@@ -4,13 +4,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="robots" content="noindex, nofollow">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Golf Gone Wrong">
 <meta name="theme-color" content="#d0e8ff">
 <meta name="mobile-web-app-capable" content="yes">
-<link rel="manifest" href="manifest.json">
-<title>Golf Gone Wrong v0.17n2</title>
+<link rel="manifest" href="manifest.webmanifest">
+<title>Golf Gone Wrong</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Lato:wght@300;400;700&display=swap');
 
@@ -1301,6 +1302,7 @@ margin-top:6px;
   <button class="esc-btn" onclick="closeEscMenu()">▶ Resume</button>
   <button class="esc-btn" onclick="escNewRun()">🔄 New Run</button>
   <button class="esc-btn" onclick="downloadRunHistory()">📥 Download Run Data</button>
+  <button class="esc-btn" onclick="exportSave()">💾 Export Save</button>
   <button class="esc-btn danger" onclick="escMainMenu()">🏠 Main Menu</button>
   <div class="esc-settings">
     <div class="esc-settings-title">Scorecard</div>
@@ -1606,6 +1608,8 @@ margin-top:6px;
 
   <button class="play-btn" id="btn-start" onclick="confirmStartGame()">Tee Off</button>
   <button class="play-btn" id="btn-resume" style="display:none;margin-top:6px;background:rgba(80,180,80,0.85);font-size:0.85rem" onclick="resumeGame()">▶ Resume Run</button>
+  <button class="play-btn" id="btn-import-save" style="margin-top:6px;background:rgba(120,120,120,0.6);font-size:0.7rem;padding:8px 20px" onclick="importSaveFile()">📂 Import Save</button>
+  <input type="file" id="import-save-input" accept=".ggwsave,application/json" style="display:none">
   <div style="font-size:0.55rem;color:rgba(255,255,255,0.35);letter-spacing:1.5px;margin-top:4px">Alpha 0.17n — Active column sheet integration</div>
 
   <div class="section-label" id="lb-title">Best Scores</div>
@@ -2143,7 +2147,7 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.17n5';
+const GAME_VERSION = '0.17n6';
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 const PRICE_MULTIPLIER = 1.25;
@@ -12785,6 +12789,119 @@ async function downloadRunHistory() {
 }
 window.downloadRunHistory = downloadRunHistory;
 
+// ── Save Export / Import (defense-in-depth against storage eviction) ──
+// Writes the current ggw_autosave (plus a minimal wrapper) to a file via
+// the iOS Share sheet. On desktop, falls back to Blob + <a download>.
+async function exportSave() {
+  try {
+    const raw = localStorage.getItem('ggw_autosave');
+    if(!raw) {
+      showToast('No save to export — start a run first', 2000);
+      return;
+    }
+    // Wrap so imports can be validated; if the save format ever changes,
+    // the version field lets us refuse incompatible imports cleanly.
+    let saveObj;
+    try { saveObj = JSON.parse(raw); } catch(e) {
+      showToast('Save data corrupt — cannot export', 2000);
+      return;
+    }
+    const wrapper = {
+      format: 'ggw_save_v1',
+      gameVersion: GAME_VERSION,
+      exportedAt: new Date().toISOString(),
+      save: saveObj,
+    };
+    const json = JSON.stringify(wrapper, null, 2);
+    const holeLabel = (typeof saveObj.hole === 'number' && typeof saveObj.totalHoles === 'number')
+      ? `hole${saveObj.hole+1}of${saveObj.totalHoles}` : 'save';
+    const filename = `ggw_${holeLabel}_${GAME_VERSION}.ggwsave`;
+
+    // Path 1: Web Share API with file
+    try {
+      if(typeof File !== 'undefined' && navigator.canShare) {
+        const file = new File([json], filename, { type: 'application/json' });
+        if(navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            title: 'Golf Gone Wrong save',
+            text: `Save exported from ${GAME_VERSION}`,
+          });
+          showToast('💾 Save exported', 1600);
+          return;
+        }
+      }
+    } catch(shareErr) {
+      if(shareErr && shareErr.name === 'AbortError') return;
+      console.warn('save share failed, falling back', shareErr);
+    }
+
+    // Path 2: Blob download
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      if(a.parentNode) a.parentNode.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 100);
+    showToast('💾 Save exported', 1600);
+  } catch(err) {
+    console.warn('exportSave failed', err);
+    showToast('Export failed — check console', 2000);
+  }
+}
+window.exportSave = exportSave;
+
+// Import a previously-exported .ggwsave file, validate, and install as the
+// current autosave. Triggers the hidden <input type=file> in the main menu.
+function importSaveFile() {
+  const input = document.getElementById('import-save-input');
+  if(!input) return;
+  // Reset so picking the same file twice still fires the change event.
+  input.value = '';
+  input.onchange = async (ev) => {
+    const file = ev.target.files && ev.target.files[0];
+    if(!file) return;
+    try {
+      const text = await file.text();
+      let wrapper;
+      try { wrapper = JSON.parse(text); } catch(e) {
+        showToast('Not a valid save file', 2200); return;
+      }
+      if(!wrapper || wrapper.format !== 'ggw_save_v1' || !wrapper.save) {
+        showToast('Unrecognized save format', 2200); return;
+      }
+      const save = wrapper.save;
+      // Minimal shape validation — don't import garbage.
+      if(typeof save.hole !== 'number' || typeof save.totalHoles !== 'number' || !Array.isArray(save.scorecard)) {
+        showToast('Save file missing required fields', 2200); return;
+      }
+      // Warn if there's already a save locally
+      const existing = localStorage.getItem('ggw_autosave');
+      if(existing) {
+        if(!confirm('You already have a saved run. Replace it with the imported save?')) return;
+      }
+      // Bump timestamp so the resume UI shows "just now" not the original export time.
+      save.timestamp = Date.now();
+      localStorage.setItem('ggw_autosave', JSON.stringify(save));
+      const verNote = (wrapper.gameVersion && wrapper.gameVersion !== GAME_VERSION)
+        ? ` (from ${wrapper.gameVersion})` : '';
+      showToast(`📂 Save imported — Hole ${save.hole+1}/${save.totalHoles}${verNote}`, 2400);
+      // Refresh the Resume button to reflect the new save.
+      if(typeof checkAutoSave === 'function') checkAutoSave();
+    } catch(err) {
+      console.warn('importSaveFile failed', err);
+      showToast('Import failed — check console', 2000);
+    }
+  };
+  input.click();
+}
+window.importSaveFile = importSaveFile;
+
 // ── Game flow ─────────────────────────────────────────
 function initHole() {
   // ── Auto-save at hole start ─────────────────────────
@@ -15655,7 +15772,18 @@ function animate(now) {
 }
 initComposer();
 requestAnimationFrame(animate);
-document.title = 'GGW LOADED';
+
+// ── Service worker registration (offline play + fast reloads) ─────────
+// Only registers on secure contexts with a real path — file:// and
+// artifact iframes are skipped automatically. Registration failures are
+// non-fatal; the game works fine without it.
+if('serviceWorker' in navigator && location.protocol === 'https:') {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(err => {
+      console.warn('Service worker registration failed (non-fatal):', err);
+    });
+  });
+}
 </script>
 
 </body>

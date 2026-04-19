@@ -1,0 +1,11 @@
+{
+  "name": "Golf Gone Wrong",
+  "short_name": "Golf Gone Wrong",
+  "description": "A 3D minigolf roguelike. Break the game of minigolf.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#87CEEB",
+  "theme_color": "#d0e8ff"
+}
