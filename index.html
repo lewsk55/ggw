@@ -1227,8 +1227,11 @@ position:fixed; inset:0;
 background:rgba(0,0,0,0.72);
 backdrop-filter:blur(12px);
 display:none; flex-direction:column;
-align-items:center; justify-content:center;
+align-items:center; justify-content:flex-start;
 gap:16px; z-index:300;
+padding:max(6vh, 24px) 24px 40px;
+overflow-y:auto;
+-webkit-overflow-scrolling:touch;
 }
 #escape-menu.open { display:flex; }
 #escape-menu h2 {
@@ -1610,7 +1613,7 @@ margin-top:6px;
   <button class="play-btn" id="btn-resume" style="display:none;margin-top:6px;background:rgba(80,180,80,0.85);font-size:0.85rem" onclick="resumeGame()">▶ Resume Run</button>
   <button class="play-btn" id="btn-import-save" style="margin-top:6px;background:rgba(120,120,120,0.6);font-size:0.7rem;padding:8px 20px" onclick="importSaveFile()">📂 Import Save</button>
   <input type="file" id="import-save-input" accept=".ggwsave,application/json" style="display:none">
-  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.17n9</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">menu version label now shows change note</div></div>
+  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.17n10</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">pause menu scrolling fix</div></div>
 
   <div class="section-label" id="lb-title">Best Scores</div>
   <div class="lb-panel" id="lb-panel"></div>
@@ -2147,8 +2150,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.17n9';
-const CHANGE_NOTE = 'menu version label now shows change note';
+const GAME_VERSION = '0.17n10';
+const CHANGE_NOTE = 'pause menu scrolling fix';
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 const PRICE_MULTIPLIER = 1.25;
