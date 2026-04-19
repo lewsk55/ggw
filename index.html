@@ -1340,6 +1340,12 @@ margin-top:6px;
   </div>
 </div>
 
+<!-- OOB grace countdown — shown only while ball is OOB and counting down -->
+<div id="oob-timer" style="display:none;position:fixed;top:28%;left:50%;transform:translateX(-50%);z-index:250;pointer-events:none;text-align:center;font-family:'Playfair Display',serif;color:#ff3333;text-shadow:0 0 12px rgba(255,0,0,0.7),0 2px 4px rgba(0,0,0,0.6)">
+  <div style="font-size:0.7rem;letter-spacing:3px;text-transform:uppercase;opacity:0.85;margin-bottom:4px">Out of bounds</div>
+  <div id="oob-timer-val" style="font-size:3.2rem;font-weight:700;line-height:1">1.5</div>
+</div>
+
 <!-- Unified stats pill -->
 <div id="stroke-hud">
   <div class="stats-row">
@@ -1613,7 +1619,7 @@ margin-top:6px;
   <button class="play-btn" id="btn-resume" style="display:none;margin-top:6px;background:rgba(80,180,80,0.85);font-size:0.85rem" onclick="resumeGame()">▶ Resume Run</button>
   <button class="play-btn" id="btn-import-save" style="margin-top:6px;background:rgba(120,120,120,0.6);font-size:0.7rem;padding:8px 20px" onclick="importSaveFile()">📂 Import Save</button>
   <input type="file" id="import-save-input" accept=".ggwsave,application/json" style="display:none">
-  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.17n10</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">pause menu scrolling fix</div></div>
+  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.17n12</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">shifter ceiling fix + OOB timer + mulligan fix</div></div>
 
   <div class="section-label" id="lb-title">Best Scores</div>
   <div class="lb-panel" id="lb-panel"></div>
@@ -2150,8 +2156,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.17n10';
-const CHANGE_NOTE = 'pause menu scrolling fix';
+const GAME_VERSION = '0.17p1';
+const CHANGE_NOTE = 'Sharpshooter camera restore fix (FOV + orbital pose)';
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 const PRICE_MULTIPLIER = 1.25;
@@ -4255,7 +4261,7 @@ function buildCourse(data) {
         blockGroup,
         halfW: blockW / 2,
         halfD: blockD / 2,
-        halfH: blockH,
+        fullH: blockH,
       });
     }
   }
@@ -5179,6 +5185,8 @@ function updatePhysics(dt) {
   // ── Jump — process before rolling guard so grace-window taps always fire ──
   if(G._jumpPending && !G.inHole) {
     G._jumpPending = false;
+  G._jumpPreloaded = false;
+  if(G.ball && G._jumpPreloadOrigEmissive && G.ball.material && G.ball.material.emissive) { G.ball.material.emissive.copy(G._jumpPreloadOrigEmissive); G._jumpPreloadOrigEmissive = null; }
     G.ballVel.y = 6.38;
     G.rolling = true;
     G.rollingSlowTimer = 0;
@@ -5202,11 +5210,12 @@ function updatePhysics(dt) {
   {
     if(!G._jumpOverChecked) G._jumpOverChecked = new Set();
     const bx = G.ballPos.x, bz = G.ballPos.z, by = G.ballPos.y;
-    // Gate 1: is the ball meaningfully off its own ground? 0.15 m tolerance — above a
-    // rolling ball (which sits ~FLOOR_H/2 + BALL_R above terrain) but below a real jump apex.
+    // Gate 1: is the ball meaningfully off its own ground? 0.25 m — well above
+    // rolling-ball resting height so a brief bumper knockback or terrain jitter
+    // can't trigger the event. Real jumps clear this easily.
     const terrAtBall = G.heightMap.length ? getTerrainHeight(bx, bz) : 0;
     const ballGroundY = terrAtBall + FLOOR_H/2 + BALL_R; // ball Y when resting on floor
-    const isOffGround = by > ballGroundY + 0.15;
+    const isOffGround = by > ballGroundY + 0.25;
     if(isOffGround) {
     // Fire once when ball enters the volume (point-in-volume check; generous radius).
     const fireJumpOver = (wx, wz, coinX, coinZ, id) => {
@@ -5239,46 +5248,86 @@ function updatePhysics(dt) {
       }
       if(dist <= radius) fireJumpOver(cx, cz, cx, cz, id);
     };
-    // Bumpers: very generous XZ radius (≥ 3.0 m). Lower lip = 60% of bumper height above base.
+    // Bumpers: trigger radius = 2× physical radius (memory spec: "2× obstacle width" columns).
+    // Gate 2 lower lip = 60% of bumper height above base (unchanged).
     if(G.bumpers) G.bumpers.forEach((b, i) => {
       if(b._destroyed) return;
-      const r = Math.max(3.0, (b.r + 0.5) * 5);
+      const r = (b.r || 0.4) * 2;
       const lowerLip = (b.baseH || 0) + (b.bumperH || 0.7) * 0.60;
       checkTriggerCyl(b.wx, b.wz, r, lowerLip, 'b'+i);
     });
-    // Rocks: generous radius. Lower lip = 45% of rock radius above base (rocks squash low).
+    // Rocks: trigger radius = 2× physical radius. Lower lip unchanged.
     if(G.rocks) G.rocks.forEach((r, i) => {
       if(r._destroyed) return;
-      const rad = Math.max(2.5, (r.r || 0.5) * 5);
+      const rad = (r.r || 0.5) * 2;
       const baseH = G.heightMap.length ? getTerrainHeight(r.wx, r.wz) : 0;
       const lowerLip = baseH + (r.r || 0.5) * 0.45;
       checkTriggerCyl(r.wx, r.wz, rad, lowerLip, 'r'+i);
     });
-    // Spikes: generous radius. Lower lip = 55% of spike radius above base.
+    // Spikes: trigger radius = 2× physical radius. Lower lip unchanged.
     if(G.spikes) G.spikes.forEach((sp, i) => {
       if(sp._destroyed) return;
-      const rad = Math.max(2.5, (sp.radius || sp.r || 0.5) * 5);
-      const lowerLip = (sp.baseH || 0) + (sp.r || sp.radius || 0.5) * 0.55;
+      const physR = (sp.radius || sp.r || 0.5);
+      const rad = physR * 2;
+      const lowerLip = (sp.baseH || 0) + physR * 0.55;
       checkTriggerCyl(sp.wx, sp.wz, rad, lowerLip, 'sp'+i);
     });
-    // Spin bars: closest-point distance to rotating bar segment. Lower lip = 0.40 m above base.
+    // Spin bars: closest-point-to-segment distance. Bar body is ~0.3 m thick;
+    // trigger halo = 0.6 m (matches 2× physical). Lower lip unchanged.
     if(G.spinBars) G.spinBars.forEach((s, i) => {
       if(s._destroyed) return;
       const cosA = Math.cos(s.angle), sinA = Math.sin(s.angle);
       const tipAx = s.wx - cosA*s.len, tipAz = s.wz + sinA*s.len;
       const tipBx = s.wx + cosA*s.len, tipBz = s.wz - sinA*s.len;
       const lowerLip = (s.baseH || 0) + 0.40;
-      checkTriggerSegment(tipAx, tipAz, tipBx, tipBz, 2.0, lowerLip, 's'+i);
+      checkTriggerSegment(tipAx, tipAz, tipBx, tipBz, 0.6, lowerLip, 's'+i);
     });
-    // Slide blocks: trigger at animated position. Lower lip = 0.45 m above base.
+    // Slide blocks: rectangular trigger (NOT cylindrical — blocks are long and
+    // thin). Uses block's axis-aligned half-extents + 0.3 m buffer. Lower lip unchanged.
     if(G.slideBlocks) G.slideBlocks.forEach((sb, i) => {
       if(sb._destroyed) return;
       const soff = Math.sin(sb.phase||0) * (sb.range||0);
       const sbx = sb.wx + (sb.axis==='X' ? soff : 0);
       const sbz = sb.wz + (sb.axis==='Z' ? soff : 0);
       const lowerLip = (sb.baseH || 0) + 0.45;
-      checkTriggerCyl(sbx, sbz, 2.5, lowerLip, 'sb'+i);
+      const id = 'sb'+i;
+      if(G._jumpOverChecked.has(id)) return;
+      if(by <= lowerLip) return;
+      // Block runs along its axis; half-extents are halfW (X-axis body length / 2)
+      // and halfD (Z-axis body length / 2). Buffer 0.3 m on each side.
+      const hw = (sb.halfW || 0.225) + 0.3;
+      const hd = (sb.halfD || 0.225) + 0.3;
+      const dx = Math.abs(bx - sbx), dz = Math.abs(bz - sbz);
+      if(dx <= hw && dz <= hd) fireJumpOver(sbx, sbz, sbx, sbz, id);
     });
+    // ── Wall-skip detection: airborne pass over a wall polyline ──
+    // Only fires when ball is meaningfully high (by > wall-top + buffer).
+    // Dedup'd per-segment via G._wallSkipChecked Set (reset on shot fire).
+    // Fires ONCE per segment per shot; rewards airborne cards (Catapult, Arc Shot,
+    // Jumper, Sharpshooter-ball) for literally flying over walls that would
+    // normally bounce. Wall height is ~0.8m so the 1.2m floor gives clean signal.
+    if(by > 1.2 && G.wallPolylines && G.wallPolylines.length > 0) {
+      if(!G._wallSkipChecked) G._wallSkipChecked = new Set();
+      const maxCheck = Math.min(G.wallPolylines.length, 200); // perf cap for dense courses
+      for(let wi = 0; wi < maxCheck; wi++) {
+        const wsId = 'ws'+wi;
+        if(G._wallSkipChecked.has(wsId)) continue;
+        const seg = G.wallPolylines[wi];
+        if(!seg || !seg[0] || !seg[1]) continue;
+        const ax = seg[0].x, az = seg[0].z, bxw = seg[1].x, bzw = seg[1].z;
+        const ex = bxw - ax, ez = bzw - az;
+        const segLenSq = ex*ex + ez*ez;
+        if(segLenSq < 0.01) continue;
+        const tt = Math.max(0, Math.min(1, ((bx-ax)*ex + (bz-az)*ez) / segLenSq));
+        const cx = ax + tt*ex, cz = az + tt*ez;
+        const d = Math.hypot(bx - cx, bz - cz);
+        if(d < 0.5) {
+          G._wallSkipChecked.add(wsId);
+          recordStyleEvent('wall_skip');
+          showToast('🦘 Wall Skip!', 700);
+        }
+      }
+    }
     } // end isOffGround
   }
 
@@ -5375,15 +5424,44 @@ function updatePhysics(dt) {
   if(hitGround && isOutside && G.ghostBallActive) {
     // Don't penalize — ghost ball can traverse OOB freely
   } else if(hitGround && isOutside) {
-    // Grace period: let ball roll 1.5s in the rough before calling OOB
+    // Grace period: let ball roll 1.5s in the rough before calling OOB.
+    // During grace: show countdown UI and flash ball red at increasing frequency.
     if(!G._oobGraceTimer) G._oobGraceTimer = 0;
     G._oobGraceTimer += dt;
-    if(G._oobGraceTimer < 1.5) {
+    const OOB_GRACE = G.modifiers.some(m=>m.id==='off_roading') ? 10.0 : 1.5;
+    if(G._oobGraceTimer < OOB_GRACE) {
       // Still in grace period — apply heavy friction but don't reset yet
       G.ballVel.x *= 0.97;
       G.ballVel.z *= 0.97;
+      // UI: show the countdown number (counts down from 1.5 to 0)
+      const remaining = OOB_GRACE - G._oobGraceTimer;
+      const tEl = document.getElementById('oob-timer');
+      const vEl = document.getElementById('oob-timer-val');
+      if(tEl && vEl) {
+        if(tEl.style.display !== 'block') tEl.style.display = 'block';
+        vEl.textContent = remaining.toFixed(1);
+      }
+      // Ball flash: emissive red, frequency accelerates as timer runs out.
+      // progress 0→1 over grace period; flash freq 4Hz→20Hz; intensity 0.3→1.0.
+      if(G.ball && G.ball.material && G.ball.material.emissive) {
+        const progress = G._oobGraceTimer / OOB_GRACE;
+        const freq = 4 + progress * 16;
+        const phase = Math.sin(G._oobGraceTimer * freq * Math.PI * 2);
+        const strobeOn = phase > 0;
+        const intensity = strobeOn ? (0.3 + progress * 0.7) : 0;
+        G.ball.material.emissive.setRGB(intensity, 0, 0);
+        if(G.ball.material.emissiveIntensity !== undefined) {
+          G.ball.material.emissiveIntensity = 1.0;
+        }
+      }
     } else {
     G._oobGraceTimer = 0;
+    // Clear OOB UI and ball flash before splash
+    const tEl = document.getElementById('oob-timer');
+    if(tEl) tEl.style.display = 'none';
+    if(G.ball && G.ball.material && G.ball.material.emissive) {
+      G.ball.material.emissive.setRGB(0, 0, 0);
+    }
     spawnSplash(G.ballPos);
     if(G.ball) G.ball.visible = false;
     if(G.ballShadow) G.ballShadow.visible = false;
@@ -5403,6 +5481,14 @@ function updatePhysics(dt) {
     return;
     }
   } else {
+    // Ball recovered from OOB before timer expired — clear UI + flash
+    if(G._oobGraceTimer > 0) {
+      const tEl = document.getElementById('oob-timer');
+      if(tEl) tEl.style.display = 'none';
+      if(G.ball && G.ball.material && G.ball.material.emissive) {
+        G.ball.material.emissive.setRGB(0, 0, 0);
+      }
+    }
     G._oobGraceTimer = 0;
   }
 
@@ -5417,8 +5503,23 @@ function updatePhysics(dt) {
     G.ballPos.y = floorY;
     // Reflect downward velocity only; preserve upward motion
     if(G.ballVel.y < 0) {
-      G.ballVel.y *= -BOUNCE;
-      if(Math.abs(G.ballVel.y) < 0.4) G.ballVel.y = 0;
+      // Catapult: one-shot super-bounce on first meaningful landing (velY < -4)
+      if(G._catapultGroundBounce && G.ballVel.y < -4) {
+        G.ballVel.y = -G.ballVel.y * 0.7; // strong bounce-back, no velocity floor
+        G._catapultGroundBounce = false;
+        triggerShake(0.3);
+        showToast('🪤 BOING!', 700);
+        if(AC) {
+          const ac = getAC(), t = ac.currentTime;
+          const o = ac.createOscillator(); o.type='sine';
+          o.frequency.setValueAtTime(120, t); o.frequency.exponentialRampToValueAtTime(600, t+0.18);
+          const g = ac.createGain(); g.gain.setValueAtTime(0.35, t); g.gain.exponentialRampToValueAtTime(0.001, t+0.22);
+          o.connect(g); g.connect(getACDest()); o.start(t); o.stop(t+0.24);
+        }
+      } else {
+        G.ballVel.y *= -BOUNCE;
+        if(Math.abs(G.ballVel.y) < 0.4) G.ballVel.y = 0;
+      }
     }
   }
 
@@ -5456,7 +5557,9 @@ function updatePhysics(dt) {
   // ── Wall collision — polyline SDF ─────────────────────
   // Skip entirely when ball is above wall height or ghost ball active.
   {
-    const wb = G._perpetualMotionActive ? 1.0 : BOUNCE * BOUNCE_MULT;
+    const wbBase = G._perpetualMotionActive ? 1.0 : BOUNCE * BOUNCE_MULT;
+    // Catapult: boost restitution on the first 3 bounces after launch (counter consumed below)
+    const wb = (G._catapultBounceBoost > 0) ? Math.min(1.05, wbBase * 1.5) : wbBase;
     const WALL_THICK = 0.25 + BALL_R_EFF;
     const WALL_TOP_ABS = 0.75 + 0.3 + BALL_R;
     const ballAboveWall = G.ballPos.y > WALL_TOP_ABS;
@@ -5547,6 +5650,18 @@ function updatePhysics(dt) {
             spawnHitParticles(G.ballPos);
             pushed=true;
             recordStyleEvent('wall_bounce');
+            // Catapult: consume bounce-boost charge
+            if(G._catapultBounceBoost > 0) {
+              G._catapultBounceBoost--;
+              if(AC) {
+                const ac = getAC(), t = ac.currentTime;
+                const o = ac.createOscillator(); o.type='sine';
+                o.frequency.setValueAtTime(440 + Math.random()*200, t);
+                o.frequency.exponentialRampToValueAtTime(900, t+0.12);
+                const g = ac.createGain(); g.gain.setValueAtTime(0.18, t); g.gain.exponentialRampToValueAtTime(0.001, t+0.14);
+                o.connect(g); g.connect(getACDest()); o.start(t); o.stop(t+0.16);
+              }
+            }
             G._challengeShotWallBounces = (G._challengeShotWallBounces||0) + 1;
             checkChallengeCompletion(true);
             trackStat('wallBounces', 1);
@@ -6052,7 +6167,7 @@ function updatePhysics(dt) {
       // Detection box (expanded by BALL_R)
       if(G.ballPos.x < bx-hw-BALL_R || G.ballPos.x > bx+hw+BALL_R) continue;
       if(G.ballPos.z < bz-hd-BALL_R || G.ballPos.z > bz+hd+BALL_R) continue;
-      if(G.ballPos.y < sb.baseH - 0.5 || G.ballPos.y > sb.baseH+sb.halfH*2+BALL_R) continue;
+      if(G.ballPos.y < sb.baseH - 0.5 || G.ballPos.y > sb.baseH+sb.fullH+BALL_R) continue;
 
       // Penetration depths on each face (positive = inside)
       const penL = bx-hw-BALL_R - G.ballPos.x;  // left face pushing right
@@ -6605,6 +6720,9 @@ function updatePhysics(dt) {
         G._arcShotActive = false;
         G._anglerCardActive = false;
         G._wallMagnetActive = false;
+        G._catapultActive = false;
+        G._catapultBounceBoost = 0;
+        G._catapultGroundBounce = false;
         if(G._ironBallActive || G._cannonballActive) {
           // Reset ball material from chrome back to normal
           if(G.ball) {
@@ -6616,9 +6734,11 @@ function updatePhysics(dt) {
         G._powerShotStacks = 0;
         G._powerShotTensionActive = false;
         G._cannonballActive = false;
-        // Draw 1 card to refill an empty slot (if any) — but not before first swing
+        // Draw 1 card to refill an empty slot (if any) — but not before first swing.
+        // Quick Draw perk: draw 2 per swing (respects hand space — drawCards handles clamping).
         const hasEmptySlot = G.cardSlots.some(s => s === null);
-        if(hasEmptySlot && G._drawPerSwing > 0 && G.strokes > 0) drawCards(1);
+        const qdN = G.modifiers.some(m=>m.id==='quick_draw') ? 2 : 1;
+        if(hasEmptySlot && G._drawPerSwing > 0 && G.strokes > 0) drawCards(qdN);
         updateHandUI();
         // ── Speed Ball: check time expired ──────────────
         if(G._speedBallActive) {
@@ -6720,6 +6840,13 @@ function updatePhysics(dt) {
 }
 
 function resetToLastShot() {
+  // Defensive: ensure OOB timer UI and ball flash are cleared on any reset path
+  const _oobEl = document.getElementById('oob-timer');
+  if(_oobEl) _oobEl.style.display = 'none';
+  if(G.ball && G.ball.material && G.ball.material.emissive) {
+    G.ball.material.emissive.setRGB(0, 0, 0);
+  }
+  G._oobGraceTimer = 0;
   // Clean up any three-ball clones — main ball OOB ends the three-balls round
   if(G._threeBalls) {
     for(const tb of G._threeBalls) if(tb.mesh) scene.remove(tb.mesh);
@@ -6749,6 +6876,9 @@ function resetToLastShot() {
   G._arcShotActive = false;
   G._anglerCardActive = false;
         G._wallMagnetActive = false;
+  G._catapultActive = false;
+  G._catapultBounceBoost = 0;
+  G._catapultGroundBounce = false;
   // Restore normal ball visual if iron ball was active
   if(G.ball && G.ball._origMat) {
     G.ball.material = G.ball._origMat;
@@ -6951,6 +7081,7 @@ const STYLE_PTS = {
   spin_bar_hit: 150, fan_ride: 100, speed_hoop: 125,
   conveyor_ride: 50, spike_dodge: 200, coin_flight: 25,
   obstacle_destroyed: 150, wall_destroyed: 200, slide_dodge: 100, jump_over: 600,
+  wall_skip: 350,
   jump: 150,
   corner_deflect: 75,
   ghost_oob: 6000,  // ghost ball through OOB and back
@@ -6971,6 +7102,8 @@ const TRICK_DEFS = [
   { id:'avalanche',      name:'AVALANCHE',         pts:800,  test:(e,c)=> c.holed && e.filter(x=>x.type==='wall_bounce').length >= 3 && G.snowballStacks > 0 },
   { id:'evel_knievel',   name:'EVEL KNIEVEL',       pts:600,  test:(e,c)=> c.holed && e.some(x=>x.type==='jump_over') },
   { id:'sky_high',       name:'SKY HIGH',            pts:400,  test:(e)=> e.filter(x=>x.type==='jump_over').length >= 2 },
+  { id:'parkour',        name:'PARKOUR',             pts:500,  test:(e)=> e.filter(x=>x.type==='wall_skip').length >= 2 },
+  { id:'great_escape',   name:'THE GREAT ESCAPE',    pts:900,  test:(e,c)=> c.holed && e.some(x=>x.type==='wall_skip') },
   { id:'rolling_thunder',name:'ROLLING THUNDER',   pts:300,  test:(e,c)=> c.explosivoWhileRolling },
   { id:'carpet_bomb',    name:'CARPET BOMB',       pts:500,  test:(e)=> e.filter(x=>x.type==='obstacle_destroyed').length >= 4 },
   { id:'bulldozer',      name:'UNSTOPPABLE',       pts:500,  test:(e)=> e.filter(x=>x.type==='obstacle_destroyed').length >= 5 },
@@ -7005,7 +7138,7 @@ const STYLE_NAMES = {
   wall_bounce:'WALL BOUNCE', rock_ricochet:'RICOCHET', bumper_hit:'BUMPER',
   spin_bar_hit:'SPIN BAR', fan_ride:'FAN RIDE', speed_hoop:'SPEED HOOP',
   conveyor_ride:'CONVEYOR', spike_dodge:'SPIKE DODGE', coin_flight:'COIN',
-  obstacle_destroyed:'DESTROYED', wall_destroyed:'WALL DOWN', slide_dodge:'SLIDE BLOCK', jump_over:'JUMP OVER', jump:'JUMP',
+  obstacle_destroyed:'DESTROYED', wall_destroyed:'WALL DOWN', slide_dodge:'SLIDE BLOCK', jump_over:'JUMP OVER', wall_skip:'WALL SKIP', jump:'JUMP',
   explosivo_rolling:'EXPLOSIVO', corner_deflect:'DEFLECT',
   ghost_oob:'GHOST SHORTCUT', jump_oob:'OOB JUMP',
 };
@@ -8239,7 +8372,7 @@ function weightedCardPicks(count) {
 function getScaledCardPrice(card) {
   const diff = G.difficulty || 1;
   const rate = diff <= 2 ? 0.1 : diff === 3 ? 0.2 : diff === 4 ? 0.25 : 0.3;
-  return Math.max(1, Math.round(card.price * 2 * (1 + G.hole * rate) * PRICE_MULTIPLIER));
+  return Math.max(1, Math.round(card.price * 1.5 * (1 + G.hole * rate) * PRICE_MULTIPLIER));
 }
 
 function closeShop() {
@@ -8323,7 +8456,7 @@ function getScaledPrice(perk) {
   // Base prices inflated 50%, then scale per hole, then global PRICE_MULTIPLIER
   const diff = G.difficulty || 1;
   const rate = diff <= 2 ? 0.1 : diff === 3 ? 0.2 : diff === 4 ? 0.25 : 0.3;
-  const base = Math.max(1, Math.round(perk.price * 2 * (1 + G.hole * rate) * PRICE_MULTIPLIER));
+  const base = Math.max(1, Math.round(perk.price * 1.5 * (1 + G.hole * rate) * PRICE_MULTIPLIER));
   // Multiplayer: 50% off — coins are split across players
   return isMultiplayer() ? Math.max(1, Math.round(base * 0.5)) : base;
 }
@@ -8477,7 +8610,7 @@ window.buyPerk = function(id) {
 function getCardRemovePrice() {
   const diff = G.difficulty || 1;
   const rate = diff <= 2 ? 0.1 : diff === 3 ? 0.2 : diff === 4 ? 0.25 : 0.3;
-  return Math.max(1, Math.round(20 * 2 * (1 + G.hole * rate) * PRICE_MULTIPLIER));
+  return Math.max(1, Math.round(20 * 1.5 * (1 + G.hole * rate) * PRICE_MULTIPLIER));
 }
 
 function openCardRemoval() {
@@ -9239,17 +9372,18 @@ const INACTIVE_PERKS = new Set(['double_or_nothing', 'thin_ice']);
 const INACTIVE_CARDS = new Set(['airstrike', 'wrecking_ball', 'portal_pair', 'wall_magnet', 'arc_shot', 'golden_path']);
 
 const CARD_DEFS = {
-  lil_scootch:  { id:'lil_scootch',  emoji:'🧤', name:"Lil' Scootch",    desc:'Cartoon glove gives the ball a nudge.',                        rarity:'common',    price:8,   context:'any',    holdable:false },
-  power_shot:   { id:'power_shot',   emoji:'💪', name:'Power Shot',      desc:'This swing: 2× max power.',                                    rarity:'common',    price:6,   context:'pre',    holdable:false },
-  shooter:      { id:'shooter',      emoji:'🚀', name:'Missile Command', desc:'Fire a missile that destroys obstacles in its path.',            rarity:'common',    price:14,  context:'pre',    holdable:false },
-  sharpshooter: { id:'sharpshooter', emoji:'🎯', name:'Sharpshooter',    desc:'Zoom down a scope. Pan & zoom, tap to snipe a distant obstacle.', rarity:'common',    price:20,  context:'pre',    holdable:false, weight:5 },
+  lil_scootch:  { id:'lil_scootch',  emoji:'🧤', name:"Lil' Scootch",    desc:'Cartoon glove gives the ball a nudge.',                        rarity:'common',    price:10,   context:'any',    holdable:false },
+  power_shot:   { id:'power_shot',   emoji:'💪', name:'Power Shot',      desc:'This swing: 2× max power.',                                    rarity:'common',    price:20,   context:'pre',    holdable:false, weight:6 },
+  shooter:      { id:'shooter',      emoji:'🚀', name:'Missile Command', desc:'Fire a missile that destroys obstacles in its path.',            rarity:'common',    price:20,  context:'pre',    holdable:false },
+  sniper:       { id:'sniper',       emoji:'🎯', name:'Sniper',          desc:'Zoom a scope and fire a precision missile at a distant obstacle.', rarity:'common',    price:20,  context:'pre',    holdable:false, weight:5 },
+  sharpshooter: { id:'sharpshooter', emoji:'🏌️‍♂️', name:'Sharpshooter',    desc:'Zoom a scope and launch YOUR BALL precisely down the barrel.',       rarity:'epic',      price:30,  context:'pre',    holdable:false, weight:2 },
   grenade:      { id:'grenade',      emoji:'🧨', name:'Grenade',         desc:'Lob an explosive. Bounces 3×, then boom.',                      rarity:'common',    price:15,  context:'pre',    holdable:false },
   boulder:      { id:'boulder',      emoji:'🪨', name:'Boulder',         desc:'Summon an unstoppable boulder that smashes everything.',          rarity:'rare',      price:22,  context:'pre',    holdable:false },
   dodgeball:    { id:'dodgeball',    emoji:'🔴', name:'Dodgeball',       desc:'Fire a super-bouncy red ball that ricochets off everything.',     rarity:'common',    price:15,  context:'pre',    holdable:false },
   explosivo:    { id:'explosivo',    emoji:'💥', name:'Explosivo',       desc:'Detonate a huge explosion at the ball\'s position.',              rarity:'epic',      price:21,  context:'any',    holdable:false },
   ghost_ball:   { id:'ghost_ball',   emoji:'👻', name:'Ghost Ball',      desc:'Hold to pass through walls, rocks and obstacles. 4s.',            rarity:'epic',      price:21,  context:'any',    holdable:true },
   backspin:     { id:'backspin',     emoji:'🔄', name:'Backspin',        desc:'Slam the brakes mid-roll for precise placement.',                rarity:'common',    price:8,   context:'during', holdable:false },
-  jumper:       { id:'jumper',       emoji:'🦘', name:'Jumper',          desc:'Jump over obstacles. Hold longer = higher jump.',                 rarity:'common',    price:12,  context:'during', holdable:false },
+  jumper:       { id:'jumper',       emoji:'🦘', name:'Jumper',          desc:'Jump over obstacles mid-roll — OR pre-load before your swing to launch on fire.', rarity:'common',    price:12,  context:'any',    holdable:false },
   slow_mo:      { id:'slow_mo',      emoji:'🐌', name:'Slow Mo',         desc:'25% speed for 6 seconds. See the chaos in detail.',              rarity:'rare',      price:20,  context:'any',    holdable:false },
   walkies:      { id:'walkies',      emoji:'🦵', name:'Walkies',         desc:'Sprout legs and walk anywhere for 6 seconds.',                   rarity:'rare',      price:22,  context:'pre',    holdable:false },
   // arc_shot hidden — may revisit later
@@ -9269,6 +9403,7 @@ const CARD_DEFS = {
   floomba:      { id:'floomba',      emoji:'🤖', name:'Floomba',         desc:'Deploy a disc robot that roams the course destroying obstacles.',  rarity:'epic',      price:28,  context:'pre',    holdable:false },
   perpetual_motion: { id:'perpetual_motion', emoji:'♾️', name:'Perpetual Motion', desc:'Zero friction and perfect wall bounces. Pure chaos.', rarity:'rare', price:20, context:'any', holdable:false },
   wall_magnet:  { id:'wall_magnet',  emoji:'🧲', name:'Wall Magnet',     desc:'This swing: ball curves toward the nearest wall. Bounce synergy!', rarity:'rare',      price:15,  context:'pre',    holdable:false },
+  catapult:     { id:'catapult',     emoji:'🪤', name:'Catapult',         desc:'This swing: launch in a huge arc with bouncy landings. Skip walls!', rarity:'common',  price:12,  context:'pre',    holdable:false, weight:5 },
 };
 
 // Starter deck definitions
@@ -9487,12 +9622,19 @@ function playCard(instanceId) {
   }
   sfxCardDiscard();
 
-  // Execute the card ability
+  // Execute the card ability. Abilities like Mulligan may replace G.hand
+  // wholesale (restoring from undoState) — so the cached `idx` is now stale.
   executeCardAbility(card.id);
 
-  // Move to discard
-  G.hand.splice(idx, 1);
-  G.discard.push(card.id);
+  // Move to discard: re-resolve index by instanceId in the (possibly new) hand.
+  // For Mulligan, the restored hand still contains the Mulligan card (it was
+  // in hand at shot-fire time when undoState was captured), so findIndex will
+  // locate it and remove it — which is what we want.
+  const removeIdx = G.hand.findIndex(c => c.instanceId === instanceId);
+  if(removeIdx !== -1) {
+    G.hand.splice(removeIdx, 1);
+    G.discard.push(card.id);
+  }
   G._challengeCardsPlayed = (G._challengeCardsPlayed||0) + 1;
   // Analytics: record card played this hole
   if(G._holeCardsPlayed) G._holeCardsPlayed.push(card.id);
@@ -9569,7 +9711,9 @@ function executeCardAbility(id) {
     case 'jumper':       triggerJump(); break;
     case 'explosivo':    triggerExplosivo(); break;
     case 'shooter':      fireProjectile({ blastRadius:2.5, travelSpeed:22, color:0xff4400, emissive:0xff2200 }); break;
-    case 'sharpshooter': activateSharpshooter(); break;
+    case 'sniper':       activateSniper(); break;
+    case 'sharpshooter': activateSharpshooterBall(); break;
+    case 'catapult':     activateCatapult(); break;
     case 'grenade':      activateGrenade(); break;
     case 'boulder':      activateBoulder(); break;
     case 'ghost_ball':   activateGhostBall(); break;
@@ -10207,9 +10351,12 @@ function activateSharpshooter() {
     };
     window.addEventListener('wheel', G._sharpshooterWheelHandler, { passive: false });
   }
-  // Wire fire button
+  // Wire fire button — route to ball-launch or missile based on mode
   const fireBtn = document.getElementById('sharpshooter-fire-btn');
-  if(fireBtn) fireBtn.onclick = () => fireSharpshooter();
+  if(fireBtn) fireBtn.onclick = () => {
+    if(G._sharpshooterBallMode) fireSharpshooterBall();
+    else fireSharpshooter();
+  };
   // Toast
   showToast('🎯 Sharpshooter — drag to aim, tap FIRE', 1800);
   // Subtle SFX: a scope-lens "click"
@@ -10309,6 +10456,14 @@ function exitSharpshooter() {
     // Clear after the transition so the fade-out is visible
     setTimeout(() => { if(!G._sharpshooterActive) scope.style.display = 'none'; }, 220);
   }
+  // Reset fire button visuals back to Sniper default (Sharpshooter-ball customizes them)
+  const fireBtn2 = document.getElementById('sharpshooter-fire-btn');
+  if(fireBtn2) {
+    fireBtn2.textContent = '🎯 FIRE';
+    fireBtn2.style.background = 'rgba(255,60,40,0.85)';
+  }
+  const hint2 = document.getElementById('sharpshooter-hint');
+  if(hint2) hint2.innerHTML = 'Drag to aim &nbsp;·&nbsp; Scroll/slider to zoom &nbsp;·&nbsp; <span style="color:#ffea40">Tap to fire</span>';
   // Unbind scroll-wheel handler
   if(G._sharpshooterWheelHandler) {
     window.removeEventListener('wheel', G._sharpshooterWheelHandler);
@@ -10320,6 +10475,172 @@ function exitSharpshooter() {
 }
 window.fireSharpshooter = fireSharpshooter;
 window.exitSharpshooter = exitSharpshooter;
+
+// ── Sniper = original Sharpshooter missile behavior (renamed) ────────
+function activateSniper() {
+  G._sharpshooterBallMode = false;
+  activateSharpshooter();
+  showToast('🎯 Sniper — drag to aim, tap FIRE', 1800);
+}
+
+// ── Sharpshooter (NEW) = launches YOUR BALL down the scope ───────────
+function activateSharpshooterBall() {
+  if(G._sharpshooterActive || G.inHole || G.state !== 'playing' || G.rolling) return;
+  G._sharpshooterBallMode = true;
+  activateSharpshooter();
+  const fireBtn = document.getElementById('sharpshooter-fire-btn');
+  if(fireBtn) {
+    fireBtn.textContent = '🏌️‍♂️ LAUNCH';
+    fireBtn.style.background = 'rgba(255,180,40,0.9)';
+  }
+  const hint = document.getElementById('sharpshooter-hint');
+  if(hint) hint.innerHTML = 'Drag to aim &nbsp;·&nbsp; Scroll/slider to zoom &nbsp;·&nbsp; <span style="color:#ffea40">Tap to LAUNCH BALL</span>';
+  showToast('🏌️‍♂️ Sharpshooter — aim your BALL', 1800);
+}
+
+function fireSharpshooterBall() {
+  if(!G._sharpshooterActive || !G._sharpshooterBallMode) return;
+  // Compute launch direction from camera spherical (matches scope forward)
+  const fx = -Math.sin(G.camPhi) * Math.sin(G.camTheta);
+  const fy = -Math.cos(G.camPhi);
+  const fz = -Math.sin(G.camPhi) * Math.cos(G.camTheta);
+  const dirLen = Math.hypot(fx, fy, fz) || 1;
+  // Horizontal shotDir for scoring/cards that read it
+  if(!G.shotDir) G.shotDir = new THREE.Vector3();
+  const hx = -Math.sin(G.camTheta), hz = -Math.cos(G.camTheta);
+  G.shotDir.set(hx, 0, hz).normalize();
+  G.shotAngle = Math.atan2(G.shotDir.x, G.shotDir.z);
+
+  // Bookkeeping matches fireShot() for stroke/undo/state
+  clearTimeout(G._stylePopupTimer); G._stylePopupTimer = null;
+  clearInterval(G._styleTickInterval); G._styleTickInterval = null;
+  document.querySelectorAll('[data-style-flyer]').forEach(el => el.remove());
+  G._shotFinalized = false;
+  G._moneyBounceCount = 0;
+  G._challengeShotWallBounces = 0;
+  G._shotEvents = [];
+  G._shotEventTypes = new Set();
+  G._tricksShownThisShot = new Set();
+  G._comboChainItems = [];
+  G._liveShotTotal = 0;
+  G._wasOOB = false; G._oobWasGhost = false; G._oobWasJump = false;
+  const _sp = document.getElementById('style-popup');
+  if(_sp) { _sp.innerHTML = ''; _sp.classList.remove('style-popup-show'); }
+  G.lastShotPos = G.ballPos.clone();
+  if(!G.undoUsed) {
+    G.undoState = {
+      pos: G.ballPos.clone(),
+      strokes: G.strokes,
+      hand: G.hand ? G.hand.map(c => ({...c})) : [],
+      cardSlots: G.cardSlots ? G.cardSlots.map(s => s ? {...s} : null) : [],
+      discard: G.discard ? G.discard.slice() : [],
+      drawPile: G.drawPile ? G.drawPile.slice() : [],
+    };
+    updateUndoBtn();
+  }
+
+  // Launch at high speed along the full 3D scope direction
+  const boost = G.swingMult || 1.0;
+  const powerMult = G._powerShotStacks > 0 ? Math.pow(2.0, G._powerShotStacks) : 1.0;
+  const LAUNCH_SPEED = 42 * boost * powerMult;
+  G.ballVel.set((fx/dirLen) * LAUNCH_SPEED, (fy/dirLen) * LAUNCH_SPEED, (fz/dirLen) * LAUNCH_SPEED);
+  triggerShake(0.25 * Math.min(powerMult, 3));
+
+  // Reset per-swing card flags (matches fireShot)
+  G._powerShotStacks = 0;
+  G._arcShotActive = false;
+  G._anglerCardActive = false;
+  G._wallMagnetActive = false;
+  G._powerShotTensionActive = false;
+
+  G.rolling = true;
+  G.rollingSlowTimer = 0;
+  G.aimMode = false;
+  G._shotJustFired = performance.now();
+  // Jumper pre-load: add upward punch to the ball's launch velocity
+  if(G._jumpPreloaded) {
+    G.ballVel.y = Math.max(G.ballVel.y, G.ballVel.y + 6.38);
+    G._jumpPreloaded = false;
+    if(G.ball && G._jumpPreloadOrigEmissive && G.ball.material && G.ball.material.emissive) {
+      G.ball.material.emissive.copy(G._jumpPreloadOrigEmissive);
+      G._jumpPreloadOrigEmissive = null;
+    }
+    recordStyleEvent('jump');
+    if(AC) sfxJump();
+  }
+  if(typeof fadeChallengDesc === 'function') fadeChallengDesc();
+  G._swingCoinCount = 0;
+  const donBtnFS = document.getElementById('hs-don-btn');
+  if(donBtnFS) donBtnFS.style.display = 'none';
+  if(G.ball) {
+    const b = G.ball;
+    const baseScale = G.modifiers.some(m=>m.id==='shrink_ray') ? 0.5 : 1.0;
+    b.scale.set(1.4*baseScale, 0.55*baseScale, 1.4*baseScale);
+    setTimeout(() => { if(b && b.scale) b.scale.set(0.85*baseScale, 1.35*baseScale, 0.85*baseScale); }, 80);
+    setTimeout(() => { if(b && b.scale) b.scale.setScalar(baseScale); }, 180);
+  }
+  G.jumpsLeft = G.jumpsMax || 0;
+  G.strokes++;
+  G._holeSwingCount = (G._holeSwingCount||0) + 1;
+  G._jumpOverChecked = new Set();
+  G._wallSkipChecked = new Set();
+
+  // Engage impact-cinematic watcher.
+  // NOTE: origFov must be the normal gameplay FOV (55), NOT camera.fov at this
+  // moment — activateSharpshooter() has already set fov to the narrow scope value (20°).
+  // Capturing the current fov here caused v0.17p's "stuck zoomed-in post-launch" bug.
+  const origSlowMo = G._slowMoScale || 1.0;
+  const origFov = G._sharpshooterOrigFov || 55;
+  G._ssBallCinematic = {
+    phase: 'waiting_contact',
+    startTime: performance.now(),
+    dir: new THREE.Vector3(hx, 0, hz).normalize(),
+    origSlowMo,
+    origFov,
+    smoothCamPos: camera.position.clone(),
+    smoothLookAt: new THREE.Vector3(G.ballPos.x, G.ballPos.y + 0.3, G.ballPos.z),
+    contactPos: null,
+    contactTime: 0,
+    easeStart: 0,
+    preContactBounces: G._holeWallBounces || 0,
+  };
+  G._slowMoScale = 0.35;
+
+  exitSharpshooter();
+  G._sharpshooterBallMode = false;
+
+  if(typeof onShotFired === 'function') onShotFired();
+
+  if(AC) {
+    const ac = getAC(), t = ac.currentTime;
+    const o = ac.createOscillator(); o.type = 'triangle';
+    o.frequency.setValueAtTime(180, t); o.frequency.exponentialRampToValueAtTime(900, t+0.12);
+    const g = ac.createGain(); g.gain.setValueAtTime(0.35, t); g.gain.exponentialRampToValueAtTime(0.001, t+0.14);
+    o.connect(g); g.connect(getACDest()); o.start(t); o.stop(t+0.16);
+  }
+}
+window.fireSharpshooterBall = fireSharpshooterBall;
+
+// ── Catapult: huge arc launch + bouncy landings + wall-skip combos ──
+function activateCatapult() {
+  G._catapultActive = true;
+  G._arcShotActive = true; // re-use arc preview render path
+  G._catapultBounceBoost = 3;
+  G._catapultGroundBounce = true;
+  showToast('🪤 CATAPULT! Huge arc + bouncy landings', 1200);
+  triggerShake('light');
+  if(AC) {
+    const ac = getAC(), t = ac.currentTime;
+    const o1 = ac.createOscillator(); o1.type = 'sawtooth';
+    o1.frequency.setValueAtTime(80, t); o1.frequency.exponentialRampToValueAtTime(40, t+0.25);
+    const g1 = ac.createGain(); g1.gain.setValueAtTime(0.12, t); g1.gain.exponentialRampToValueAtTime(0.001, t+0.28);
+    o1.connect(g1); g1.connect(getACDest()); o1.start(t); o1.stop(t+0.3);
+    const o2 = ac.createOscillator(); o2.type = 'sine';
+    o2.frequency.setValueAtTime(320, t+0.22); o2.frequency.exponentialRampToValueAtTime(120, t+0.5);
+    const g2 = ac.createGain(); g2.gain.setValueAtTime(0.22, t+0.22); g2.gain.exponentialRampToValueAtTime(0.001, t+0.55);
+    o2.connect(g2); g2.connect(getACDest()); o2.start(t+0.22); o2.stop(t+0.55);
+  }
+}
 
 function activateFreezeFrame() {
   G._freezeFrameActive = true;
@@ -10484,6 +10805,29 @@ function activateGoldenPath() {
 }
 
 function triggerJump() {
+  // Pre-swing pre-load: if ball isn't rolling yet and we're in aim mode,
+  // arm a pre-loaded jump that will fire the moment the swing launches.
+  if(G.aimMode && !G.rolling && !G.inHole && G.state === 'playing') {
+    G._jumpPreloaded = true;
+    showToast('🦘 Jump Pre-loaded for swing', 1400);
+    triggerShake('light');
+    if(AC) {
+      // Spring-coil SFX: low charge-up
+      const ac = getAC(), t = ac.currentTime;
+      const o = ac.createOscillator(); o.type = 'sine';
+      o.frequency.setValueAtTime(140, t); o.frequency.exponentialRampToValueAtTime(380, t+0.22);
+      const g = ac.createGain(); g.gain.setValueAtTime(0.18, t); g.gain.exponentialRampToValueAtTime(0.001, t+0.24);
+      o.connect(g); g.connect(getACDest()); o.start(t); o.stop(t+0.26);
+    }
+    // Light-green tint on ball to signal primed state (restored on launch)
+    if(G.ball && G.ball.material && G.ball.material.emissive) {
+      G._jumpPreloadOrigEmissive = G.ball.material.emissive.clone();
+      G.ball.material.emissive.setRGB(0.2, 0.55, 0.2);
+    }
+    updateHandUI();
+    return;
+  }
+  // Mid-roll: existing grace-window pending-jump behavior
   const jumpReady = (G.rolling || (performance.now() - (G._shotJustFired||0) < 300)) && !G.inHole && !G.aimMode;
   if(jumpReady) {
     G._jumpPending = true;
@@ -11119,6 +11463,86 @@ function updateParticles(dt) {
 
 // ── Camera ────────────────────────────────────────────
 function updateCamera() {
+  // ── Sharpshooter-Ball cinematic: trail the ball, zoom out on first contact ──
+  if(G._ssBallCinematic) {
+    const cin = G._ssBallCinematic;
+    const now = performance.now();
+    const elapsed = (now - cin.startTime) / 1000;
+    const bp = G.ballPos;
+    const behindDist = 5.5, upDist = 1.8;
+    const tgtX = bp.x - cin.dir.x * behindDist;
+    const tgtZ = bp.z - cin.dir.z * behindDist;
+    const tgtY = bp.y + upDist;
+    const lookAheadX = bp.x + cin.dir.x * 2.5;
+    const lookAheadZ = bp.z + cin.dir.z * 2.5;
+    const lookAheadY = bp.y;
+    const lerpK = 0.18;
+    cin.smoothCamPos.x += (tgtX - cin.smoothCamPos.x) * lerpK;
+    cin.smoothCamPos.y += (tgtY - cin.smoothCamPos.y) * lerpK;
+    cin.smoothCamPos.z += (tgtZ - cin.smoothCamPos.z) * lerpK;
+    cin.smoothLookAt.x += (lookAheadX - cin.smoothLookAt.x) * 0.25;
+    cin.smoothLookAt.y += (lookAheadY - cin.smoothLookAt.y) * 0.25;
+    cin.smoothLookAt.z += (lookAheadZ - cin.smoothLookAt.z) * 0.25;
+
+    if(cin.phase === 'waiting_contact') {
+      const bouncesNow = G._holeWallBounces || 0;
+      const bounceContact = bouncesNow > cin.preContactBounces;
+      const hasImpactEvent = G._shotEvents && G._shotEvents.some(e =>
+        e.type === 'wall_bounce' || e.type === 'obstacle_destroyed' || e.type === 'wall_destroyed'
+        || e.type === 'rock_ricochet' || e.type === 'bumper_hit'
+      );
+      if(bounceContact || hasImpactEvent || elapsed > 5.0) {
+        cin.phase = 'zoom_out';
+        cin.contactTime = now;
+        cin.contactPos = G.ballPos.clone();
+        G._slowMoScale = 0.2;
+      }
+    }
+    if(cin.phase === 'zoom_out') {
+      const t = Math.min(1, (now - cin.contactTime) / 900);
+      const e = 1 - Math.pow(1 - t, 2);
+      const pullBack = 5.5 + e * 10.0;
+      const pullUp   = 1.8 + e * 5.0;
+      const tgtX2 = bp.x - cin.dir.x * pullBack;
+      const tgtZ2 = bp.z - cin.dir.z * pullBack;
+      const tgtY2 = bp.y + pullUp;
+      cin.smoothCamPos.x += (tgtX2 - cin.smoothCamPos.x) * 0.1;
+      cin.smoothCamPos.y += (tgtY2 - cin.smoothCamPos.y) * 0.1;
+      cin.smoothCamPos.z += (tgtZ2 - cin.smoothCamPos.z) * 0.1;
+      const tgtFov = 55 + e * 10;
+      camera.fov += (tgtFov - camera.fov) * 0.12;
+      G._slowMoScale = 0.2 + e * 0.6;
+      if(t >= 1) {
+        cin.phase = 'ease_back';
+        cin.easeStart = now;
+      }
+    }
+    if(cin.phase === 'ease_back') {
+      const t = Math.min(1, (now - cin.easeStart) / 400);
+      G._slowMoScale = 0.8 + t * (cin.origSlowMo - 0.8);
+      camera.fov += (cin.origFov - camera.fov) * 0.15;
+      if(t >= 1) {
+        G._slowMoScale = cin.origSlowMo;
+        camera.fov = cin.origFov;
+        camera.updateProjectionMatrix();
+        // Belt-and-suspenders: reset orbital camera pose so the hand-off back to
+        // the normal orbital view doesn't land on a weird pitch/azimuth.
+        // camPhi=0.85 is the normal gameplay pitch; camTheta points away from the
+        // ball's velocity so the camera sits behind the ball in its direction of travel.
+        G.camPhi = 0.85;
+        const velMag = Math.hypot(G.ballVel.x, G.ballVel.z);
+        if(velMag > 0.5) {
+          // Point camTheta so the orbit ends up behind the ball relative to motion
+          G.camTheta = Math.atan2(-G.ballVel.x, -G.ballVel.z);
+        }
+        G._ssBallCinematic = null;
+      }
+    }
+    camera.position.copy(cin.smoothCamPos);
+    camera.lookAt(cin.smoothLookAt);
+    camera.updateProjectionMatrix();
+    return;
+  }
   // Sharpshooter VATS-style cinematic: follow the missile in slow-mo, survey the carnage.
   if(G._ssCinematic) {
     const cin = G._ssCinematic;
@@ -11632,7 +12056,8 @@ function onPointerDown(x, y, id) {
     G._powerShotActive = false;
     G._cannonballActive = false;
     const hasEmptySlot2 = G.cardSlots.some(s => s === null);
-    if(hasEmptySlot2 && G._drawPerSwing > 0) drawCards(1);
+    const qdN2 = G.modifiers.some(m=>m.id==='quick_draw') ? 2 : 1;
+    if(hasEmptySlot2 && G._drawPerSwing > 0) drawCards(qdN2);
     updateHandUI();
   }
   if(G.aimMode && !G.rolling && !G.inHole && hitTestBall(x,y)) {
@@ -11769,7 +12194,8 @@ function fireShot() {
   }
   const boost = G.swingMult || 1.0;
   const ironWeight = G._ironBallActive ? 0.85 : 1.0;
-  const arcExtra = G._arcShotActive ? 4.5 : 0;
+  // Catapult: bigger arc pop than Arc Shot (+6.5 vs +4.5). Catapult implies arc.
+  const arcExtra = G._catapultActive ? 6.5 : (G._arcShotActive ? 4.5 : 0);
   const powerMult = G._powerShotStacks > 0 ? Math.pow(2.0, G._powerShotStacks) : 1.0;
   const speed = G.shotPower * 32 * boost * ironWeight * powerMult;
   const firedPower = G.shotPower;
@@ -11826,6 +12252,18 @@ function fireShot() {
   G.rollingSlowTimer = 0;
   G.aimMode = false;
   G._shotJustFired = performance.now();
+  // Jumper pre-load consumption: punch Y-velocity up on launch if armed.
+  // Use Math.max so Catapult's bigger initial Y (9.0) still wins over a normal jump.
+  if(G._jumpPreloaded) {
+    G.ballVel.y = Math.max(G.ballVel.y, 6.38);
+    G._jumpPreloaded = false;
+    if(G.ball && G._jumpPreloadOrigEmissive && G.ball.material && G.ball.material.emissive) {
+      G.ball.material.emissive.copy(G._jumpPreloadOrigEmissive);
+      G._jumpPreloadOrigEmissive = null;
+    }
+    recordStyleEvent('jump');
+    if(AC) sfxJump();
+  }
   fadeChallengDesc(); // hide challenge description after first swing
   G._swingCoinCount = 0; // reset Balatro coin pitch counter
   // Hide DoN wager button once play begins
@@ -11848,6 +12286,7 @@ function fireShot() {
   G._holeSwingCount = (G._holeSwingCount||0) + 1;
   // Reset jump-over dedup for the new shot
   G._jumpOverChecked = new Set();
+  G._wallSkipChecked = new Set();
   G.shotPower = 0;
   if(AC) sfxSwing(firedPower);
   if(G.aimArrow){ scene.remove(G.aimArrow); G.aimArrow=null; }
@@ -12482,17 +12921,17 @@ function updateHint(msg) {
 // Per-perk shop weights (survival/spectacle boosted, economy reduced)
 const ALL_PERKS = [
   // COMMON — base weight 8
-  { id:'strengthen_swing', name:'Stronger Swing',      emoji:'💪', rarity:'common',    price:6,  stackable:true,  weight:7,
+  { id:'strengthen_swing', name:'Stronger Swing',      emoji:'💪', rarity:'common',    price:10,  stackable:true,  weight:7,
     desc:'+20% shot power. Stacks every purchase — no cap.' },
-  { id:'bouncy_walls',     name:'Rubber Walls',        emoji:'🧱', rarity:'common',    price:8,  stackable:true,  weight:7,
+  { id:'bouncy_walls',     name:'Rubber Walls',        emoji:'🧱', rarity:'common',    price:15,  stackable:true,  weight:6,
     desc:'Increased wall and surface restitution — bouncier everything. Stacks!' },
-  { id:'hot_streak',       name:'Hot Streak',          emoji:'🔥', rarity:'common',    price:8,  stackable:false, weight:7,
+  { id:'hot_streak',       name:'Hot Streak',          emoji:'🔥', rarity:'common',    price:20,  stackable:false, weight:6,
     desc:'Each consecutive par-or-better hole adds +15% to coin earnings. Resets on bogey.' },
-  { id:'magnet',           name:'Coin Magnet',         emoji:'🧲', rarity:'common',    price:8,  stackable:true,  weight:8,
+  { id:'magnet',           name:'Coin Magnet',         emoji:'🧲', rarity:'common',    price:15,  stackable:true,  weight:8,
     desc:'Coins are pulled toward your ball. Buy up to 3× to increase range and pull strength.' },
   { id:'extra_heart',     name:'Heart',                emoji:'❤️‍🩹', rarity:'common',   price:8,  stackable:true,  weight:12,
     desc:'Gain back one lost life immediately.' },
-  { id:'high_speed_finish', name:'High Speed Finish',  emoji:'🏁', rarity:'common',   price:9,  stackable:false, weight:8,
+  { id:'high_speed_finish', name:'High Speed Finish',  emoji:'🏁', rarity:'common',   price:15,  stackable:false, weight:8,
     desc:'Score +10 coins when you fly into the hole at high speed. Checkered flag celebration!' },
   // RARE — base weight 4
   { id:'speed_hoops',      name:'Speed Hoops',         emoji:'⭕', rarity:'rare',      price:12,  stackable:false, weight:4,
@@ -12522,6 +12961,10 @@ const ALL_PERKS = [
     desc:'Destroyed obstacles explode too, damaging nearby obstacles in a small chain reaction.' },
   { id:'showboat',        name:'Showboat',              emoji:'🎭', rarity:'rare',     price:14, stackable:true,  weight:4,
     desc:'Style score coin bonus is +50% larger. Stacks: 2.0×, 2.5×, 3.0×…' },
+  { id:'quick_draw',      name:'Quick Draw',            emoji:'🤠', rarity:'rare',     price:16, stackable:false, weight:3,
+    desc:'Draw 2 new cards every swing instead of 1. More chaos per stroke.' },
+  { id:'off_roading',     name:'Off-Roading',           emoji:'🏜️', rarity:'rare',     price:18, stackable:false, weight:3,
+    desc:'Out-of-bounds grace period extended from 1.5s to 10s. Live dangerously.' },
   // EPIC — base weight 2
   { id:'big_hole',         name:'Big Hole',            emoji:'🕳️', rarity:'epic',      price:14, stackable:false, weight:2,
     desc:'The hole radius doubles — much more forgiving on close approaches.' },
@@ -12988,6 +13431,8 @@ function initHole() {
   // Per-hole perk resets
   G.jumpsLeft = G.jumpsMax || 0;
   G._jumpPending = false;
+  G._jumpPreloaded = false;
+  if(G.ball && G._jumpPreloadOrigEmissive && G.ball.material && G.ball.material.emissive) { G.ball.material.emissive.copy(G._jumpPreloadOrigEmissive); G._jumpPreloadOrigEmissive = null; }
   G._shotJustFired = 0;
   G.shooterAmmo   = G.modifiers.filter(m => m.id === 'shooter').length;
   G.grenadeAmmo   = G.modifiers.filter(m => m.id === 'grenade').length;
@@ -13319,6 +13764,12 @@ function escMainMenu() {
     camera.fov = G._ssCinematic.origFov || 55;
     camera.updateProjectionMatrix();
     G._ssCinematic = null;
+  }
+  if(G._ssBallCinematic) {
+    G._slowMoScale = G._ssBallCinematic.origSlowMo || 1.0;
+    camera.fov = G._ssBallCinematic.origFov || 55;
+    camera.updateProjectionMatrix();
+    G._ssBallCinematic = null;
   }
   // ── Analytics: save abandoned run if one is in progress ──
   if(G._runId && G.scorecard && G.scorecard.length > 0 && G.state === 'playing') {
@@ -13728,6 +14179,8 @@ function switchToNextPlayer() {
   // Per-hole perk resets for this player
   G.jumpsLeft = G.jumpsMax || 0;
   G._jumpPending = false;
+  G._jumpPreloaded = false;
+  if(G.ball && G._jumpPreloadOrigEmissive && G.ball.material && G.ball.material.emissive) { G.ball.material.emissive.copy(G._jumpPreloadOrigEmissive); G._jumpPreloadOrigEmissive = null; }
   G.shooterAmmo = G.modifiers.filter(m => m.id === 'shooter').length;
   G.grenadeAmmo = G.modifiers.filter(m => m.id === 'grenade').length;
   G.boulderAvail = G.modifiers.some(m => m.id === 'boulder');
@@ -14038,6 +14491,8 @@ function startGame(){
   G.swingMult = 1.0;
   G.jumpsMax = 0;
   G._jumpPending = false;
+  G._jumpPreloaded = false;
+  if(G.ball && G._jumpPreloadOrigEmissive && G.ball.material && G.ball.material.emissive) { G.ball.material.emissive.copy(G._jumpPreloadOrigEmissive); G._jumpPreloadOrigEmissive = null; }
   G.thinIceActive = false;
   G.magnetActive = false;
   G.snowballStacks = 0;
@@ -14160,6 +14615,12 @@ function nextHole(){
     camera.fov = G._ssCinematic.origFov || 55;
     camera.updateProjectionMatrix();
     G._ssCinematic = null;
+  }
+  if(G._ssBallCinematic) {
+    G._slowMoScale = G._ssBallCinematic.origSlowMo || 1.0;
+    camera.fov = G._ssBallCinematic.origFov || 55;
+    camera.updateProjectionMatrix();
+    G._ssBallCinematic = null;
   }
   G.hole++;
   if(G.hole>=G.totalHoles){showGameOver();return;}
