@@ -301,9 +301,9 @@ position:absolute; inset:0;
 background:linear-gradient(160deg,rgba(135,206,235,0.92) 0%,rgba(100,180,100,0.9) 100%);
 backdrop-filter:blur(8px);
 display:flex; flex-direction:column;
-align-items:center; justify-content:safe center;
+align-items:center; justify-content:flex-start;
 gap:18px; z-index:100;
-padding:32px 32px 48px;
+padding:max(8vh, 32px) 32px 48px;
 overflow-y:auto;
 -webkit-overflow-scrolling:touch;
 }
@@ -2147,7 +2147,7 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.17n6';
+const GAME_VERSION = '0.17n7';
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 const PRICE_MULTIPLIER = 1.25;
@@ -8235,7 +8235,7 @@ function weightedCardPicks(count) {
 function getScaledCardPrice(card) {
   const diff = G.difficulty || 1;
   const rate = diff <= 2 ? 0.1 : diff === 3 ? 0.2 : diff === 4 ? 0.25 : 0.3;
-  return Math.max(1, Math.round(card.price * 1.5 * (1 + G.hole * rate) * PRICE_MULTIPLIER));
+  return Math.max(1, Math.round(card.price * 2 * (1 + G.hole * rate) * PRICE_MULTIPLIER));
 }
 
 function closeShop() {
@@ -8319,7 +8319,7 @@ function getScaledPrice(perk) {
   // Base prices inflated 50%, then scale per hole, then global PRICE_MULTIPLIER
   const diff = G.difficulty || 1;
   const rate = diff <= 2 ? 0.1 : diff === 3 ? 0.2 : diff === 4 ? 0.25 : 0.3;
-  const base = Math.max(1, Math.round(perk.price * 1.5 * (1 + G.hole * rate) * PRICE_MULTIPLIER));
+  const base = Math.max(1, Math.round(perk.price * 2 * (1 + G.hole * rate) * PRICE_MULTIPLIER));
   // Multiplayer: 50% off — coins are split across players
   return isMultiplayer() ? Math.max(1, Math.round(base * 0.5)) : base;
 }
@@ -8473,7 +8473,7 @@ window.buyPerk = function(id) {
 function getCardRemovePrice() {
   const diff = G.difficulty || 1;
   const rate = diff <= 2 ? 0.1 : diff === 3 ? 0.2 : diff === 4 ? 0.25 : 0.3;
-  return Math.max(1, Math.round(20 * 1.5 * (1 + G.hole * rate) * PRICE_MULTIPLIER));
+  return Math.max(1, Math.round(20 * 2 * (1 + G.hole * rate) * PRICE_MULTIPLIER));
 }
 
 function openCardRemoval() {
