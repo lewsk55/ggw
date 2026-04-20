@@ -97,6 +97,59 @@ letter-spacing:0.5px;
 font-size:0.7rem;
 letter-spacing:-1px;
 }
+/* HP row — third row of the pill, sits under the info row (v0.17x) */
+.hp-row {
+  display:flex;
+  justify-content:center;
+  padding:4px 0 1px;
+  margin-top:2px;
+  border-top:1px solid rgba(0,0,0,0.06);
+}
+#h-hp-dots {
+  display:flex;
+  gap:3px;
+  align-items:center;
+}
+.hp-dot {
+  width:7px; height:7px; border-radius:50%;
+  background:rgba(200,80,80,0.18);
+  border:1px solid rgba(120,40,40,0.25);
+  transition:background 0.2s, border-color 0.2s, transform 0.1s;
+  display:inline-block;
+}
+.hp-dot.filled {
+  background:#e05555;
+  border-color:#8a2626;
+  box-shadow:0 0 3px rgba(224,85,85,0.5);
+}
+/* Pulse on damage: bright red flash + slight scale on the whole strip */
+#h-hp-dots.hp-pulse .hp-dot.filled {
+  animation: hp-pulse 0.5s ease-out;
+}
+@keyframes hp-pulse {
+  0%   { transform:scale(1);   filter:brightness(1); }
+  35%  { transform:scale(1.35); filter:brightness(1.8) saturate(1.3); }
+  100% { transform:scale(1);   filter:brightness(1); }
+}
+/* Floating "-1" popup under the HP row on per-swing damage (v0.17y) */
+.hp-damage-popup {
+  position:fixed;
+  transform:translate(-50%, 0);
+  pointer-events:none;
+  z-index:250;
+  font-family:'Playfair Display','Lato',serif;
+  font-weight:900;
+  font-size:1.35rem;
+  color:#ff3030;
+  text-shadow:0 0 8px rgba(255,0,0,0.6), 0 2px 4px rgba(0,0,0,0.4);
+  animation: hp-pop-damage 0.9s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+@keyframes hp-pop-damage {
+  0%   { transform:translate(-50%, -4px) scale(0.6); opacity:0; }
+  15%  { transform:translate(-50%, 0)    scale(1.25); opacity:1; }
+  40%  { transform:translate(-50%, 2px)  scale(1.1);  opacity:1; }
+  100% { transform:translate(-50%, 22px) scale(0.9);  opacity:0; }
+}
 .info-row .info-div {
 width:3px; height:3px; border-radius:50%; background:rgba(0,0,0,0.2);
 }
@@ -806,6 +859,35 @@ border:1px solid rgba(255,255,255,0.2);
 border-radius:50px;
 cursor:pointer;
 }
+/* Description panel: populated on hover (desktop) or tap (mobile) */
+.dv-desc-panel {
+  margin: 14px auto 0;
+  max-width: 520px;
+  min-height: 62px;
+  padding: 10px 14px;
+  background: rgba(0,0,0,0.35);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 12px;
+  color: #fff;
+  font-family: 'Lato', sans-serif;
+  text-align: center;
+  transition: background 0.15s;
+}
+.dv-desc-name {
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: rgba(255,255,255,0.95);
+  margin-bottom: 4px;
+  letter-spacing: 0.3px;
+}
+.dv-desc-body {
+  font-size: 0.75rem;
+  color: rgba(255,255,255,0.75);
+  line-height: 1.4;
+}
+.dv-hoverable { cursor: pointer; transition: transform 0.1s, box-shadow 0.15s; }
+.dv-hoverable:hover { transform: translateY(-2px); box-shadow: 0 4px 14px rgba(0,0,0,0.35); }
+.dv-hoverable.dv-selected { outline: 2px solid rgba(255,255,255,0.5); outline-offset: 2px; }
 
 /* When undo is shown alongside menu btn, stack it above */
 #btn-undo {
@@ -828,6 +910,29 @@ transition:opacity 0.2s;
 }
 #btn-undo:active { background:rgba(255,255,255,0.95); }
 #btn-undo:disabled { opacity:0.35; cursor:not-allowed; }
+
+/* Slow Mo perk button — appears when owned + unused this hole */
+#btn-slowmo {
+  position:absolute;
+  bottom:128px; left:20px;
+  font-family:'Lato', sans-serif;
+  font-size:0.72rem; font-weight:700;
+  letter-spacing:1px;
+  text-transform:uppercase;
+  padding:10px 16px;
+  background:rgba(255,245,180,0.9);
+  color:#7a5a1a;
+  border:2px solid rgba(255,215,80,0.85);
+  border-radius:50px;
+  cursor:pointer;
+  box-shadow:0 2px 14px rgba(200,150,40,0.3);
+  z-index:15;
+  display:none;
+  backdrop-filter:blur(8px);
+  transition:opacity 0.2s, transform 0.1s;
+}
+#btn-slowmo:active { transform:scale(0.95); background:#fff0a0; }
+#btn-slowmo:disabled { opacity:0.35; cursor:not-allowed; background:rgba(200,200,200,0.5); color:#888; border-color:rgba(150,150,150,0.4); }
 /* ── Card Hand (4 centered slots at bottom) ── */
 #card-hand {
 position:fixed;
@@ -1499,11 +1604,13 @@ margin-top:6px;
   <div class="info-row">
     <span id="h-mph" style="font-weight:700;color:#3a8abf;min-width:28px">0 <span style="font-size:0.45rem;font-weight:400">mph</span></span>
     <span class="info-div"></span>
-    <span id="h-lives-mini">❤️❤️❤️</span>
-    <span class="info-div"></span>
     <span>Hole <b id="h-hole">1</b>/<span id="h-total-holes">9</span></span>
     <span class="info-div"></span>
     <span><span id="h-par-label">Par</span> <b id="h-par">3</b></span>
+  </div>
+  <!-- HP dots: third row of the pill (v0.17x) -->
+  <div class="hp-row">
+    <div id="h-hp-dots"></div>
   </div>
 </div>
 
@@ -1538,6 +1645,7 @@ margin-top:6px;
 <!-- Undo last shot -->
 
 <button id="btn-undo">↩ Undo Shot</button>
+<button id="btn-slowmo" onclick="activateSlowMoPerk()">🐌 Slow Mo</button>
 <button id="btn-menu" onclick="openEscMenu()">☰ Menu</button>
 <button id="btn-deck" onclick="openDeckViewer()">🃏 Loadout</button>
 
@@ -1550,6 +1658,11 @@ margin-top:6px;
     <div class="deck-viewer-grid" id="deck-viewer-grid"></div>
     <div class="deck-section-label" style="margin-top:10px">⭐ Perks</div>
     <div class="deck-viewer-grid" id="deck-viewer-perks"></div>
+    <!-- Description panel: shows on hover (desktop) / tap (mobile) -->
+    <div id="deck-viewer-desc" class="dv-desc-panel">
+      <div class="dv-desc-name" id="dv-desc-name">Tap or hover any card or perk above to see what it does.</div>
+      <div class="dv-desc-body" id="dv-desc-body"></div>
+    </div>
     <button class="deck-viewer-close" onclick="closeDeckViewer()">Close</button>
   </div>
 </div>
@@ -1624,6 +1737,15 @@ margin-top:6px;
 #challenge-badge.completed {
   background:rgba(245,200,66,0.3); border-color:rgba(245,200,66,0.6);
   color:#f5c842; box-shadow:0 0 16px rgba(245,200,66,0.4);
+}
+/* Pulse animation triggered when a counting challenge ticks up */
+#challenge-badge.progress-pulse {
+  animation: challenge-pulse 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes challenge-pulse {
+  0%   { transform:translateX(-50%) scale(1); background:rgba(0,0,0,0.4); }
+  30%  { transform:translateX(-50%) scale(1.25); background:rgba(120,220,120,0.55); color:#fff; box-shadow:0 0 22px rgba(120,220,120,0.6); }
+  100% { transform:translateX(-50%) scale(1); background:rgba(0,0,0,0.4); }
 }
 #challenge-desc {
   position:fixed; font-family:'Lato',sans-serif;
@@ -2308,8 +2430,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.17r';
-const CHANGE_NOTE = 'Profile picker modal (iOS PWA fix) + Coin Bouncer merged into Money Bounce';
+const GAME_VERSION = '0.17x3';
+const CHANGE_NOTE = 'Manual ball-stop now triggers per-swing HP damage (no more cheese)';
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 const PRICE_MULTIPLIER = 1.25;
@@ -2322,9 +2444,14 @@ const G = {
   difficultyBudgetMult: 1.3,
   biome: 'puttputt',
   strokes: 0, totalStrokes: 0, par: 3,
-  strokeBudget: 0,      // legacy — replaced by lives system
-  lives: 3,             // start with 3 lives; lose one when finishing over par
-  budgetBase: 27,       // total stroke budget for the whole round (3 per hole × 9)
+  strokeBudget: 0,      // legacy — replaced by HP system
+  // v0.17x: HP system replaces 3-heart lives. Linear damage: 1 HP per stroke over par.
+  // 10-dot segmented bar lives in the pill HUD bottom row.
+  hp: 10, hpMax: 10,
+  // DEPRECATED: kept for multiplayer back-compat (p.lives derives from hp).
+  // Removing these fully requires migrating multiplayer flow, which is scoped out of Phase 1.
+  lives: 3,
+  budgetBase: 27,
   scorecard: [], modifiers: [],
   // ── Economy ─────────────────────────────────────────
   coins: 0,               // current wallet
@@ -3540,10 +3667,11 @@ function generatePuttPuttCourse(holeNum) {
   if(totalObstacles >= 8) basePar += 1;
   // Difficulty penalty: harder stars = tighter par
   const parPenalty = diff >= 4 ? 2 : diff >= 3 ? 1 : 0;
-  // Clamp: min 2, max 7
-  let par = Math.max(2, Math.min(7, basePar - parPenalty));
-  // Par 6+ holes played too easy for their length — shave 1 off anything that ends up 6 or more
-  if(par >= 6) par -= 1;
+  // v0.17y: par tightened by 1 globally, clamped to [3, 6].
+  // Min 3 (every hole should plausibly accommodate a sink on the first stroke,
+  // at least with a lucky swing). Max 6 (caps disaster exposure under the
+  // 1-HP-per-over-par rule — a perfect run plus one bad hole shouldn't be fatal).
+  let par = Math.max(3, Math.min(6, basePar - parPenalty - 1));
 
   // ── 12. Flat terrain ─────────────────────────────────
   const vmW = W+1, vmH = H+1;
@@ -4624,7 +4752,7 @@ function buildCourse(data) {
   if(data.angledWallData && data.angledWallData.length) {
     for(const aw of data.angledWallData) {
       const baseH = ch(aw.gx, aw.gy);
-      const triH  = 0.72;
+      const triH  = 1.4;  // v0.17s: was 0.72; raised to match actual collidable height
 
       // Three vertices in absolute world XZ coords
       const rx=aw.rcx, rz=aw.rcz;   // right-angle corner
@@ -4677,6 +4805,8 @@ function buildCourse(data) {
         ax: x1, az: z1,   // hypotenuse end 1
         bx: x2, bz: z2,   // hypotenuse end 2
         wx: rx, wz: rz,    // right-angle vertex
+        baseY: baseH,
+        topY: baseH + triH,   // v0.17s: expose Y ceiling so collision can gate on ball height
         edges: [
           {x0:x1, z0:z1, x1:x2, z1:z2},   // hypotenuse
           {x0:rx, z0:rz, x1:x1, z1:z1},    // leg: corner → h1
@@ -5072,8 +5202,8 @@ function buildCourse(data) {
     }
   }
 
-  // ── Lot of Heart: spawn a healing heart on ~25% of holes ──
-  if(G.modifiers.some(m=>m.id==='lot_of_heart') && Math.random() < 0.25) {
+  // ── Lot of Heart: spawn a healing heart on ~12% of holes (v0.17x: was 25%) ──
+  if(G.modifiers.some(m=>m.id==='lot_of_heart') && Math.random() < 0.12) {
     // Place heart at a random fair cell along the path
     const fairCells = [];
     for(let gy=0;gy<data.H;gy++) for(let gx=0;gx<data.W;gx++) {
@@ -5279,10 +5409,13 @@ function createAimArrow() {
     const SPREAD = 0.9;
     G._aimSideBalls = [];
     const ballGeo = new THREE.SphereGeometry(BALL_R, 12, 8);
+    const _aimShrunk = G.modifiers.some(m=>m.id==='shrink_ray');
+    const _aimBallScale = _aimShrunk ? 0.35 : 1.0;
     for(let side = -1; side <= 1; side += 2) {
       // Side ball
       const ballMat = new THREE.MeshStandardMaterial({color:0xddddff, roughness:0.2, metalness:0.05, transparent:true, opacity:0.7});
       const mesh = new THREE.Mesh(ballGeo, ballMat);
+      mesh.scale.setScalar(_aimBallScale);
       scene.add(mesh);
 
       // Side arrow — same structure as main (line + 12 dots + cone = children 0–13)
@@ -5387,13 +5520,21 @@ function updateAimArrow() {
 
   const power  = G.shotPower;
   const hasArc = G._arcShotActive;
+  const hasCatapult = G._catapultActive;
   const boost  = G.swingMult || 1.0;
   const spd    = power * 32 * boost;
   const c      = new THREE.Color();
   c.setHSL(0.33 - power * 0.33, 0.9, 0.52);
+  // Catapult: bold magenta arc for max readability, overriding the power-color ramp
+  const catC = new THREE.Color(0xff3ba8);
 
-  // Shared arc params
-  const vy0    = 2.5 + 4.5;
+  // Shared arc params — vy0 matches the actual fireShot launch velocity so the
+  // preview lands where the ball will actually land.
+  //   Normal Arc Shot: 2.5 + 4.5 = 7.0
+  //   Catapult:        2.5 + 6.5 = 9.0
+  const vy0Default = 2.5 + 4.5;
+  const vy0Cat     = 2.5 + 6.5;
+  const vy0    = hasCatapult ? vy0Cat : vy0Default;
   const grav   = 12;
   const totalT = (vy0 + Math.sqrt(vy0 * vy0)) / grav;
 
@@ -5403,25 +5544,35 @@ function updateAimArrow() {
     grp.rotation.y = G.shotAngle || 0;
     const line = grp.children[0];
     const cone = grp.children[13];
-    if(hasArc && power > 0.01) {
+    if((hasArc || hasCatapult) && power > 0.01) {
       line.visible = false;
+      const dotScale = hasCatapult ? 2.0 : 1.0;   // bigger dots for Catapult
+      const dotCol = hasCatapult ? catC : c;
       for(let i = 1; i <= 12; i++) {
         const dot = grp.children[i];
         const t   = (i / 12) * totalT * 1.1;
         dot.position.set(0, vy0*t - 0.5*grav*t*t - 0.28, spd*t);
+        dot.scale.setScalar(dotScale);
         dot.visible = true;
-        dot.material.color.copy(c);
-        dot.material.opacity = 0.9 - (i/12)*0.5;
+        dot.material.color.copy(dotCol);
+        // Brighter, more opaque dots for Catapult; emissive so they glow
+        dot.material.opacity = hasCatapult ? (1.0 - (i/12)*0.2) : (0.9 - (i/12)*0.5);
+        if(dot.material.emissive) dot.material.emissive.copy(dotCol);
+        if(hasCatapult && dot.material.emissiveIntensity !== undefined) {
+          dot.material.emissiveIntensity = 0.8;
+        }
       }
       const tEnd = totalT * 1.1;
       cone.position.set(0, vy0*tEnd - 0.5*grav*tEnd*tEnd - 0.28, spd*tEnd);
+      cone.scale.setScalar(hasCatapult ? 1.6 : 1.0);
     } else {
       line.visible = true;
-      for(let i = 1; i <= 12; i++) grp.children[i].visible = false;
+      for(let i = 1; i <= 12; i++) { grp.children[i].visible = false; grp.children[i].scale.setScalar(1); }
       line.scale.z = 0.4 + power * 0.9;
       cone.position.set(0, 0, (0.4 + power * 0.9) * 3 + 0.18);
+      cone.scale.setScalar(1);
     }
-    cone.material.color.copy(c);
+    cone.material.color.copy(hasCatapult && power > 0.01 ? catC : c);
   }
 
   // Main ball arrow
@@ -5576,6 +5727,7 @@ function updatePhysics(dt) {
       recordStyleEvent('jump_over');
       G._challengeJumpOvers = (G._challengeJumpOvers||0) + 1;
       checkChallengeCompletion(true);
+      if(G._holeChallenge && G._holeChallenge.id === 'sky_walker') flashChallengeProgress();
       collectCoin(coinX, coinZ); collectCoin(coinX, coinZ); // +2 coins
       showToast('🦘 Jump over! +2 🪙', 800);
     };
@@ -5695,6 +5847,9 @@ function updatePhysics(dt) {
   const bouncyWallsCount = G.modifiers.filter(m=>m.id==='bouncy_walls').length;
   const BOUNCE_MULT    = (bouncyWallsCount > 0 ? 1.0 + bouncyWallsCount * 0.4 : 1.0) * (hasRicochet ? 2.2 : 1.0);
   const BALL_R_EFF     = G.modifiers.find(m=>m.id==='shrink_ray') ? BALL_R * 0.5 : BALL_R;
+  // v0.17v: Use BALL_R_EFF for floor resting height too — previously floorY used BALL_R,
+  // so under Shrink Ray the ball visually floated since its collision radius is smaller.
+  const BALL_FLOOR_R   = BALL_R_EFF;
   const ghostActive    = G.ghostBallActive; // pass-through rocks/walls
   const hasIronBall    = G._ironBallActive || G._cannonballActive;
 
@@ -5735,7 +5890,7 @@ function updatePhysics(dt) {
 
   // Sample terrain at new position
   const terrainY = G.heightMap.length ? getTerrainHeight(G.ballPos.x, G.ballPos.z) : 0;
-  const floorY = terrainY + FLOOR_H/2 + BALL_R;
+  const floorY = terrainY + FLOOR_H/2 + BALL_FLOOR_R;
 
   // ── Out-of-bounds: ball landed on ground outside course ──
   // While airborne outside the fairway it's fine (jump shots).
@@ -5915,9 +6070,17 @@ function updatePhysics(dt) {
     const WALL_THICK = 0.25 + BALL_R_EFF;
     const WALL_TOP_ABS = 0.75 + 0.3 + BALL_R;
     const ballAboveWall = G.ballPos.y > WALL_TOP_ABS;
+    // v0.17t: Launch grace — 200ms after shot fire, wall collision is skipped,
+    // BUT only when this swing involved a Catapult or a pre-loaded Jumper.
+    // Those are the cases where the ball leaves the ground immediately and
+    // bouncing off a wall at tee is an annoying false interaction. Regular
+    // rolling shots still respect walls at the tee.
+    const launchGrace = G._shotJustFired
+      && (performance.now() - G._shotJustFired) < 200
+      && (G._catapultLaunchGrace || G._jumpPreloadLaunchGrace);
     let pushed = false;
 
-    if(!ballAboveWall && !ghostActive) {
+    if(!ballAboveWall && !ghostActive && !launchGrace) {
     for(const poly of G.wallPolylines) {
       for(let i=0; i<poly.length-1; i++) {
         const ax=poly[i].x,   az=poly[i].z;
@@ -6011,6 +6174,7 @@ function updatePhysics(dt) {
             }
             G._challengeShotWallBounces = (G._challengeShotWallBounces||0) + 1;
             checkChallengeCompletion(true);
+            if(G._holeChallenge && G._holeChallenge.id === 'wall_rider') flashChallengeProgress();
             trackStat('wallBounces', 1);
             trackStat('totalBounces', 1);
             G._holeWallBounces = (G._holeWallBounces||0) + 1;
@@ -6044,6 +6208,9 @@ function updatePhysics(dt) {
     for(const aw of G.angledWalls) {
       const bx = G.ballPos.x, bz = G.ballPos.z;
       const minDist = BALL_R_EFF + 0.08;
+      // v0.17s: Y-ceiling gate — ball clearly above the triangle top can fly over.
+      // Leaves a small tolerance (-BALL_R_EFF) so balls grazing the top still deflect.
+      if(aw.topY != null && G.ballPos.y - BALL_R_EFF > aw.topY) continue;
 
       // ── Point-in-triangle test (2D XZ) ──────────────────
       const cross2d = (px,pz, ax,az, bx2,bz2) => (bx2-ax)*(pz-az) - (bz2-az)*(px-ax);
@@ -6245,20 +6412,19 @@ function updatePhysics(dt) {
         spawnHitParticles(G.ballPos);
         triggerShake('heavy');
         if(AC) sfxBounce(Math.max(5, Math.hypot(G.ballVel.x, G.ballVel.z)));
-        // Lose a life — cooldown prevents same spike hurting twice in one contact
+        // Spike damage (v0.17x: 1 HP per hit; Phase 2 will add tiered damage)
         if(spike.squashT <= 0) {
           spike.squashT = 1.0;
-          G.lives = Math.max(0, G.lives - 1);
-          triggerLifeLost(null);
-          showToast('🔺 OUCH! -1 ❤️', 1200);
-          updateUI();
+          applyDamage(1, 'spike');
+          spawnHpDamagePopup(1);
+          showToast('🔺 OUCH! -1 HP', 1200);
           G._holeHazardsTouched.spikes = (G._holeHazardsTouched.spikes||0) + 1;
           // Spike blows up on contact — explosion VFX + remove from play
           spike._destroyed = true;
           spawnExplosion(spike.wx, spike.baseH + 0.3, spike.wz);
           if(spike.mesh) { spike.mesh.visible = false; }
           // Flag for game over check when ball stops
-          if(G.lives <= 0) {
+          if(G.hp <= 0) {
             G._spikeGameOver = true;
             // Immediate 2s game over — don't wait for ball to stop
             setTimeout(() => {
@@ -6369,6 +6535,7 @@ function updatePhysics(dt) {
         G._challengeBumperHits = (G._challengeBumperHits||0) + 1;
         G._challengeObstacleTouched = true;
         checkChallengeCompletion(true);
+        if(G._holeChallenge && G._holeChallenge.id === 'bumper_lover') flashChallengeProgress();
         trackStat('bumperHits', 1);
         trackStat('totalBounces', 1);
         G._holeBumperHits = (G._holeBumperHits||0) + 1;
@@ -6685,7 +6852,7 @@ function updatePhysics(dt) {
   updateIdleBalls(dt);
 
   const terrainY = G.heightMap.length ? getTerrainHeight(G.ballPos.x, G.ballPos.z) : 0;
-  const floorY   = terrainY + FLOOR_H/2 + BALL_R;
+  const floorY   = terrainY + FLOOR_H/2 + BALL_FLOOR_R;
 
   const curCell = getCell(G.ballPos.x, G.ballPos.z);
   if(curCell===CELL.WATER && !hasGhostWater && !G.ghostBallActive) {
@@ -6815,7 +6982,7 @@ function updatePhysics(dt) {
     if(G._slowMoWaitingForSwing && G.rolling) {
       G._slowMoWaitingForSwing = false;
       G._slowMoSwingCount = G.strokes; // track which swing started it
-      showToast('🐌 Slow Mo! 12s', 1000);
+      showToast('🐌 Slow Mo! 6s', 1000);
     }
     // End slow mo if a NEW swing starts (ball stopped then started rolling again)
     const newSwing = G._slowMoSwingCount !== undefined && G.strokes > G._slowMoSwingCount && G.rolling;
@@ -6958,8 +7125,8 @@ function updatePhysics(dt) {
     if(hDist < 0.6) {
       hpk.collected = true;
       if(hpk.mesh && G.courseGroup) G.courseGroup.remove(hpk.mesh);
-      G.lives = Math.min(G.lives + 1, 9);
-      showToast('💝 +1 Life!', 1500);
+      applyHeal(2, 'lot_of_heart_pickup');
+      showToast('💝 +2 HP!', 1500);
       triggerShake('light');
       if(AC) { for(let k=0;k<3;k++) setTimeout(()=>sfxCoinPickup(k+10),k*100); }
       updateUI();
@@ -7048,6 +7215,7 @@ function updatePhysics(dt) {
     if(G.rollingSlowTimer >= 0.3 && !G._shotFinalized) {
       G._shotFinalized = true;
       finalizeShot(false);
+      applyOverParDamageIfNeeded();
     }
     // Once we've been slow for 2s, smoothly decelerate to zero over 0.4s
     if(G.rollingSlowTimer >= 2.0) {
@@ -7063,6 +7231,12 @@ function updatePhysics(dt) {
         updateHint('Tap the ball, then pull back to aim');
         createAimArrow();
         updateUndoBtn();
+        // v0.17v: If this roll was only a Scootch nudge (no actual swing), skip the
+        // per-swing perk resets — the player still has iron ball / power shot /
+        // catapult / arc shot armed for their upcoming swing.
+        const _wasSwing = !G._nudgeOnlyRoll;
+        G._nudgeOnlyRoll = false;
+        if(_wasSwing) {
         // ── Card: draw per-swing cards & reset per-swing flags ──
         G._arcShotActive = false;
         G._anglerCardActive = false;
@@ -7070,6 +7244,8 @@ function updatePhysics(dt) {
         G._catapultActive = false;
         G._catapultBounceBoost = 0;
         G._catapultGroundBounce = false;
+        G._catapultLaunchGrace = false;
+        G._jumpPreloadLaunchGrace = false;
         if(G._ironBallActive || G._cannonballActive) {
           // Reset ball material from chrome back to normal
           if(G.ball) {
@@ -7091,25 +7267,19 @@ function updatePhysics(dt) {
         if(G._speedBallActive) {
           const parTime = G.par * 5;
           if(G._speedBallTimer >= parTime) {
-            G.lives = Math.max(0, G.lives - 1);
-            showToast('⏱️ Time expired! -1 ❤️', 1800);
+            applyDamage(3, 'speed_ball_timeout');
+            spawnHpDamagePopup(3);
+            showToast('⏱️ Time expired! -3 HP', 1800);
             triggerShake('med');
             G._lifeDeductedThisHole = true;
-            updateUI();
           }
           const sbHud2 = document.getElementById('speed-ball-hud');
           if(sbHud2) { sbHud2.style.opacity='0'; setTimeout(()=>{if(sbHud2.parentNode)sbHud2.remove();},200); }
         }
-        // ── Lose a life when ball stops over par ──────────
-        if(G.strokes > G.par && !G._lifeDeductedThisHole) {
-          G._lifeDeductedThisHole = true;
-          G.lives = Math.max(0, G.lives - 1);
-          if(isMultiplayer()) trackStat('livesLost', 1);
-          triggerLifeLost(null);
-          updateUI();
-        }
-        // ── Game over immediately if no lives left ──────
-        if(G.lives <= 0) {
+        // Per-swing damage now fires at 0.3s slow (in finalizeShot block above),
+        // not here. Keeping the comment anchor for code-spelunking.
+        // ── Game over immediately if HP depleted ──
+        if(G.hp <= 0) {
           if(isMultiplayer()) {
             // Mark this player as dead and switch to next
             savePlayerState();
@@ -7169,6 +7339,7 @@ function updatePhysics(dt) {
         if(!G.ghostBallAvail && G.modifiers.some(m=>m.id==='ghost_ball')) {
           G.ghostBallAvail = true;
         }
+        } // end if(_wasSwing)
       }
     }
   } else {
@@ -7226,6 +7397,8 @@ function resetToLastShot() {
   G._catapultActive = false;
   G._catapultBounceBoost = 0;
   G._catapultGroundBounce = false;
+  G._catapultLaunchGrace = false;
+  G._jumpPreloadLaunchGrace = false;
   // Restore normal ball visual if iron ball was active
   if(G.ball && G.ball._origMat) {
     G.ball.material = G.ball._origMat;
@@ -7277,6 +7450,8 @@ function collectCoin(wx, wz) {
   updateCoinHUD();
   // Analytics: count pickups this hole (excludes bonus coin-rains etc; matches "collected from world")
   G._holeCoinsPickedUp = (G._holeCoinsPickedUp || 0) + _coinAmt;
+  // Live challenge counter juice
+  if(G._holeChallenge && G._holeChallenge.id === 'coin_hoarder') flashChallengeProgress();
 
   // Add to combo chain if rolling
   if(G.rolling) {
@@ -7912,10 +8087,8 @@ const CHALLENGE_POOL = [
   { id:'demolition',    label:'💥 Demolition',      desc:'Destroy 5+ obstacles',           reward:10,
     guard:()=>G.deck.some(c=>['shooter','grenade','boulder','cannonball','explosivo','iron_ball'].includes(c))||G.modifiers.some(m=>m.id==='bounce_boom'),
     checkMid:()=>G._challengeObstaclesDestroyed>=5, checkEnd:()=>G._challengeObstaclesDestroyed>=5 },
-  { id:'wall_rider',    label:'🏓 Wall Rider',      desc:'3+ wall bounces in one shot',    reward:8,
-    guard:()=>true, checkMid:()=>G._challengeShotWallBounces>=3, checkEnd:()=>false },
-  { id:'minimalist',    label:'🃏 Minimalist',      desc:'Use no cards this hole',         reward:5,
-    guard:()=>G.deck.length>=3, checkMid:()=>false, checkEnd:()=>G._challengeCardsPlayed===0 },
+  { id:'wall_rider',    label:'🏓 Wall Rider',      desc:'5+ wall bounces in one shot',    reward:8,
+    guard:()=>true, checkMid:()=>G._challengeShotWallBounces>=5, checkEnd:()=>false },
   { id:'clean_run',     label:'✨ Clean Run',       desc:"Don't touch any obstacle",       reward:10,
     guard:(data)=>{const obs=(data.bumperData?.length||0)+(data.rockData?.length||0)+(data.spinBarData?.length||0)+(data.spikeData?.length||0);return obs>0;},
     checkMid:()=>false, checkEnd:()=>!G._challengeObstacleTouched },
@@ -7983,11 +8156,34 @@ function updateChallengeBadge() {
       if(desc) { desc.style.opacity = '0'; setTimeout(()=>{ if(desc) desc.style.display='none'; }, 600); }
     }, 3000);
   };
+
+  // Compute progress text per-challenge (empty for binary challenges)
+  let progressSuffix = '';
+  if(!G._holeChallenge.completed) {
+    const id = G._holeChallenge.id;
+    if(id === 'coin_hoarder') {
+      const collected = G.coinMeshes ? G.coinMeshes.filter(c=>c.collected).length : 0;
+      progressSuffix = ` ${collected}/10`;
+    } else if(id === 'sky_walker') {
+      progressSuffix = ` ${Math.min(G._challengeJumpOvers||0,1)}/1`;
+    } else if(id === 'demolition') {
+      progressSuffix = ` ${Math.min(G._challengeObstaclesDestroyed||0,5)}/5`;
+    } else if(id === 'wall_rider') {
+      progressSuffix = ` ${Math.min(G._challengeShotWallBounces||0,5)}/5`;
+    } else if(id === 'bumper_lover') {
+      progressSuffix = ` ${Math.min(G._challengeBumperHits||0,5)}/5`;
+    } else if(id === 'speed_demon') {
+      // Render live elapsed time while the challenge is running
+      const t = G._challengeRollingTime || 0;
+      if(G.rolling || t > 0) progressSuffix = ` ${t.toFixed(1)}/10s`;
+    }
+  }
+
   if(G._holeChallenge.completed) {
     badge.textContent = `${G._holeChallenge.label} ✓`;
     badge.classList.add('completed');
   } else {
-    badge.textContent = G._holeChallenge.label;
+    badge.textContent = G._holeChallenge.label + progressSuffix;
     badge.classList.remove('completed');
     // Show description until first swing
     if(desc && G.strokes === 0) {
@@ -7996,6 +8192,19 @@ function updateChallengeBadge() {
       desc.style.opacity = '1';
     }
   }
+}
+
+// Flash the challenge badge to signal progress (juice). Call from the same
+// sites that increment challenge counters (bumper hits, coin pickups, etc.)
+function flashChallengeProgress() {
+  const badge = document.getElementById('challenge-badge');
+  if(!badge || !G._holeChallenge || G._holeChallenge.completed) return;
+  updateChallengeBadge(); // refresh count text first
+  badge.classList.remove('progress-pulse');
+  // Force reflow so re-adding the class restarts the animation
+  void badge.offsetWidth;
+  badge.classList.add('progress-pulse');
+  setTimeout(() => { if(badge) badge.classList.remove('progress-pulse'); }, 500);
 }
 
 // Fade challenge description after first swing
@@ -8135,6 +8344,119 @@ function calcHoleEarnings(strokes, par, coinsPickedUp, wallCoins = 0) {
 }
 
 // ── Life lost visual effect ───────────────────────────
+// ═══════════════════════════════════════════════════════
+// HP system (v0.17x) — replaces hearts-based lives.
+// Single chokepoint for all damage/healing so juice & analytics
+// stay consistent. Always pass a reason so we can later tag
+// source-specific effects (damage tint, sound, style multipliers).
+// ═══════════════════════════════════════════════════════
+function applyDamage(amount, reason) {
+  if(!amount || amount <= 0) return 0;
+  const before = G.hp;
+  G.hp = Math.max(0, G.hp - amount);
+  const actual = before - G.hp;
+  if(actual <= 0) return 0;
+  // Track per-hole over_par damage so onHoled can compute the residual.
+  if(reason === 'over_par') {
+    G._damageTakenThisHole = (G._damageTakenThisHole || 0) + actual;
+  }
+  // Back-compat for multiplayer HUD: derive legacy "lives" (out of 3) from hp.
+  // One "life" ≈ 33% of hpMax. This is a view-layer shim and should NOT be read
+  // by damage logic — use G.hp directly.
+  G.lives = Math.max(0, Math.ceil((G.hp / Math.max(1, G.hpMax)) * 3));
+  if(isMultiplayer()) trackStat('livesLost', actual);
+  triggerDamageFlash(actual, reason);
+  if(typeof updateHpDots === 'function') updateHpDots();
+  updateUI();
+  return actual;
+}
+function applyHeal(amount, reason) {
+  if(!amount || amount <= 0) return 0;
+  const before = G.hp;
+  G.hp = Math.min(G.hpMax, G.hp + amount);
+  const actual = G.hp - before;
+  if(actual <= 0) return 0;
+  G.lives = Math.max(0, Math.ceil((G.hp / Math.max(1, G.hpMax)) * 3));
+  if(typeof updateHpDots === 'function') updateHpDots();
+  updateUI();
+  return actual;
+}
+window.applyDamage = applyDamage;
+window.applyHeal = applyHeal;
+
+// v0.17x3: Call this wherever a swing "resolves" (natural slow-stop OR manual
+// interrupt). Deducts 1 HP if the current stroke is over par and hasn't already
+// taken damage. Gated against Scootch nudges, hole-out, and Speed Ball timeouts
+// (those use their own damage paths).
+function applyOverParDamageIfNeeded() {
+  if(G._nudgeOnlyRoll) return;
+  if(G.inHole) return;
+  if(G.strokes <= G.par) return;
+  if(G._lastDamagedAtStroke === G.strokes) return;
+  G._lastDamagedAtStroke = G.strokes;
+  G._lifeDeductedThisHole = true;
+  applyDamage(1, 'over_par');
+  spawnHpDamagePopup(1);
+}
+window.applyOverParDamageIfNeeded = applyOverParDamageIfNeeded;
+
+// Floating "-N HP" popup anchored under the pill's HP dots row.
+// Bright red, scales in then drifts down and fades.
+function spawnHpDamagePopup(amount) {
+  const strip = document.getElementById('h-hp-dots');
+  if(!strip || !amount || amount <= 0) return;
+  const rect = strip.getBoundingClientRect();
+  const el = document.createElement('div');
+  el.className = 'hp-damage-popup';
+  el.textContent = '-' + amount;
+  // Anchor centered horizontally under the strip, just below it.
+  el.style.left = (rect.left + rect.width / 2) + 'px';
+  el.style.top  = (rect.bottom + 4) + 'px';
+  document.body.appendChild(el);
+  // Remove after animation completes.
+  setTimeout(() => { if(el.parentNode) el.remove(); }, 950);
+}
+window.spawnHpDamagePopup = spawnHpDamagePopup;
+
+// Render the HP dots row in the pill HUD. Called from updateUI + applyDamage/Heal.
+// Builds one dot per hpMax; filled dots represent current hp.
+function updateHpDots() {
+  const strip = document.getElementById('h-hp-dots');
+  if(!strip) return;
+  const max = Math.max(1, G.hpMax || 10);
+  const cur = Math.max(0, Math.min(max, G.hp || 0));
+  // Only rebuild DOM if dot count changed (hpMax changed via Extra Heart perk).
+  if(strip.childElementCount !== max) {
+    strip.innerHTML = '';
+    for(let i = 0; i < max; i++) {
+      const d = document.createElement('span');
+      d.className = 'hp-dot';
+      strip.appendChild(d);
+    }
+  }
+  // Update filled state in place (cheap).
+  const dots = strip.children;
+  for(let i = 0; i < dots.length; i++) {
+    dots[i].classList.toggle('filled', i < cur);
+  }
+}
+window.updateHpDots = updateHpDots;
+
+// Thin wrapper that replaces the old triggerLifeLost for the damage path.
+// Runs the screen shake + red flash + pill-dot pulse + SFX. Scales shake with
+// damage amount (single HP = light; big chunk = heavy).
+function triggerDamageFlash(amount, reason) {
+  triggerLifeLost(null); // reuse existing shake + flash + heart emoji + SFX
+  // Pulse the HP dots strip
+  const strip = document.getElementById('h-hp-dots');
+  if(strip) {
+    strip.classList.remove('hp-pulse');
+    void strip.offsetWidth;
+    strip.classList.add('hp-pulse');
+    setTimeout(() => { if(strip) strip.classList.remove('hp-pulse'); }, 600);
+  }
+}
+
 function triggerLifeLost(onDone) {
   // Screen shake
   document.body.classList.remove('screen-shake');
@@ -8272,7 +8594,7 @@ function onHoled() {
     const hy = G.heightMap.length ? G.heightMap[Math.min(G.holePos.y,G.gridH-1)][Math.min(G.holePos.x,G.gridW-1)] || 0 : 0;
     const startY = G.ball.position.y;
     const sinkTarget = hy - 0.3;
-    const startScale = G.modifiers.some(m=>m.id==='shrink_ray') ? 0.5 : 1.0;    const startT = performance.now();
+    const startScale = G.modifiers.some(m=>m.id==='shrink_ray') ? 0.35 : 1.0;    const startT = performance.now();
     const sinkDur = 380;
     const ball = G.ball;
     function animSink() {
@@ -8299,13 +8621,22 @@ function onHoled() {
     triggerShake(d <= -1 ? 'light' : 0.15);
   }, 180);
 
-  // Lives: only deduct if not already deducted mid-hole (fireShot does it at par+1)
-  const lostLife = d > 0 && !G._lifeDeductedThisHole;
-  if(lostLife) {
-    G.lives = Math.max(0, G.lives - 1);
+  // Damage: most over-par damage is now applied per-swing at ball-stop
+  // (v0.17y). This block covers the residual — e.g. if the ball holes on a
+  // stroke after crossing par without a stop in between, or holes on the
+  // first over-par stroke so the ball-stop path never ran.
+  // Total damage for this hole should equal d (= strokes - par). Compute how
+  // much we've already taken from _damageTakenThisHole and pay the remainder.
+  const totalOwed = Math.max(0, d);
+  const alreadyPaid = G._damageTakenThisHole || 0;
+  const residual = Math.max(0, totalOwed - alreadyPaid);
+  if(residual > 0) {
+    applyDamage(residual, 'over_par');
+    spawnHpDamagePopup(residual);
   }
-  // Either way, a life was lost this hole if over par
+  G._lifeDeductedThisHole = totalOwed > 0;
   const lifeWasLost = d > 0;
+  const lostLife = lifeWasLost; // legacy alias for downstream code
 
   // Update hot streak
   if(d <= 0) {
@@ -8371,7 +8702,7 @@ function onHoled() {
   G.scorecard.push(buildScorecardEntry(earnings, coinsPickedUp, wallCoins));
 
   const isLast = G.hole >= G.totalHoles - 1;
-  const outOfLives = G.lives <= 0;
+  const outOfLives = G.hp <= 0;
 
   if(lifeWasLost && lostLife) {
     // Life not yet shown (par exceeded exactly on hole-out) — show effect then proceed
@@ -8451,13 +8782,13 @@ function showHoleSummary(earnings, bustedBudget, _epoch) {
   const earningsDiv = document.getElementById('hs-earnings');
   earningsDiv.innerHTML = '';
 
-  // Life lost indicator (shown above earnings rows)
+  // Damage row (shown above earnings) — shows HP lost + current HP
   if(d > 0) {
-    const livesLeft = '❤️'.repeat(Math.max(0, G.lives)) + '🖤'.repeat(Math.max(0, 3 - G.lives));
     const lifeRow = document.createElement('div');
     lifeRow.className = 'hs-row';
     lifeRow.style.color = '#e07050';
-    lifeRow.innerHTML = `<span class="label">💔 Life lost — ${livesLeft}</span>`;
+    const hpHurt = d; // damage this hole = strokes over par
+    lifeRow.innerHTML = `<span class="label">💔 -${hpHurt} HP — ${G.hp}/${G.hpMax} remaining</span>`;
     earningsDiv.appendChild(lifeRow);
     setTimeout(() => lifeRow.classList.add('show'), 150);
   }
@@ -8665,7 +8996,7 @@ function onSummaryDismiss() {
   if(!G.inHole) return; // must have actually holed out
   const hs = document.getElementById('hole-summary');
   hs.classList.remove('visible');
-  if(G._summaryBusted || G.lives <= 0) {
+  if(G._summaryBusted || G.hp <= 0) {
     showGameOver(true);
     return;
   }
@@ -8726,7 +9057,7 @@ function closeShop() {
   if(G.state !== 'playing') return; // guard against stale callbacks after game over/restart
   G._shopCurrentPicks = null;
   document.getElementById('shop-overlay').classList.remove('visible');
-  if(G.lives <= 0 && !isMultiplayer()) { showGameOver(true); return; }
+  if(G.hp <= 0 && !isMultiplayer()) { showGameOver(true); return; }
 
   // Multiplayer: advance to next player's shop or show combined summary
   if(isMultiplayer() && G._mpShopQueue) {
@@ -8777,8 +9108,6 @@ function weightedShopPicks(pool, count) {
   const available = pool.filter(p => {
     // Stackable perks are always available; non-stackable hidden if already owned
     if(!p.stackable && G.modifiers.find(m => m.id === p.id)) return false;
-    // Hide extra hearts when at full health (3+ lives)
-    if(p.id === 'extra_heart' && G.lives >= 3) return false;
     return true;
   });
   if(!available.length) return [];
@@ -8943,6 +9272,7 @@ window.buyPerk = function(id) {
   applyPerkEffect(perk.id);
   updateHandUI();
   updateCoinHUD();
+  if(typeof updateSlowMoButton === 'function') updateSlowMoButton();
   if(AC) {
     for(let k=0;k<3;k++) setTimeout(()=>sfxCoinPickup(), k*100);
   }
@@ -9063,11 +9393,19 @@ function collectObstaclesInRadius(cx, cz, blastR) {
     }
   });  if(G.slideBlocks) G.slideBlocks.forEach(s  => {
     if(s._destroyed) return;
-    // Use animated position, not base position
+    // Use animated position + half-extents. Previous code checked distance to
+    // center only, which missed long blocks whose edges were next to the blast
+    // even when the center was far away. Now: closest-point-on-AABB distance.
     const soff = Math.sin(s.phase||0) * (s.range||0);
     const sx = s.wx + (s.axis==='X' ? soff : 0);
     const sz = s.wz + (s.axis==='Z' ? soff : 0);
-    check(sx, sz, 'slideBlock', s, ()=>s.blockGroup?[s.blockGroup]:[]);
+    const hw = s.halfW || 0.225;
+    const hd = s.halfD || 0.225;
+    const dx = Math.max(0, Math.abs(cx - sx) - hw);
+    const dz = Math.max(0, Math.abs(cz - sz) - hd);
+    if(Math.hypot(dx, dz) <= blastR) {
+      hits.push({ wx:sx, wz:sz, type:'slideBlock', physRef:s, meshes:s.blockGroup?[s.blockGroup]:[] });
+    }
   });
   if(G.popupWalls)  G.popupWalls.forEach(p   => check(p.wx, p.wz, 'popupWall', p, ()=>p.wallMesh?[p.wallMesh]:[]));
   if(G.spikes)      G.spikes.forEach(s       => check(s.wx, s.wz, 'spike',     s, ()=>s.mesh?[s.mesh]:[]));
@@ -9258,6 +9596,7 @@ function destroyObstacles(hits, epicentreX, epicentreY, epicentreZ) {
     G._obstaclesDestroyedRun = (G._obstaclesDestroyedRun || 0) + 1;
     G._challengeObstaclesDestroyed = (G._challengeObstaclesDestroyed||0) + 1;
     checkChallengeCompletion(true);
+    if(G._holeChallenge && G._holeChallenge.id === 'demolition') flashChallengeProgress();
     trackStat('obstaclesDestroyed', 1);
   }
   // Chain Reaction: destroyed obstacles explode, damaging nearby obstacles.
@@ -9716,7 +10055,7 @@ function triggerCheckeredFlag() {
 // ── Active filtering (synced from tuning sheet) ──────────────
 // Perks/cards marked 'no' in the Active column are filtered out at load time
 const INACTIVE_PERKS = new Set(['double_or_nothing', 'thin_ice', 'coin_bouncer']);
-const INACTIVE_CARDS = new Set(['airstrike', 'wrecking_ball', 'portal_pair', 'wall_magnet', 'arc_shot', 'golden_path']);
+const INACTIVE_CARDS = new Set(['airstrike', 'wrecking_ball', 'portal_pair', 'wall_magnet', 'arc_shot', 'golden_path', 'slow_mo']);
 
 const CARD_DEFS = {
   lil_scootch:  { id:'lil_scootch',  emoji:'🧤', name:"Lil' Scootch",    desc:'Cartoon glove gives the ball a nudge.',                        rarity:'common',    price:10,   context:'any',    holdable:false },
@@ -10252,13 +10591,6 @@ function stopGhostHold() {
   G._ghostCardInstanceId = null;
 }
 
-function stopGhostHold() {
-  if(G._ghostHolding && G.ghostBallActive) {
-    deactivateGhostBall();
-  }
-  G._ghostHolding = false;
-}
-
 function deactivateGhostBall() {
   if(!G.ghostBallActive) return;
   G.ghostBallActive = false;
@@ -10297,7 +10629,12 @@ function activateScootch() {
   const nudgeForce = 2.25;
   G.ballVel.x += nx * nudgeForce;
   G.ballVel.z += nz * nudgeForce;
-  if(!G.rolling) { G.rolling = true; G.aimMode = false; G.rollingSlowTimer = 0; }
+  if(!G.rolling) {
+    G.rolling = true; G.aimMode = false; G.rollingSlowTimer = 0;
+    // v0.17v: Scootch isn't a swing — flag so the ball-stop handler doesn't
+    // clear per-swing perks (iron ball, power shot, cannonball, catapult, arc shot).
+    G._nudgeOnlyRoll = true;
+  }
   // Spawn cartoon glove mesh
   const gloveMat = new THREE.MeshStandardMaterial({color:0xffffff, roughness:0.6});
   const palm = new THREE.Mesh(new THREE.SphereGeometry(0.3, 8, 6), gloveMat);
@@ -10370,17 +10707,39 @@ window.activateScootch = activateScootch;
 // ── Slow Mo perk — activate before or during swing, timer counts after swing ──
 function activateSlowMoPerk() {
   if(G._slowMoPerkActive) return;
+  if(G._slowMoUsedThisHole) { showToast('🐌 Slow Mo used this hole', 1000); return; }
   G._slowMoPerkActive = true;
+  G._slowMoUsedThisHole = true;
   G._slowMoScale = 0.25;
-  G._slowMoPerkTimer = 12.0;
+  G._slowMoPerkTimer = 6.0;
   G._slowMoWaitingForSwing = !G.rolling; // if not rolling yet, wait for swing to start timer
   if(_musicGainNode && AC) {
     _musicGainNode.gain.setTargetAtTime(0.4, AC.currentTime, 0.3);
   }
-  showToast('🐌 Slow Mo!' + (G.rolling ? ' 12s' : ' Swing to start!'), 1200);
+  showToast('🐌 Slow Mo!' + (G.rolling ? ' 6s' : ' Swing to start!'), 1200);
   updateHandUI();
+  updateSlowMoButton();
 }
 window.activateSlowMoPerk = activateSlowMoPerk;
+
+// ── Slow Mo button visibility ────────────────────────────────
+// Shows when the perk is owned and unused this hole; hides otherwise.
+function updateSlowMoButton() {
+  const btn = document.getElementById('btn-slowmo');
+  if(!btn) return;
+  const owned = G.modifiers && G.modifiers.some(m=>m.id==='slow_mo');
+  const show = owned && G.state === 'playing' && !G.inHole;
+  if(!show) { btn.style.display = 'none'; return; }
+  btn.style.display = 'block';
+  if(G._slowMoUsedThisHole || G._slowMoPerkActive) {
+    btn.disabled = true;
+    btn.textContent = G._slowMoPerkActive ? '🐌 Slow Mo ·' + Math.ceil(G._slowMoPerkTimer||0) + 's' : '🐌 Used';
+  } else {
+    btn.disabled = false;
+    btn.textContent = '🐌 Slow Mo';
+  }
+}
+window.updateSlowMoButton = updateSlowMoButton;
 
 // ── Perpetual Motion — zero friction + perfect bounces for 10s ──
 function activatePerpetualMotion() {
@@ -10904,6 +11263,9 @@ function fireSharpshooterBall() {
   G.rollingSlowTimer = 0;
   G.aimMode = false;
   G._shotJustFired = performance.now();
+  // Launch-grace (Sharpshooter-ball only uses jump-preload grace; no Catapult here)
+  G._jumpPreloadLaunchGrace = !!G._jumpPreloaded;
+  G._catapultLaunchGrace = false;
   // Jumper pre-load: add upward punch to the ball's launch velocity
   if(G._jumpPreloaded) {
     G.ballVel.y = Math.max(G.ballVel.y, G.ballVel.y + 6.38);
@@ -10921,7 +11283,7 @@ function fireSharpshooterBall() {
   if(donBtnFS) donBtnFS.style.display = 'none';
   if(G.ball) {
     const b = G.ball;
-    const baseScale = G.modifiers.some(m=>m.id==='shrink_ray') ? 0.5 : 1.0;
+    const baseScale = G.modifiers.some(m=>m.id==='shrink_ray') ? 0.35 : 1.0;
     b.scale.set(1.4*baseScale, 0.55*baseScale, 1.4*baseScale);
     setTimeout(() => { if(b && b.scale) b.scale.set(0.85*baseScale, 1.35*baseScale, 0.85*baseScale); }, 80);
     setTimeout(() => { if(b && b.scale) b.scale.setScalar(baseScale); }, 180);
@@ -11646,7 +12008,9 @@ function applyPerkEffect(id) {
     case 'speed_hoops':      /* placed in initHole */ break;
     case 'money_bounce':     /* counted live via modifiers.filter in wall bounce */ break;
     case 'extra_heart':
-      G.lives = Math.min(G.lives + 1, 9);
+      // v0.17x: was +1 life (cap 9); now +3 max HP and heal 3.
+      G.hpMax += 3;
+      applyHeal(3, 'extra_heart_perk');
       updateUI();
       break;
     case 'four_choices':
@@ -12373,6 +12737,10 @@ function onPointerDown(x, y, id) {
       G._shotFinalized = true;
       finalizeShot(false);
     }
+    // v0.17x3: manual interrupt also resolves the swing for damage purposes.
+    // Without this, tapping to stop the ball early would skip the over-par
+    // damage deduction and batch everything into the hole-out path.
+    applyOverParDamageIfNeeded();
     // If combo fly animation is still pending, let it play out naturally.
     // The fly animation will update the purple HUD when it lands.
     // Only snap if there's no pending animation (no events this shot).
@@ -12460,7 +12828,9 @@ function onPointerMove(x, y) {
       G.camPhi   = Math.max(0.3, Math.min(Math.PI - 0.3, G.camPhi - dy * 0.004));
     } else {
       G.camTheta -= dx * 0.008;
-      G.camPhi   = Math.max(0.2, Math.min(1.4, G.camPhi + dy * 0.006));
+      // Wider Y clamp accommodates Shrink Ray's lower seed pitch (1.15) and
+      // lets players look further up/down in general.
+      G.camPhi   = Math.max(0.15, Math.min(1.45, G.camPhi + dy * 0.006));
     }
     input.lastX = x; input.lastY = y;
   }
@@ -12575,6 +12945,8 @@ function fireShot() {
     const perpZ = -G.shotDir.x;
     const SPREAD = 0.9; // world units apart — matches aim preview
     G._threeBalls = [];
+    const _isShrunk = G.modifiers.some(m=>m.id==='shrink_ray');
+    const _tbVisualScale = _isShrunk ? 0.35 : 1.0;
     for(let i = -1; i <= 1; i += 1) { // i = -1, 0, 1
       if(i === 0) continue; // centre ball = main ball (G.ball)
       const offX = perpX * i * SPREAD;
@@ -12582,6 +12954,7 @@ function fireShot() {
       const geo = new THREE.SphereGeometry(BALL_R, 12, 8);
       const mat = G.ball && G.ball.material ? G.ball.material.clone() : new THREE.MeshStandardMaterial({color:0xffffff, roughness:0.15, metalness:0.05});
       const mesh = new THREE.Mesh(geo, mat);
+      mesh.scale.setScalar(_tbVisualScale);
       mesh.castShadow = true;
       mesh.position.set(G.ballPos.x + offX, G.ballPos.y, G.ballPos.z + offZ);
       scene.add(mesh);
@@ -12591,6 +12964,7 @@ function fireShot() {
         mesh,
         rolling: true,
         slowTimer: 0,
+        shrunk: _isShrunk,
       });
     }
   }
@@ -12598,6 +12972,10 @@ function fireShot() {
   G.rollingSlowTimer = 0;
   G.aimMode = false;
   G._shotJustFired = performance.now();
+  // Launch-grace flags: enable 200ms wall pass-through only for Catapult / pre-loaded Jumper.
+  // These trigger airborne launches where colliding with a nearby wall at tee is annoying.
+  G._catapultLaunchGrace = !!G._catapultActive;
+  G._jumpPreloadLaunchGrace = !!G._jumpPreloaded;
   // Jumper pre-load consumption: punch Y-velocity up on launch if armed.
   // Use Math.max so Catapult's bigger initial Y (9.0) still wins over a normal jump.
   if(G._jumpPreloaded) {
@@ -12619,7 +12997,7 @@ function fireShot() {
   if(G.ball) {
     const b = G.ball;
     const power = G.shotPower;
-    const baseScale = G.modifiers.some(m=>m.id==='shrink_ray') ? 0.5 : 1.0;
+    const baseScale = G.modifiers.some(m=>m.id==='shrink_ray') ? 0.35 : 1.0;
     const squashAmt = (0.55 + power * 0.3) * baseScale;
     const wideAmt   = (1 + power*0.4) * baseScale;
     b.scale.set(wideAmt, squashAmt, wideAmt);
@@ -12682,6 +13060,19 @@ canvas.addEventListener('mousemove', e=>{ onPointerMove(e.clientX,e.clientY); })
 // Window-level move/up so pull-back drag works even when cursor leaves canvas
 window.addEventListener('mousemove', e=>{ if(input.ballDragging) onPointerMove(e.clientX,e.clientY); });
 window.addEventListener('mouseup',   e=>{ if(input.ballDragging || input.dragging) onPointerUp(); });
+
+// Mouse wheel: orbital camera zoom in/out (desktop). Skip when Sharpshooter is
+// active — it already binds its own wheel handler for scope zoom. Same clamp
+// range as two-finger pinch on touch (4–30).
+canvas.addEventListener('wheel', e=>{
+  if(G.state !== 'playing') return;
+  if(G._sharpshooterActive) return;
+  e.preventDefault();
+  // deltaY > 0 when scrolling down — interpret as "zoom out" (farther).
+  // Step is proportional to current distance for smooth feel at any zoom.
+  const step = G.camDist * 0.0015 * e.deltaY;
+  G.camDist = Math.max(4, Math.min(30, G.camDist + step));
+}, { passive: false });
 
 // Touch events
 canvas.addEventListener('touchstart', e=>{
@@ -12765,9 +13156,8 @@ function debugSkipHole() {
   onHoled();
 }
 function debugAddBudget() {
-  G.lives = Math.min(G.lives + 1, 9);
-  updateUI();
-  showToast('❤️ +1 life added', 1200);
+  applyHeal(5, 'debug');
+  showToast('❤️ +5 HP added', 1200);
   document.getElementById('debug-menu').classList.remove('open');
 }
 
@@ -13008,7 +13398,7 @@ function updateKeyboardCamera(dt) {
         G.ballPos.z += (mz/len) * WALK_SPEED * dt;
         G._walkTarget = null; // clear tap target if keyboard used
         const terrY = G.heightMap.length ? getTerrainHeight(G.ballPos.x, G.ballPos.z) : 0;
-        G.ballPos.y = terrY + FLOOR_H/2 + BALL_R;
+        G.ballPos.y = terrY + FLOOR_H/2 + (G.modifiers.some(m=>m.id==="shrink_ray") ? BALL_R*0.5 : BALL_R);
         if(G.ball) G.ball.position.copy(G.ballPos);
         if(G.ballShadow) { G.ballShadow.position.x = G.ballPos.x; G.ballShadow.position.z = G.ballPos.z; }
       }
@@ -13024,7 +13414,7 @@ function updateKeyboardCamera(dt) {
           G.ballPos.x += (tdx/td) * step;
           G.ballPos.z += (tdz/td) * step;
           const terrY = G.heightMap.length ? getTerrainHeight(G.ballPos.x, G.ballPos.z) : 0;
-          G.ballPos.y = terrY + FLOOR_H/2 + BALL_R;
+          G.ballPos.y = terrY + FLOOR_H/2 + (G.modifiers.some(m=>m.id==="shrink_ray") ? BALL_R*0.5 : BALL_R);
           if(G.ball) G.ball.position.copy(G.ballPos);
           if(G.ballShadow) { G.ballShadow.position.x = G.ballPos.x; G.ballShadow.position.z = G.ballPos.z; }
         }
@@ -13083,7 +13473,7 @@ function endWalkies() {
     const pColor = isMultiplayer() ? G.players[G.currentPlayer].color : 0xffffff;
     G.ball.material = new THREE.MeshStandardMaterial({color:pColor, roughness:0.15, metalness:0.05});
   }
-  const baseScale = G.modifiers.some(m=>m.id==='shrink_ray') ? 0.5 : 1.0;
+  const baseScale = G.modifiers.some(m=>m.id==='shrink_ray') ? 0.35 : 1.0;
   if(G.ball) G.ball.scale.setScalar(baseScale);
   // Enter aim mode at new position
   G.ballVel.set(0,0,0);
@@ -13120,18 +13510,8 @@ function updateUI() {
       hudPlayer.style.display = 'none';
     }
   }
-  // Mini hearts in info row
-  const livesEl = document.getElementById('h-lives-mini');
-  if(livesEl) {
-    const full = Math.max(0, G.lives);
-    const startingLives = 3;
-    if(full > startingLives) {
-      livesEl.textContent = '❤️'.repeat(startingLives) + '+' + (full - startingLives);
-    } else {
-      const empty = Math.max(0, startingLives - full);
-      livesEl.textContent = '❤️'.repeat(full) + '🖤'.repeat(empty);
-    }
-  }
+  // HP dots bar (v0.17x: renders in the new third row of the pill)
+  if(typeof updateHpDots === 'function') updateHpDots();
   const menuBtn = document.getElementById('btn-menu');
   if(menuBtn) menuBtn.style.display = G.state === 'playing' ? 'block' : 'none';
   const deckBtn = document.getElementById('btn-deck');
@@ -13275,8 +13655,8 @@ const ALL_PERKS = [
     desc:'Each consecutive par-or-better hole adds +15% to coin earnings. Resets on bogey.' },
   { id:'magnet',           name:'Coin Magnet',         emoji:'🧲', rarity:'common',    price:15,  stackable:true,  weight:8,
     desc:'Coins are pulled toward your ball. Buy up to 3× to increase range and pull strength.' },
-  { id:'extra_heart',     name:'Heart',                emoji:'❤️‍🩹', rarity:'common',   price:8,  stackable:true,  weight:12,
-    desc:'Gain back one lost life immediately.' },
+  { id:'extra_heart',     name:'Heart',                emoji:'❤️‍🩹', rarity:'common',   price:14,  stackable:true,  weight:4,
+    desc:'+3 max HP and heal 3 instantly. Stacks.' },
   { id:'high_speed_finish', name:'High Speed Finish',  emoji:'🏁', rarity:'common',   price:15,  stackable:false, weight:8,
     desc:'Score +10 coins when you fly into the hole at high speed. Checkered flag celebration!' },
   // RARE — base weight 4
@@ -13300,7 +13680,7 @@ const ALL_PERKS = [
   { id:'money_bounce',    name:'Money Bounce',         emoji:'💸', rarity:'rare',      price:15, stackable:true,  weight:3,
     desc:'Earn 1 coin per wall bounce, up to 3 bounces per stack. Stack for more bounces!' },
   { id:'lot_of_heart',    name:'Lot of Heart',         emoji:'💝', rarity:'rare',     price:15, stackable:false, weight:4,
-    desc:'A floating heart spawns on 25% of holes. Pick it up to recover a lost life.' },
+    desc:'A floating heart spawns on ~12% of holes. Pick it up to heal 2 HP.' },
   { id:'inbounds',        name:'Inbounds',              emoji:'🟩', rarity:'rare',     price:12, stackable:false, weight:5,
     desc:'Blue grid walls prevent you from ever going out of bounds. Ghost ball still passes through.' },
   { id:'chain_reaction',  name:'Chain Reaction',        emoji:'💥', rarity:'rare',     price:18, stackable:false, weight:4,
@@ -13311,6 +13691,8 @@ const ALL_PERKS = [
     desc:'Draw 2 new cards every swing instead of 1. More chaos per stroke.' },
   { id:'off_roading',     name:'Off-Roading',           emoji:'🏜️', rarity:'rare',     price:18, stackable:false, weight:3,
     desc:'Out-of-bounds grace period extended from 1.5s to 10s. Live dangerously.' },
+  { id:'slow_mo',         name:'Slow Mo',               emoji:'🐌', rarity:'rare',     price:20, stackable:false, weight:3,
+    desc:'Once per hole, tap to slow time for up to 6s. Armed before or during your swing.' },
   // EPIC — base weight 2
   { id:'big_hole',         name:'Big Hole',            emoji:'🕳️', rarity:'epic',      price:14, stackable:false, weight:2,
     desc:'The hole radius doubles — much more forgiving on close approaches.' },
@@ -13697,16 +14079,23 @@ window.importSaveFile = importSaveFile;
 
 // ── Game flow ─────────────────────────────────────────
 function initHole() {
+  // ── Per-hole perk state reset ───────────────────────
+  G._slowMoUsedThisHole = false;
+  G._slowMoPerkActive = false;
+  G._slowMoScale = 1.0;
+  G._slowMoPerkTimer = 0;
   // ── Auto-save at hole start ─────────────────────────
   if(!isMultiplayer()) {
     try {
       const saveData = {
-        version: 1,
+        version: 2, // v0.17x: HP system — old v1 saves invalidate
         seed: G._currentSeed || '',
         hole: G.hole,
         totalHoles: G.totalHoles,
         difficulty: G.difficulty,
-        lives: G.lives,
+        hp: G.hp,
+        hpMax: G.hpMax,
+        lives: G.lives, // legacy shim (multiplayer reads this)
         coins: G.coins,
         totalStrokes: G.totalStrokes,
         modifiers: G.modifiers.map(m => ({id:m.id, name:m.name, emoji:m.emoji, rarity:m.rarity, price:m.price, stackable:m.stackable})),
@@ -13811,6 +14200,8 @@ function initHole() {
   G._shopUsedThisHole = false;
   G._cardRemoveUsedThisHole = false;
   G._lifeDeductedThisHole = false;
+  G._damageTakenThisHole = 0;
+  G._lastDamagedAtStroke = -1;
   G._spikeGameOver = false;
   G._holeEpoch = Date.now() + Math.random(); // unique per hole, never collides across games
   // Style score tracking — per-shot events and per-hole totals
@@ -13860,6 +14251,7 @@ function initHole() {
   G._challengeCardsPlayed = 0;
   G._holeChallenge = selectHoleChallenge(data);
   updateChallengeBadge();
+  updateSlowMoButton();
 
   // ── Floombas (spawned via card, not perk) ────────────
   // Cleanup handled above; G._floombas initialized to [] at hole start
@@ -13873,15 +14265,22 @@ function initHole() {
   }
 
   createBall();
-  // Shrink ray: scale ball visually and pull camera back for big-course feel
+  // Shrink ray: tiny ball + closer camera with a lower starting pitch for true
+  // "toy in a giant world" feel. v0.17w: _shrinkCamPhi is now a *seed* value used
+  // only on hole init — after that G.camPhi is free to respond to drag input so
+  // the player can look up/down normally. Previously the value was used as a
+  // persistent render override that locked the Y axis.
   if(G.modifiers.some(m=>m.id==='shrink_ray')) {
-    if(G.ball) G.ball.scale.setScalar(0.5);
-    G._shrinkCamMult = 1.8; // pull camera back significantly
-    camera.fov = 72;         // wider FOV makes course look vast
+    if(G.ball) G.ball.scale.setScalar(0.35);   // was 0.5 — smaller ball
+    G._shrinkCamMult = 0.65;                   // was 1.8 — closer, not farther
+    G._shrinkActive = true;
+    G.camPhi = 1.15;                           // seed the lower pitch (drag can change)
+    camera.fov = 65;                           // was 72 — slightly less wide so ball reads larger
     camera.updateProjectionMatrix();
   } else {
     G._shrinkCamMult = 1.0;
-    camera.fov = 55;         // restore normal FOV
+    G._shrinkActive = false;
+    camera.fov = 55;                           // restore normal FOV
     camera.updateProjectionMatrix();
   }
   createAimArrow();
@@ -13889,7 +14288,8 @@ function initHole() {
 
   const tx=data.teePos.x*TILE_SIZE, tz=data.teePos.y*TILE_SIZE;
   const teeTerrainY = data.heightMap.length ? getTerrainHeight(tx, tz) : 0;
-  G.ballPos.set(tx, teeTerrainY + FLOOR_H/2+BALL_R, tz);
+  const teeBallR = G.modifiers.some(m=>m.id==='shrink_ray') ? BALL_R * 0.5 : BALL_R;
+  G.ballPos.set(tx, teeTerrainY + FLOOR_H/2+teeBallR, tz);
   G.ballVel.set(0,0,0);
   G.ball.position.copy(G.ballPos);
   G.ball.visible=true;
@@ -14019,8 +14419,10 @@ function openDeckViewer() {
       status = 'played'; statusLabel = 'Played';
     }
 
+    const tip = _escapeHtml(def.desc || '');
     grid.innerHTML += `
-      <div class="deck-card dc-${status}">
+      <div class="deck-card dc-${status} dv-hoverable" title="${def.name} — ${tip}"
+           data-kind="card" data-name="${_escapeHtml(def.name)}" data-desc="${tip}">
         <div class="dc-emoji">${def.emoji}</div>
         <div class="dc-name">${def.name}</div>
         <div class="dc-status st-${status}">${statusLabel}</div>
@@ -14051,8 +14453,10 @@ function openDeckViewer() {
         const def = ALL_PERKS.find(p=>p.id===m.id);
         if(!def) continue;
         const stacks = counts[m.id]||1;
+        const tip = _escapeHtml(def.desc || '');
         perksGrid.innerHTML += `
-          <div class="deck-card">
+          <div class="deck-card dv-hoverable" title="${def.name} — ${tip}"
+               data-kind="perk" data-name="${_escapeHtml(def.name)}" data-desc="${tip}">
             <div class="dc-emoji">${def.emoji}</div>
             <div class="dc-name">${def.name}${stacks>1?' ×'+stacks:''}</div>
           </div>`;
@@ -14061,6 +14465,40 @@ function openDeckViewer() {
   }
 
   viewer.classList.add('open');
+
+  // v0.17v: hover/tap-to-describe. Desktop: mouseenter swaps the panel text.
+  // Mobile: tap toggles "sticky" selection so the text stays until another tile tapped.
+  const descNameEl = document.getElementById('dv-desc-name');
+  const descBodyEl = document.getElementById('dv-desc-body');
+  const tiles = viewer.querySelectorAll('.dv-hoverable');
+  const resetDesc = () => {
+    if(descNameEl) descNameEl.textContent = 'Tap or hover any card or perk above to see what it does.';
+    if(descBodyEl) descBodyEl.textContent = '';
+    tiles.forEach(t => t.classList.remove('dv-selected'));
+  };
+  tiles.forEach(tile => {
+    const name = tile.getAttribute('data-name') || '';
+    const desc = tile.getAttribute('data-desc') || '';
+    tile.onmouseenter = () => {
+      // Don't override sticky selection on desktop hover
+      if(viewer.querySelector('.dv-selected')) return;
+      if(descNameEl) descNameEl.textContent = name;
+      if(descBodyEl) descBodyEl.textContent = desc;
+    };
+    tile.onmouseleave = () => {
+      if(viewer.querySelector('.dv-selected')) return;
+      resetDesc();
+    };
+    tile.onclick = (e) => {
+      e.stopPropagation();
+      const wasSelected = tile.classList.contains('dv-selected');
+      tiles.forEach(t => t.classList.remove('dv-selected'));
+      if(wasSelected) { resetDesc(); return; }
+      tile.classList.add('dv-selected');
+      if(descNameEl) descNameEl.textContent = name;
+      if(descBodyEl) descBodyEl.textContent = desc;
+    };
+  });
 }
 window.openDeckViewer = openDeckViewer;
 
@@ -14144,6 +14582,8 @@ function escMainMenu() {
   const _challengeDesc = document.getElementById('challenge-desc');
   if(_challengeDesc) _challengeDesc.style.display = 'none';
   document.getElementById('btn-undo').style.display = 'none';
+  const _slBtn = document.getElementById('btn-slowmo');
+  if(_slBtn) _slBtn.style.display = 'none';
   for(const k of CARD_SLOT_KEYS) { const el = document.getElementById('card-slot-'+k); if(el) { el.className = 'card-slot'; el.innerHTML = ''; } }
   
   document.getElementById('hs-don-btn').style.display = 'none';
@@ -14505,7 +14945,7 @@ function switchToNextPlayer() {
   if(G.ball) {
     G.ball.position.copy(G.ballPos);
     G.ball.visible = true;
-    G.ball.scale.setScalar(G.modifiers.some(m=>m.id==='shrink_ray') ? 0.5 : 1.0);
+    G.ball.scale.setScalar(G.modifiers.some(m=>m.id==='shrink_ray') ? 0.35 : 1.0);
   }
   if(G.ballShadow) {
     const tY = G.heightMap && G.heightMap.length ? getTerrainHeight(G.ballPos.x, G.ballPos.z) : 0;
@@ -14522,6 +14962,8 @@ function switchToNextPlayer() {
   G._holeStyleScore = 0;
   G._holeTricks = [];
   G._lifeDeductedThisHole = false;
+  G._damageTakenThisHole = 0;
+  G._lastDamagedAtStroke = -1;
   G.undoState = null;
   G.undoUsed = false;
   G.lastShotPos = G.ballPos.clone();
@@ -14822,7 +15264,9 @@ function startGame(){
   G._runStartTime = performance.now();
   G._runSaved = false;
   G.strokeBudget = 0;
-  G.lives = 3;
+  G.hp = 10;
+  G.hpMax = 10;
+  G.lives = 3; // legacy shim — kept in sync by applyDamage/applyHeal
   G.hasUndoPower = false;
   G.budgetBusted = false;
   // Economy reset
@@ -15274,6 +15718,10 @@ function checkAutoSave() {
     if(!raw) return;
     const save = JSON.parse(raw);
     if(!save.version) return;
+    // v0.17x: HP system is a clean-slate change; saves from before v2 don't have
+    // the hp/hpMax fields and aren't worth migrating. Hide the resume button —
+    // the underlying save stays on disk but the user can start fresh.
+    if(save.version < 2) return;
     // First-hole saves are resumable too (no save.hole <= 0 gate).
     const resumeBtn = document.getElementById('btn-resume');
     if(resumeBtn) {
@@ -15318,7 +15766,12 @@ function resumeGame() {
     }
     G.state = 'playing';
     G.strokeBudget = 0;
-    G.lives = save.lives;
+    // v0.17x: load HP system fields. Legacy v1 saves (no hp field) fall back to
+    // fresh values — saves pre-HP-system invalidate naturally since clean-slate
+    // was the chosen direction.
+    G.hp = (typeof save.hp === 'number') ? save.hp : 10;
+    G.hpMax = (typeof save.hpMax === 'number') ? save.hpMax : 10;
+    G.lives = (typeof save.lives === 'number') ? save.lives : Math.max(0, Math.ceil((G.hp / Math.max(1, G.hpMax)) * 3));
     G.coins = save.coins || 0;
     G.hotStreak = save.hotStreak || 0;
     G.piggyBankStacks = save.piggyBankStacks || 0;
@@ -15867,9 +16320,10 @@ let _musicBreakUntil = 0;
 let _lastKeyChangeHole = -1;
 
 function pickMusicMood() {
-  const lives = G.lives || 3;
-  if(lives >= 3) return 'bright';
-  if(lives === 2) return 'chill';
+  // v0.17x: HP-based mood. Bright > 66%, chill 33-66%, tense below.
+  const hpRatio = G.hpMax > 0 ? G.hp / G.hpMax : 1;
+  if(hpRatio > 0.66) return 'bright';
+  if(hpRatio > 0.33) return 'chill';
   return 'tense';
 }
 
@@ -16239,6 +16693,12 @@ function animate(now) {
     updatePhysics(dt);
     updateParticles(dt);
     if(G.rolling || G.inHole) focusCameraOnBall();
+    else if(G._camTransitionFrames && G._camTransitionFrames > 0) {
+      // v0.17v: keep lerping for N frames after Three Balls winner resolves
+      // (or any other resolution that warps the ball without rolling).
+      focusCameraOnBall();
+      G._camTransitionFrames--;
+    }
     if(G.aimArrow && G.aimMode) updateAimArrow();
     // ── Power Shot tension shake at full pull ──
     if(G._powerShotTensionActive && G.aimMode && G.shotPower > 0.85) {
@@ -16261,6 +16721,16 @@ function animate(now) {
       G._challengeRollingTime = (G._challengeRollingTime||0) + dt;
       checkChallengeCompletion(true);
     }
+    // Throttled HUD refreshes (~10Hz): live challenge timer + slow-mo button countdown
+    G._hudTick = (G._hudTick||0) + dt;
+    if(G._hudTick >= 0.1) {
+      G._hudTick = 0;
+      if(G._holeChallenge && !G._holeChallenge.completed) {
+        const cid = G._holeChallenge.id;
+        if(cid === 'speed_demon' || cid === 'wall_rider') updateChallengeBadge();
+      }
+      if(G.modifiers && G.modifiers.some(m=>m.id==='slow_mo')) updateSlowMoButton();
+    }
     _wasRolling = G.rolling;
     // Speedometer: convert game units/s to comedic MPH (1 unit ≈ 2 mph)
     const mphEl = document.getElementById('h-mph');
@@ -16280,6 +16750,10 @@ function animate(now) {
 
       for(const tb of G._threeBalls) {
         if(!tb.rolling) continue;
+
+        // Hoisted perk flags (used across wall/rock/bumper collision branches)
+        const tbHasIron = G._ironBallActive || G._cannonballActive;
+        const tbHasBoom = G.modifiers.some(m=>m.id==='bounce_boom');
 
         // Gravity + move
         tb.vel.y += GRAVITY * dt;
@@ -16334,9 +16808,7 @@ function animate(now) {
           }
         }
 
-        // Rock collision
-        const tbHasIron = G._ironBallActive || G._cannonballActive;
-        const tbHasBoom = G.modifiers.some(m=>m.id==='bounce_boom');
+        // Rock collision (tbHasIron/tbHasBoom declared at top of loop)
         if(G.rocks) for(const rock of G.rocks){
           if(rock._destroyed) continue;
           const rdx=tb.pos.x-rock.wx,rdz=tb.pos.z-rock.wz;
@@ -16387,6 +16859,71 @@ function animate(now) {
               if(bH3.length>0){destroyObstacles(bH3,tb.pos.x,tb.pos.y,tb.pos.z);for(let bk3=0;bk3<bH3.length;bk3++){G.coins++;updateCoinHUD();}}
               destroyWallChunksInRadius(tb.pos.x,tb.pos.z,bR3);
             }
+          }
+        }
+
+        // Corner triangle collision (angledWalls) — mirrors main-ball logic
+        // in updatePhysics but simplified (no squash/particles/style events).
+        if(G.angledWalls) for(const aw of G.angledWalls){
+          // Y-ceiling gate — airborne ball above the top flies over.
+          if(aw.topY != null && tb.pos.y - BALL_R > aw.topY) continue;
+          const tbx = tb.pos.x, tbz = tb.pos.z;
+          const tMinDist = BALL_R + 0.08;
+          // Point-in-triangle test
+          const cross2d = (px,pz, axx,azz, bxx,bzz) => (bxx-axx)*(pz-azz) - (bzz-azz)*(px-axx);
+          const ts1 = cross2d(tbx,tbz, aw.wx,aw.wz, aw.ax,aw.az);
+          const ts2 = cross2d(tbx,tbz, aw.ax,aw.az, aw.bx,aw.bz);
+          const ts3 = cross2d(tbx,tbz, aw.bx,aw.bz, aw.wx,aw.wz);
+          const tInside = (ts1>=0 && ts2>=0 && ts3>=0) || (ts1<=0 && ts2<=0 && ts3<=0);
+          if(tInside) {
+            // Push out through hypotenuse (edges[0])
+            const hyp = aw.edges[0];
+            const hex = hyp.x1-hyp.x0, hez = hyp.z1-hyp.z0;
+            const hsq = hex*hex+hez*hez;
+            if(hsq < 0.0001) continue;
+            const htp = Math.max(0, Math.min(1, ((tbx-hyp.x0)*hex+(tbz-hyp.z0)*hez)/hsq));
+            const hcx = hyp.x0+htp*hex, hcz = hyp.z0+htp*hez;
+            const hdx = tbx-hcx, hdz = tbz-hcz;
+            const hd = Math.hypot(hdx, hdz);
+            let tnx, tnz;
+            if(hd > 0.001) { tnx = hdx/hd; tnz = hdz/hd; }
+            else { const sL = Math.sqrt(hsq); tnx = -hez/sL; tnz = hex/sL;
+                   const toCx = aw.wx - (hyp.x0+hyp.x1)/2, toCz = aw.wz - (hyp.z0+hyp.z1)/2;
+                   if(tnx*toCx + tnz*toCz > 0) { tnx = -tnx; tnz = -tnz; } }
+            const tPen = Math.max(0.05, tMinDist - (hd || 0));
+            tb.pos.x += tnx * tPen; tb.pos.z += tnz * tPen;
+            const tDot = tb.vel.x*tnx + tb.vel.z*tnz;
+            if(tDot < 0) {
+              tb.vel.x -= (1+BOUNCE*2.0) * tDot * tnx;
+              tb.vel.z -= (1+BOUNCE*2.0) * tDot * tnz;
+              if(tb.vel.y < 0.5) tb.vel.y += 0.8;
+            }
+            aw.squashT = 0.18;
+            continue;
+          }
+          // Edge capsule tests
+          let tBestD = Infinity, tBNx = 0, tBNz = 0, tBPen = 0;
+          for(const edge of aw.edges) {
+            const eex = edge.x1-edge.x0, eez = edge.z1-edge.z0;
+            const esq = eex*eex+eez*eez;
+            if(esq < 0.0001) continue;
+            const tp = Math.max(0, Math.min(1, ((tbx-edge.x0)*eex+(tbz-edge.z0)*eez)/esq));
+            const ecx = edge.x0+tp*eex, ecz = edge.z0+tp*eez;
+            const edx = tbx-ecx, edz = tbz-ecz;
+            const ed = Math.hypot(edx, edz);
+            if(ed < tMinDist && ed > 0.001 && ed < tBestD) {
+              tBestD = ed; tBNx = edx/ed; tBNz = edz/ed; tBPen = tMinDist - ed;
+            }
+          }
+          if(tBPen > 0) {
+            tb.pos.x += tBNx * tBPen; tb.pos.z += tBNz * tBPen;
+            const tDot2 = tb.vel.x*tBNx + tb.vel.z*tBNz;
+            if(tDot2 < 0) {
+              tb.vel.x -= (1+BOUNCE*2.0) * tDot2 * tBNx;
+              tb.vel.z -= (1+BOUNCE*2.0) * tDot2 * tBNz;
+              if(tb.vel.y < 0.5) tb.vel.y += 0.8;
+            }
+            aw.squashT = 0.18;
           }
         }
 
@@ -16534,8 +17071,21 @@ function animate(now) {
         // Ensure ball is visible at winning position
         if(G.ball) { G.ball.position.copy(G.ballPos); G.ball.visible=true; }
         if(G.ballShadow) G.ballShadow.visible=true;
-        // Snap camera to winning ball
-        snapCameraToPos(G.ballPos);
+        // Smooth camera transition toward the winning ball.
+        // camTarget is the point the orbital camera looks at; we lerp it via
+        // focusCameraOnBall's existing per-frame logic. Instead of snapping
+        // (which jump-cuts the view), we just update camTheta to face the
+        // new ball from a sensible angle and let camTarget drift in.
+        const ghx = G.holePos.x * TILE_SIZE, ghz = G.holePos.y * TILE_SIZE;
+        const toHoleX = G.ballPos.x - ghx, toHoleZ = G.ballPos.z - ghz;
+        if(Math.hypot(toHoleX, toHoleZ) > 0.1) {
+          G.camTheta = Math.atan2(toHoleX, toHoleZ);
+        }
+        G.camPhi = 0.85;
+        // Do NOT snap camTarget — use a transition-frame counter so the main
+        // animate loop keeps lerping camTarget toward the new ballPos even
+        // though G.rolling is false here.
+        G._camTransitionFrames = 40;
         for(const tb of G._threeBalls) if(tb.mesh) scene.remove(tb.mesh);
         G._threeBalls = null;
       }
