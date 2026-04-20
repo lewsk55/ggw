@@ -309,6 +309,133 @@ overflow-y:auto;
 }
 #overlay.hidden { display:none; }
 
+/* Profile picker — mirrors #overlay styling so they feel consistent */
+#profile-picker {
+  position:absolute; inset:0;
+  background:linear-gradient(160deg,rgba(135,206,235,0.95) 0%,rgba(100,180,100,0.93) 100%);
+  backdrop-filter:blur(8px);
+  display:flex; flex-direction:column;
+  align-items:center; justify-content:flex-start;
+  gap:18px; z-index:150;
+  padding:max(8vh, 32px) 32px 48px;
+  overflow-y:auto;
+  -webkit-overflow-scrolling:touch;
+}
+#profile-picker.hidden { display:none; }
+#profile-slots {
+  display:flex; flex-direction:column; gap:14px;
+  width:100%; max-width:380px;
+  margin-top:8px;
+}
+.profile-slot {
+  background:rgba(255,255,255,0.22);
+  border:2px solid rgba(255,255,255,0.35);
+  border-radius:18px;
+  padding:18px 22px;
+  color:#fff;
+  font-family:'Playfair Display', serif;
+  cursor:pointer;
+  transition:transform 0.15s, background 0.15s, border-color 0.15s;
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+  backdrop-filter:blur(4px);
+}
+.profile-slot:active { transform:scale(0.98); }
+.profile-slot.filled { background:rgba(255,255,255,0.3); border-color:rgba(255,255,255,0.55); }
+.profile-slot.filled:hover { background:rgba(255,255,255,0.4); }
+.profile-slot.empty {
+  background:rgba(255,255,255,0.1);
+  border:2px dashed rgba(255,255,255,0.5);
+  color:rgba(255,255,255,0.85);
+  font-style:italic;
+}
+.profile-slot-main { flex:1; text-align:left; }
+.profile-slot-name {
+  font-size:1.5rem; font-weight:700; letter-spacing:-0.5px; line-height:1.1;
+}
+.profile-slot-meta {
+  font-size:0.7rem; font-weight:400; letter-spacing:0.5px;
+  color:rgba(255,255,255,0.8); margin-top:4px;
+  font-family:'Inter', sans-serif;
+}
+.profile-slot-badge {
+  display:inline-block; background:rgba(80,180,80,0.9);
+  color:#fff; font-size:0.55rem; font-weight:700; letter-spacing:1px;
+  padding:3px 8px; border-radius:10px; margin-left:6px;
+  text-transform:uppercase; vertical-align:middle;
+  font-family:'Inter', sans-serif;
+}
+.profile-slot-menu-btn {
+  background:rgba(0,0,0,0.15);
+  color:rgba(255,255,255,0.85);
+  border:none;
+  width:36px; height:36px; border-radius:50%;
+  font-size:1.2rem; cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+  transition:background 0.15s;
+  flex-shrink:0;
+}
+.profile-slot-menu-btn:hover { background:rgba(0,0,0,0.3); }
+#profile-chip:hover { background:rgba(255,255,255,0.3); }
+
+/* Profile modal — replaces browser prompt/confirm (blocked in iOS PWA mode) */
+#profile-modal {
+  position:fixed; inset:0; z-index:300;
+  display:flex; align-items:center; justify-content:center;
+  padding:20px;
+}
+#profile-modal.hidden { display:none; }
+.profile-modal-backdrop {
+  position:absolute; inset:0;
+  background:rgba(0,0,0,0.55);
+  backdrop-filter:blur(4px);
+}
+.profile-modal-card {
+  position:relative;
+  background:linear-gradient(160deg,#b4e0ee 0%,#8fcf8f 100%);
+  border-radius:18px;
+  padding:24px 22px;
+  width:100%; max-width:340px;
+  box-shadow:0 10px 40px rgba(0,0,0,0.4);
+  font-family:'Playfair Display', serif;
+}
+.profile-modal-title {
+  font-size:1.3rem; font-weight:700; color:#fff;
+  text-align:center; margin-bottom:10px;
+  text-shadow:0 1px 4px rgba(0,0,0,0.2);
+}
+.profile-modal-body {
+  font-family:'Inter', sans-serif;
+  font-size:0.85rem; color:rgba(255,255,255,0.95);
+  text-align:center; line-height:1.5; margin-bottom:14px;
+}
+#profile-modal-input {
+  width:100%; box-sizing:border-box;
+  font-family:'Playfair Display', serif;
+  font-size:1.05rem; color:#2c4a1e;
+  padding:10px 14px;
+  border-radius:10px; border:none;
+  background:rgba(255,255,255,0.95);
+  outline:none; margin-bottom:14px;
+  text-align:center;
+}
+#profile-modal-input:focus { background:#fff; box-shadow:0 0 0 3px rgba(255,255,255,0.4); }
+#profile-modal-input.hidden { display:none; }
+.profile-modal-actions {
+  display:flex; gap:10px; justify-content:center;
+}
+.profile-modal-btn {
+  font-family:'Playfair Display', serif;
+  font-weight:700; font-size:0.95rem; letter-spacing:0.5px;
+  padding:11px 24px;
+  border:none; border-radius:30px;
+  cursor:pointer; flex:1;
+  transition:transform 0.1s;
+}
+.profile-modal-btn:active { transform:scale(0.95); }
+.profile-modal-btn-primary { background:#fff; color:#2c4a1e; }
+.profile-modal-btn-secondary { background:rgba(0,0,0,0.2); color:#fff; }
+.profile-modal-btn-danger { background:#cc3333; color:#fff; }
+
 #overlay h1 {
 font-family:'Playfair Display', serif;
 font-size:clamp(2.5rem,10vw,4.5rem);
@@ -1572,9 +1699,34 @@ margin-top:6px;
   <div class="dbg-close" id="dbg-close">close (~ or Esc)</div>
 </div>
 
+<!-- Profile picker — shown before main menu -->
+<div id="profile-picker" class="hidden">
+  <div class="tagline">Who's playing?</div>
+  <h1 style="font-size:clamp(2rem,7vw,3.2rem);margin-bottom:8px">Golf Gone<br>Wrong</h1>
+  <div id="profile-slots"></div>
+  <div id="profile-hint" style="font-size:0.7rem;color:rgba(255,255,255,0.75);letter-spacing:1.5px;text-transform:uppercase;margin-top:12px">Tap a slot to begin</div>
+</div>
+
+<!-- Generic profile modal (replaces prompt/confirm which is blocked in iOS PWA mode) -->
+<div id="profile-modal" class="hidden">
+  <div class="profile-modal-backdrop" onclick="closeProfileModal()"></div>
+  <div class="profile-modal-card">
+    <div class="profile-modal-title" id="profile-modal-title">Profile</div>
+    <div class="profile-modal-body" id="profile-modal-body"></div>
+    <input id="profile-modal-input" type="text" maxlength="20" placeholder="Name" spellcheck="false" autocomplete="off"/>
+    <div class="profile-modal-actions">
+      <button class="profile-modal-btn profile-modal-btn-secondary" id="profile-modal-cancel" onclick="closeProfileModal()">Cancel</button>
+      <button class="profile-modal-btn profile-modal-btn-primary" id="profile-modal-confirm">OK</button>
+    </div>
+  </div>
+</div>
+
 <!-- Overlay -->
 
-<div id="overlay">
+<div id="overlay" class="hidden">
+  <div id="profile-chip" style="position:absolute;top:16px;right:16px;background:rgba(255,255,255,0.18);color:#fff;font-family:'Inter',sans-serif;font-size:0.75rem;font-weight:700;letter-spacing:1px;padding:7px 14px;border-radius:24px;cursor:pointer;backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,0.3);z-index:5" onclick="switchProfile()">
+    <span id="profile-chip-name">—</span> ⇄
+  </div>
   <div class="tagline">A Minigolf Roguelike</div>
   <h1>Golf Gone<br>Wrong</h1>
   <p>Procedurally generated minigolf.<br>Drag to look around.<br>Tap the ball, pull back &amp; release to shoot.</p>
@@ -2156,8 +2308,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.17p1';
-const CHANGE_NOTE = 'Sharpshooter camera restore fix (FOV + orbital pose)';
+const GAME_VERSION = '0.17r';
+const CHANGE_NOTE = 'Profile picker modal (iOS PWA fix) + Coin Bouncer merged into Money Bounce';
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 const PRICE_MULTIPLIER = 1.25;
@@ -2328,29 +2480,35 @@ const _storageCache = {};
 let _storageReady = false;
 
 function lsGet(key) {
-  if(key in _storageCache) return _storageCache[key];
-  try { const v = JSON.parse(localStorage.getItem(key)); _storageCache[key] = v; return v; } catch(e) { return null; }
+  // Auto-namespace namespaced keys to the active profile. profKey returns
+  // the raw key when no active profile or when the key is not in NAMESPACED_KEYS.
+  const k = (typeof profKey === 'function') ? profKey(key) : key;
+  if(k in _storageCache) return _storageCache[k];
+  try { const v = JSON.parse(localStorage.getItem(k)); _storageCache[k] = v; return v; } catch(e) { return null; }
 }
 function lsSet(key, val) {
-  _storageCache[key] = val;
+  const k = (typeof profKey === 'function') ? profKey(key) : key;
+  _storageCache[k] = val;
   // Try localStorage first (desktop)
-  try { localStorage.setItem(key, JSON.stringify(val)); } catch(e) {}
+  try { localStorage.setItem(k, JSON.stringify(val)); } catch(e) {}
   // Also persist to window.storage (Claude preview)
   if(window.storage && window.storage.set) {
-    window.storage.set(key, JSON.stringify(val)).catch(()=>{});
+    window.storage.set(k, JSON.stringify(val)).catch(()=>{});
   }
 }
 
-// On startup, hydrate cache from window.storage (async)
+// On startup, hydrate cache from window.storage (async).
+// After profile switch, callers can invoke this again to refresh
+// the cache from the new profile's cloud-persisted data.
 async function _hydrateStorage() {
-  if(!window.storage || !window.storage.get) return;
-  const keys = [LS_KEY_ALLTIME, LS_KEY_SEEDS, LS_KEY_SAVED];
-  for(const key of keys) {
+  if(!window.storage || !window.storage.get) { _storageReady = true; return; }
+  const bases = [LS_KEY_ALLTIME, LS_KEY_ALLTIME + '_9', LS_KEY_ALLTIME + '_18', LS_KEY_SEEDS, LS_KEY_SAVED];
+  for(const base of bases) {
+    const key = (typeof profKey === 'function') ? profKey(base) : base;
     try {
       const result = await window.storage.get(key);
       if(result && result.value != null) {
         const parsed = JSON.parse(result.value);
-        // Only use cloud value if local cache is empty (cloud wins on first load)
         if(!_storageCache[key] && parsed != null) {
           _storageCache[key] = parsed;
         }
@@ -2359,9 +2517,191 @@ async function _hydrateStorage() {
   }
   _storageReady = true;
   // Re-render leaderboard with hydrated data
-  renderLeaderboard();
+  if(typeof renderLeaderboard === 'function') renderLeaderboard();
 }
 _hydrateStorage();
+window._hydrateStorage = _hydrateStorage;
+
+// ═══════════════════════════════════════════════════════
+//  PROFILE SYSTEM (v0.17q+)
+//  Three fixed profile slots. Each profile owns its own
+//  autosave, leaderboard, run history, and meta-progression.
+// ═══════════════════════════════════════════════════════
+const PROFILES_INDEX_KEY = 'ggw_profiles';   // top-level, never namespaced
+const PROFILE_SLOT_IDS   = ['p1', 'p2', 'p3'];
+
+// Keys that should be namespaced per-profile. Everything else (the profiles
+// index itself, master volume, etc.) stays global.
+const NAMESPACED_KEYS = new Set([
+  'ggw_autosave',
+  'ggw_run_history',
+  'ggw_played',
+  'foreever_alltime',
+  'foreever_alltime_9',
+  'foreever_alltime_18',
+  'foreever_seeds',
+  'foreever_saved',
+  'ggw_meta',          // RESERVED for meta-progression
+]);
+
+function _rawLsGet(key) {
+  try { return JSON.parse(localStorage.getItem(key)); } catch(e) { return null; }
+}
+function _rawLsSet(key, val) {
+  try { localStorage.setItem(key, JSON.stringify(val)); } catch(e) {}
+  if(window.storage && window.storage.set) {
+    window.storage.set(key, JSON.stringify(val)).catch(()=>{});
+  }
+}
+
+// Current active profile ID, cached. Set by loadProfilesIndex at boot
+// and by setActiveProfile when user switches.
+let _activeProfileId = null;
+
+function loadProfilesIndex() {
+  let idx = _rawLsGet(PROFILES_INDEX_KEY);
+  if(!idx || !idx.profiles || !Array.isArray(idx.profiles) || idx.profiles.length !== 3) {
+    // Initialize a fresh empty index
+    idx = {
+      activeProfileId: null,
+      profiles: PROFILE_SLOT_IDS.map(id => ({
+        id, name: null, createdAt: null, lastPlayedAt: null
+      })),
+    };
+    _rawLsSet(PROFILES_INDEX_KEY, idx);
+  }
+  _activeProfileId = idx.activeProfileId;
+  return idx;
+}
+function saveProfilesIndex(idx) {
+  idx.activeProfileId = _activeProfileId;
+  _rawLsSet(PROFILES_INDEX_KEY, idx);
+}
+function getProfile(id) {
+  const idx = loadProfilesIndex();
+  return idx.profiles.find(p => p.id === id) || null;
+}
+function getActiveProfile() {
+  if(!_activeProfileId) return null;
+  return getProfile(_activeProfileId);
+}
+function setActiveProfile(id) {
+  _activeProfileId = id;
+  const idx = loadProfilesIndex();
+  idx.activeProfileId = id;
+  const p = idx.profiles.find(pp => pp.id === id);
+  if(p) p.lastPlayedAt = Date.now();
+  saveProfilesIndex(idx);
+  // Purge in-memory storage cache so the next read fetches the new profile's data
+  for(const k of Object.keys(_storageCache)) delete _storageCache[k];
+}
+function createProfile(slotId, name) {
+  const idx = loadProfilesIndex();
+  const slot = idx.profiles.find(p => p.id === slotId);
+  if(!slot) return null;
+  slot.name = (name && name.trim()) || ('Player ' + slotId.slice(1));
+  slot.createdAt = Date.now();
+  slot.lastPlayedAt = Date.now();
+  saveProfilesIndex(idx);
+  return slot;
+}
+function renameProfile(slotId, newName) {
+  const idx = loadProfilesIndex();
+  const slot = idx.profiles.find(p => p.id === slotId);
+  if(!slot || !slot.createdAt) return false;
+  slot.name = (newName && newName.trim()) || slot.name;
+  saveProfilesIndex(idx);
+  return true;
+}
+function deleteProfile(slotId) {
+  // Wipes all namespaced keys for this profile AND resets the slot to empty.
+  // Leaves other profiles untouched.
+  for(const baseKey of NAMESPACED_KEYS) {
+    const fullKey = baseKey + '__' + slotId;
+    try { localStorage.removeItem(fullKey); } catch(e){}
+    if(window.storage && window.storage.delete) {
+      window.storage.delete(fullKey).catch(()=>{});
+    }
+    delete _storageCache[fullKey];
+  }
+  const idx = loadProfilesIndex();
+  const slot = idx.profiles.find(p => p.id === slotId);
+  if(slot) { slot.name = null; slot.createdAt = null; slot.lastPlayedAt = null; }
+  // If we deleted the active profile, clear active state — caller must re-pick
+  if(_activeProfileId === slotId) { _activeProfileId = null; idx.activeProfileId = null; }
+  saveProfilesIndex(idx);
+}
+
+// Apply profile namespacing to a storage key. Global (non-namespaced) keys
+// are returned as-is. If no active profile yet, returns the raw key as a
+// safe fallback so early-boot calls don't throw.
+function profKey(baseKey) {
+  if(!_activeProfileId) return baseKey;
+  if(!NAMESPACED_KEYS.has(baseKey)) return baseKey;
+  return baseKey + '__' + _activeProfileId;
+}
+
+// ── Migration: detect legacy (pre-profile) save data on first boot ─────
+// If the user had data before v0.17q, we offer to adopt it into slot p1.
+function hasLegacySaveData() {
+  const idx = loadProfilesIndex();
+  // If any profile already exists, migration is no longer relevant
+  if(idx.profiles.some(p => p.createdAt)) return false;
+  // Check for any legacy unsuffixed key
+  for(const baseKey of NAMESPACED_KEYS) {
+    if(localStorage.getItem(baseKey) != null) return true;
+  }
+  return false;
+}
+function migrateLegacyToP1(playerName) {
+  const slotId = 'p1';
+  for(const baseKey of NAMESPACED_KEYS) {
+    const val = localStorage.getItem(baseKey);
+    if(val != null) {
+      const newKey = baseKey + '__' + slotId;
+      try { localStorage.setItem(newKey, val); } catch(e){}
+      try { localStorage.removeItem(baseKey); } catch(e){}
+      if(window.storage && window.storage.set) {
+        window.storage.set(newKey, val).catch(()=>{});
+      }
+      if(window.storage && window.storage.delete) {
+        window.storage.delete(baseKey).catch(()=>{});
+      }
+      delete _storageCache[baseKey];
+    }
+  }
+  createProfile(slotId, playerName || 'Player 1');
+  setActiveProfile(slotId);
+}
+
+// ── Meta-progression scaffold (RESERVED — shape will evolve next update) ─
+const META_SCHEMA_DEFAULT = {
+  schemaVersion: 1,
+  totalRuns: 0,
+  totalHolesCompleted: 0,
+  totalCoinsEarnedLifetime: 0,
+  unlocks: { cards: [], perks: [], starterDecks: [], biomes: [], cosmetics: [] },
+  currencies: { gems: 0 },
+  talents: {},
+  achievements: [],
+};
+function getMeta() {
+  const raw = lsGet('ggw_meta');
+  if(!raw) return JSON.parse(JSON.stringify(META_SCHEMA_DEFAULT));
+  // Forward-compat: fill missing fields from default so older saves don't break
+  const merged = JSON.parse(JSON.stringify(META_SCHEMA_DEFAULT));
+  Object.assign(merged, raw);
+  return merged;
+}
+function setMeta(meta) {
+  lsSet('ggw_meta', meta);
+}
+window.getMeta = getMeta;
+window.setMeta = setMeta;
+
+// Expose profile API for debug / console use
+window.GGW_Profiles = { loadProfilesIndex, getActiveProfile, setActiveProfile,
+  createProfile, renameProfile, deleteProfile, profKey, getMeta, setMeta };
 
 function recordScore(seed, totalStrokes, totalPar) {
   const diff = totalStrokes - totalPar;
@@ -2508,6 +2848,18 @@ document.getElementById('seed-input').addEventListener('input', function() {
 
 // Render leaderboard on page load
 renderLeaderboard();
+
+// Profile gate — deferred so renderProfilePicker / bootProfileGate are defined by now.
+// If a profile already exists, this reveals the main menu; otherwise shows picker.
+// setTimeout(0) pushes to next macrotask, after all synchronous top-level defs.
+setTimeout(() => {
+  if(typeof bootProfileGate === 'function') bootProfileGate();
+  else {
+    // Fallback: no profile system initialized — just show the main menu as before
+    const ov = document.getElementById('overlay');
+    if(ov) ov.classList.remove('hidden');
+  }
+}, 0);
 
 // ── Settings UI ───────────────────────────────────────
 window.setHoles = function(n) {
@@ -5631,19 +5983,14 @@ function updatePhysics(dt) {
               G.ballVel.z *= boost;
               G.snowballCount++;
             }
-            // Money Bounce perk: 1 coin per wall bounce, capped at 3 bounces per stack
+            // Money Bounce perk: 1 coin per wall bounce, capped at 3 bounces per stack.
+            // (Merged with former Coin Bouncer perk in v0.17r — Money Bounce is now the sole wall-coin perk.)
             const moneyBounceStacks = G.modifiers.filter(m=>m.id==='money_bounce').length;
             if(moneyBounceStacks > 0 && !pushed) {
               G._moneyBounceCount = (G._moneyBounceCount||0) + 1;
               if(G._moneyBounceCount <= moneyBounceStacks * 3) {
                 G._bounceCoinsPending = (G._bounceCoinsPending||0) + 1;
               }
-            }
-            // Coin Bouncer perk: 1 coin per bounce, 2 at stack 2+
-            const coinBouncerStacks = G.modifiers.filter(m=>m.id==='coin_bouncer').length;
-            if(coinBouncerStacks > 0 && !pushed) {
-              const cbCoins = Math.min(coinBouncerStacks, 2);
-              G._bounceCoinsPending = (G._bounceCoinsPending||0) + cbCoins;
             }
           }
           if(!pushed) {
@@ -9368,7 +9715,7 @@ function triggerCheckeredFlag() {
 
 // ── Active filtering (synced from tuning sheet) ──────────────
 // Perks/cards marked 'no' in the Active column are filtered out at load time
-const INACTIVE_PERKS = new Set(['double_or_nothing', 'thin_ice']);
+const INACTIVE_PERKS = new Set(['double_or_nothing', 'thin_ice', 'coin_bouncer']);
 const INACTIVE_CARDS = new Set(['airstrike', 'wrecking_ball', 'portal_pair', 'wall_magnet', 'arc_shot', 'golden_path']);
 
 const CARD_DEFS = {
@@ -11322,7 +11669,6 @@ function applyPerkEffect(id) {
     case 'slippery_ball':    /* applied in physics via modifier count */ break;
     case 'money_pit':        /* applied in buildCourse coin count */ break;
     case 'gravity_pull':     /* applied in physics hole detection */ break;
-    case 'coin_bouncer':     /* applied in wall collision */ break;
     case 'high_speed_finish':/* checked in onHoled */ break;
     case 'bounce_boom':      /* applied in wall/obstacle bounce */ break;
     case 'lot_of_heart':     /* spawns hearts in buildCourse */ break;
@@ -12945,8 +13291,8 @@ const ALL_PERKS = [
     desc:'50% less friction on the ball. Stacks for even faster rolling.' },
   { id:'gravity_pull',    name:'Gravitational Pull',   emoji:'🌀', rarity:'rare',      price:15, stackable:false, weight:4,
     desc:'When close to the hole, a gentle force pulls the ball toward it.' },
-  { id:'coin_bouncer',   name:'Coin Bouncer',          emoji:'🪙', rarity:'rare',      price:12,  stackable:true,  weight:3,
-    desc:'Earn a coin every time you bounce off a wall (max 2 coins per bounce per stack).' },
+  { id:'coin_bouncer',   name:'Coin Bouncer',          emoji:'🪙', rarity:'rare',      price:12,  stackable:true,  weight:0,
+    desc:'[MERGED INTO MONEY BOUNCE v0.17r — auto-migrated on load]' },
   { id:'full_house',      name:'Full House',            emoji:'🂡', rarity:'rare',     price:30, stackable:false, weight:6,
     desc:'Hold 5 cards at a time instead of 4. One more tool in your back pocket.' },
   { id:'bounce_boom',     name:'Bounce & Boom',        emoji:'🔥', rarity:'rare',     price:20, stackable:false, weight:4,
@@ -13036,7 +13382,7 @@ function computeSoloAwards() {
 
 function showGameOver(bustedBudget=false){
   clearAutoSave();
-  try { localStorage.setItem('ggw_played', '1'); } catch(e){}
+  try { localStorage.setItem(profKey('ggw_played'), '1'); } catch(e){}
   // In multiplayer, use the dedicated results screen
   if(isMultiplayer()) {
     savePlayerState();
@@ -13154,7 +13500,7 @@ function saveRunData(outcome) {
     return;
   }
   try {
-    const raw = localStorage.getItem('ggw_run_history');
+    const raw = localStorage.getItem(profKey('ggw_run_history'));
     let history = [];
     if(raw) {
       try { history = JSON.parse(raw); } catch(_) { history = []; }
@@ -13163,12 +13509,12 @@ function saveRunData(outcome) {
     history.push(run);
     // Cap history — drop oldest to keep well under localStorage quota (~5MB typical)
     if(history.length > MAX_RUN_HISTORY) history = history.slice(history.length - MAX_RUN_HISTORY);
-    localStorage.setItem('ggw_run_history', JSON.stringify(history));
+    localStorage.setItem(profKey('ggw_run_history'), JSON.stringify(history));
   } catch(err) {
     // Quota exceeded or storage unavailable — try once more with a trimmed history
     try {
       const trimmed = [run];
-      localStorage.setItem('ggw_run_history', JSON.stringify(trimmed));
+      localStorage.setItem(profKey('ggw_run_history'), JSON.stringify(trimmed));
       console.warn('saveRunData: quota hit, reset history to just this run');
     } catch(e2) {
       console.warn('saveRunData: localStorage write failed', e2);
@@ -13183,7 +13529,7 @@ function saveRunData(outcome) {
 // then falls back to the classic <a download> Blob pattern for desktop / older mobile.
 async function downloadRunHistory() {
   try {
-    const raw = localStorage.getItem('ggw_run_history');
+    const raw = localStorage.getItem(profKey('ggw_run_history'));
     const data = raw ? JSON.parse(raw) : [];
     const arr = Array.isArray(data) ? data : [];
     if(arr.length === 0) {
@@ -13241,7 +13587,7 @@ window.downloadRunHistory = downloadRunHistory;
 // the iOS Share sheet. On desktop, falls back to Blob + <a download>.
 async function exportSave() {
   try {
-    const raw = localStorage.getItem('ggw_autosave');
+    const raw = localStorage.getItem(profKey('ggw_autosave'));
     if(!raw) {
       showToast('No save to export — start a run first', 2000);
       return;
@@ -13328,13 +13674,13 @@ function importSaveFile() {
         showToast('Save file missing required fields', 2200); return;
       }
       // Warn if there's already a save locally
-      const existing = localStorage.getItem('ggw_autosave');
+      const existing = localStorage.getItem(profKey('ggw_autosave'));
       if(existing) {
         if(!confirm('You already have a saved run. Replace it with the imported save?')) return;
       }
       // Bump timestamp so the resume UI shows "just now" not the original export time.
       save.timestamp = Date.now();
-      localStorage.setItem('ggw_autosave', JSON.stringify(save));
+      localStorage.setItem(profKey('ggw_autosave'), JSON.stringify(save));
       const verNote = (wrapper.gameVersion && wrapper.gameVersion !== GAME_VERSION)
         ? ` (from ${wrapper.gameVersion})` : '';
       showToast(`📂 Save imported — Hole ${save.hole+1}/${save.totalHoles}${verNote}`, 2400);
@@ -13378,18 +13724,18 @@ function initHole() {
       };
       const json = JSON.stringify(saveData);
       try {
-        localStorage.setItem('ggw_autosave', json);
+        localStorage.setItem(profKey('ggw_autosave'), json);
       } catch(writeErr) {
         // Quota exceeded — try dropping the analytics history to make room, then retry autosave.
         try {
-          const rh = localStorage.getItem('ggw_run_history');
+          const rh = localStorage.getItem(profKey('ggw_run_history'));
           if(rh) {
             const hist = JSON.parse(rh);
             if(Array.isArray(hist) && hist.length > 5) {
-              localStorage.setItem('ggw_run_history', JSON.stringify(hist.slice(-5)));
+              localStorage.setItem(profKey('ggw_run_history'), JSON.stringify(hist.slice(-5)));
             }
           }
-          localStorage.setItem('ggw_autosave', json);
+          localStorage.setItem(profKey('ggw_autosave'), json);
         } catch(retryErr) { /* storage unavailable — skip this save */ }
       }
     } catch(e) { /* save assembly failure — skip */ }
@@ -13806,6 +14152,9 @@ function escMainMenu() {
   if(_deckBtn) _deckBtn.style.display = 'none';
   const ov = document.getElementById('overlay');
   ov.innerHTML = `
+    <div id="profile-chip" style="position:absolute;top:16px;right:16px;background:rgba(255,255,255,0.18);color:#fff;font-family:'Inter',sans-serif;font-size:0.75rem;font-weight:700;letter-spacing:1px;padding:7px 14px;border-radius:24px;cursor:pointer;backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,0.3);z-index:5" onclick="switchProfile()">
+      <span id="profile-chip-name">—</span> ⇄
+    </div>
     <div class="tagline">A Minigolf Roguelike</div>
     <h1>Golf Gone<br>Wrong</h1>
     <p>Procedurally generated minigolf.<br>Drag to look around.<br>Tap the ball, pull back &amp; release to shoot.</p>
@@ -13850,6 +14199,7 @@ function escMainMenu() {
   });
   renderLeaderboard();
   checkAutoSave();
+  if(typeof updateProfileChip === 'function') updateProfileChip();
 }
 function escNewRun() {
   if(!confirm('Start a new run? This will erase your current saved run.')) return;
@@ -14633,7 +14983,7 @@ function nextHole(){
 }
 
 function confirmStartGame() {
-  const hasSave = localStorage.getItem('ggw_autosave');
+  const hasSave = localStorage.getItem(profKey('ggw_autosave'));
   if(hasSave) {
     // Read save to show the user what they'd be erasing — they may have forgotten it exists.
     let desc = 'your saved run';
@@ -14652,10 +15002,275 @@ document.getElementById('btn-start').addEventListener('click', confirmStartGame)
 window.startGame = startGame;
 window.confirmStartGame = confirmStartGame;
 
+// ═══════════════════════════════════════════════════════
+//  PROFILE PICKER UI (v0.17q+)
+// ═══════════════════════════════════════════════════════
+function _fmtAgo(ts) {
+  if(!ts) return '';
+  const ago = Date.now() - ts;
+  if(ago < 60000) return 'just now';
+  if(ago < 3600000) return Math.round(ago/60000)+'m ago';
+  if(ago < 86400000) return Math.round(ago/3600000)+'h ago';
+  return Math.round(ago/86400000)+'d ago';
+}
+
+function _profileHasActiveRun(profileId) {
+  // Check if this profile has an autosave (don't touch the active-profile state)
+  const key = 'ggw_autosave__' + profileId;
+  try { return localStorage.getItem(key) != null; } catch(e) { return false; }
+}
+
+function renderProfilePicker() {
+  const idx = loadProfilesIndex();
+  const wrap = document.getElementById('profile-slots');
+  if(!wrap) return;
+  wrap.innerHTML = '';
+  for(const slot of idx.profiles) {
+    const el = document.createElement('div');
+    el.className = 'profile-slot ' + (slot.createdAt ? 'filled' : 'empty');
+    if(slot.createdAt) {
+      const hasRun = _profileHasActiveRun(slot.id);
+      const lastSeen = slot.lastPlayedAt ? 'Last played ' + _fmtAgo(slot.lastPlayedAt) : 'New profile';
+      el.innerHTML = `
+        <div class="profile-slot-main">
+          <div class="profile-slot-name">${_escapeHtml(slot.name)}${hasRun ? '<span class="profile-slot-badge">Active run</span>' : ''}</div>
+          <div class="profile-slot-meta">${lastSeen}</div>
+        </div>
+        <button class="profile-slot-menu-btn" title="Options" data-slot="${slot.id}">⋮</button>
+      `;
+      el.onclick = (e) => {
+        if(e.target.classList.contains('profile-slot-menu-btn')) return;
+        pickProfile(slot.id);
+      };
+      // Wire up the ⋮ menu button
+      const menuBtn = el.querySelector('.profile-slot-menu-btn');
+      if(menuBtn) menuBtn.onclick = (e) => { e.stopPropagation(); openProfileMenu(slot.id); };
+    } else {
+      el.innerHTML = `
+        <div class="profile-slot-main">
+          <div class="profile-slot-name">+ New Profile</div>
+          <div class="profile-slot-meta">Slot ${slot.id.slice(1)} — tap to create</div>
+        </div>
+      `;
+      el.onclick = () => createProfileFlow(slot.id);
+    }
+    wrap.appendChild(el);
+  }
+}
+
+function _escapeHtml(s) {
+  return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// ── Custom modal (replaces prompt/confirm; iOS PWAs block those dialogs) ─────
+// Usage: openProfileModal({ title, body, inputDefault, confirmLabel, danger, onConfirm })
+// If inputDefault is null/undefined, the input is hidden and the modal acts as a confirm.
+let _modalPending = null;
+function openProfileModal(opts) {
+  const modal = document.getElementById('profile-modal');
+  const title = document.getElementById('profile-modal-title');
+  const body  = document.getElementById('profile-modal-body');
+  const input = document.getElementById('profile-modal-input');
+  const confirmBtn = document.getElementById('profile-modal-confirm');
+  if(!modal || !title || !body || !input || !confirmBtn) return;
+  title.textContent = opts.title || 'Profile';
+  body.innerHTML = opts.body ? _escapeHtml(opts.body) : '';
+  body.style.display = opts.body ? '' : 'none';
+  if(opts.inputDefault != null) {
+    input.classList.remove('hidden');
+    input.value = String(opts.inputDefault);
+    setTimeout(() => { try { input.focus(); input.select(); } catch(e){} }, 50);
+  } else {
+    input.classList.add('hidden');
+    input.value = '';
+  }
+  confirmBtn.textContent = opts.confirmLabel || 'OK';
+  confirmBtn.className = 'profile-modal-btn ' + (opts.danger ? 'profile-modal-btn-danger' : 'profile-modal-btn-primary');
+  // Reset the cancel button to defaults — openProfileMenu sometimes repurposes it
+  const cancelBtn = document.getElementById('profile-modal-cancel');
+  if(cancelBtn) {
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.className = 'profile-modal-btn profile-modal-btn-secondary';
+    cancelBtn.onclick = closeProfileModal;
+  }
+  _modalPending = opts.onConfirm || null;
+  modal.classList.remove('hidden');
+}
+function closeProfileModal() {
+  const modal = document.getElementById('profile-modal');
+  if(modal) modal.classList.add('hidden');
+  _modalPending = null;
+}
+function _modalConfirmClick() {
+  const input = document.getElementById('profile-modal-input');
+  const value = input && !input.classList.contains('hidden') ? input.value.trim() : null;
+  const cb = _modalPending;
+  closeProfileModal();
+  if(cb) cb(value);
+}
+// Wire modal confirm button + enter key (deferred so DOM exists)
+setTimeout(() => {
+  const confirmBtn = document.getElementById('profile-modal-confirm');
+  if(confirmBtn) confirmBtn.onclick = _modalConfirmClick;
+  const input = document.getElementById('profile-modal-input');
+  if(input) input.addEventListener('keydown', (e) => {
+    if(e.key === 'Enter') { e.preventDefault(); _modalConfirmClick(); }
+    else if(e.key === 'Escape') { e.preventDefault(); closeProfileModal(); }
+  });
+}, 0);
+window.closeProfileModal = closeProfileModal;
+
+function openProfileMenu(slotId) {
+  const slot = getProfile(slotId);
+  if(!slot) return;
+  // First modal: choose action
+  openProfileModal({
+    title: `Profile: ${slot.name}`,
+    body: 'Rename this profile, or delete it entirely?',
+    inputDefault: null,  // no text input on this step
+    confirmLabel: 'Rename',
+    onConfirm: () => {
+      // They chose "Rename" — open second modal with text input
+      openProfileModal({
+        title: `Rename "${slot.name}"`,
+        body: null,
+        inputDefault: slot.name,
+        confirmLabel: 'Save',
+        onConfirm: (newName) => {
+          if(newName && newName.trim()) {
+            renameProfile(slotId, newName.trim());
+            renderProfilePicker();
+          }
+        }
+      });
+    }
+  });
+  // Also swap the Cancel button into a "Delete" action for this specific modal
+  // by targeting it after open (since openProfileModal resets the secondary btn).
+  setTimeout(() => {
+    const cancelBtn = document.getElementById('profile-modal-cancel');
+    if(cancelBtn) {
+      cancelBtn.textContent = 'Delete';
+      cancelBtn.className = 'profile-modal-btn profile-modal-btn-danger';
+      cancelBtn.onclick = () => {
+        closeProfileModal();
+        // Open confirm modal for the destructive action
+        openProfileModal({
+          title: `Delete "${slot.name}"?`,
+          body: "This erases their active run, leaderboard, and all saves. Cannot be undone.",
+          inputDefault: null,
+          confirmLabel: 'Delete',
+          danger: true,
+          onConfirm: () => {
+            deleteProfile(slotId);
+            renderProfilePicker();
+          }
+        });
+      };
+    }
+  }, 10);
+}
+
+function createProfileFlow(slotId) {
+  const defaultName = 'Player ' + slotId.slice(1);
+  openProfileModal({
+    title: 'New Profile',
+    body: null,
+    inputDefault: defaultName,
+    confirmLabel: "Let's Go",
+    onConfirm: (name) => {
+      const finalName = (name && name.trim()) || defaultName;
+      createProfile(slotId, finalName);
+      pickProfile(slotId);
+    }
+  });
+}
+
+function pickProfile(slotId) {
+  setActiveProfile(slotId);
+  // Re-hydrate cache from storage for new profile's data
+  _hydrateStorage();
+  // Hide picker, show main menu
+  const picker = document.getElementById('profile-picker');
+  if(picker) picker.classList.add('hidden');
+  const overlay = document.getElementById('overlay');
+  if(overlay) overlay.classList.remove('hidden');
+  updateProfileChip();
+  renderLeaderboard();
+  checkAutoSave();
+}
+
+function switchProfile() {
+  // From main menu: save any in-progress work, show picker.
+  // Active-run autosave lives on the current profile already, so no extra save needed.
+  const picker = document.getElementById('profile-picker');
+  const overlay = document.getElementById('overlay');
+  if(picker) picker.classList.remove('hidden');
+  if(overlay) overlay.classList.add('hidden');
+  renderProfilePicker();
+}
+
+function updateProfileChip() {
+  const chip = document.getElementById('profile-chip-name');
+  const p = getActiveProfile();
+  if(chip) chip.textContent = p ? p.name : '—';
+}
+
+window.pickProfile = pickProfile;
+window.switchProfile = switchProfile;
+window.createProfileFlow = createProfileFlow;
+window.openProfileMenu = openProfileMenu;
+
+// ── Boot flow: if no active profile, show picker; otherwise show main menu ──
+function bootProfileGate() {
+  // First boot with legacy data? Offer one-time migration via modal.
+  if(hasLegacySaveData()) {
+    openProfileModal({
+      title: 'Welcome back!',
+      body: "We now support multiple profiles. Name this profile to keep your existing save.",
+      inputDefault: 'Player 1',
+      confirmLabel: 'Continue',
+      onConfirm: (name) => {
+        migrateLegacyToP1((name && name.trim()) || 'Player 1');
+        // Hide picker, reveal main menu (migration made p1 active)
+        const picker = document.getElementById('profile-picker');
+        const overlay = document.getElementById('overlay');
+        if(picker) picker.classList.add('hidden');
+        if(overlay) overlay.classList.remove('hidden');
+        updateProfileChip();
+        checkAutoSave();
+        renderLeaderboard();
+      }
+    });
+    // Show a hidden picker underneath so the backdrop looks consistent
+    // (picker defaults hidden, no need to force — the modal overlays everything)
+    return;
+  }
+  const active = getActiveProfile();
+  if(active) {
+    // Active profile exists — reveal main menu
+    const picker = document.getElementById('profile-picker');
+    const overlay = document.getElementById('overlay');
+    if(picker) picker.classList.add('hidden');
+    if(overlay) overlay.classList.remove('hidden');
+    updateProfileChip();
+    checkAutoSave();
+    renderLeaderboard();
+    return;
+  }
+  // No active profile — show picker, hide main menu
+  const picker = document.getElementById('profile-picker');
+  const overlay = document.getElementById('overlay');
+  if(picker) picker.classList.remove('hidden');
+  if(overlay) overlay.classList.add('hidden');
+  renderProfilePicker();
+}
+window.bootProfileGate = bootProfileGate;
+
 // ── Auto-save resume ─────────────────────────────────
 function checkAutoSave() {
   try {
-    const raw = localStorage.getItem('ggw_autosave');
+    const raw = localStorage.getItem(profKey('ggw_autosave'));
     if(!raw) return;
     const save = JSON.parse(raw);
     if(!save.version) return;
@@ -14671,7 +15286,7 @@ function checkAutoSave() {
 }
 function resumeGame() {
   try {
-    const raw = localStorage.getItem('ggw_autosave');
+    const raw = localStorage.getItem(profKey('ggw_autosave'));
     if(!raw) { showToast('No save found', 1200); return; }
     const save = JSON.parse(raw);
     // Restore game state
@@ -14685,6 +15300,22 @@ function resumeGame() {
     G.totalStrokes = save.totalStrokes || 0;
     G.scorecard = save.scorecard || [];
     G.modifiers = save.modifiers || [];
+    // v0.17r migration: Coin Bouncer merged into Money Bounce. Convert any legacy
+    // coin_bouncer entries in saved modifiers to money_bounce (same price/rarity,
+    // stackable rules identical under Money Bounce's "1 coin/bounce, max 3/stack").
+    let _migratedCB = 0;
+    G.modifiers = G.modifiers.map(m => {
+      if(m && m.id === 'coin_bouncer') {
+        _migratedCB++;
+        const mbDef = ALL_PERKS.find(p => p.id === 'money_bounce');
+        return mbDef ? { id:'money_bounce', name:mbDef.name, emoji:mbDef.emoji, rarity:mbDef.rarity, price:mbDef.price, stackable:mbDef.stackable }
+                     : { ...m, id:'money_bounce', name:'Money Bounce' };
+      }
+      return m;
+    });
+    if(_migratedCB > 0) {
+      setTimeout(() => { try { showToast(`💸 Coin Bouncer merged into Money Bounce (×${_migratedCB})`, 2200); } catch(e){} }, 600);
+    }
     G.state = 'playing';
     G.strokeBudget = 0;
     G.lives = save.lives;
@@ -14756,7 +15387,7 @@ try {
 
 // Also clear autosave when game completes
 function clearAutoSave() {
-  try { localStorage.removeItem('ggw_autosave'); } catch(e) {}
+  try { localStorage.removeItem(profKey('ggw_autosave')); } catch(e) {}
   const resumeBtn = document.getElementById('btn-resume');
   if(resumeBtn) resumeBtn.style.display = 'none';
 }
