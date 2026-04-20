@@ -2430,11 +2430,12 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.17x3';
-const CHANGE_NOTE = 'Manual ball-stop now triggers per-swing HP damage (no more cheese)';
+const GAME_VERSION = '0.17y8';
+const CHANGE_NOTE = 'Destruction combos now track before first swing too (hole 1 pre-swing explosivo fix)';
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
-const PRICE_MULTIPLIER = 1.25;
+// v0.17x4: synced down from 1.25 to 1.0 per tuning sheet.
+const PRICE_MULTIPLIER = 1.0;
 
 // ── Game state ────────────────────────────────────────
 const G = {
@@ -3660,18 +3661,27 @@ function generatePuttPuttCourse(holeNum) {
   }
   // Par: based on path length with tighter scaling
   // A short L (pathLen ~14) should be par 2-3, a long multi-turn (pathLen ~50) should be par 5-6
-  let basePar = pathLen < 10 ? 2 : pathLen < 18 ? 3 : pathLen < 28 ? 4 : pathLen < 40 ? 5 : pathLen < 55 ? 6 : 7;
+  // Extended brackets for epic marathon holes (par 7-8, rare 9-10).
+  let basePar = pathLen < 10 ? 2 : pathLen < 18 ? 3 : pathLen < 28 ? 4 : pathLen < 40 ? 5 : pathLen < 55 ? 6 : pathLen < 70 ? 7 : pathLen < 85 ? 8 : 9;
   // Obstacle density bump: LOTS of hazards = +1 par
   const totalObstacles = (bumperData.length || 0) + (spinBarData.length || 0) + 
     (slideBlockData.length || 0) + (rockData.length || 0) + (spikeData.length || 0);
   if(totalObstacles >= 8) basePar += 1;
   // Difficulty penalty: harder stars = tighter par
   const parPenalty = diff >= 4 ? 2 : diff >= 3 ? 1 : 0;
-  // v0.17y: par tightened by 1 globally, clamped to [3, 6].
-  // Min 3 (every hole should plausibly accommodate a sink on the first stroke,
-  // at least with a lucky swing). Max 6 (caps disaster exposure under the
-  // 1-HP-per-over-par rule — a perfect run plus one bad hole shouldn't be fatal).
-  let par = Math.max(3, Math.min(6, basePar - parPenalty - 1));
+  // v0.17y5: par cap now scales with hole number — early holes stay tight,
+  // late holes can be par 7-8, with rare par 9-10 on long runs. This keeps
+  // the 1-HP-per-over-par rule honest while allowing epic marathon holes.
+  // holeNum is 0-indexed. Cap scaling:
+  //   holes 1-4:   max 6
+  //   holes 5-9:   max 7  (occasional par 7)
+  //   holes 10-14: max 8  (occasional par 7-8)
+  //   holes 15-17: max 8, with 15% chance to lift to 9-10 (rare marathon)
+  let parCap = 6;
+  if(holeNum >= 4)  parCap = 7;
+  if(holeNum >= 9)  parCap = 8;
+  if(holeNum >= 14 && rng() < 0.15) parCap = 10; // rare par 9-10 surprise
+  let par = Math.max(3, Math.min(parCap, basePar - parPenalty - 1));
 
   // ── 12. Flat terrain ─────────────────────────────────
   const vmW = W+1, vmH = H+1;
@@ -6432,8 +6442,9 @@ function updatePhysics(dt) {
               G.rolling = false;
               G.ballVel.set(0,0,0);
               G._spikeGameOver = false;
-              const cp = G.coinMeshes ? G.coinMeshes.filter(c => c.collected).reduce((s,c)=>s+(c.value||1),0) : 0;
+              const _totCp3 = G._holeCoinsPickedUp || 0;
               const wc = G.wallCoinsThisHole || 0;
+              const cp = Math.max(0, _totCp3 - wc);
               const earn = calcHoleEarnings(G.strokes, G.par, cp, wc);
               G.coins += Math.max(0, earn.total - cp);
               updateCoinHUD();
@@ -6467,7 +6478,16 @@ function updatePhysics(dt) {
   }
 
   // ── Fan force ─────────────────────────────────────────
+  // v0.17y5: fans only push grounded/low-altitude balls. Airborne catapult
+  // and arc shots should sail over fans without getting deflected mid-flight.
   if(G.fans && G.fans.length) {
+    const _fanTerrainY = G.heightMap.length ? getTerrainHeight(G.ballPos.x, G.ballPos.z) : 0;
+    const _fanHeightAboveGround = G.ballPos.y - _fanTerrainY;
+    // Grounded ball floats at ~FLOOR_H/2 + BALL_R ≈ 0.35–0.5. Allow up to 1.2
+    // above terrain so a small hop still feels the wind, but a catapult shot
+    // (peaks 3–8 units) is unaffected.
+    const _fanYGate = _fanHeightAboveGround < 1.2;
+    if(_fanYGate) {
     for(const fan of G.fans) {
       const toBallX = G.ballPos.x - fan.wx;
       const toBallZ = G.ballPos.z - fan.wz;
@@ -6488,6 +6508,7 @@ function updatePhysics(dt) {
         recordStyleEvent('fan_ride');
       }
     }
+    } // end _fanYGate
   }
 
   // ── Bumper collision ─────────────────────────────────
@@ -6746,7 +6767,12 @@ function updatePhysics(dt) {
   }
 
   // ── Conveyor force ───────────────────────────────────
+  // v0.17y5: conveyors only push grounded balls. An airborne catapult
+  // ball sailing over a conveyor shouldn't get sideways force.
   if(G.conveyors && G.conveyors.length) {
+    const _cvTerrainY = G.heightMap.length ? getTerrainHeight(G.ballPos.x, G.ballPos.z) : 0;
+    const _cvGrounded = (G.ballPos.y - _cvTerrainY) < 1.2;
+    if(_cvGrounded) {
     for(const cv of G.conveyors) {
       if(G.ballPos.x < cv.minX || G.ballPos.x > cv.maxX) continue;
       if(G.ballPos.z < cv.minZ || G.ballPos.z > cv.maxZ) continue;
@@ -6760,6 +6786,7 @@ function updatePhysics(dt) {
         recordStyleEvent('conveyor_ride');
       }
     }
+    } // end _cvGrounded
   }
 
   // ── Pop-up wall collision ─────────────────────────────
@@ -7291,8 +7318,9 @@ function updatePhysics(dt) {
             }
             return;
           }
-          const coinsPickedUp = G.coinMeshes ? G.coinMeshes.filter(c => c.collected).reduce((sum,c) => sum + (c.value||1), 0) : 0;
+          const _totCp = G._holeCoinsPickedUp || 0;
           const wallCoins = G.wallCoinsThisHole || 0;
+          const coinsPickedUp = Math.max(0, _totCp - wallCoins);
           const earnings = calcHoleEarnings(G.strokes, G.par, coinsPickedUp, wallCoins);
           G.coins += Math.max(0, earnings.total - coinsPickedUp);
           updateCoinHUD();
@@ -7312,8 +7340,9 @@ function updatePhysics(dt) {
             }
             return;
           }
-          const coinsPickedUp2 = G.coinMeshes ? G.coinMeshes.filter(c => c.collected).reduce((sum,c) => sum + (c.value||1), 0) : 0;
+          const _totCp2 = G._holeCoinsPickedUp || 0;
           const wallCoins2 = G.wallCoinsThisHole || 0;
+          const coinsPickedUp2 = Math.max(0, _totCp2 - wallCoins2);
           const earnings2 = calcHoleEarnings(G.strokes, G.par, coinsPickedUp2, wallCoins2);
           G.coins += Math.max(0, earnings2.total - coinsPickedUp2);
           updateCoinHUD();
@@ -7370,15 +7399,28 @@ function resetToLastShot() {
     for(const tb of G._threeBalls) if(tb.mesh) scene.remove(tb.mesh);
     G._threeBalls = null;
   }
-  // Return to where the last shot was taken (or tee if no shot yet)
+  // Return to where the last shot was taken (or tee if no shot yet).
+  // v0.17y5: validate last-shot position — if it's on a destroyed tile,
+  // in water, or off the grid, fall back to the tee so the ball never
+  // respawns OOB. This can happen when walls/obstacles destroyed during
+  // the shot leave the previous position in a now-invalid cell.
   let wx, wz;
+  const tp = G.teePos;
+  const teeWX = tp.x * TILE_SIZE, teeWZ = tp.y * TILE_SIZE;
   if(G.lastShotPos) {
     wx = G.lastShotPos.x;
     wz = G.lastShotPos.z;
+    // Validate: last-shot cell must be on a rollable surface
+    const cell = getCell(wx, wz);
+    const safeCells = (cell === CELL.FAIR || cell === CELL.GREEN ||
+                       cell === CELL.TEE  || cell === CELL.SAND);
+    if(!safeCells) {
+      // Fallback to tee — nearest known safe position
+      wx = teeWX; wz = teeWZ;
+    }
   } else {
-    const tp = G.teePos;
-    wx = tp.x * TILE_SIZE;
-    wz = tp.y * TILE_SIZE;
+    wx = teeWX;
+    wz = teeWZ;
   }
   const ty = G.heightMap.length ? getTerrainHeight(wx, wz) : 0;
   const clampedTY = Math.max(-0.5, ty);
@@ -7653,6 +7695,32 @@ function recordStyleEvent(type) {
   }
   // Check for named tricks in real-time
   checkLiveTricks();
+
+  // v0.17y5/y6/y7/y8: fix style-points-not-counted bug for destruction events
+  // that fire outside of an active shot.
+  //
+  // Scenarios this handles:
+  //   1. Post-finalize (0.3s slow roll over): explosivo fuse, grenade fuse,
+  //      chain reactions, dodgeball hits after the player ball stopped.
+  //   2. Pre-first-swing: explosivo/grenade played before any shot on hole 1
+  //      (or any fresh hole). _shotFinalized is still false, but G.rolling
+  //      is also false — there's no pending finalizeShot() call to ever pick
+  //      these events up.
+  //
+  // In either case, if the ball isn't actively rolling when the event fires,
+  // debounce a finalizeShot(false) call to close out the combo. This reuses
+  // the normal combo display, pulse, fly-to-HUD, and score crediting logic.
+  if(!G.rolling && pts > 0) {
+    clearTimeout(G._postFinalizeTimer);
+    G._postFinalizeTimer = setTimeout(() => {
+      G._postFinalizeTimer = null;
+      // finalizeShot reads _shotEvents (which we've been appending to),
+      // runs the full combo/pulse/fly animation, credits _holeStyleScore,
+      // and clears _shotEvents on exit — so repeated bursts each get
+      // their own finalize cycle.
+      finalizeShot(false);
+    }, 500);
+  }
 }
 
 // Event display names
@@ -8673,9 +8741,11 @@ function onHoled() {
 
   // ── Multiplayer: switch to next player instead of showing summary ──
   if(isMultiplayer()) {
-    // Count coins picked up this hole
-    const coinsPickedUp = G.coinMeshes ? G.coinMeshes.filter(c => c.collected).reduce((s,c)=>s+(c.value||1),0) : 0;
+    // v0.17y5: count ALL coins via _holeCoinsPickedUp (bounce, destruction,
+    // hoops, static meshes) then subtract wallCoins which display separately.
+    const _totalCp = G._holeCoinsPickedUp || 0;
     const wallCoins = G.wallCoinsThisHole || 0;
+    const coinsPickedUp = Math.max(0, _totalCp - wallCoins);
     const earnings = calcHoleEarnings(G.strokes, G.par, coinsPickedUp, wallCoins);
     const bonusCoins = Math.max(0, earnings.total - coinsPickedUp);
     if(bonusCoins > 0) { G.coins += bonusCoins; updateCoinHUD(); }
@@ -8695,8 +8765,13 @@ function onHoled() {
   }
 
   // Count coins picked up this hole
-  const coinsPickedUp = G.coinMeshes ? G.coinMeshes.filter(c => c.collected).reduce((s,c)=>s+(c.value||1),0) : 0;
+  // v0.17y5: use the running _holeCoinsPickedUp counter (incremented by collectCoin)
+  // instead of just coinMeshes, so bounce coins, destruction drops, speed-hoop
+  // coins, and all other programmatic pickups are properly credited.
+  // Subtract wallCoins to avoid double-counting — they get their own line item.
+  const _totalCoinsPickedUp = G._holeCoinsPickedUp || 0;
   const wallCoins = G.wallCoinsThisHole || 0;
+  const coinsPickedUp = Math.max(0, _totalCoinsPickedUp - wallCoins);
   const earnings = calcHoleEarnings(G.strokes, G.par, coinsPickedUp, wallCoins);
   // Analytics: expanded scorecard entry (solo path)
   G.scorecard.push(buildScorecardEntry(earnings, coinsPickedUp, wallCoins));
@@ -9019,6 +9094,10 @@ function openShop() {
   // Generate card picks for the card row
   G._shopCardPicks = weightedCardPicks(3);
   G._shopRerolledThisHole = false;
+  // v0.17y5: 1-second grace period before any shop click registers.
+  // Prevents accidental purchases from stray taps immediately after the
+  // shop pops up (common on mobile after a final putt).
+  G._shopOpenTime = performance.now();
   renderShop();
   const sub = document.getElementById('shop-subtitle');
   if(sub) sub.textContent = `Hole ${G.hole+1} of ${G.totalHoles} complete — spend wisely`;
@@ -9050,10 +9129,12 @@ function weightedCardPicks(count) {
 function getScaledCardPrice(card) {
   const diff = G.difficulty || 1;
   const rate = diff <= 2 ? 0.1 : diff === 3 ? 0.2 : diff === 4 ? 0.25 : 0.3;
-  return Math.max(1, Math.round(card.price * 1.5 * (1 + G.hole * rate) * PRICE_MULTIPLIER));
+  // v0.17x4: base inflation 1.5 → 1.4 per tuning sheet
+  return Math.max(1, Math.round(card.price * 1.4 * (1 + G.hole * rate) * PRICE_MULTIPLIER));
 }
 
 function closeShop() {
+  if(shopGraceActive()) return;
   if(G.state !== 'playing') return; // guard against stale callbacks after game over/restart
   G._shopCurrentPicks = null;
   document.getElementById('shop-overlay').classList.remove('visible');
@@ -9073,6 +9154,7 @@ function closeShop() {
 window.closeShop = closeShop;
 
 function rerollShop() {
+  if(shopGraceActive()) return;
   // Free reroll perk: first reroll this run is free (only if not used yet)
   const hasFreeReroll = G.modifiers.find(m => m.id === 'free_reroll');
   const freeAvailable = hasFreeReroll && !G._freeRerollUsed;
@@ -9129,10 +9211,11 @@ function weightedShopPicks(pool, count) {
 }
 
 function getScaledPrice(perk) {
-  // Base prices inflated 50%, then scale per hole, then global PRICE_MULTIPLIER
+  // Base prices inflated, then scale per hole, then global PRICE_MULTIPLIER
+  // v0.17x4: base inflation 1.5 → 1.4 per tuning sheet
   const diff = G.difficulty || 1;
   const rate = diff <= 2 ? 0.1 : diff === 3 ? 0.2 : diff === 4 ? 0.25 : 0.3;
-  const base = Math.max(1, Math.round(perk.price * 1.5 * (1 + G.hole * rate) * PRICE_MULTIPLIER));
+  const base = Math.max(1, Math.round(perk.price * 1.4 * (1 + G.hole * rate) * PRICE_MULTIPLIER));
   // Multiplayer: 50% off — coins are split across players
   return isMultiplayer() ? Math.max(1, Math.round(base * 0.5)) : base;
 }
@@ -9234,7 +9317,15 @@ function renderShop() {
 }
 
 // ── Buy a card (adds to deck) ─────────────────────────
+// v0.17y5: 1-second input grace after the shop opens, so finger-taps
+// that carry over from the final putt don't instantly buy something.
+function shopGraceActive() {
+  return G._shopOpenTime && (performance.now() - G._shopOpenTime) < 1000;
+}
+window.shopGraceActive = shopGraceActive;
+
 window.buyCard = function(id) {
+  if(shopGraceActive()) return;
   const card = CARD_DEFS[id];
   if(!card) return;
   const scaledPrice = getScaledCardPrice(card);
@@ -9252,6 +9343,7 @@ window.buyCard = function(id) {
 };
 
 window.buyPerk = function(id) {
+  if(shopGraceActive()) return;
   const perk = ALL_PERKS.find(p => p.id === id);
   if(!perk) return;
   const owned = !perk.stackable && G.modifiers.find(m => m.id === id);
@@ -9324,6 +9416,7 @@ function closeCardRemoval() {
 window.closeCardRemoval = closeCardRemoval;
 
 window.removeCardFromDeck = function(cardId, el) {
+  if(shopGraceActive()) return;
   const price = getCardRemovePrice();
   if(G.coins < price) return;
   G.coins -= price;
@@ -9925,7 +10018,7 @@ function fireProjectile({ blastRadius = 4.0, travelSpeed = 22, color = 0xff4400,
         for(const aw of G.angledWalls) {
           if(aw._destroyed) continue;
           for(const edge of aw.edges) {
-            const eax=edge.ax,eaz=edge.az,ebx=edge.bx,ebz=edge.bz;
+            const eax=edge.x0,eaz=edge.z0,ebx=edge.x1,ebz=edge.z1;
             const eex=ebx-eax,eez=ebz-eaz,eLSq=eex*eex+eez*eez;
             if(eLSq<0.0001) continue;
             const et=Math.max(0,Math.min(1,((px-eax)*eex+(pz-eaz)*eez)/eLSq));
@@ -10854,7 +10947,7 @@ function activateDodgeball() {
         for(const aw of G.angledWalls) {
           if(aw._destroyed) continue;
           for(const edge of aw.edges) {
-            const eax=edge.ax,eaz=edge.az,ebx=edge.bx,ebz=edge.bz;
+            const eax=edge.x0,eaz=edge.z0,ebx=edge.x1,ebz=edge.z1;
             const eex=ebx-eax,eez=ebz-eaz,eLSq=eex*eex+eez*eez;
             if(eLSq<0.0001) continue;
             const et=Math.max(0,Math.min(1,((px-eax)*eex+(pz-eaz)*eez)/eLSq));
@@ -11221,6 +11314,13 @@ function fireSharpshooterBall() {
   clearTimeout(G._stylePopupTimer); G._stylePopupTimer = null;
   clearInterval(G._styleTickInterval); G._styleTickInterval = null;
   document.querySelectorAll('[data-style-flyer]').forEach(el => el.remove());
+  // v0.17y7: if a post-finalize destruction combo is still debouncing,
+  // fire it now so its score isn't lost when the new shot clears state.
+  if(G._postFinalizeTimer) {
+    clearTimeout(G._postFinalizeTimer);
+    G._postFinalizeTimer = null;
+    finalizeShot(false);
+  }
   G._shotFinalized = false;
   G._moneyBounceCount = 0;
   G._challengeShotWallBounces = 0;
@@ -11642,7 +11742,7 @@ function activateGrenade() {
         for(const aw of G.angledWalls) {
           if(aw._destroyed) continue;
           for(const edge of aw.edges) {
-            const eax=edge.ax,eaz=edge.az,ebx=edge.bx,ebz=edge.bz;
+            const eax=edge.x0,eaz=edge.z0,ebx=edge.x1,ebz=edge.z1;
             const eex=ebx-eax,eez=ebz-eaz,eLSq=eex*eex+eez*eez;
             if(eLSq<0.0001) continue;
             const et=Math.max(0,Math.min(1,((gx-eax)*eex+(gz-eaz)*eez)/eLSq));
@@ -11895,10 +11995,13 @@ function triggerExplosivo() {
   if(!G.ballPos) return;
   if(G.rolling) recordStyleEvent('explosivo_rolling');
   const px = G.ballPos.x, py = G.ballPos.y, pz = G.ballPos.z;
-  const BLAST_R = BALL_R * 8 * 2 * getBoomScale(); // 8 balls wide = 8 × diameter = doubled from original
+  // v0.17y5: explosivo gets 2x range and 2x visual FX scale to match.
+  // Previous: BALL_R * 8 * 2 = 16 radii wide. New: BALL_R * 16 * 2 = 32 radii.
+  const BLAST_R = BALL_R * 16 * 2 * getBoomScale();
 
   // Staggered multi-burst explosion for dramatic slow-motion feel
-  const bvs = getBoomScale();
+  // v0.17y5: visual scale also doubled so the fireball matches the new range.
+  const bvs = getBoomScale() * 2.0;
   spawnExplosion(px, py, pz, bvs);
   setTimeout(() => spawnExplosion(px + (Math.random()-0.5)*0.6*bvs, py + 0.2, pz + (Math.random()-0.5)*0.6*bvs, bvs*0.8), 80);
   setTimeout(() => spawnExplosion(px + (Math.random()-0.5)*0.8*bvs, py + 0.4, pz + (Math.random()-0.5)*0.8*bvs, bvs*0.8), 180);
@@ -12382,6 +12485,38 @@ function updateCamera() {
     );
     return;
   }
+  // v0.17y5: 3rd-person follow-cam during rolling shots.
+  // When the ball is rolling with meaningful horizontal velocity, lerp camTheta
+  // toward an azimuth that places the camera behind the ball (looking along the
+  // ball's motion). On sharp bounces/deflections, the lerp smooths the rotation
+  // so the camera rotates into the new direction rather than cutting.
+  // Skipped when:
+  //   - Ball is aiming (user is staging the next shot)
+  //   - Sharpshooter / ball-cinematic cameras are active (handled above)
+  //   - User is actively panning (aimManualOverride during rolling = user intent)
+  //   - Ball speed is too low to have a meaningful direction
+  if(G.rolling && !G.aimMode && !G._sharpshooterActive && !G._ssBallCinematic
+     && !G._ssCinematic && typeof aimManualOverride !== 'undefined' && !aimManualOverride) {
+    const vx = G.ballVel.x, vz = G.ballVel.z;
+    const hSpeed = Math.hypot(vx, vz);
+    if(hSpeed > 1.5) {
+      // Desired theta: camera behind ball, looking along velocity.
+      // The orbital camera's forward direction is (-sin(theta), -cos(theta)),
+      // so setting theta = atan2(-vx, -vz) places the camera along the OPPOSITE
+      // of velocity, looking at where the ball is heading.
+      const targetTheta = Math.atan2(-vx, -vz);
+      // Shortest-angle lerp (unwrap to avoid >π jumps)
+      let delta = targetTheta - G.camTheta;
+      while(delta > Math.PI)  delta -= Math.PI * 2;
+      while(delta < -Math.PI) delta += Math.PI * 2;
+      // Speed-scaled lerp: faster ball → quicker catch-up. Clamp so sharp
+      // bounces still lerp smoothly rather than snapping.
+      // 0.05 at 2 m/s rising to ~0.12 at 15+ m/s.
+      const lerpK = Math.min(0.12, 0.03 + hSpeed * 0.006);
+      G.camTheta += delta * lerpK;
+    }
+  }
+
   const dist = G.camDist * (G._shrinkCamMult || 1.0);
   const x = G.camTarget.x + dist * Math.sin(G.camPhi) * Math.sin(G.camTheta);
   const y = G.camTarget.y + dist * Math.cos(G.camPhi);
@@ -12869,6 +13004,12 @@ function fireShot() {
   G._styleTickInterval = null;
   // Remove any flying score elements
   document.querySelectorAll('[data-style-flyer]').forEach(el => el.remove());
+  // v0.17y7: flush any pending post-finalize destruction combo before clear
+  if(G._postFinalizeTimer) {
+    clearTimeout(G._postFinalizeTimer);
+    G._postFinalizeTimer = null;
+    finalizeShot(false);
+  }
   // Snap purple HUD to actual current value
   const styleEl = document.getElementById('h-style');
   if(styleEl) {
@@ -14210,6 +14351,8 @@ function initHole() {
   G._holeStyleScore = 0;     // total style points this hole
   G._holeTricks = [];        // named tricks landed this hole
   G._bestTrickThisHole = null;
+  // v0.17y7: clear any stale post-finalize debounce from previous hole
+  if(G._postFinalizeTimer) { clearTimeout(G._postFinalizeTimer); G._postFinalizeTimer = null; }
   // ── Per-hole analytics counters ─────────────────────
   G._holeCoinsPickedUp = 0;
   G._holeStartTime = performance.now();
