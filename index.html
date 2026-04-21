@@ -430,6 +430,104 @@ overflow-y:auto;
 .profile-slot-menu-btn:hover { background:rgba(0,0,0,0.3); }
 #profile-chip:hover { background:rgba(255,255,255,0.3); }
 
+/* v0.19n: inline profile picker on main menu — hover/active feedback.
+   Chips are built programmatically via renderInlineProfileRow but the
+   hover/tap responses have to live in real CSS for pseudo-classes to fire. */
+.inline-profile-chip {
+  position:relative;
+  flex:1; min-width:0;
+  padding:12px 6px 10px;
+  border-radius:12px;
+  cursor:pointer;
+  font-family:'Inter',sans-serif;
+  font-weight:700;
+  font-size:0.72rem;
+  letter-spacing:0.3px;
+  line-height:1.15;
+  text-align:center;
+  transition:transform 140ms ease, box-shadow 160ms ease, background 140ms ease, border-color 140ms ease;
+  border:1px solid rgba(255,255,255,0.18);
+  background:rgba(255,255,255,0.07);
+  color:rgba(255,255,255,0.72);
+  z-index:1;
+  outline:none;
+}
+.inline-profile-chip:hover {
+  background:rgba(255,255,255,0.15);
+  border-color:rgba(255,255,255,0.4);
+  transform:translateY(-2px);
+  box-shadow:0 4px 14px rgba(0,0,0,0.3);
+  color:rgba(255,255,255,0.95);
+}
+.inline-profile-chip:active {
+  transform:scale(0.96) translateY(0);
+  box-shadow:0 1px 4px rgba(0,0,0,0.3);
+}
+.inline-profile-chip.active {
+  border:2px solid #ffd95e;
+  background:linear-gradient(180deg, rgba(255,217,94,0.42) 0%, rgba(255,184,50,0.32) 100%);
+  color:#fff9e3;
+  text-shadow:0 1px 4px rgba(120,70,0,0.5);
+  transform:scale(1.08);
+  z-index:2;
+  box-shadow:0 0 0 3px rgba(255,217,94,0.18), 0 6px 24px rgba(255,184,50,0.45), inset 0 0 18px rgba(255,217,94,0.2);
+}
+.inline-profile-chip.active:hover {
+  transform:scale(1.12) translateY(-2px);
+  box-shadow:0 0 0 3px rgba(255,217,94,0.28), 0 10px 32px rgba(255,184,50,0.6), inset 0 0 22px rgba(255,217,94,0.26);
+  border-color:#ffe580;
+}
+.inline-profile-chip.active:active {
+  transform:scale(1.02) translateY(0);
+}
+.inline-profile-chip.empty {
+  background:rgba(255,255,255,0.03);
+  color:rgba(255,255,255,0.42);
+  border-style:dashed;
+  border-color:rgba(255,255,255,0.22);
+}
+.inline-profile-chip.empty:hover {
+  background:rgba(255,255,255,0.1);
+  border-color:rgba(255,255,255,0.5);
+  color:rgba(255,255,255,0.85);
+}
+/* Delete affordance: small 🗑 button in the top-right corner of a filled chip */
+.inline-profile-chip-delete {
+  position:absolute;
+  top:-6px; right:-6px;
+  width:20px; height:20px;
+  border-radius:50%;
+  background:rgba(40,20,20,0.92);
+  border:1.5px solid rgba(255,120,120,0.7);
+  color:#ff9c9c;
+  font-size:0.62rem;
+  line-height:1;
+  display:flex; align-items:center; justify-content:center;
+  cursor:pointer;
+  opacity:0;
+  transition:opacity 140ms ease, background 140ms ease, transform 140ms ease, border-color 140ms ease;
+  padding:0;
+  z-index:3;
+  box-shadow:0 2px 6px rgba(0,0,0,0.4);
+}
+/* Reveal on hover of the parent chip; always visible on touch (no hover there) */
+.inline-profile-chip:hover .inline-profile-chip-delete,
+.inline-profile-chip:focus-within .inline-profile-chip-delete {
+  opacity:1;
+}
+.inline-profile-chip-delete:hover {
+  background:#c93030;
+  color:#fff;
+  border-color:#ff7070;
+  transform:scale(1.2);
+}
+.inline-profile-chip-delete:active {
+  transform:scale(0.9);
+}
+/* On touch devices where hover doesn't fire, keep the delete button visible */
+@media (hover: none) {
+  .inline-profile-chip-delete { opacity:0.85; }
+}
 /* Profile modal — replaces browser prompt/confirm (blocked in iOS PWA mode) */
 #profile-modal {
   position:fixed; inset:0; z-index:300;
@@ -562,18 +660,48 @@ border-color:#fff;
 }
 .toggle-btn:active { transform:scale(0.95); }
 
-/* Star difficulty picker */
+/* Star difficulty picker — v0.18a: 10-star ladder, 5+5 two-row grid */
 .star-row {
 display:flex; gap:4px; justify-content:center;
+flex-direction:column;
+}
+.star-row-line {
+display:flex; gap:3px; justify-content:center;
 }
 .star-btn {
-font-size:1.3rem; cursor:pointer;
-opacity:0.4; transition:opacity 0.15s, transform 0.1s;
+font-size:1.15rem; cursor:pointer;
+opacity:0.4; transition:opacity 0.15s, transform 0.1s, color 0.15s;
 background:none; border:none; padding:2px 3px;
 line-height:1;
+color:#fff;
+min-width:22px;
 }
 .star-btn.active { opacity:1; }
+.star-btn.locked {
+opacity:0.25;
+cursor:not-allowed;
+color:rgba(180,180,180,0.7);
+}
+.star-btn.locked:active { transform:none; }
 .star-btn:active { transform:scale(0.88); }
+.star-btn.deny-shake {
+animation: starDenyShake 0.3s ease-out;
+}
+@keyframes starDenyShake {
+  0%,100% { transform:translateX(0); }
+  25% { transform:translateX(-3px); }
+  50% { transform:translateX(3px); }
+  75% { transform:translateX(-2px); }
+}
+.star-diff-label {
+text-align:center;
+font-size:0.55rem;
+letter-spacing:1.5px;
+color:rgba(255,255,255,0.8);
+margin-top:2px;
+text-transform:uppercase;
+min-height:0.7rem;
+}
 
 .big-score-val {
 font-family:'Playfair Display', serif;
@@ -1521,6 +1649,215 @@ margin-top:6px;
 }
 .shop-reroll-btn:hover { background:rgba(167,139,250,0.25); }
 .shop-reroll-btn:disabled { opacity:0.4; cursor:not-allowed; }
+
+/* ── Achievements overlay (v0.19g) ── */
+#achievements-overlay {
+position:fixed; inset:0;
+background:rgba(0,0,0,0.80);
+backdrop-filter:blur(14px);
+display:none; flex-direction:column;
+align-items:center; justify-content:flex-start;
+gap:14px; z-index:400;
+padding:max(6vh, 24px) 20px 40px;
+overflow-y:auto;
+-webkit-overflow-scrolling:touch;
+}
+#achievements-overlay.open { display:flex; }
+#achievements-overlay h2 {
+font-family:'Playfair Display',serif;
+font-size:1.9rem; color:#fff;
+letter-spacing:-0.5px; margin:0 0 4px;
+}
+.ach-progress {
+font-size:0.75rem; color:rgba(255,255,255,0.6);
+letter-spacing:1px; margin-bottom:4px;
+}
+.ach-section-label {
+font-size:0.6rem; letter-spacing:2px; text-transform:uppercase;
+color:rgba(255,255,255,0.45); margin:16px 0 4px;
+font-weight:700;
+}
+.ach-row {
+display:flex; align-items:center; gap:12px;
+padding:12px 16px;
+background:rgba(255,255,255,0.05);
+border:1px solid rgba(255,255,255,0.1);
+border-radius:14px;
+width:min(420px, calc(100vw - 48px));
+transition:all 0.18s;
+}
+.ach-row.unlocked {
+background:rgba(245,200,66,0.10);
+border-color:rgba(245,200,66,0.35);
+}
+.ach-row.prestige.unlocked {
+background:rgba(167,139,250,0.12);
+border-color:rgba(167,139,250,0.40);
+}
+.ach-icon {
+font-size:1.8rem; width:42px; text-align:center;
+filter:grayscale(1) brightness(0.55);
+}
+.ach-row.unlocked .ach-icon { filter:none; }
+.ach-body { flex:1; display:flex; flex-direction:column; gap:2px; }
+.ach-name {
+font-family:'Playfair Display',serif;
+font-size:0.95rem; font-weight:700;
+color:rgba(255,255,255,0.85);
+}
+.ach-row.unlocked .ach-name { color:#fff; }
+.ach-row.prestige.unlocked .ach-name { color:#e0ccff; }
+.ach-condition {
+font-size:0.72rem; color:rgba(255,255,255,0.55);
+line-height:1.3;
+}
+.ach-reward {
+font-size:0.62rem; letter-spacing:1px; text-transform:uppercase;
+color:rgba(255,255,255,0.35); margin-top:1px;
+}
+.ach-status {
+font-size:1.1rem; width:30px; text-align:right;
+color:rgba(255,255,255,0.35);
+}
+.ach-row.unlocked .ach-status { color:#f5c842; }
+.ach-row.prestige.unlocked .ach-status { color:#c4a7ff; }
+
+/* ── Locker Room (v0.19h) ── */
+#locker-overlay {
+position:fixed; inset:0;
+background:rgba(0,0,0,0.82);
+backdrop-filter:blur(14px);
+display:none; flex-direction:column;
+align-items:center; justify-content:flex-start;
+gap:14px; z-index:400;
+padding:max(5vh, 20px) 16px 28px;
+overflow-y:auto;
+-webkit-overflow-scrolling:touch;
+}
+#locker-overlay.open { display:flex; }
+#locker-overlay h2 {
+font-family:'Playfair Display',serif;
+font-size:1.9rem; color:#fff;
+letter-spacing:-0.5px; margin:0 0 2px;
+}
+.locker-progress {
+font-size:0.72rem; color:rgba(255,255,255,0.6);
+letter-spacing:1px; margin-bottom:4px;
+}
+.locker-main {
+display:flex; gap:16px;
+width:min(880px, calc(100vw - 32px));
+align-items:flex-start;
+}
+@media (max-width: 640px) {
+  .locker-main { flex-direction:column; align-items:center; gap:10px; }
+}
+.locker-preview {
+flex: 0 0 280px;
+display:flex; flex-direction:column; align-items:center; gap:8px;
+background:rgba(255,255,255,0.06);
+border:1px solid rgba(255,255,255,0.1);
+border-radius:18px;
+padding:16px;
+position:sticky; top:0;
+}
+@media (max-width: 640px) {
+  .locker-preview { flex:0 0 auto; width:min(320px, 100%); position:static; }
+}
+#locker-preview-canvas {
+width:240px; height:240px;
+max-width:100%;
+border-radius:14px;
+background:linear-gradient(160deg, #2a3a55 0%, #1a2538 100%);
+display:block;
+cursor:grab;
+touch-action:none;
+}
+#locker-preview-canvas:active { cursor:grabbing; }
+.locker-preview-caption {
+font-size:0.72rem; color:rgba(255,255,255,0.55);
+text-align:center; line-height:1.4;
+}
+.locker-preview-caption strong { color:#fff; font-weight:700; }
+.locker-grid-col {
+flex:1; display:flex; flex-direction:column; gap:10px;
+min-width:0;
+}
+.locker-tabs {
+display:flex; gap:6px;
+background:rgba(255,255,255,0.06);
+border:1px solid rgba(255,255,255,0.1);
+border-radius:14px;
+padding:4px;
+width:fit-content;
+margin:0 auto;
+}
+.locker-tab {
+font-family:'Playfair Display',serif;
+font-size:0.85rem; font-weight:700;
+padding:8px 22px;
+background:transparent;
+color:rgba(255,255,255,0.6);
+border:none; border-radius:10px; cursor:pointer;
+transition:all 0.15s;
+}
+.locker-tab:hover { color:#fff; }
+.locker-tab.active {
+background:rgba(245,200,66,0.15);
+color:#f5c842;
+}
+.locker-grid {
+display:grid;
+grid-template-columns:repeat(auto-fill, minmax(110px, 1fr));
+gap:10px;
+padding:4px 2px;
+}
+.locker-card {
+display:flex; flex-direction:column; align-items:center; gap:4px;
+padding:12px 8px 10px;
+background:rgba(255,255,255,0.05);
+border:1px solid rgba(255,255,255,0.12);
+border-radius:14px;
+cursor:pointer;
+transition:all 0.15s;
+position:relative;
+}
+.locker-card:hover { background:rgba(255,255,255,0.09); border-color:rgba(255,255,255,0.25); }
+.locker-card.locked {
+cursor:default;
+opacity:0.55;
+}
+.locker-card.locked:hover { background:rgba(255,255,255,0.05); border-color:rgba(255,255,255,0.12); }
+.locker-card.equipped {
+background:rgba(245,200,66,0.15);
+border-color:rgba(245,200,66,0.55);
+box-shadow:0 0 18px rgba(245,200,66,0.25);
+}
+.locker-card.equipped:hover { background:rgba(245,200,66,0.22); }
+.locker-card-icon {
+font-size:2.2rem; line-height:1;
+filter:drop-shadow(0 2px 3px rgba(0,0,0,0.4));
+}
+.locker-card.locked .locker-card-icon { filter:grayscale(1) brightness(0.55); }
+.locker-card-name {
+font-size:0.68rem; font-weight:700;
+color:rgba(255,255,255,0.85);
+text-align:center;
+line-height:1.2;
+}
+.locker-card.equipped .locker-card-name { color:#fff; }
+.locker-card-status {
+font-size:0.58rem; letter-spacing:1px; text-transform:uppercase;
+color:rgba(255,255,255,0.4);
+line-height:1;
+}
+.locker-card.equipped .locker-card-status { color:#f5c842; }
+.locker-card.locked .locker-card-status { color:rgba(255,255,255,0.45); font-size:0.56rem; }
+.locker-card-lock-badge {
+position:absolute; top:6px; right:6px;
+font-size:0.85rem;
+filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
+}
 </style>
 
 </head>
@@ -1535,6 +1872,8 @@ margin-top:6px;
 <div id="escape-menu">
   <h2>⛳ Paused</h2>
   <button class="esc-btn" onclick="closeEscMenu()">▶ Resume</button>
+  <button class="esc-btn" onclick="openLocker()">🎨 Locker Room</button>
+  <button class="esc-btn" onclick="openAchievements()">🏆 Achievements</button>
   <button class="esc-btn" onclick="escNewRun()">🔄 New Run</button>
   <button class="esc-btn" onclick="downloadRunHistory()">📥 Download Run Data</button>
   <button class="esc-btn" onclick="exportSave()">💾 Export Save</button>
@@ -1560,6 +1899,37 @@ margin-top:6px;
     <div id="esc-perk-list" style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;padding:4px 0 8px"></div>
   </div>
   <div class="esc-close" onclick="closeEscMenu()">press Escape to close</div>
+</div>
+
+<!-- Achievements overlay (v0.19g) — opened from main menu and pause menu -->
+<div id="achievements-overlay">
+  <h2>🏆 Achievements</h2>
+  <div class="ach-progress" id="ach-progress">0 / 0 unlocked</div>
+  <div id="ach-list" style="display:flex;flex-direction:column;align-items:center;gap:8px;width:100%"></div>
+  <button class="esc-btn" onclick="closeAchievements()" style="margin-top:14px">← Back</button>
+</div>
+
+<!-- Locker Room overlay (v0.19h) — browse + equip cosmetics -->
+<div id="locker-overlay">
+  <h2>🎨 Locker Room</h2>
+  <div class="locker-progress" id="locker-progress">0 / 0 unlocked</div>
+  <div class="locker-main">
+    <div class="locker-preview">
+      <canvas id="locker-preview-canvas" width="480" height="480"></canvas>
+      <div class="locker-preview-caption" id="locker-preview-caption">
+        <strong>No Hat</strong> &middot; <strong>Default (White)</strong>
+      </div>
+      <div style="font-size:0.62rem;color:rgba(255,255,255,0.35);letter-spacing:1px;text-transform:uppercase">drag to rotate</div>
+    </div>
+    <div class="locker-grid-col">
+      <div class="locker-tabs">
+        <button class="locker-tab active" id="locker-tab-hats"  onclick="setLockerTab('hats')">Hats</button>
+        <button class="locker-tab"        id="locker-tab-skins" onclick="setLockerTab('skins')">Skins</button>
+      </div>
+      <div class="locker-grid" id="locker-grid"></div>
+    </div>
+  </div>
+  <button class="esc-btn" onclick="closeLocker()" style="margin-top:8px">← Back</button>
 </div>
 
 <!-- HUD top -->
@@ -1846,7 +2216,7 @@ margin-top:6px;
 <!-- Overlay -->
 
 <div id="overlay" class="hidden">
-  <div id="profile-chip" style="position:absolute;top:16px;right:16px;background:rgba(255,255,255,0.18);color:#fff;font-family:'Inter',sans-serif;font-size:0.75rem;font-weight:700;letter-spacing:1px;padding:7px 14px;border-radius:24px;cursor:pointer;backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,0.3);z-index:5" onclick="switchProfile()">
+  <div id="profile-chip" style="display:none;position:absolute;top:16px;right:16px;background:rgba(255,255,255,0.18);color:#fff;font-family:'Inter',sans-serif;font-size:0.75rem;font-weight:700;letter-spacing:1px;padding:7px 14px;border-radius:24px;cursor:pointer;backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,0.3);z-index:5" onclick="switchProfile()">
     <span id="profile-chip-name">—</span> ⇄
   </div>
   <div class="tagline">A Minigolf Roguelike</div>
@@ -1880,20 +2250,24 @@ margin-top:6px;
     <div class="setting-group">
       <div class="setting-label">Difficulty</div>
       <div class="star-row" id="star-row">
-        <button class="star-btn" data-star="1" onclick="setDifficulty(1)">★</button>
-        <button class="star-btn" data-star="2" onclick="setDifficulty(2)">★</button>
-        <button class="star-btn active" data-star="3" onclick="setDifficulty(3)">★</button>
-        <button class="star-btn" data-star="4" onclick="setDifficulty(4)">★</button>
-        <button class="star-btn" data-star="5" onclick="setDifficulty(5)">★</button>
+        <div class="star-row-line" id="star-row-1"></div>
+        <div class="star-row-line" id="star-row-2"></div>
       </div>
+      <div class="star-diff-label" id="star-diff-label">Standard</div>
     </div>
   </div>
 
   <button class="play-btn" id="btn-start" onclick="confirmStartGame()">Tee Off</button>
   <button class="play-btn" id="btn-resume" style="display:none;margin-top:6px;background:rgba(80,180,80,0.85);font-size:0.85rem" onclick="resumeGame()">▶ Resume Run</button>
+  <button class="play-btn" onclick="openLocker()" style="margin-top:6px;background:rgba(167,139,250,0.18);border:1px solid rgba(167,139,250,0.5);color:#c4a7ff;font-size:0.85rem;padding:10px 28px">🎨 Locker Room</button>
+  <button class="play-btn" onclick="openAchievements()" style="margin-top:6px;background:rgba(245,200,66,0.18);border:1px solid rgba(245,200,66,0.5);color:#f5c842;font-size:0.85rem;padding:10px 28px">🏆 Achievements</button>
   <button class="play-btn" id="btn-import-save" style="margin-top:6px;background:rgba(120,120,120,0.6);font-size:0.7rem;padding:8px 20px" onclick="importSaveFile()">📂 Import Save</button>
   <input type="file" id="import-save-input" accept=".ggwsave,application/json" style="display:none">
-  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.17n12</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">shifter ceiling fix + OOB timer + mulligan fix</div></div>
+  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.19o</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Resume Run button correctly hides when switching to a profile without an active run</div></div>
+
+  <!-- v0.19j: Inline profile picker — skip the separate slot-picks screen -->
+  <div class="section-label" style="margin-top:14px">Save Slot</div>
+  <div id="inline-profile-row" style="display:flex;gap:8px;width:100%;max-width:320px;margin:10px 0 14px;justify-content:center;padding-top:8px"></div>
 
   <div class="section-label" id="lb-title">Best Scores</div>
   <div class="lb-panel" id="lb-panel"></div>
@@ -2430,8 +2804,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.17y8';
-const CHANGE_NOTE = 'Destruction combos now track before first swing too (hole 1 pre-swing explosivo fix)';
+const GAME_VERSION = '0.19o';
+const CHANGE_NOTE = 'Resume Run button now hides correctly when switching to a profile without an active run';
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.17x4: synced down from 1.25 to 1.0 per tuning sheet.
@@ -2562,6 +2936,64 @@ const G = {
   players: [],          // per-player state: {name, color, colorHex, strokes, totalStrokes, scorecard, lives, coins, modifiers, styleScore, stats{}, ball, ballShadow, ballPos, ballVel, holedThisHole, ...}
   idleBalls: [],        // meshes of non-active players sitting on course
 };
+
+// ═══════════════════════════════════════════════════════
+// DIFFICULTY SYSTEM (v0.18a) — 10-star ladder
+// Single dispatch point for all rule modifiers per star.
+// Course pressure (paths, hazards, shop rates) ramps 1-6★ smoothly.
+// Rule modifiers (HP, damage, OOB) layer in cumulatively at 4★+.
+// Reward scaling is modest (coins/style) — prestige is the real reward.
+// ═══════════════════════════════════════════════════════
+const DIFFICULTY_TABLE = {
+  1:  { name:'Casual',     pathMult:0.70, shopRate:0.10, startingHp:10, overParDmg:1, spikeDmg:1,
+        oobGrace:1.5, coinMult:1.00, styleMult:1.00, bogeyDmgExtra:0, rerollCostMult:1.0,
+        cardRemoveCostMult:1.0, lateHoleExtraPath:0, healReduction:0, forcedHardShopCards:false,
+        winReq:'finish' },
+  2:  { name:'Easy',       pathMult:0.85, shopRate:0.10, startingHp:10, overParDmg:1, spikeDmg:1,
+        oobGrace:1.5, coinMult:1.00, styleMult:1.00, bogeyDmgExtra:0, rerollCostMult:1.0,
+        cardRemoveCostMult:1.0, lateHoleExtraPath:0, healReduction:0, forcedHardShopCards:false,
+        winReq:'finish' },
+  3:  { name:'Standard',   pathMult:1.00, shopRate:0.15, startingHp:10, overParDmg:1, spikeDmg:1,
+        oobGrace:1.5, coinMult:1.00, styleMult:1.00, bogeyDmgExtra:0, rerollCostMult:1.0,
+        cardRemoveCostMult:1.0, lateHoleExtraPath:0, healReduction:0, forcedHardShopCards:false,
+        winReq:'finish' },
+  4:  { name:'Hard',       pathMult:1.15, shopRate:0.20, startingHp:8,  overParDmg:1, spikeDmg:1,
+        oobGrace:1.5, coinMult:1.10, styleMult:1.05, bogeyDmgExtra:0, rerollCostMult:1.0,
+        cardRemoveCostMult:1.0, lateHoleExtraPath:0, healReduction:0, forcedHardShopCards:false,
+        winReq:'noHpLoss' },
+  5:  { name:'Nightmare',  pathMult:1.30, shopRate:0.25, startingHp:7,  overParDmg:2, spikeDmg:1,
+        oobGrace:1.5, coinMult:1.20, styleMult:1.10, bogeyDmgExtra:0, rerollCostMult:1.0,
+        cardRemoveCostMult:1.0, lateHoleExtraPath:0, healReduction:0, forcedHardShopCards:false,
+        winReq:'noHpLoss' },
+  6:  { name:'Cursed',     pathMult:1.40, shopRate:0.30, startingHp:7,  overParDmg:2, spikeDmg:1,
+        oobGrace:1.5, coinMult:1.30, styleMult:1.15, bogeyDmgExtra:0, rerollCostMult:1.0,
+        cardRemoveCostMult:1.0, lateHoleExtraPath:0.20, healReduction:0, forcedHardShopCards:false,
+        winReq:'noHpLoss' },
+  7:  { name:'Punishing',  pathMult:1.40, shopRate:0.30, startingHp:7,  overParDmg:2, spikeDmg:2,
+        oobGrace:1.5, coinMult:1.40, styleMult:1.20, bogeyDmgExtra:0, rerollCostMult:1.0,
+        cardRemoveCostMult:2.0, lateHoleExtraPath:0.20, healReduction:0, forcedHardShopCards:false,
+        winReq:'underPar' },
+  8:  { name:'Brutal',     pathMult:1.40, shopRate:0.30, startingHp:7,  overParDmg:2, spikeDmg:2,
+        oobGrace:1.0, coinMult:1.50, styleMult:1.25, bogeyDmgExtra:0, rerollCostMult:1.0,
+        cardRemoveCostMult:2.0, lateHoleExtraPath:0.20, healReduction:0, forcedHardShopCards:true,
+        winReq:'underPar' },
+  9:  { name:'Masochist',  pathMult:1.40, shopRate:0.30, startingHp:5,  overParDmg:2, spikeDmg:2,
+        oobGrace:1.0, coinMult:1.60, styleMult:1.30, bogeyDmgExtra:0, rerollCostMult:1.0,
+        cardRemoveCostMult:2.0, lateHoleExtraPath:0.20, healReduction:1, forcedHardShopCards:true,
+        winReq:'underPar' },
+  10: { name:'Impossible', pathMult:1.40, shopRate:0.30, startingHp:5,  overParDmg:2, spikeDmg:2,
+        oobGrace:1.0, coinMult:1.75, styleMult:1.40, bogeyDmgExtra:1, rerollCostMult:2.0,
+        cardRemoveCostMult:2.0, lateHoleExtraPath:0.20, healReduction:1, forcedHardShopCards:true,
+        winReq:'underPar' },
+};
+function getDifficultyMods(star) {
+  const s = Math.max(1, Math.min(10, star|0));
+  return DIFFICULTY_TABLE[s] || DIFFICULTY_TABLE[3];
+}
+window.getDifficultyMods = getDifficultyMods;
+
+// Default to Standard (3★) if nothing set yet. G._diffMods is refreshed in startGame.
+G._diffMods = getDifficultyMods(3);
 
 // ── Seeded PRNG (mulberry32) ──────────────────────────
 // All Math.random() calls inside generatePuttPuttCourse are replaced with rng()
@@ -2804,21 +3236,76 @@ function migrateLegacyToP1(playerName) {
 
 // ── Meta-progression scaffold (RESERVED — shape will evolve next update) ─
 const META_SCHEMA_DEFAULT = {
-  schemaVersion: 1,
+  schemaVersion: 3,  // v0.19b: cosmetics unlocks + XP + equipped items + run achievements
   totalRuns: 0,
   totalHolesCompleted: 0,
   totalCoinsEarnedLifetime: 0,
-  unlocks: { cards: [], perks: [], starterDecks: [], biomes: [], cosmetics: [] },
+  unlocks: {
+    cards: [], perks: [], starterDecks: [], biomes: [],
+    // Cosmetic unlock ids (hats + skins pooled into one list; category is
+    // disambiguated via the HATS/SKINS registries). The default ball skin is
+    // granted so every profile has something on their ball; hats are NOT
+    // granted — the first hat (Top Hat) is an XP unlock at 100 XP so players
+    // earn their first cosmetic milestone a few holes into their first run.
+    cosmetics: ['default_white'],
+    // Difficulties unlocked per run length. Clean slate = 1,2,3 for both.
+    // Populated by unlockNextDifficulty() when a run meets winReq.
+    difficulties: { d9:[1,2,3], d18:[1,2,3] },
+  },
   currencies: { gems: 0 },
   talents: {},
   achievements: [],
+  // ── Cosmetic equip slots (v0.19b) ──
+  // v0.19l: no hat equipped by default — the Top Hat is now the first XP unlock
+  // (100 XP), so fresh profiles play bare-headed until they earn it.
+  equippedHat: null,
+  equippedSkin: 'default_white',
+  // ── XP system (v0.19b) ──
+  // Earned at end of hole / end of run. Unlocks XP-gated cosmetics when it
+  // crosses per-item thresholds (see checkXpUnlocks in M1.5).
+  xp: 0,
+  // ── Run achievement counters (v0.19b) ──
+  // Persist across runs so achievement unlocks can reference lifetime stats.
+  // Per-run counters live on the G object and are folded in at run end.
+  runAchievements: {},
 };
 function getMeta() {
   const raw = lsGet('ggw_meta');
   if(!raw) return JSON.parse(JSON.stringify(META_SCHEMA_DEFAULT));
-  // Forward-compat: fill missing fields from default so older saves don't break
+  // Forward-compat: fill missing fields from default so older saves don't break.
+  // Deep-merge the `unlocks` sub-object specifically so new unlock categories
+  // (like `difficulties` in v0.18a) get populated for pre-v0.18 profiles.
   const merged = JSON.parse(JSON.stringify(META_SCHEMA_DEFAULT));
+  const defUnlocks = merged.unlocks;
   Object.assign(merged, raw);
+  merged.unlocks = Object.assign({}, defUnlocks, raw.unlocks || {});
+  // Ensure difficulties object has both d9 and d18 keys, default to [1,2,3]
+  if(!merged.unlocks.difficulties) merged.unlocks.difficulties = { d9:[1,2,3], d18:[1,2,3] };
+  if(!Array.isArray(merged.unlocks.difficulties.d9))  merged.unlocks.difficulties.d9  = [1,2,3];
+  if(!Array.isArray(merged.unlocks.difficulties.d18)) merged.unlocks.difficulties.d18 = [1,2,3];
+  // ── v0.19b cosmetic migration shims ──
+  // v0.18 saves had an empty cosmetics: [] — seed the starter skin so every
+  // profile begins with something on their ball.
+  // v0.19l: Top Hat is no longer a starter (it's the first XP unlock at 100 XP).
+  // BUT existing profiles that already had it as a starter keep it — we don't
+  // claw back cosmetics from anyone. Same logic for equippedHat.
+  if(!Array.isArray(merged.unlocks.cosmetics)) merged.unlocks.cosmetics = [];
+  if(!merged.unlocks.cosmetics.includes('default_white')) merged.unlocks.cosmetics.push('default_white');
+  // equippedHat: default to null. If a profile had an equipped hat before, keep it.
+  // If the stored value is a non-string or an id they don't own, clear it safely.
+  if(merged.equippedHat !== null) {
+    if(typeof merged.equippedHat !== 'string' ||
+       !merged.unlocks.cosmetics.includes(merged.equippedHat)) {
+      merged.equippedHat = null;
+    }
+  }
+  if(typeof merged.equippedSkin !== 'string' || !merged.equippedSkin) merged.equippedSkin = 'default_white';
+  if(typeof merged.xp !== 'number' || !isFinite(merged.xp) || merged.xp < 0) merged.xp = 0;
+  if(!merged.runAchievements || typeof merged.runAchievements !== 'object' || Array.isArray(merged.runAchievements)) {
+    merged.runAchievements = {};
+  }
+  // Bump schemaVersion if we just upgraded an older save
+  if(typeof merged.schemaVersion !== 'number' || merged.schemaVersion < 3) merged.schemaVersion = 3;
   return merged;
 }
 function setMeta(meta) {
@@ -2826,6 +3313,53 @@ function setMeta(meta) {
 }
 window.getMeta = getMeta;
 window.setMeta = setMeta;
+
+// ── Difficulty unlock helpers (v0.18a) ────────────────
+// Per-profile, per-length tracking. Each run length (9 vs 18) has its own
+// independent unlock progression. Starting state is [1,2,3] for both.
+function isDifficultyUnlocked(length, star) {
+  const meta = getMeta();
+  const key = (length <= 9) ? 'd9' : 'd18';
+  const list = (meta.unlocks && meta.unlocks.difficulties && meta.unlocks.difficulties[key]) || [1,2,3];
+  return list.indexOf(star) !== -1;
+}
+window.isDifficultyUnlocked = isDifficultyUnlocked;
+
+// Returns the newly unlocked star (or null if nothing was unlocked).
+// Caller is responsible for showing toast + SFX.
+function unlockNextDifficulty(length, currentStar) {
+  if(currentStar >= 10) return null;
+  const meta = getMeta();
+  if(!meta.unlocks) meta.unlocks = {};
+  if(!meta.unlocks.difficulties) meta.unlocks.difficulties = { d9:[1,2,3], d18:[1,2,3] };
+  const key = (length <= 9) ? 'd9' : 'd18';
+  if(!Array.isArray(meta.unlocks.difficulties[key])) meta.unlocks.difficulties[key] = [1,2,3];
+  const list = meta.unlocks.difficulties[key];
+  const next = currentStar + 1;
+  if(list.indexOf(next) === -1) {
+    list.push(next);
+    list.sort((a,b) => a - b);
+    setMeta(meta);
+    return next;
+  }
+  return null;
+}
+window.unlockNextDifficulty = unlockNextDifficulty;
+
+// Given a completed run's stats + difficulty, evaluate whether it meets winReq
+// and unlock the next star. Returns the newly unlocked star or null.
+function evaluateDifficultyUnlock(length, currentStar, runStats) {
+  const mods = getDifficultyMods(currentStar);
+  const { holesPlayed, totalHoles, hpRemaining, diff } = runStats;
+  if(holesPlayed < totalHoles) return null; // must actually finish
+  let met = false;
+  if(mods.winReq === 'finish')        met = true;
+  else if(mods.winReq === 'noHpLoss') met = (hpRemaining > 0);
+  else if(mods.winReq === 'underPar') met = (hpRemaining > 0 && diff < 0);
+  if(!met) return null;
+  return unlockNextDifficulty(length, currentStar);
+}
+window.evaluateDifficultyUnlock = evaluateDifficultyUnlock;
 
 // Expose profile API for debug / console use
 window.GGW_Profiles = { loadProfilesIndex, getActiveProfile, setActiveProfile,
@@ -2869,7 +3403,95 @@ function toggleSaveSeed(seed) {
   renderLeaderboard();
 }
 
+// v0.19j: Compact 3-slot profile picker row for the main menu.
+// Shows filled slots + a "+" button for empty ones. Active slot is highlighted
+// (already pre-selected — getActiveProfile defaults to last-played profile from
+// localStorage). Tapping a filled slot switches instantly; tapping "+" opens the
+// create-profile flow; long-press / right-click opens the rename/delete menu.
+function renderInlineProfileRow() {
+  const row = document.getElementById('inline-profile-row');
+  if(!row) return;  // menu not mounted (in-game)
+  const idx = loadProfilesIndex();
+  const activeId = _activeProfileId;
+  row.innerHTML = '';
+  for(const slot of idx.profiles) {
+    const btn = document.createElement('button');
+    const isActive = slot.id === activeId;
+    const isFilled = !!slot.createdAt;
+    // v0.19n: switched from inline styles to CSS classes so :hover and :active
+    // pseudo-classes actually fire. Visual states live in the .inline-profile-chip
+    // rules above; this function just attaches the right classes + content.
+    btn.className = 'inline-profile-chip' + (isActive ? ' active' : '') + (isFilled ? '' : ' empty');
+    if(isFilled) {
+      const nameSafe = _escapeHtml(slot.name);
+      const ago = slot.lastPlayedAt ? _fmtAgo(slot.lastPlayedAt) : 'new';
+      const activeBadge = isActive
+        ? `<div style="position:absolute;top:-9px;left:50%;transform:translateX(-50%);background:#ffd95e;color:#4a2800;font-size:0.52rem;font-weight:800;letter-spacing:1.2px;padding:2px 8px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,0.35);white-space:nowrap;pointer-events:none">✓ ACTIVE</div>`
+        : '';
+      btn.innerHTML =
+        activeBadge +
+        `<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${nameSafe}</div>` +
+        `<div style="font-size:0.55rem;font-weight:${isActive?600:400};opacity:${isActive?0.85:0.6};margin-top:2px">${ago}</div>` +
+        `<button class="inline-profile-chip-delete" title="Delete profile" aria-label="Delete profile">🗑</button>`;
+      btn.onclick = (e) => {
+        // Delete button inside the chip: stop propagation, fire confirm prompt.
+        const delBtn = e.target.closest('.inline-profile-chip-delete');
+        if(delBtn) {
+          e.stopPropagation();
+          confirmDeleteProfile(slot.id);
+          return;
+        }
+        if(slot.id === _activeProfileId) {
+          openProfileMenu(slot.id);  // already active → tap opens rename/delete
+          return;
+        }
+        setActiveProfile(slot.id);
+        updateProfileChip();
+        checkAutoSave();
+        renderLeaderboard();
+        if(typeof renderStarRow === 'function') renderStarRow();
+      };
+      // Long-press / right-click → rename/delete menu (kept as power-user path)
+      btn.oncontextmenu = (e) => { e.preventDefault(); openProfileMenu(slot.id); };
+      let lpTimer = null;
+      btn.ontouchstart = () => { lpTimer = setTimeout(() => openProfileMenu(slot.id), 600); };
+      btn.ontouchend   = () => { if(lpTimer) { clearTimeout(lpTimer); lpTimer = null; } };
+      btn.ontouchmove  = () => { if(lpTimer) { clearTimeout(lpTimer); lpTimer = null; } };
+    } else {
+      btn.innerHTML =
+        `<div style="font-size:1.3rem;line-height:1">+</div>` +
+        `<div style="font-size:0.55rem;font-weight:400;opacity:0.75;margin-top:2px">new</div>`;
+      btn.onclick = () => createProfileFlow(slot.id);
+    }
+    row.appendChild(btn);
+  }
+}
+window.renderInlineProfileRow = renderInlineProfileRow;
+
+// v0.19n: Dedicated "are you sure?" flow for the inline 🗑 button. Skips the
+// intermediate Rename/Delete menu and goes straight to the destructive confirm
+// (still using the same language + behavior as the long-press path).
+function confirmDeleteProfile(slotId) {
+  const slot = getProfile(slotId);
+  if(!slot) return;
+  openProfileModal({
+    title: `Delete "${slot.name}"?`,
+    body: "This erases their active run, leaderboard, and all saves. Cannot be undone.",
+    inputDefault: null,
+    confirmLabel: 'Delete',
+    danger: true,
+    onConfirm: () => {
+      deleteProfile(slotId);
+      bootProfileGate();  // auto-activate a fallback profile, refresh UI
+    }
+  });
+}
+window.confirmDeleteProfile = confirmDeleteProfile;
+
 function renderLeaderboard() {
+  // v0.19j: also render inline profile row above leaderboard if present.
+  renderInlineProfileRow();
+
   const panel = document.getElementById('lb-panel');
   const title = document.getElementById('lb-title');
   if(!panel) return;
@@ -2987,6 +3609,10 @@ setTimeout(() => {
     const ov = document.getElementById('overlay');
     if(ov) ov.classList.remove('hidden');
   }
+  // v0.18a: render star row after boot regardless of path. bootProfileGate
+  // also calls this, but this catches the fallback + protects against
+  // ordering edge cases where the overlay is revealed synchronously.
+  if(typeof renderStarRow === 'function') renderStarRow();
 }, 0);
 
 // ── Settings UI ───────────────────────────────────────
@@ -2994,14 +3620,86 @@ window.setHoles = function(n) {
   G.totalHoles = n;
   document.getElementById('holes-9').classList.toggle('active', n===9);
   document.getElementById('holes-18').classList.toggle('active', n===18);
+  // v0.18a: star unlocks are per-length, so re-render when length toggles.
+  if(typeof renderStarRow === 'function') renderStarRow();
 };
 
 window.setDifficulty = function(n) {
+  const len = G.totalHoles || 9;
+  if(!isDifficultyUnlocked(len, n)) {
+    // Locked — deny feedback. Shake the button, play reject SFX, show toast.
+    const btn = document.querySelector(`.star-btn[data-star="${n}"]`);
+    if(btn) {
+      btn.classList.remove('deny-shake');
+      void btn.offsetWidth;
+      btn.classList.add('deny-shake');
+      setTimeout(() => btn && btn.classList.remove('deny-shake'), 350);
+    }
+    // Quiet deny SFX
+    if(typeof AC !== 'undefined' && AC) {
+      try {
+        const ac = getAC ? getAC() : AC;
+        const t = ac.currentTime;
+        const o = ac.createOscillator(); o.type = 'square';
+        o.frequency.setValueAtTime(140, t);
+        o.frequency.exponentialRampToValueAtTime(60, t + 0.15);
+        const g = ac.createGain(); g.gain.setValueAtTime(0.08, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+        o.connect(g); g.connect(getACDest ? getACDest() : ac.destination);
+        o.start(t); o.stop(t + 0.2);
+      } catch(e){}
+    }
+    const mods = getDifficultyMods(n);
+    if(typeof showToast === 'function') showToast(`🔒 ${mods.name} locked — win ★${n-1} to unlock`, 1800);
+    return;
+  }
   G.difficulty = n;
-  document.querySelectorAll('.star-btn').forEach(btn => {
-    btn.classList.toggle('active', +btn.dataset.star <= n);
-  });
+  G._diffMods = getDifficultyMods(n);
+  renderStarRow();
 };
+
+// Build the two-row 10-star picker respecting unlock state for the current
+// run length. Called after menu renders, after setHoles() changes length,
+// and whenever the player cycles between 9h/18h.
+function renderStarRow() {
+  const len = G.totalHoles || 9;
+  const row1 = document.getElementById('star-row-1');
+  const row2 = document.getElementById('star-row-2');
+  if(!row1 || !row2) return;
+  row1.innerHTML = '';
+  row2.innerHTML = '';
+  const build = (star, parent) => {
+    const unlocked = isDifficultyUnlocked(len, star);
+    const btn = document.createElement('button');
+    btn.className = 'star-btn' + (G.difficulty === star ? ' active' : '') + (unlocked ? '' : ' locked');
+    btn.setAttribute('data-star', star);
+    btn.setAttribute('aria-label', `Difficulty ${star}: ${getDifficultyMods(star).name}${unlocked?'':' (locked)'}`);
+    btn.textContent = unlocked ? '★' : '🔒';
+    btn.onclick = () => setDifficulty(star);
+    parent.appendChild(btn);
+  };
+  for(let s = 1; s <= 5;  s++) build(s, row1);
+  for(let s = 6; s <= 10; s++) build(s, row2);
+  // Refresh label
+  const lbl = document.getElementById('star-diff-label');
+  if(lbl) lbl.textContent = getDifficultyMods(G.difficulty).name;
+  // If current selection got locked (e.g. switched from 9h to 18h), fall back
+  // to the highest unlocked star for this length.
+  if(!isDifficultyUnlocked(len, G.difficulty)) {
+    const meta = getMeta();
+    const key = len <= 9 ? 'd9' : 'd18';
+    const list = (meta.unlocks.difficulties[key] || [1,2,3]);
+    const highest = Math.max.apply(null, list);
+    G.difficulty = highest;
+    G._diffMods = getDifficultyMods(highest);
+    // Re-render to update active state after fallback
+    for(const btn of document.querySelectorAll('.star-btn')) {
+      btn.classList.toggle('active', +btn.dataset.star === highest);
+    }
+    if(lbl) lbl.textContent = getDifficultyMods(highest).name;
+  }
+}
+window.renderStarRow = renderStarRow;
 
 // ── Multiplayer player colors & setup ─────────────────
 const PLAYER_COLORS_DEFAULT = [
@@ -3143,10 +3841,20 @@ function generatePuttPuttCourse(holeNum) {
   const HALF = LANE_W / 2;  // 2 — offset from waypoint corner to lane centre
 
   // ── 1. Build a right-angle path from segments ─────────
-  const diffMult = 0.7 + (diff - 1) * 0.2;
-  // Later holes get progressively longer — kicks in from hole 2
-  // 9-hole games still get long holes by hole 6-8
-  const holeMult = 1.0 + Math.min(holeNum, 17) * 0.08 + (diff >= 3 ? 0.15 : 0); // +8% per hole + difficulty bonus
+  // v0.18a: pathMult comes from difficulty table (0.70 at ★1 → 1.40 at ★6-10).
+  // Keeps the 1-6 smooth ramp and holds steady 6-10 since gameplay difficulty
+  // is provided by rule modifiers above that point rather than geometry.
+  const mods = G._diffMods || getDifficultyMods(diff);
+  const diffMult = mods.pathMult;
+  // Later holes get progressively longer — kicks in from hole 2.
+  // v0.18a: at 6★+, holes past the midpoint of a run get an additional +20%
+  // path bonus per mods.lateHoleExtraPath. For 9h: holes 6-8. For 18h: holes 12-17.
+  let holeMult = 1.0 + Math.min(holeNum, 17) * 0.08 + (diff >= 3 ? 0.15 : 0);
+  const totalHoles = G.totalHoles || 9;
+  const lateThreshold = Math.floor(totalHoles * 0.66); // 6 for 9h, 12 for 18h
+  if(mods.lateHoleExtraPath > 0 && holeNum >= lateThreshold) {
+    holeMult *= (1 + mods.lateHoleExtraPath);
+  }
   const S = Math.max(6, Math.floor((7  + Math.floor(rng() * 5)) * diffMult * holeMult));
   const M = Math.max(9, Math.floor((11 + Math.floor(rng() * 6)) * diffMult * holeMult));
   const L = Math.max(14,Math.floor((18 + Math.floor(rng() * 8)) * diffMult * holeMult));
@@ -5352,18 +6060,746 @@ function buildCourse(data) {
   return group;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// ── Cosmetics factories ──────────────────────────────────────────────
+// Pasted from GGW_Cosmetics_Bundle.js (v0.18a.cos1). v0.19a: spliced in;
+// not yet wired to createBall/meta/hat-follow. M1.2+ will hook these up.
+//
+// Skipped from original bundle:
+//   - local _toonGrad   (GGW already defines this at module scope)
+//   - toonFlat()        (GGW already defines this, aliased to toon())
+//   - BALL_R            (GGW already defines const BALL_R = 0.22)
+//   - addOutlineToGroup (replaced with a no-op; GGW uses OutlinePass)
+// ═══════════════════════════════════════════════════════════════════════════
+
+// No-op outline helper: bundle references this, but GGW uses OutlinePass so
+// no backface-shell is needed. Kept as a no-op in case any pasted factory
+// ever tries to call it. (Current factories below do NOT call it.)
+function addOutlineToGroup(group /*, thickness */) { return group; }
+
+  function buildHat_topHat() {
+    const g = new THREE.Group();
+    const blackMat = toonFlat({ color: 0x1a1a1a });
+    const brimProfile = [
+      new THREE.Vector2(0.00, 0.000),
+      new THREE.Vector2(0.08, -0.005),
+      new THREE.Vector2(0.13, -0.010),
+      new THREE.Vector2(0.17, -0.008),
+      new THREE.Vector2(0.195, 0.010),
+      new THREE.Vector2(0.205, 0.034),
+      new THREE.Vector2(0.198, 0.048),
+      new THREE.Vector2(0.180, 0.040),
+      new THREE.Vector2(0.160, 0.020),
+      new THREE.Vector2(0.130, 0.005),
+      new THREE.Vector2(0.080, 0.008),
+      new THREE.Vector2(0.000, 0.012),
+    ];
+    const brimGeo = new THREE.LatheGeometry(brimProfile, 28);
+    const brim = new THREE.Mesh(brimGeo, blackMat);
+    g.add(brim);
+    const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.115, 0.105, 0.22, 20), blackMat);
+    crown.position.y = 0.125;
+    g.add(crown);
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.108, 0.108, 0.028, 20), toonFlat({ color: 0xc02020 }));
+    band.position.y = 0.030;
+    g.add(band);
+    g.scale.setScalar(1.2);
+    g.position.y = -0.055;
+    return g;
+  }
+
+  function buildHat_hardHat() {
+    const g = new THREE.Group();
+    const mat = toonFlat({ color: 0xf0a020 });
+    const dome = new THREE.Mesh(
+      new THREE.SphereGeometry(0.15, 14, 10, 0, Math.PI*2, 0, Math.PI/2),
+      mat
+    );
+    dome.position.y = 0.01;
+    const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.018, 20), mat);
+    const ridge = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.03, 0.30), mat);
+    ridge.position.y = 0.09;
+    g.add(brim, dome, ridge);
+    g.scale.setScalar(1.2);
+    g.position.y = -0.055;
+    return g;
+  }
+
+  function buildHat_crown() {
+    const g = new THREE.Group();
+    const goldMat = toonFlat({ color: 0xffcc22 });
+    function mergeGeometries(geometries) {
+      const merged = new THREE.BufferGeometry();
+      let posCount = 0, normCount = 0;
+      for(const geo of geometries) {
+        const g2 = geo.index ? geo.toNonIndexed() : geo;
+        posCount += g2.attributes.position.count;
+        if(g2.attributes.normal) normCount += g2.attributes.normal.count;
+      }
+      const positions = new Float32Array(posCount * 3);
+      const normals = new Float32Array(posCount * 3);
+      let offset = 0;
+      for(const geo of geometries) {
+        const g2 = geo.index ? geo.toNonIndexed() : geo;
+        const p = g2.attributes.position.array;
+        positions.set(p, offset * 3);
+        if(g2.attributes.normal) {
+          normals.set(g2.attributes.normal.array, offset * 3);
+        }
+        offset += g2.attributes.position.count;
+      }
+      merged.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      merged.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+      return merged;
+    }
+    const outerR = 0.135;
+    const innerR_band = 0.110;
+    const bandHeight = 0.085;
+    const ringShape = new THREE.Shape();
+    ringShape.absarc(0, 0, outerR, 0, Math.PI * 2, false);
+    const holePath = new THREE.Path();
+    holePath.absarc(0, 0, innerR_band, 0, Math.PI * 2, true);
+    ringShape.holes.push(holePath);
+    const bandGeo = new THREE.ExtrudeGeometry(ringShape, {
+      depth: bandHeight,
+      bevelEnabled: false,
+      curveSegments: 28,
+    });
+    bandGeo.rotateX(-Math.PI / 2);
+    bandGeo.translate(0, -bandHeight / 2, 0);
+    bandGeo.computeVertexNormals();
+    const spikeGeos = [];
+    const spikeInnerR = innerR_band - 0.003;
+    const bandTopY = bandHeight / 2;
+    for(let i=0; i<10; i++) {
+      const a = (i / 10) * Math.PI * 2;
+      const isMajor = (i % 2 === 0);
+      const h = isMajor ? 0.095 : 0.065;
+      const r = isMajor ? 0.024 : 0.020;
+      const sg = new THREE.ConeGeometry(r, h, 6);
+      sg.translate(Math.cos(a) * spikeInnerR, bandTopY + h / 2, Math.sin(a) * spikeInnerR);
+      spikeGeos.push(sg);
+    }
+    const crownGeo = mergeGeometries([bandGeo, ...spikeGeos]);
+    const crownMesh = new THREE.Mesh(crownGeo, goldMat);
+    g.add(crownMesh);
+    const bigGemCols = [0xff2266, 0x22aaff, 0x44ff66];
+    for(let i=0; i<3; i++) {
+      const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.024), toonFlat({ color: bigGemCols[i] }));
+      const a = (i / 3) * Math.PI * 2 + 0.4;
+      gem.position.set(Math.cos(a) * (outerR + 0.005), 0, Math.sin(a) * (outerR + 0.005));
+      g.add(gem);
+    }
+    for(let i=0; i<3; i++) {
+      const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.014), toonFlat({ color: 0xd81830 }));
+      const a = (i / 3) * Math.PI * 2 + 0.4 + Math.PI / 3;
+      gem.position.set(Math.cos(a) * (outerR + 0.005), 0, Math.sin(a) * (outerR + 0.005));
+      g.add(gem);
+    }
+    return g;
+  }
+
+  function buildHat_cowboyHat() {
+    const g = new THREE.Group();
+    const mat = toonFlat({ color: 0x8a5a2a });
+    const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.288, 0.312, 0.024, 24), mat);
+    brim.position.y = -0.04;
+    const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.144, 0.192, 18), mat);
+    crown.position.y = 0.062;
+    const topCap = new THREE.Mesh(new THREE.SphereGeometry(0.12, 14, 8, 0, Math.PI*2, 0, Math.PI/2), mat);
+    topCap.position.y = 0.158;
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.145, 0.145, 0.030, 18), toonFlat({ color: 0x3a2a15 }));
+    band.position.y = -0.01;
+    g.add(brim, crown, topCap, band);
+    brim.rotation.x = 0.05;
+    return g;
+  }
+
+  function buildHat_gradCap() {
+    const g = new THREE.Group();
+    const mat = toonFlat({ color: 0x1a1a1a });
+    const board = new THREE.Mesh(new THREE.BoxGeometry(0.408, 0.024, 0.408), mat);
+    board.position.y = 0.036;
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.132, 0.132, 0.084, 16), mat);
+    cap.position.y = -0.018;
+    const button = new THREE.Mesh(new THREE.SphereGeometry(0.026, 8, 6), toonFlat({ color: 0xc02020 }));
+    button.position.y = 0.054;
+    const string = new THREE.Mesh(new THREE.CylinderGeometry(0.010, 0.010, 0.168, 6), toonFlat({ color: 0xc02020 }));
+    string.position.set(0.168, -0.03, 0.168);
+    const poof = new THREE.Mesh(new THREE.SphereGeometry(0.036, 8, 6), toonFlat({ color: 0xc02020 }));
+    poof.position.set(0.168, -0.11, 0.168);
+    g.add(cap, board, button, string, poof);
+    return g;
+  }
+
+  function buildHat_backwardsCap() {
+    const g = new THREE.Group();
+    const mat = toonFlat({ color: 0x2060c0 });
+    const dome = new THREE.Mesh(
+      new THREE.SphereGeometry(0.18, 18, 12, 0, Math.PI*2, 0, Math.PI/2),
+      mat
+    );
+    dome.position.y = -0.05;
+    g.add(dome);
+    const bill = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.02, 0.14), mat);
+    bill.position.set(0, -0.04, -0.16);
+    g.add(bill);
+    const button = new THREE.Mesh(new THREE.SphereGeometry(0.020, 8, 6), toonFlat({ color: 0xffffff }));
+    button.position.y = 0.125;
+    g.add(button);
+    const stitch = new THREE.Mesh(
+      new THREE.CircleGeometry(0.02, 12),
+      toonFlat({ color: 0xffffff })
+    );
+    stitch.position.set(0, -0.015, 0.175);
+    stitch.lookAt(0, -0.015, 1);
+    stitch.userData.skipOutline = true;
+    g.add(stitch);
+    return g;
+  }
+
+  function buildHat_sunhat() {
+    const g = new THREE.Group();
+    const mat = toonFlat({ color: 0xd9b060 });
+    const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.336, 0.360, 0.018, 26), mat);
+    brim.position.y = -0.04;
+    const crown = new THREE.Mesh(
+      new THREE.SphereGeometry(0.156, 16, 10, 0, Math.PI*2, 0, Math.PI/2),
+      mat
+    );
+    crown.position.y = -0.03;
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.158, 0.158, 0.036, 18), toonFlat({ color: 0xc85a90 }));
+    band.position.y = -0.025;
+    const flower = new THREE.Mesh(new THREE.SphereGeometry(0.036, 8, 6), toonFlat({ color: 0xffffff }));
+    flower.position.set(0.162, -0.02, 0);
+    flower.scale.set(1, 0.5, 1);
+    const flowerCenter = new THREE.Mesh(new THREE.SphereGeometry(0.017, 6, 4), toonFlat({ color: 0xffcc22 }));
+    flowerCenter.position.set(0.162, -0.015, 0);
+    g.add(brim, crown, band, flower, flowerCenter);
+    return g;
+  }
+
+  function buildHat_birthdayCake() {
+    const g = new THREE.Group();
+    const icingMat = toonFlat({ color: 0xd8203a });
+    const t1 = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.08, 18), toonFlat({ color: 0xf8d0e0 }));
+    const t2 = new THREE.Mesh(new THREE.CylinderGeometry(0.10, 0.10, 0.07, 18), toonFlat({ color: 0xf8f4d0 }));
+    t2.position.y = 0.075;
+    const t3 = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.055, 16), toonFlat({ color: 0xf8d0e0 }));
+    t3.position.y = 0.138;
+    const icing1 = new THREE.Mesh(new THREE.CylinderGeometry(0.1315, 0.1315, 0.022, 18), icingMat);
+    icing1.position.y = 0.015;
+    const icing2 = new THREE.Mesh(new THREE.CylinderGeometry(0.1015, 0.1015, 0.02, 18), icingMat);
+    icing2.position.y = 0.078;
+    const icing3 = new THREE.Mesh(new THREE.CylinderGeometry(0.0715, 0.0715, 0.018, 16), icingMat);
+    icing3.position.y = 0.138;
+    g.add(icing1, icing2, icing3);
+    for(let tier = 0; tier < 2; tier++) {
+      const r = tier === 0 ? 0.13 : 0.10;
+      const y = tier === 0 ? 0.041 : 0.11;
+      const n = tier === 0 ? 10 : 8;
+      for(let i=0; i<n; i++) {
+        const a = (i/n) * Math.PI*2;
+        const dot = new THREE.Mesh(new THREE.SphereGeometry(0.018, 6, 4), toonFlat({ color: 0xffffff }));
+        dot.position.set(Math.cos(a)*r, y, Math.sin(a)*r);
+        g.add(dot);
+      }
+    }
+    const candle = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.06, 8), toonFlat({ color: 0xff4466 }));
+    candle.position.y = 0.195;
+    const flame = new THREE.Mesh(new THREE.ConeGeometry(0.018, 0.04, 8), toonFlat({ color: 0xffcc22, emissive: 0xff8800, emissiveIntensity: 0.6 }));
+    flame.position.y = 0.245;
+    g.add(t1, t2, t3, candle, flame);
+    return g;
+  }
+
+  function buildHat_bucket() {
+    const g = new THREE.Group();
+    const mat = toonFlat({ color: 0x909090 });
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.13, 0.20, 16), mat);
+    body.position.y = 0.10;
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.012, 6, 20), mat);
+    rim.rotation.x = Math.PI / 2;
+    rim.position.y = 0.20;
+    const handle = new THREE.Mesh(new THREE.TorusGeometry(0.15, 0.012, 6, 20, Math.PI), toonFlat({ color: 0x707070 }));
+    handle.position.y = 0.21;
+    handle.rotation.y = Math.PI / 2;
+    g.add(body, rim, handle);
+    return g;
+  }
+
+  function buildHat_trafficCone() {
+    const g = new THREE.Group();
+    const mat = toonFlat({ color: 0xff6a1a });
+    const base = new THREE.Mesh(new THREE.BoxGeometry(0.288, 0.025, 0.288), mat);
+    base.position.y = 0.012;
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(0.13, 0.28, 14), mat);
+    cone.position.y = 0.165;
+    const stripe1 = new THREE.Mesh(new THREE.CylinderGeometry(0.105, 0.115, 0.025, 14), toonFlat({ color: 0xffffff }));
+    stripe1.position.y = 0.085;
+    const stripe2 = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.09, 0.022, 14), toonFlat({ color: 0xffffff }));
+    stripe2.position.y = 0.16;
+    g.add(base, cone, stripe1, stripe2);
+    return g;
+  }
+
+  function buildHat_pineapple() {
+    const g = new THREE.Group();
+    const bodyMat = toonFlat({ color: 0xf0b820 });
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.13, 14, 10), bodyMat);
+    body.scale.set(1, 1.3, 1);
+    body.position.y = 0.12;
+    const textureMat = toonFlat({ color: 0xc08808 });
+    const rings = 11;
+    const dotsPerRing = 12;
+    const yStart = -0.03;
+    const yEnd = 0.28;
+    for(let ring = 0; ring < rings; ring++) {
+      const t = ring / (rings - 1);
+      const y = yStart + t * (yEnd - yStart);
+      const centerY = 0.12;
+      const verticalHalfExtent = 0.169;
+      const yFromCenter = (y - centerY) / verticalHalfExtent;
+      const r = 0.13 * Math.sqrt(Math.max(0, 1 - yFromCenter * yFromCenter)) + 0.005;
+      if(r < 0.02) continue;
+      for(let i=0; i<dotsPerRing; i++) {
+        const offset = (ring % 2) * 0.5;
+        const a = ((i + offset) / dotsPerRing) * Math.PI * 2;
+        const dot = new THREE.Mesh(new THREE.SphereGeometry(0.014, 6, 4), textureMat);
+        dot.position.set(Math.cos(a) * r, y, Math.sin(a) * r);
+        dot.userData.skipOutline = true;
+        g.add(dot);
+      }
+    }
+    for(let i=0; i<9; i++) {
+      const a = (i / 9) * Math.PI * 2;
+      const leafLen = 0.08 + (i % 2) * 0.03;
+      const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.022, leafLen, 5), toonFlat({ color: 0x3a9030 }));
+      const r = 0.04 + (i % 2) * 0.02;
+      leaf.position.set(Math.cos(a) * r, 0.28 + leafLen/2, Math.sin(a) * r);
+      leaf.rotation.z = -Math.cos(a) * 0.3;
+      leaf.rotation.x = Math.sin(a) * 0.3;
+      g.add(leaf);
+    }
+    g.add(body);
+    return g;
+  }
+
+  function buildHat_crab() {
+    const g = new THREE.Group();
+    const bodyMat = toonFlat({ color: 0xe04030 });
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.14, 16, 10), bodyMat);
+    body.scale.set(1.1, 0.55, 0.9);
+    body.position.y = 0.06;
+    body.userData.skipOutline = true;
+    for(const side of [-1, 1]) {
+      const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.06, 6), bodyMat);
+      stalk.position.set(side * 0.04, 0.12, 0.05);
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.025, 8, 6), toonFlat({ color: 0xffffff }));
+      eye.position.set(side * 0.04, 0.16, 0.05);
+      const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.012, 6, 4), toonFlat({ color: 0x000000 }));
+      pupil.position.set(side * 0.04, 0.16, 0.07);
+      g.add(stalk, eye, pupil);
+    }
+    for(const side of [-1, 1]) {
+      const claw = new THREE.Mesh(new THREE.SphereGeometry(0.05, 10, 8), bodyMat);
+      claw.scale.set(0.8, 0.9, 1.3);
+      claw.position.set(side * 0.16, 0.055, 0.10);
+      const pincer = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.01, 0.04), toonFlat({ color: 0x801810 }));
+      pincer.position.set(side * 0.16, 0.075, 0.13);
+      g.add(claw, pincer);
+    }
+    for(const side of [-1, 1]) {
+      for(let i = 0; i < 3; i++) {
+        const leg = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.01, 0.015), bodyMat);
+        leg.position.set(side * 0.15, 0.05, -0.04 + i * 0.04);
+        leg.rotation.y = side * 0.3;
+        g.add(leg);
+      }
+    }
+    g.add(body);
+    return g;
+  }
+
+  // Hat registry — id → name → build function
+  // v0.19h: `icon` (emoji) used in the Locker Room grid thumbnails.
+  const HATS = [
+    { id: 'top_hat',           name: 'Top Hat',          icon: '🎩', build: buildHat_topHat },
+    { id: 'hard_hat',          name: 'Hard Hat',         icon: '⛑️', build: buildHat_hardHat },
+    { id: 'crown',             name: 'Crown',            icon: '👑', build: buildHat_crown },
+    { id: 'cowboy_hat',        name: 'Cowboy Hat',       icon: '🤠', build: buildHat_cowboyHat },
+    { id: 'grad_cap',          name: 'Grad Cap',         icon: '🎓', build: buildHat_gradCap },
+    { id: 'backwards_cap',     name: 'Backwards Cap',    icon: '🧢', build: buildHat_backwardsCap },
+    { id: 'sunhat',            name: 'Sun Hat',          icon: '👒', build: buildHat_sunhat },
+    { id: 'birthday_cake',     name: 'Birthday Cake',    icon: '🎂', build: buildHat_birthdayCake },
+    { id: 'bucket',            name: 'Bucket',           icon: '🪣', build: buildHat_bucket },
+    { id: 'traffic_cone',      name: 'Traffic Cone',     icon: '🚧', build: buildHat_trafficCone },
+    { id: 'pineapple',         name: 'Pineapple',        icon: '🍍', build: buildHat_pineapple },
+    { id: 'crab',              name: 'Live Crab',        icon: '🦀', build: buildHat_crab },
+  ];
+
+  // ── Ball skin: default dimpled builder ──────────────────
+  // Returns a THREE.Group with core sphere + dimple decals. Core sphere is the
+  // first child with userData.isSkinBall = true for outline targeting. Dimples
+  // are flagged userData.skipOutline = true.
+  function buildBallWithDimples(baseColor, dimpleColor, fade) {
+    const g = new THREE.Group();
+    const ballGeo = new THREE.SphereGeometry(BALL_R, 20, 16);
+    const ballMat = toonFlat({ color: baseColor });
+    const ball = new THREE.Mesh(ballGeo, ballMat);
+    g.add(ball);
+    ball.userData.isSkinBall = true;
+    const fadeAmount = (typeof fade === 'number') ? fade : 0.5;
+    const baseCol = new THREE.Color(baseColor);
+    const rawShadow = new THREE.Color(dimpleColor);
+    const rawHighlight = baseCol.clone().lerp(new THREE.Color(0xffffff), 0.35);
+    if(baseCol.r + baseCol.g + baseCol.b > 2.4) {
+      rawHighlight.copy(baseCol).lerp(new THREE.Color(0xffffff), 0.15);
+    }
+    const shadowColor = rawShadow.clone().lerp(baseCol, fadeAmount);
+    const highlightColor = rawHighlight.clone().lerp(baseCol, fadeAmount);
+    const shadowMat = new THREE.MeshBasicMaterial({ color: shadowColor });
+    const highlightMat = new THREE.MeshBasicMaterial({ color: highlightColor });
+    const N_DIMPLES = 100;
+    const SHADOW_R = 0.028;
+    const HIGHLIGHT_R = SHADOW_R * 0.62;
+    const SHADOW_OFFSET = BALL_R + 0.0008;
+    const HIGHLIGHT_OFFSET = BALL_R + 0.0018;
+    const lightWorld = new THREE.Vector3(1.2, 2.0, 1.0).normalize();
+    const phi = Math.PI * (3 - Math.sqrt(5));
+    for(let i = 0; i < N_DIMPLES; i++) {
+      const y = 1 - 2 * (i + 0.5) / N_DIMPLES;
+      const radiusAtY = Math.sqrt(1 - y * y);
+      const theta = phi * i;
+      const x = Math.cos(theta) * radiusAtY;
+      const z = Math.sin(theta) * radiusAtY;
+      const dimple = new THREE.Group();
+      dimple.position.set(x * SHADOW_OFFSET, y * SHADOW_OFFSET, z * SHADOW_OFFSET);
+      dimple.lookAt(x * SHADOW_OFFSET * 2, y * SHADOW_OFFSET * 2, z * SHADOW_OFFSET * 2);
+      dimple.updateMatrix();
+      const normalWorld = new THREE.Vector3(x, y, z);
+      const dot = lightWorld.dot(normalWorld);
+      const tangentWorld = lightWorld.clone().sub(normalWorld.clone().multiplyScalar(dot));
+      const tangentMag = tangentWorld.length();
+      const inverseMatrix = new THREE.Matrix4().extractRotation(dimple.matrix).invert();
+      const tangentLocal = tangentWorld.clone().applyMatrix4(inverseMatrix);
+      let offX = 0, offY = 0;
+      if(tangentMag > 0.001) {
+        offX = (tangentLocal.x / tangentMag) * SHADOW_R * 0.30;
+        offY = (tangentLocal.y / tangentMag) * SHADOW_R * 0.30;
+      }
+      const shadow = new THREE.Mesh(new THREE.CircleGeometry(SHADOW_R, 12), shadowMat);
+      shadow.scale.set(1.0, 0.78, 1.0);
+      shadow.userData.skipOutline = true;
+      dimple.add(shadow);
+      const highlight = new THREE.Mesh(
+        new THREE.CircleGeometry(HIGHLIGHT_R, 10),
+        highlightMat
+      );
+      highlight.position.set(offX, offY, (HIGHLIGHT_OFFSET - SHADOW_OFFSET));
+      highlight.scale.set(1.0, 0.78, 1.0);
+      highlight.userData.skipOutline = true;
+      dimple.add(highlight);
+      g.add(dimple);
+    }
+    return g;
+  }
+
+  // ── Themed skin factories ──────────────────────────
+  function buildSkin_alien() {
+    const g = new THREE.Group();
+    const ballGeo = new THREE.SphereGeometry(BALL_R, 20, 16);
+    const ballMat = new THREE.MeshToonMaterial({
+      color: 0x40e060,
+      emissive: 0x28ff50,
+      emissiveIntensity: 0.7,
+      gradientMap: _toonGrad,
+    });
+    const ball = new THREE.Mesh(ballGeo, ballMat);
+    g.add(ball);
+    ball.userData.isSkinBall = true;
+    const innerGlow = new THREE.Mesh(
+      new THREE.SphereGeometry(BALL_R * 1.12, 20, 14),
+      new THREE.MeshBasicMaterial({
+        color: 0x40ff60, transparent: true, opacity: 0.50,
+        side: THREE.BackSide, depthWrite: false,
+      })
+    );
+    innerGlow.userData.skipOutline = true;
+    g.add(innerGlow);
+    const midGlow = new THREE.Mesh(
+      new THREE.SphereGeometry(BALL_R * 1.30, 20, 14),
+      new THREE.MeshBasicMaterial({
+        color: 0x30e840, transparent: true, opacity: 0.32,
+        side: THREE.BackSide, depthWrite: false,
+      })
+    );
+    midGlow.userData.skipOutline = true;
+    g.add(midGlow);
+    const outerGlow = new THREE.Mesh(
+      new THREE.SphereGeometry(BALL_R * 1.55, 20, 14),
+      new THREE.MeshBasicMaterial({
+        color: 0x20c040, transparent: true, opacity: 0.18,
+        side: THREE.BackSide, depthWrite: false,
+      })
+    );
+    outerGlow.userData.skipOutline = true;
+    g.add(outerGlow);
+    return g;
+  }
+
+  function buildSkin_transparent() {
+    const g = new THREE.Group();
+    const gemGeo = new THREE.IcosahedronGeometry(BALL_R, 1);
+    const gemMat = new THREE.MeshToonMaterial({
+      color: 0xb8d8ff,
+      transparent: true,
+      opacity: 0.55,
+      flatShading: true,
+      gradientMap: _toonGrad,
+      depthWrite: false,
+    });
+    const gem = new THREE.Mesh(gemGeo, gemMat);
+    g.add(gem);
+    gem.userData.isSkinBall = true;
+    gem.userData.skipOutline = true;
+    const innerGeo = new THREE.IcosahedronGeometry(BALL_R * 0.7, 1);
+    const innerMat = new THREE.MeshToonMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.25,
+      flatShading: true,
+      gradientMap: _toonGrad,
+      depthWrite: false,
+    });
+    const innerGem = new THREE.Mesh(innerGeo, innerMat);
+    innerGem.rotation.set(0.6, 0.9, 0.3);
+    innerGem.userData.skipOutline = true;
+    g.add(innerGem);
+    const sparkleMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff, transparent: true, opacity: 0.95, depthWrite: false,
+    });
+    const sparklePositions = [
+      [ 0.12,  0.14,  0.15],
+      [-0.08,  0.05,  0.19],
+      [ 0.15, -0.05,  0.13],
+      [-0.14,  0.12,  0.10],
+    ];
+    const sparkleSizes = [0.025, 0.018, 0.014, 0.012];
+    for(let i = 0; i < sparklePositions.length; i++) {
+      const [x, y, z] = sparklePositions[i];
+      const sparkle = new THREE.Mesh(
+        new THREE.CircleGeometry(sparkleSizes[i], 8),
+        sparkleMat
+      );
+      sparkle.position.set(x, y, z);
+      sparkle.lookAt(0, 0, 5);
+      sparkle.userData.skipOutline = true;
+      g.add(sparkle);
+    }
+    return g;
+  }
+
+  // ── Ball skin registry ──────────────────────────
+  // Skins declare either (base, dimple, fade) for buildBallWithDimples OR
+  // a custom build() function. First entry is the default.
+  // Ball skin registry — v0.19h adds `icon` for Locker Room grid thumbnails.
+  // Skins declare either (base, dimple, fade) for buildBallWithDimples OR
+  // a custom build() function. First entry is the default.
+  const SKINS = [
+    { id: 'default_white', name: 'Default (White)',  icon: '⚪', base: 0xffffff, dimple: 0xc8cdd3, fade: 0.5 },
+    { id: 'red',           name: 'Red',              icon: '🔴', base: 0xd83030, dimple: 0x982020, fade: 0.8 },
+    { id: 'blue',          name: 'Blue',             icon: '🔵', base: 0x3060d0, dimple: 0x1e408c, fade: 0.8 },
+    { id: 'green',         name: 'Green',            icon: '🟢', base: 0x3aa845, dimple: 0x256b2c, fade: 0.8 },
+    { id: 'yellow',        name: 'Yellow',           icon: '🟡', base: 0xf0c020, dimple: 0xa8820e, fade: 0.8 },
+    { id: 'black',         name: 'Black',            icon: '⚫', base: 0x202020, dimple: 0x505050, fade: 0.5 },
+    { id: 'atomic_orange', name: 'Atomic Orange',    icon: '🟠', base: 0xff5a1a, dimple: 0xc0380a, fade: 0.8 },
+    { id: 'purple',        name: 'Purple',           icon: '🟣', base: 0x8040c8, dimple: 0x4a2080, fade: 0.8 },
+    { id: 'pink',          name: 'Pink',             icon: '🌸', base: 0xff80b0, dimple: 0xc04880, fade: 0.8 },
+    { id: 'transparent',   name: 'Transparent',      icon: '💎', build: buildSkin_transparent },
+    { id: 'alien',         name: 'Alien (Glowing)',  icon: '👽', build: buildSkin_alien },
+  ];
+
+  // ── Cosmetic unlock tables (v0.19e) ──
+  // Seed values for XP-gated cosmetics. M1.9 will migrate these into the
+  // tuning sheet with an `active` column so pacing can be tuned live, with
+  // these values as the fallback.
+  const COSMETIC_XP_UNLOCKS = [
+    { id: 'red',           category: 'skin', xpCost:  120 },
+    { id: 'blue',          category: 'skin', xpCost:  200 },
+    { id: 'green',         category: 'skin', xpCost:  320 },
+    { id: 'yellow',        category: 'skin', xpCost:  500 },
+    { id: 'atomic_orange', category: 'skin', xpCost:  800 },
+    { id: 'purple',        category: 'skin', xpCost: 1100 },
+    { id: 'pink',          category: 'skin', xpCost: 1400 },
+    // v0.19l: Top Hat is now the first hat unlock — lowest XP threshold of any
+    // hat, reached a few holes into a player's first run.
+    { id: 'top_hat',       category: 'hat',  xpCost:  100 },
+    { id: 'hard_hat',      category: 'hat',  xpCost:  250 },
+    { id: 'cowboy_hat',    category: 'hat',  xpCost:  450 },
+    { id: 'grad_cap',      category: 'hat',  xpCost:  700 },
+    { id: 'backwards_cap', category: 'hat',  xpCost:  900 },
+    { id: 'sunhat',        category: 'hat',  xpCost: 1200 },
+    { id: 'bucket',        category: 'hat',  xpCost: 1600 },
+  ];
+
+  // Helper: check every XP-gated unlock against meta.xp, push newly
+  // unlocked ids into meta.unlocks.cosmetics, and return the list of
+  // newly unlocked item definitions (for toast display). Caller is
+  // responsible for setMeta(meta) after this call.
+  function checkXpUnlocks(meta) {
+    if(!meta || !meta.unlocks || !Array.isArray(meta.unlocks.cosmetics)) return [];
+    const owned = meta.unlocks.cosmetics;
+    const newly = [];
+    for(const item of COSMETIC_XP_UNLOCKS) {
+      if(!owned.includes(item.id) && (meta.xp || 0) >= item.xpCost) {
+        owned.push(item.id);
+        newly.push(item);
+      }
+    }
+    return newly;
+  }
+
+  // ── Achievement-based cosmetic unlocks (v0.19f) ──
+  // Checked at run end. `ctx` carries the flags the conditions depend on.
+  // Returns the list of newly unlocked item definitions (same shape as
+  // checkXpUnlocks results so the caller can reuse the toast logic).
+  // v0.19g: also handles prestige unlocks tied to the star-clear ladder.
+  function checkAchievementUnlocks(meta, ctx) {
+    if(!meta || !meta.unlocks || !Array.isArray(meta.unlocks.cosmetics)) return [];
+    const owned = meta.unlocks.cosmetics;
+    const newly = [];
+    const add = (id, category) => {
+      if(!owned.includes(id)) {
+        owned.push(id);
+        newly.push({ id, category });
+      }
+    };
+    // ── Achievements ──
+    // black — finish a run under par (won + diff < 0)
+    if(ctx.runCompleted && ctx.diff < 0) add('black', 'skin');
+    // transparent — complete a run without losing HP (won + no HP lost)
+    if(ctx.runCompleted && !ctx.hpLost) add('transparent', 'skin');
+    // pineapple — win a run without buying any perks
+    if(ctx.runCompleted && (ctx.perksBought || 0) === 0) add('pineapple', 'hat');
+    // traffic_cone — lose a run on the first hole (busted + no holes completed)
+    if(ctx.runFailed && (ctx.holesPlayed || 0) === 0) add('traffic_cone', 'hat');
+    // birthday_cake — complete your 10th run (any outcome)
+    if((meta.totalRuns || 0) >= 10) add('birthday_cake', 'hat');
+    // ── Prestige (v0.19g) ──
+    // Tied to the 10-star difficulty ladder unlocked via newStar this run.
+    // crown — clear any 7★ run (either run length). Triggers on the exact run
+    // that earns star 7+; also retroactively grants if the player has already
+    // unlocked 7+ on either length via a prior run.
+    const has7 = ctx.newStar != null && ctx.newStar >= 7;
+    const ladderHas7 = (() => {
+      const d9 = (meta.unlocks.difficulties && meta.unlocks.difficulties.d9) || [];
+      const d18 = (meta.unlocks.difficulties && meta.unlocks.difficulties.d18) || [];
+      return d9.some(s => s >= 7) || d18.some(s => s >= 7);
+    })();
+    if(has7 || ladderHas7) add('crown', 'hat');
+    // crab — clear 10★ on 9-hole
+    const has10_9  = ctx.newStar === 10 && ctx.runLength === 9;
+    const ladder10_9  = ((meta.unlocks.difficulties && meta.unlocks.difficulties.d9)  || []).indexOf(10) !== -1;
+    if(has10_9 || ladder10_9) add('crab', 'hat');
+    // alien — clear 10★ on 18-hole
+    const has10_18 = ctx.newStar === 10 && ctx.runLength === 18;
+    const ladder10_18 = ((meta.unlocks.difficulties && meta.unlocks.difficulties.d18) || []).indexOf(10) !== -1;
+    if(has10_18 || ladder10_18) add('alien', 'skin');
+    return newly;
+  }
+
+  // ── Prestige unlocks (v0.19g) ──
+  // Fired when the star ladder evaluator returns a freshly-unlocked star.
+  // Gated by star tier + (optionally) run length.
+  function checkPrestigeUnlocks(meta, starUnlocked, runLength) {
+    if(!meta || !meta.unlocks || !Array.isArray(meta.unlocks.cosmetics)) return [];
+    if(starUnlocked == null) return [];
+    const owned = meta.unlocks.cosmetics;
+    const newly = [];
+    const add = (id, category) => {
+      if(!owned.includes(id)) {
+        owned.push(id);
+        newly.push({ id, category });
+      }
+    };
+    // crown — any 7★+ clear
+    if(starUnlocked >= 7) add('crown', 'hat');
+    // crab — 10★ on 9-hole specifically
+    if(starUnlocked >= 10 && runLength <= 9) add('crab', 'hat');
+    // alien — 10★ on 18-hole specifically
+    if(starUnlocked >= 10 && runLength >= 18) add('alien', 'skin');
+    return newly;
+  }
+
+  // Helper: resolve a cosmetic id to a friendly display name by searching
+  // both HATS and SKINS. Falls back to the raw id if not found.
+  function cosmeticDisplayName(id) {
+    const h = HATS.find(x => x.id === id);
+    if(h) return h.name;
+    const s = SKINS.find(x => x.id === id);
+    if(s) return s.name;
+    return id;
+  }
+
+  // ── Achievement list for the Achievements screen (v0.19g) ──
+  // Condition-based unlocks only (XP tiers live in the Locker Room). Order
+  // is rough difficulty / chase-priority. `category`: 'achievement' or
+  // 'prestige' for section grouping. `icon`: emoji shown in the list.
+  // `condition` is the player-facing unlock text.
+  const ACHIEVEMENT_DEFS = [
+    { id: 'black',          reward: 'skin', category: 'achievement', icon: '⚫', name: 'Under Par',         condition: 'Finish a run under par' },
+    { id: 'transparent',    reward: 'skin', category: 'achievement', icon: '💎', name: 'Untouchable',       condition: 'Complete a run without losing HP' },
+    { id: 'pineapple',      reward: 'hat',  category: 'achievement', icon: '🍍', name: 'Pure Golfer',       condition: 'Win a run without buying any perks' },
+    { id: 'traffic_cone',   reward: 'hat',  category: 'achievement', icon: '🚧', name: 'Under Construction', condition: 'Lose a run on the first hole' },
+    { id: 'birthday_cake',  reward: 'hat',  category: 'achievement', icon: '🎂', name: 'Dedicated',         condition: 'Complete your 10th run' },
+    { id: 'crown',          reward: 'hat',  category: 'prestige',    icon: '👑', name: 'Royalty',           condition: 'Clear any 7★ run' },
+    { id: 'crab',           reward: 'hat',  category: 'prestige',    icon: '🦀', name: 'Beach Champion',    condition: 'Clear 10★ on a 9-hole run' },
+    { id: 'alien',          reward: 'skin', category: 'prestige',    icon: '👽', name: 'Interstellar',      condition: 'Clear 10★ on an 18-hole run' },
+  ];
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ── End cosmetics factories ─────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+
 // ── Ball ──────────────────────────────────────────────
+// v0.19c: G.ball is now a Group (skin output) and G.ballMesh is the core
+// sphere child. The hat is a separate scene sibling (G.hat) so it stays
+// upright as the ball rotates for visual roll. Outline pass targets only
+// the core ballMesh (not dimples, patches, glow halos, or the hat).
 function createBall() {
-  if(G.ball){ scene.remove(G.ball); scene.remove(G.ballShadow); }
-  const geo = new THREE.SphereGeometry(0.22, 20, 16);
-  const mesh = new THREE.Mesh(geo, MAT.ball);
-  mesh.castShadow = true;
-  scene.add(mesh);
-  G.ball = mesh;
-  // Update outline targets: ball + course group meshes
-  if (outlinePass) {
-    const targets = [mesh];
-    if (G.courseGroup) G.courseGroup.traverse(o => { if (o.isMesh) targets.push(o); });
+  if(G.ball){ scene.remove(G.ball); scene.remove(G.ballShadow); G.ball = null; G.ballShadow = null; G.ballMesh = null; }
+  if(G.hat){ scene.remove(G.hat); G.hat = null; }
+
+  const meta = getMeta();
+  // Skin: either uses the declarative dimpled-ball builder, or a custom factory
+  const skinDef = (typeof SKINS !== 'undefined' && SKINS.find(s => s.id === meta.equippedSkin)) || (typeof SKINS !== 'undefined' ? SKINS[0] : null);
+  let ballGroup;
+  if(skinDef && skinDef.build) {
+    ballGroup = skinDef.build();
+  } else if(skinDef) {
+    ballGroup = buildBallWithDimples(skinDef.base, skinDef.dimple, skinDef.fade);
+  } else {
+    // Safety fallback — should never happen since the cosmetics bundle is pasted above
+    ballGroup = new THREE.Group();
+    const geo = new THREE.SphereGeometry(BALL_R, 20, 16);
+    const mesh = new THREE.Mesh(geo, MAT.ball);
+    mesh.userData.isSkinBall = true;
+    ballGroup.add(mesh);
+  }
+  ballGroup.castShadow = true;
+  scene.add(ballGroup);
+  G.ball = ballGroup;
+  // Core sphere child — the mesh whose material is swapped by power-ups
+  // (iron ball, chrome, gold, etc.) and whose emissive is used by OOB/jump flashes.
+  G.ballMesh = ballGroup.children.find(c => c.userData && c.userData.isSkinBall) || ballGroup.children[0];
+
+  // Outline targets: only the core ballMesh (unless the skin opts out, e.g.
+  // the transparent gem skin flags itself skipOutline), plus course meshes.
+  if(outlinePass) {
+    const targets = [];
+    if(G.ballMesh && !(G.ballMesh.userData && G.ballMesh.userData.skipOutline)) targets.push(G.ballMesh);
+    if(G.courseGroup) G.courseGroup.traverse(o => { if(o.isMesh) targets.push(o); });
     outlinePass.selectedObjects = targets;
   }
 
@@ -5373,6 +6809,23 @@ function createBall() {
   sm.position.y = 0.01;
   scene.add(sm);
   G.ballShadow = sm;
+
+  // Hat — scene sibling, NOT a child of the ball group. Per-frame update
+  // copies G.ball.position but leaves G.hat.rotation at identity so the
+  // hat stays upright while the ball rolls.
+  const hatDef = (typeof HATS !== 'undefined' && meta.equippedHat) ? HATS.find(h => h.id === meta.equippedHat) : null;
+  if(hatDef) {
+    const hatGroup = hatDef.build();
+    scene.add(hatGroup);
+    G.hat = hatGroup;
+  } else {
+    G.hat = null;
+  }
+
+  // Reset ball-rotation tracking so the first frame of a new hole doesn't
+  // compute a big delta against the previous hole's end position.
+  G._lastBallX = undefined;
+  G._lastBallZ = undefined;
 }
 
 // ── Aim arrow ─────────────────────────────────────────
@@ -5699,7 +7152,7 @@ function updatePhysics(dt) {
   if(G._jumpPending && !G.inHole) {
     G._jumpPending = false;
   G._jumpPreloaded = false;
-  if(G.ball && G._jumpPreloadOrigEmissive && G.ball.material && G.ball.material.emissive) { G.ball.material.emissive.copy(G._jumpPreloadOrigEmissive); G._jumpPreloadOrigEmissive = null; }
+  if(G.ball && G._jumpPreloadOrigEmissive && G.ballMesh.material && G.ballMesh.material.emissive) { G.ballMesh.material.emissive.copy(G._jumpPreloadOrigEmissive); G._jumpPreloadOrigEmissive = null; }
     G.ballVel.y = 6.38;
     G.rolling = true;
     G.rollingSlowTimer = 0;
@@ -5919,9 +7372,38 @@ function updatePhysics(dt) {
       G._wasOOB = true;
       G._oobWasGhost = G.ghostBallActive;
       G._oobWasJump = G._jumpAirborne;
+      G._oobComboTimer = 0;  // v0.19j — OOB combo starts ticking
     }
+    // Accumulate time-out-of-bounds for the combo payout (v0.19j)
+    G._oobComboTimer = (G._oobComboTimer || 0) + dt;
   } else if(!isOutside && G._wasOOB) {
-    // Just re-entered bounds — award style points!
+    // Just re-entered bounds — award style points + OOB combo bonus (v0.19j)
+    const oobSecs = G._oobComboTimer || 0;
+    if(oobSecs > 0.35) {  // short OOBs don't count — avoids scraping rewards from tiny nicks
+      // Growing reward: 5 coins/sec baseline + superlinear bonus for longer OOBs.
+      // 1s → 7, 2s → 16, 3s → 27, 4s → 40, 5s → 54 — scales fast enough to matter.
+      const oobCoins = Math.floor(oobSecs * 5 + Math.pow(oobSecs, 1.6) * 2);
+      if(oobCoins > 0) {
+        G.coins += oobCoins;
+        updateCoinHUD();
+        // Style juice scales with seconds too
+        for(let k=0;k<Math.min(5, Math.floor(oobSecs)+1);k++) recordStyleEvent('trick_shot');
+        const tier = oobSecs < 1.5 ? '🎪' : oobSecs < 3 ? '🎪🔥' : oobSecs < 5 ? '🎪💥🔥' : '👑💥🔥';
+        showToast(`${tier} OOB COMBO! +${oobCoins} (${oobSecs.toFixed(1)}s)`, 1800);
+        triggerShake(oobSecs < 2 ? 'med' : 'heavy');
+        if(AC) {
+          const ac = getAC(), t0 = ac.currentTime;
+          const o = ac.createOscillator(); o.type = 'triangle';
+          o.frequency.setValueAtTime(300, t0);
+          o.frequency.exponentialRampToValueAtTime(900 + oobSecs*80, t0+0.25);
+          const g = ac.createGain();
+          g.gain.setValueAtTime(0.28, t0);
+          g.gain.exponentialRampToValueAtTime(0.001, t0+0.35);
+          o.connect(g); g.connect(getACDest());
+          o.start(t0); o.stop(t0+0.35);
+        }
+      }
+    }
     if(G._oobWasGhost) {
       recordStyleEvent('ghost_oob');
       showToast('👻 GHOST SHORTCUT! 🔥', 1500);
@@ -5935,6 +7417,7 @@ function updatePhysics(dt) {
     G._wasOOB = false;
     G._oobWasGhost = false;
     G._oobWasJump = false;
+    G._oobComboTimer = 0;
   }
 
   // Ghost ball: immune to OOB penalty
@@ -5945,11 +7428,17 @@ function updatePhysics(dt) {
     // During grace: show countdown UI and flash ball red at increasing frequency.
     if(!G._oobGraceTimer) G._oobGraceTimer = 0;
     G._oobGraceTimer += dt;
-    const OOB_GRACE = G.modifiers.some(m=>m.id==='off_roading') ? 10.0 : 1.5;
+    // v0.18a: baseline OOB grace from difficulty mods (1.5s at ★1-7, 1.0s at ★8+).
+    // Off-Roading perk still overrides everything to 10s regardless of difficulty.
+    const baseGrace = (G._diffMods && G._diffMods.oobGrace) || 1.5;
+    const OOB_GRACE = G.modifiers.some(m=>m.id==='off_roading') ? 10.0 : baseGrace;
     if(G._oobGraceTimer < OOB_GRACE) {
-      // Still in grace period — apply heavy friction but don't reset yet
-      G.ballVel.x *= 0.97;
-      G.ballVel.z *= 0.97;
+      // Still in grace period — apply heavy friction but don't reset yet.
+      // v0.19j: with Off-Roading, friction loss reduced by ~3× so trick shots
+      // through the rough stay fast and reachable (0.03 loss → 0.01 loss per substep).
+      const oobFric = G.modifiers.some(m=>m.id==='off_roading') ? 0.99 : 0.97;
+      G.ballVel.x *= oobFric;
+      G.ballVel.z *= oobFric;
       // UI: show the countdown number (counts down from 1.5 to 0)
       const remaining = OOB_GRACE - G._oobGraceTimer;
       const tEl = document.getElementById('oob-timer');
@@ -5960,15 +7449,15 @@ function updatePhysics(dt) {
       }
       // Ball flash: emissive red, frequency accelerates as timer runs out.
       // progress 0→1 over grace period; flash freq 4Hz→20Hz; intensity 0.3→1.0.
-      if(G.ball && G.ball.material && G.ball.material.emissive) {
+      if(G.ballMesh && G.ballMesh.material && G.ballMesh.material.emissive) {
         const progress = G._oobGraceTimer / OOB_GRACE;
         const freq = 4 + progress * 16;
         const phase = Math.sin(G._oobGraceTimer * freq * Math.PI * 2);
         const strobeOn = phase > 0;
         const intensity = strobeOn ? (0.3 + progress * 0.7) : 0;
-        G.ball.material.emissive.setRGB(intensity, 0, 0);
-        if(G.ball.material.emissiveIntensity !== undefined) {
-          G.ball.material.emissiveIntensity = 1.0;
+        G.ballMesh.material.emissive.setRGB(intensity, 0, 0);
+        if(G.ballMesh.material.emissiveIntensity !== undefined) {
+          G.ballMesh.material.emissiveIntensity = 1.0;
         }
       }
     } else {
@@ -5976,8 +7465,8 @@ function updatePhysics(dt) {
     // Clear OOB UI and ball flash before splash
     const tEl = document.getElementById('oob-timer');
     if(tEl) tEl.style.display = 'none';
-    if(G.ball && G.ball.material && G.ball.material.emissive) {
-      G.ball.material.emissive.setRGB(0, 0, 0);
+    if(G.ballMesh && G.ballMesh.material && G.ballMesh.material.emissive) {
+      G.ballMesh.material.emissive.setRGB(0, 0, 0);
     }
     spawnSplash(G.ballPos);
     if(G.ball) G.ball.visible = false;
@@ -6002,8 +7491,8 @@ function updatePhysics(dt) {
     if(G._oobGraceTimer > 0) {
       const tEl = document.getElementById('oob-timer');
       if(tEl) tEl.style.display = 'none';
-      if(G.ball && G.ball.material && G.ball.material.emissive) {
-        G.ball.material.emissive.setRGB(0, 0, 0);
+      if(G.ballMesh && G.ballMesh.material && G.ballMesh.material.emissive) {
+        G.ballMesh.material.emissive.setRGB(0, 0, 0);
       }
     }
     G._oobGraceTimer = 0;
@@ -6422,12 +7911,13 @@ function updatePhysics(dt) {
         spawnHitParticles(G.ballPos);
         triggerShake('heavy');
         if(AC) sfxBounce(Math.max(5, Math.hypot(G.ballVel.x, G.ballVel.z)));
-        // Spike damage (v0.17x: 1 HP per hit; Phase 2 will add tiered damage)
+        // Spike damage (v0.18a: scales 1→2 HP at 7★+)
         if(spike.squashT <= 0) {
           spike.squashT = 1.0;
-          applyDamage(1, 'spike');
-          spawnHpDamagePopup(1);
-          showToast('🔺 OUCH! -1 HP', 1200);
+          const spikeDmg = (G._diffMods && G._diffMods.spikeDmg) || 1;
+          applyDamage(spikeDmg, 'spike');
+          spawnHpDamagePopup(spikeDmg);
+          showToast(`🔺 OUCH! -${spikeDmg} HP`, 1200);
           G._holeHazardsTouched.spikes = (G._holeHazardsTouched.spikes||0) + 1;
           // Spike blows up on contact — explosion VFX + remove from play
           spike._destroyed = true;
@@ -6990,7 +8480,7 @@ function updatePhysics(dt) {
       G._ghostTimer = 0;
       if(G.ball) {
         const pColor = isMultiplayer() ? G.players[G.currentPlayer].color : 0xffffff;
-        G.ball.material = new THREE.MeshStandardMaterial({color:pColor, roughness:0.15, metalness:0.05});
+        G.ballMesh.material = new THREE.MeshStandardMaterial({color:pColor, roughness:0.15, metalness:0.05});
       }
       showToast('👻 Ghost faded!', 1000);
       ghostHud.style.opacity = '0';
@@ -7152,8 +8642,10 @@ function updatePhysics(dt) {
     if(hDist < 0.6) {
       hpk.collected = true;
       if(hpk.mesh && G.courseGroup) G.courseGroup.remove(hpk.mesh);
-      applyHeal(2, 'lot_of_heart_pickup');
-      showToast('💝 +2 HP!', 1500);
+      // v0.18a: heals reduced by 1 at ★9+ (healReduction modifier).
+      const heartHeal = Math.max(1, 2 - ((G._diffMods && G._diffMods.healReduction) || 0));
+      applyHeal(heartHeal, 'lot_of_heart_pickup');
+      showToast(`💝 +${heartHeal} HP!`, 1500);
       triggerShake('light');
       if(AC) { for(let k=0;k<3;k++) setTimeout(()=>sfxCoinPickup(k+10),k*100); }
       updateUI();
@@ -7277,7 +8769,7 @@ function updatePhysics(dt) {
           // Reset ball material from chrome back to normal
           if(G.ball) {
             const pColor = isMultiplayer() ? G.players[G.currentPlayer].color : 0xffffff;
-            G.ball.material = new THREE.MeshStandardMaterial({color:pColor, roughness:0.15, metalness:0.05});
+            G.ballMesh.material = new THREE.MeshStandardMaterial({color:pColor, roughness:0.15, metalness:0.05});
           }
         }
         G._ironBallActive = false;
@@ -7361,7 +8853,7 @@ function updatePhysics(dt) {
           G.ghostBallActive = false;
           if(G.ball) {
             const pColor = isMultiplayer() ? G.players[G.currentPlayer].color : 0xffffff;
-            G.ball.material = new THREE.MeshStandardMaterial({color:pColor, roughness:0.15, metalness:0.05});
+            G.ballMesh.material = new THREE.MeshStandardMaterial({color:pColor, roughness:0.15, metalness:0.05});
           }
         }
         // Refresh ghost ball availability for next shot if perk still owned
@@ -7390,11 +8882,11 @@ function resetToLastShot() {
   // Defensive: ensure OOB timer UI and ball flash are cleared on any reset path
   const _oobEl = document.getElementById('oob-timer');
   if(_oobEl) _oobEl.style.display = 'none';
-  if(G.ball && G.ball.material && G.ball.material.emissive) {
-    G.ball.material.emissive.setRGB(0, 0, 0);
+  if(G.ballMesh && G.ballMesh.material && G.ballMesh.material.emissive) {
+    G.ballMesh.material.emissive.setRGB(0, 0, 0);
   }
   G._oobGraceTimer = 0;
-  // Clean up any three-ball clones — main ball OOB ends the three-balls round
+  G._oobComboTimer = 0;  // v0.19j — reset combo timer on penalty reset too
   if(G._threeBalls) {
     for(const tb of G._threeBalls) if(tb.mesh) scene.remove(tb.mesh);
     G._threeBalls = null;
@@ -7442,9 +8934,9 @@ function resetToLastShot() {
   G._catapultLaunchGrace = false;
   G._jumpPreloadLaunchGrace = false;
   // Restore normal ball visual if iron ball was active
-  if(G.ball && G.ball._origMat) {
-    G.ball.material = G.ball._origMat;
-    G.ball._origMat = null;
+  if(G.ballMesh && G.ballMesh._origMat) {
+    G.ballMesh.material = G.ballMesh._origMat;
+    G.ballMesh._origMat = null;
   }
   aimManualOverride = false;
   syncAimToCamera();
@@ -8344,12 +9836,22 @@ function calcHoleEarnings(strokes, par, coinsPickedUp, wallCoins = 0) {
     total += wallCoins;
   }
 
-  // Score bonus (doubled for under-par)
+  // Score bonus: under-par pays 10 coins per stroke under (v0.19j — scales with par)
+  // Par-5 HIO = 40, Par-4 eagle = 20, Par-3 birdie = 20, etc.
   let scoreBonus = 0;
-  if(strokes === 1)        { scoreBonus = 16; rows.push({ label:'🏆 Hole in One!',  amount: scoreBonus }); }
-  else if(diff <= -2)      { scoreBonus = 10; rows.push({ label:'🦅 Eagle bonus',   amount: scoreBonus }); }
-  else if(diff === -1)     { scoreBonus = 6;  rows.push({ label:'🐦 Birdie bonus',  amount: scoreBonus }); }
-  else if(diff === 0)      { scoreBonus = 1;  rows.push({ label:'⛳ Par bonus',      amount: scoreBonus }); }
+  const underPar = par - strokes;  // positive when under par
+  if(underPar > 0) {
+    scoreBonus = underPar * 10;
+    let label;
+    if(strokes === 1)       label = `🏆 Hole in One! (${underPar} under)`;
+    else if(underPar >= 3)  label = `👑 ${underPar} UNDER PAR!`;
+    else if(underPar === 2) label = `🦅 Eagle bonus (2 under)`;
+    else                    label = `🐦 Birdie bonus (1 under)`;
+    rows.push({ label, amount: scoreBonus });
+  } else if(diff === 0) {
+    scoreBonus = 1;
+    rows.push({ label:'⛳ Par bonus', amount: scoreBonus });
+  }
   total += scoreBonus;
 
   // Hot streak (requires perk)
@@ -8382,6 +9884,9 @@ function calcHoleEarnings(strokes, par, coinsPickedUp, wallCoins = 0) {
     // Showboat perk: multiply style coin bonus
     const showboatStacks = G.modifiers.filter(m=>m.id==='showboat').length;
     if(showboatStacks > 0) styleBonus = Math.ceil(styleBonus * (1 + showboatStacks * 0.5)); // +50% per stack (1.5×, 2.0×, 2.5×, …)
+    // v0.18a: difficulty styleMult boosts style bonus at higher stars.
+    const styleMult = (G._diffMods && G._diffMods.styleMult) || 1.0;
+    if(styleMult > 1.0) styleBonus = Math.ceil(styleBonus * styleMult);
     rows.push({ label:`🎯 Style Bonus! (+${styleScore.toLocaleString()} this hole)`, amount: styleBonus });
     total += styleBonus;
     coinsStyleBonus = styleBonus;
@@ -8408,6 +9913,19 @@ function calcHoleEarnings(strokes, par, coinsPickedUp, wallCoins = 0) {
     coinsPiggyBankInterest *= 2;
   }
 
+  // v0.18a: difficulty coinMult applied as final multiplier across all earnings.
+  // Only scales if above 1.0 (i.e. ★4+). Adds a visible bonus row so players
+  // see where the extra coins came from — important for "harder = more reward" feel.
+  const coinMult = (G._diffMods && G._diffMods.coinMult) || 1.0;
+  if(coinMult > 1.0 && total > 0) {
+    const bonus = Math.floor(total * (coinMult - 1.0));
+    if(bonus > 0) {
+      const pct = Math.round((coinMult - 1.0) * 100);
+      rows.push({ label:`★ Difficulty bonus (+${pct}%)`, amount: bonus });
+      total += bonus;
+    }
+  }
+
   return { rows, total, coinsStyleBonus, coinsChallengeBonus, coinsStreakBonus, coinsPiggyBankInterest };
 }
 
@@ -8424,6 +9942,8 @@ function applyDamage(amount, reason) {
   G.hp = Math.max(0, G.hp - amount);
   const actual = before - G.hp;
   if(actual <= 0) return 0;
+  // v0.19f: flag HP loss for achievement tracking (transparent skin unlock)
+  G._hpLostThisRun = true;
   // Track per-hole over_par damage so onHoled can compute the residual.
   if(reason === 'over_par') {
     G._damageTakenThisHole = (G._damageTakenThisHole || 0) + actual;
@@ -8463,8 +9983,10 @@ function applyOverParDamageIfNeeded() {
   if(G._lastDamagedAtStroke === G.strokes) return;
   G._lastDamagedAtStroke = G.strokes;
   G._lifeDeductedThisHole = true;
-  applyDamage(1, 'over_par');
-  spawnHpDamagePopup(1);
+  // v0.18a: scale over-par damage by difficulty (1 at ★1-4, 2 at ★5+).
+  const dmg = (G._diffMods && G._diffMods.overParDmg) || 1;
+  applyDamage(dmg, 'over_par');
+  spawnHpDamagePopup(dmg);
 }
 window.applyOverParDamageIfNeeded = applyOverParDamageIfNeeded;
 
@@ -8585,6 +10107,16 @@ function onHoled() {
   const d = G.strokes - G.par;
   const scoreLabel = d <= -2 ? 'eagle' : d === -1 ? 'birdie' : d === 0 ? 'par' : 'bogey';
 
+  // ── XP award for hole completion (v0.19e) ──
+  // +5 base for finishing any hole, plus a bonus based on score quality.
+  // HIO (strokes===1) supersedes eagle which supersedes birdie — NOT additive
+  // across tiers, additive with the base.
+  let holeXp = 5;
+  if(G.strokes === 1) holeXp += 20;          // hole-in-one
+  else if(d <= -2)    holeXp += 8;           // eagle or better
+  else if(d === -1)   holeXp += 3;           // birdie
+  G.xpThisRun = (G.xpThisRun || 0) + holeXp;
+
   // ── Finalize style score for this shot + hole ────────
   finalizeShot(true);
   // Check end-of-hole challenges (speed_demon, minimalist, clean_run, etc.)
@@ -8693,14 +10225,20 @@ function onHoled() {
   // (v0.17y). This block covers the residual — e.g. if the ball holes on a
   // stroke after crossing par without a stop in between, or holes on the
   // first over-par stroke so the ball-stop path never ran.
-  // Total damage for this hole should equal d (= strokes - par). Compute how
-  // much we've already taken from _damageTakenThisHole and pay the remainder.
-  const totalOwed = Math.max(0, d);
+  // v0.18a: scale owed damage by difficulty overParDmg (1 or 2 per stroke).
+  const overParDmg = (G._diffMods && G._diffMods.overParDmg) || 1;
+  const totalOwed = Math.max(0, d) * overParDmg;
   const alreadyPaid = G._damageTakenThisHole || 0;
   const residual = Math.max(0, totalOwed - alreadyPaid);
   if(residual > 0) {
     applyDamage(residual, 'over_par');
     spawnHpDamagePopup(residual);
+  }
+  // v0.18a: 10★ — every bogey costs an additional flat HP on top of over-par damage.
+  const bogeyExtra = (G._diffMods && G._diffMods.bogeyDmgExtra) || 0;
+  if(bogeyExtra > 0 && d > 0) {
+    applyDamage(bogeyExtra, 'bogey_extra');
+    spawnHpDamagePopup(bogeyExtra);
   }
   G._lifeDeductedThisHole = totalOwed > 0;
   const lifeWasLost = d > 0;
@@ -9085,6 +10623,34 @@ function onSummaryDismiss() {
 window.onSummaryDismiss = onSummaryDismiss;
 
 // ── Pro Shop ──────────────────────────────────────────
+// v0.18a: "hard" perks — perks that change the fundamental run experience in
+// ways that most players will find uncomfortable. At ★8+, the shop is forced
+// to contain at least one of these so players have to engage with the extra
+// difficulty. Not the same as "bad" — these are legitimately interesting
+// mechanics, just demanding ones.
+const HARD_SHOP_PERK_IDS = ['shrink_ray','all_bounce','bowling_ball','three_balls'];
+function maybeForceHardShopPerk() {
+  if(!(G._diffMods && G._diffMods.forcedHardShopCards)) return;
+  if(!Array.isArray(G._shopCurrentPicks) || G._shopCurrentPicks.length === 0) return;
+  // If any pick is already a hard perk, we're good.
+  const hasHard = G._shopCurrentPicks.some(p => HARD_SHOP_PERK_IDS.includes(p.id));
+  if(hasHard) return;
+  // Find a candidate hard perk the player doesn't already own (non-stackable ones).
+  const candidates = HARD_SHOP_PERK_IDS
+    .map(id => ALL_PERKS.find(p => p.id === id))
+    .filter(p => p && (!p.stackable ? !G.modifiers.find(m => m.id === p.id) : true));
+  if(candidates.length === 0) return;
+  // Pick one at random, swap it for the lowest-weight pick so we don't displace
+  // the best pick the shop rolled.
+  const forced = candidates[Math.floor(Math.random() * candidates.length)];
+  let minW = Infinity, minIdx = 0;
+  for(let i = 0; i < G._shopCurrentPicks.length; i++) {
+    const w = G._shopCurrentPicks[i].weight || 1;
+    if(w < minW) { minW = w; minIdx = i; }
+  }
+  G._shopCurrentPicks[minIdx] = forced;
+}
+
 function openShop() {
   // Belt-and-suspenders: ensure Sharpshooter scope is fully cleared before showing shop.
   if(G._sharpshooterActive) exitSharpshooter();
@@ -9094,13 +10660,25 @@ function openShop() {
   // Generate card picks for the card row
   G._shopCardPicks = weightedCardPicks(3);
   G._shopRerolledThisHole = false;
+  // v0.18a: at ★8+, force a "fragile" perk into every shop. Shrink Ray / All Bounce /
+  // Bowling Ball change the run fundamentally — forcing one pressures players to
+  // either embrace the chaos or skip the shop. Adds a visible sign of harder difficulty.
+  maybeForceHardShopPerk();
   // v0.17y5: 1-second grace period before any shop click registers.
   // Prevents accidental purchases from stray taps immediately after the
   // shop pops up (common on mobile after a final putt).
   G._shopOpenTime = performance.now();
   renderShop();
   const sub = document.getElementById('shop-subtitle');
-  if(sub) sub.textContent = `Hole ${G.hole+1} of ${G.totalHoles} complete — spend wisely`;
+  if(sub) {
+    // v0.18a: surface the current difficulty tier so players can see the
+    // active star while deciding what to buy. Only shown on ★4+ where the
+    // rule modifiers start mattering (below that it just clutters).
+    const diffName = (G._diffMods && G._diffMods.name) || '';
+    const star = G.difficulty || 3;
+    const tierLine = star >= 4 ? ` · ★${star} ${diffName}` : '';
+    sub.textContent = `Hole ${G.hole+1} of ${G.totalHoles} complete — spend wisely${tierLine}`;
+  }
   document.getElementById('shop-overlay').classList.add('visible');
 }
 
@@ -9127,8 +10705,8 @@ function weightedCardPicks(count) {
 }
 
 function getScaledCardPrice(card) {
-  const diff = G.difficulty || 1;
-  const rate = diff <= 2 ? 0.1 : diff === 3 ? 0.2 : diff === 4 ? 0.25 : 0.3;
+  // v0.18a: shop rate from difficulty mods (0.10 at ★1-2 → 0.30 at ★6+)
+  const rate = (G._diffMods && G._diffMods.shopRate) || 0.15;
   // v0.17x4: base inflation 1.5 → 1.4 per tuning sheet
   return Math.max(1, Math.round(card.price * 1.4 * (1 + G.hole * rate) * PRICE_MULTIPLIER));
 }
@@ -9180,6 +10758,9 @@ function rerollShop() {
   G._shopCurrentPicks = weightedShopPicks(filteredPool.length >= count ? filteredPool : ALL_PERKS, count);
   // Also reroll card picks
   G._shopCardPicks = weightedCardPicks(3);
+  // v0.18a: re-apply forced hard perk after reroll so ★8+ players can't just
+  // reroll their way out of the difficulty modifier.
+  maybeForceHardShopPerk();
   renderShop();
   if(AC) { for(let k=0;k<2;k++) setTimeout(()=>sfxCoinPickup(),k*80); }
 }
@@ -9213,8 +10794,8 @@ function weightedShopPicks(pool, count) {
 function getScaledPrice(perk) {
   // Base prices inflated, then scale per hole, then global PRICE_MULTIPLIER
   // v0.17x4: base inflation 1.5 → 1.4 per tuning sheet
-  const diff = G.difficulty || 1;
-  const rate = diff <= 2 ? 0.1 : diff === 3 ? 0.2 : diff === 4 ? 0.25 : 0.3;
+  // v0.18a: shop rate from difficulty mods
+  const rate = (G._diffMods && G._diffMods.shopRate) || 0.15;
   const base = Math.max(1, Math.round(perk.price * 1.4 * (1 + G.hole * rate) * PRICE_MULTIPLIER));
   // Multiplayer: 50% off — coins are split across players
   return isMultiplayer() ? Math.max(1, Math.round(base * 0.5)) : base;
@@ -9361,6 +10942,8 @@ window.buyPerk = function(id) {
   G.coins -= scaledPrice;
   trackStat('coinsSpent', scaledPrice);
   G.modifiers.push({ ...perk });
+  // v0.19f: track perks-bought for pineapple-hat achievement
+  G._perksBoughtThisRun = (G._perksBoughtThisRun || 0) + 1;
   applyPerkEffect(perk.id);
   updateHandUI();
   updateCoinHUD();
@@ -9377,9 +10960,10 @@ window.buyPerk = function(id) {
 
 // ── Card Removal — every 3 holes ─────────────────────
 function getCardRemovePrice() {
-  const diff = G.difficulty || 1;
-  const rate = diff <= 2 ? 0.1 : diff === 3 ? 0.2 : diff === 4 ? 0.25 : 0.3;
-  return Math.max(1, Math.round(20 * 1.5 * (1 + G.hole * rate) * PRICE_MULTIPLIER));
+  // v0.18a: shop rate from difficulty mods; cardRemoveCostMult doubles cost at 7★+.
+  const rate = (G._diffMods && G._diffMods.shopRate) || 0.15;
+  const mult = (G._diffMods && G._diffMods.cardRemoveCostMult) || 1.0;
+  return Math.max(1, Math.round(20 * 1.5 * (1 + G.hole * rate) * PRICE_MULTIPLIER * mult));
 }
 
 function openCardRemoval() {
@@ -10175,7 +11759,7 @@ const CARD_DEFS = {
   reverse:      { id:'reverse',      emoji:'⏪', name:'Reverse',         desc:'Instantly reverse the ball\'s direction. Full speed.',             rarity:'common',    price:10,  context:'during', holdable:false },
   portal_pair:  { id:'portal_pair',  emoji:'🕳️', name:'Portal Pair',     desc:'Place two portals. Ball enters one, exits the other.',            rarity:'legendary', price:30,  context:'pre',    holdable:false },
   freeze_frame: { id:'freeze_frame', emoji:'🧊', name:'Freeze Frame',    desc:'All moving obstacles freeze for 10 seconds.',                    rarity:'rare',      price:11,  context:'any',    holdable:false, weight:3 },
-  coin_shower:  { id:'coin_shower',  emoji:'🌧️', name:'Coin Shower',     desc:'Spawn 15-20 coins across the course. Includes a 5× coin!',       rarity:'rare',      price:18,  context:'pre',    holdable:false },
+  coin_shower:  { id:'coin_shower',  emoji:'🌧️', name:'Coin Shower',     desc:'Drop 20 coins in a line ahead of your ball. Clean line = bonus 5× coin!', rarity:'rare',      price:18,  context:'pre',    holdable:false },
   // golden_path hidden — may revisit later
   // golden_path:  { id:'golden_path',  emoji:'🔦', name:'Golden Path',     desc:'Reveals the optimal line to the hole. Fades after one swing.',    rarity:'common',    price:10,  context:'pre',    holdable:false },
   angler:       { id:'angler',       emoji:'📐', name:'Angler',          desc:'This swing: shows predicted bounce lines off walls.',              rarity:'rare',      price:14,  context:'pre',    holdable:false },
@@ -10690,7 +12274,7 @@ function deactivateGhostBall() {
   G._ghostTimer = 0;
   if(G.ball) {
     const pColor = isMultiplayer() ? G.players[G.currentPlayer].color : 0xffffff;
-    G.ball.material = new THREE.MeshStandardMaterial({color:pColor, roughness:0.15, metalness:0.05});
+    G.ballMesh.material = new THREE.MeshStandardMaterial({color:pColor, roughness:0.15, metalness:0.05});
   }
   showToast('👻 Ghost off!', 800);
   updateHandUI();
@@ -11020,7 +12604,7 @@ function activateWalkiesCard() {
   trackStat('walkiesUsed', 1);
   showToast('🦵 Walkies! 10s — tap anywhere or use WASD', 1200);
   if(G.ball) {
-    G.ball.material = new THREE.MeshStandardMaterial({color:0xffcc44, roughness:0.3, metalness:0.1});
+    G.ballMesh.material = new THREE.MeshStandardMaterial({color:0xffcc44, roughness:0.3, metalness:0.1});
   }
   // Sprout goofy legs
   if(G.ball && !G._walkieLegs) {
@@ -11054,7 +12638,7 @@ function activateWalkiesCard() {
 
 function applyIronBallVisual() {
   if(G.ball) {
-    G.ball.material = new THREE.MeshStandardMaterial({color:0xcccccc, roughness:0.05, metalness:1.0});
+    G.ballMesh.material = new THREE.MeshStandardMaterial({color:0xcccccc, roughness:0.05, metalness:1.0});
   }
 }
 
@@ -11370,8 +12954,8 @@ function fireSharpshooterBall() {
   if(G._jumpPreloaded) {
     G.ballVel.y = Math.max(G.ballVel.y, G.ballVel.y + 6.38);
     G._jumpPreloaded = false;
-    if(G.ball && G._jumpPreloadOrigEmissive && G.ball.material && G.ball.material.emissive) {
-      G.ball.material.emissive.copy(G._jumpPreloadOrigEmissive);
+    if(G.ball && G._jumpPreloadOrigEmissive && G.ballMesh.material && G.ballMesh.material.emissive) {
+      G.ballMesh.material.emissive.copy(G._jumpPreloadOrigEmissive);
       G._jumpPreloadOrigEmissive = null;
     }
     recordStyleEvent('jump');
@@ -11466,30 +13050,72 @@ function activateFreezeFrame() {
 
 function activateCoinShower() {
   if(!G.courseGroup) return;
-  const fairCells = [];
-  for(let gy=0; gy<G.gridH; gy++) for(let gx=0; gx<G.gridW; gx++) {
-    if(G.grid[gy]?.[gx]===1) fairCells.push({x:gx,y:gy});
+  // v0.19j rewrite: straight-line shower along the aim arrow.
+  // 20 regular coins spaced ahead of the ball + a single 5× bonus coin at the end,
+  // but ONLY if every coin in the line landed in-bounds (fairway). If the line
+  // clips OOB or an obstacle column, we stop placing and skip the bonus coin.
+  // Each coin falls from the sky with a staggered delay and squashes on impact.
+
+  // Safe shotDir fallback — mirrors missile/boulder logic
+  let dirX, dirZ;
+  if(G.shotDir && G.shotDir.length() > 0.01) {
+    dirX = G.shotDir.x; dirZ = G.shotDir.z;
+  } else {
+    dirX = -Math.sin(G.camTheta || 0); dirZ = -Math.cos(G.camTheta || 0);
   }
-  const count = 15 + Math.floor(Math.random() * 6);
-  let placed5x = false;
+  const dirLen = Math.hypot(dirX, dirZ) || 1;
+  dirX /= dirLen; dirZ /= dirLen;
+
+  const LINE_COUNT   = 20;      // regular coins
+  const SPACING      = 1.1;     // world-units between coins
+  const START_OFFSET = 1.0;     // distance in front of ball where the line begins
+  const SKY_HEIGHT   = 14;      // how high coins spawn
+  const DROP_MS      = 420;     // fall duration per coin
+  const STAGGER_MS   = 55;      // delay between consecutive coins landing
+
   const coinGeo = new THREE.CylinderGeometry(0.14, 0.14, 0.04, 8);
   const coinMat = new THREE.MeshStandardMaterial({color:0xffd700, roughness:0.15, metalness:0.9, emissive:0xaa8800, emissiveIntensity:0.3});
   const glowMat = new THREE.MeshStandardMaterial({color:0xffd700, emissive:0xffaa00, emissiveIntensity:2.0, transparent:true, opacity:0.35, roughness:1, metalness:0, depthWrite:false});
 
-  for(let i = 0; i < count && fairCells.length > 0; i++) {
-    const idx = Math.floor(Math.random() * fairCells.length);
-    const cell = fairCells[idx];
-    const wx = cell.x * TILE_SIZE + (Math.random()-0.5)*1.2;
-    const wz = cell.y * TILE_SIZE + (Math.random()-0.5)*1.2;
-    const terrY = G.heightMap[cell.y]?.[cell.x] || 0;
-    const cy = terrY + FLOOR_H/2 + 0.28;
-    const isSpecial = !placed5x && i === Math.floor(count/2);
+  // Walk the line, place coins only while still in fairway; break on OOB.
+  let placed = 0;
+  let lineClean = true;  // false if we hit OOB before reaching the end
+  let lastValidIdx = -1;
+  const placements = [];
+  for(let i = 0; i < LINE_COUNT; i++) {
+    const dist = START_OFFSET + i * SPACING;
+    const wx = G.ballPos.x + dirX * dist;
+    const wz = G.ballPos.z + dirZ * dist;
+    const cell = getCell(wx, wz);
+    if(cell !== CELL.FAIR) { lineClean = false; break; }
+    placements.push({ wx, wz, idx: i });
+    lastValidIdx = i;
+  }
+
+  // If the line made it all 20 deep, append a 5× bonus coin one spacing further
+  const wantBonus = lineClean && placements.length === LINE_COUNT;
+  if(wantBonus) {
+    const dist = START_OFFSET + LINE_COUNT * SPACING;
+    const wx = G.ballPos.x + dirX * dist;
+    const wz = G.ballPos.z + dirZ * dist;
+    const cell = getCell(wx, wz);
+    if(cell === CELL.FAIR) {
+      placements.push({ wx, wz, idx: LINE_COUNT, isSpecial: true });
+    }
+  }
+
+  // Spawn each coin, initially high in the sky + invisible, with a drop timer.
+  // The existing coin animation loop will drive the fall via _dropTimer + _landingSquash.
+  for(const p of placements) {
+    const terrY = G.heightMap.length ? getTerrainHeight(p.wx, p.wz) : 0;
+    const restY = terrY + FLOOR_H/2 + 0.28;
+    const isSpecial = !!p.isSpecial;
     const coinScale = isSpecial ? 1.6 : 1.0;
 
-    // Pivot group
     const pivot = new THREE.Group();
-    pivot.position.set(wx, cy, wz);
+    pivot.position.set(p.wx, restY + SKY_HEIGHT, p.wz);
     pivot.userData.noOutline = true;
+    pivot.visible = false;  // hidden until drop timer starts
     const cMat = isSpecial
       ? new THREE.MeshStandardMaterial({color:0xffeedd, roughness:0.01, metalness:1.0, emissive:0xffcc44, emissiveIntensity:1.2})
       : coinMat.clone();
@@ -11500,29 +13126,53 @@ function activateCoinShower() {
     pivot.add(m);
     G.courseGroup.add(pivot);
 
-    // Glow disc
     const glowG = new THREE.CylinderGeometry(0.32 * coinScale, 0.32 * coinScale, 0.02, 16);
     const glowClone = glowMat.clone();
     if(isSpecial) { glowClone.emissiveIntensity = 3.0; glowClone.opacity = 0.7; }
     const glowM = new THREE.Mesh(glowG, glowClone);
     glowM.rotation.x = Math.PI / 2;
-    glowM.position.set(wx, cy - 0.01, wz);
+    glowM.position.set(p.wx, restY - 0.01, p.wz);
+    glowM.visible = false;
     glowM.userData.noOutline = true;
     G.courseGroup.add(glowM);
 
-    G.coinMeshes.push({
+    const coinObj = {
       pivot, mesh: m, glowMesh: glowM,
-      wx, wz, collected: false,
+      wx: p.wx, wz: p.wz, collected: false,
       bobOffset: Math.random() * Math.PI * 2,
       spinSpeed: isSpecial ? 5.5 : 4.0 + Math.random() * 1.2,
       value: isSpecial ? 5 : 1,
       isSpecial,
-    });
-    if(isSpecial) placed5x = true;
+      // v0.19j drop/squash state
+      _dropDelay: (p.idx * STAGGER_MS) / 1000,  // seconds until it starts falling
+      _dropProgress: 0,                         // 0 → 1 during fall
+      _dropDuration: DROP_MS / 1000,
+      _dropStartY: restY + SKY_HEIGHT,
+      _dropEndY: restY,
+      _landingSquash: 0,                        // 0 = none, starts at 1 on impact, decays
+    };
+    G.coinMeshes.push(coinObj);
   }
-  showToast('🌧️ Coin Shower! +' + count + ' coins!', 1500);
-  triggerShake('light');
-  if(AC) { for(let k=0;k<5;k++) setTimeout(()=>sfxCoinPickup(k),k*60); }
+
+  // Toast + SFX feedback — tie messaging to actual coins placed
+  const regularCount = placements.filter(p => !p.isSpecial).length;
+  if(wantBonus && placements.length > LINE_COUNT) {
+    showToast(`🌧️ COIN SHOWER! +${regularCount} + 5× bonus!`, 1800);
+    triggerShake('med');
+  } else if(lineClean) {
+    showToast(`🌧️ Coin Shower! +${regularCount} coins`, 1500);
+    triggerShake('light');
+  } else {
+    showToast(`🌧️ Coin Shower cut short! +${regularCount} (aim away from walls!)`, 1800);
+    triggerShake('light');
+  }
+  // Staggered landing blips — match visual cadence
+  if(AC) {
+    const n = Math.min(placements.length, 10);
+    for(let k = 0; k < n; k++) {
+      setTimeout(() => sfxCoinPickup(k), (placements[k].idx * STAGGER_MS) + DROP_MS);
+    }
+  }
 }
 
 function activateGoldenPath() {
@@ -11629,9 +13279,9 @@ function triggerJump() {
       o.connect(g); g.connect(getACDest()); o.start(t); o.stop(t+0.26);
     }
     // Light-green tint on ball to signal primed state (restored on launch)
-    if(G.ball && G.ball.material && G.ball.material.emissive) {
-      G._jumpPreloadOrigEmissive = G.ball.material.emissive.clone();
-      G.ball.material.emissive.setRGB(0.2, 0.55, 0.2);
+    if(G.ballMesh && G.ballMesh.material && G.ballMesh.material.emissive) {
+      G._jumpPreloadOrigEmissive = G.ballMesh.material.emissive.clone();
+      G.ballMesh.material.emissive.setRGB(0.2, 0.55, 0.2);
     }
     updateHandUI();
     return;
@@ -11978,7 +13628,7 @@ function spawnFloombaFromCard() {
   G._floombas.push({
     mesh: fbGroup, pos: new THREE.Vector3(fwx, ftY + FLOOR_H/2 + 0.2, fwz),
     vel: new THREE.Vector3(Math.sin(fAng)*fSpeed, 0, Math.cos(fAng)*fSpeed),
-    _hitSet: new Set(), _flipTimer: 0,
+    _hitSet: new Set(), _flipTimer: 0, _squashTimer: 0, _squashDir: new THREE.Vector3(1,0,0),
   });
   showToast('🤖 Floomba deployed!', 1000);
   triggerShake('light');
@@ -12083,7 +13733,7 @@ function activateGhostBall() {
   G.ghostBallActive = true;
   G._ghostTimer = 4.0; // 4 seconds of ghost mode
   if(G.ball) {
-    G.ball.material = new THREE.MeshToonMaterial({
+    G.ballMesh.material = new THREE.MeshToonMaterial({
       color:0xaaddff, transparent:true, opacity:0.35,
       emissive:0x4488ff, emissiveIntensity:0.4
     });
@@ -12112,9 +13762,14 @@ function applyPerkEffect(id) {
     case 'money_bounce':     /* counted live via modifiers.filter in wall bounce */ break;
     case 'extra_heart':
       // v0.17x: was +1 life (cap 9); now +3 max HP and heal 3.
-      G.hpMax += 3;
-      applyHeal(3, 'extra_heart_perk');
-      updateUI();
+      // v0.18a: at ★9+, heal reduced by 1 (max HP gain unchanged — you still
+      // get the ceiling raise, you just don't top off as much from the perk itself).
+      {
+        const heartHeal = Math.max(1, 3 - ((G._diffMods && G._diffMods.healReduction) || 0));
+        G.hpMax += 3;
+        applyHeal(heartHeal, 'extra_heart_perk');
+        updateUI();
+      }
       break;
     case 'four_choices':
       G.shopPickCount = Math.max(G.shopPickCount || 3, 4);
@@ -12898,7 +14553,7 @@ function onPointerDown(x, y, id) {
     if(G._ironBallActive || G._cannonballActive) {
       if(G.ball) {
         const pColor = isMultiplayer() ? G.players[G.currentPlayer].color : 0xffffff;
-        G.ball.material = new THREE.MeshStandardMaterial({color:pColor, roughness:0.15, metalness:0.05});
+        G.ballMesh.material = new THREE.MeshStandardMaterial({color:pColor, roughness:0.15, metalness:0.05});
       }
     }
     G._ironBallActive = false;
@@ -13093,7 +14748,7 @@ function fireShot() {
       const offX = perpX * i * SPREAD;
       const offZ = perpZ * i * SPREAD;
       const geo = new THREE.SphereGeometry(BALL_R, 12, 8);
-      const mat = G.ball && G.ball.material ? G.ball.material.clone() : new THREE.MeshStandardMaterial({color:0xffffff, roughness:0.15, metalness:0.05});
+      const mat = G.ballMesh && G.ballMesh.material ? G.ballMesh.material.clone() : new THREE.MeshStandardMaterial({color:0xffffff, roughness:0.15, metalness:0.05});
       const mesh = new THREE.Mesh(geo, mat);
       mesh.scale.setScalar(_tbVisualScale);
       mesh.castShadow = true;
@@ -13122,8 +14777,8 @@ function fireShot() {
   if(G._jumpPreloaded) {
     G.ballVel.y = Math.max(G.ballVel.y, 6.38);
     G._jumpPreloaded = false;
-    if(G.ball && G._jumpPreloadOrigEmissive && G.ball.material && G.ball.material.emissive) {
-      G.ball.material.emissive.copy(G._jumpPreloadOrigEmissive);
+    if(G.ball && G._jumpPreloadOrigEmissive && G.ballMesh.material && G.ballMesh.material.emissive) {
+      G.ballMesh.material.emissive.copy(G._jumpPreloadOrigEmissive);
       G._jumpPreloadOrigEmissive = null;
     }
     recordStyleEvent('jump');
@@ -13381,6 +15036,12 @@ window.addEventListener('keydown', e => {
   if(e.key === 'Escape') {
     const debugOpen = document.getElementById('debug-menu').classList.contains('open');
     if(debugOpen) { document.getElementById('debug-menu').classList.remove('open'); return; }
+    // v0.19h: locker overlay closes first (can be opened from main or pause)
+    const lockerOpen = document.getElementById('locker-overlay').classList.contains('open');
+    if(lockerOpen) { closeLocker(); return; }
+    // v0.19g: achievements overlay closes first (can be opened from main or pause)
+    const achOpen = document.getElementById('achievements-overlay').classList.contains('open');
+    if(achOpen) { closeAchievements(); return; }
     const escOpen = document.getElementById('escape-menu').classList.contains('open');
     if(escOpen) { closeEscMenu(); return; }
     // Cancel shot if aiming with power charged
@@ -13445,10 +15106,36 @@ function updateFloombas(dt) {
   if(!G._floombas || !G._floombas.length || G.state !== 'playing' || G.inHole) return;
   const FB_R = 0.6;
   const FB_WALL = (G.biome==='puttputt'?0.25:0.32) + FB_R;
+  // Helper: register a bounce — squash+stretch along vel dir, kick flip animation, play blip
+  // Only squash if the floomba is roughly on-screen (cheap cam-distance gate)
+  const registerBounce = (fb, nx, nz) => {
+    if(camera) {
+      const dx = fb.pos.x - camera.position.x;
+      const dz = fb.pos.z - camera.position.z;
+      const camDist2 = dx*dx + dz*dz;
+      if(camDist2 < 1600) {  // ~40 units — enough to catch anywhere in view
+        fb._squashTimer = 0.22;
+        const vs = Math.hypot(fb.vel.x, fb.vel.z);
+        if(vs > 0.01) fb._squashDir.set(fb.vel.x/vs, 0, fb.vel.z/vs);
+      }
+    }
+    if(AC) {
+      const ac = getAC(), t0 = ac.currentTime;
+      const o = ac.createOscillator(); o.type = 'square';
+      o.frequency.setValueAtTime(420, t0);
+      o.frequency.exponentialRampToValueAtTime(180, t0+0.1);
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.08, t0);
+      g.gain.exponentialRampToValueAtTime(0.001, t0+0.12);
+      o.connect(g); g.connect(getACDest());
+      o.start(t0); o.stop(t0+0.12);
+    }
+  };
   for(const fb of G._floombas) {
     if(!fb.mesh) continue;
     fb.pos.x += fb.vel.x * dt;
     fb.pos.z += fb.vel.z * dt;
+    let bouncedThisFrame = false;
     // Wall SDF collision
     for(const poly of G.wallPolylines) {
       for(let wi=0;wi<poly.length-1;wi++){
@@ -13464,6 +15151,30 @@ function updateFloombas(dt) {
           fb.pos.x+=wnx*(FB_WALL-wdist);fb.pos.z+=wnz*(FB_WALL-wdist);
           const wdot=fb.vel.x*wnx+fb.vel.z*wnz;
           if(wdot<0){fb.vel.x-=2*wdot*wnx;fb.vel.z-=2*wdot*wnz;}
+          if(!bouncedThisFrame) { registerBounce(fb, wnx, wnz); bouncedThisFrame = true; }
+        }
+      }
+    }
+    // v0.19j: Corner-triangle (angled walls) collision — floombas now deflect off
+    // corner deflectors the same way dodgeballs/grenades do. Uses edge.x0/z0/x1/z1.
+    if(G.angledWalls && G.angledWalls.length) {
+      for(const aw of G.angledWalls) {
+        if(aw._destroyed) continue;
+        for(const edge of aw.edges) {
+          const eax=edge.x0, eaz=edge.z0, ebx=edge.x1, ebz=edge.z1;
+          const eex=ebx-eax, eez=ebz-eaz, eLSq=eex*eex+eez*eez;
+          if(eLSq<0.0001) continue;
+          const et=Math.max(0,Math.min(1,((fb.pos.x-eax)*eex+(fb.pos.z-eaz)*eez)/eLSq));
+          const ecx=eax+et*eex, ecz=eaz+et*eez;
+          const edx=fb.pos.x-ecx, edz=fb.pos.z-ecz;
+          const eDist=Math.hypot(edx,edz);
+          if(eDist<FB_WALL && eDist>0.001){
+            const enx=edx/eDist, enz=edz/eDist;
+            fb.pos.x+=enx*(FB_WALL-eDist); fb.pos.z+=enz*(FB_WALL-eDist);
+            const eDot=fb.vel.x*enx+fb.vel.z*enz;
+            if(eDot<0){ fb.vel.x-=2*eDot*enx; fb.vel.z-=2*eDot*enz; }
+            if(!bouncedThisFrame) { registerBounce(fb, enx, enz); bouncedThisFrame = true; }
+          }
         }
       }
     }
@@ -13499,11 +15210,59 @@ function updateFloombas(dt) {
     fb.pos.y = fbTY + FLOOR_H/2 + 0.3;
     fb.mesh.position.copy(fb.pos);
     fb.mesh.rotation.y += dt * 3;
-    // OOB safety
+    // v0.19j: Squash & stretch — scale along travel dir, inverse perpendicular.
+    // Applied after position copy so it doesn't interfere with physics.
+    if(fb._squashTimer > 0) {
+      fb._squashTimer -= dt;
+      const sq = Math.max(0, fb._squashTimer / 0.22);     // 1 → 0 over lifetime
+      const stretch = 1.0 + sq * 0.45;   // along travel
+      const squash  = 1.0 - sq * 0.30;   // perpendicular (+ vertical)
+      // Build a per-frame scale by reading the travel-dir yaw and applying a rotated scale
+      // via non-uniform scaling on the mesh. Cheap approach: rotate a helper quaternion.
+      const yaw = Math.atan2(fb._squashDir.x, fb._squashDir.z);
+      // Apply via parent rotation trick: set scale using cos/sin projection onto X/Z.
+      const cx = Math.cos(yaw), sx = Math.sin(yaw);
+      const sX = Math.abs(sx)*stretch + Math.abs(cx)*squash;
+      const sZ = Math.abs(cx)*stretch + Math.abs(sx)*squash;
+      fb.mesh.scale.set(sX, squash, sZ);
+    } else if(fb.mesh.scale.x !== 1 || fb.mesh.scale.y !== 1) {
+      fb.mesh.scale.set(1, 1, 1);
+    }
+    // v0.19j: OOB safety — proper normal reflection instead of flipping both axes.
+    // Sample cells around current pos to estimate which side of the course we left,
+    // then reflect velocity across that normal. This makes OOB bounces look like
+    // wall bounces (incidence = reflection) instead of reversing direction.
     const fbCell = getCell(fb.pos.x, fb.pos.z);
     if(fbCell === CELL.EMPTY || fbCell === CELL.WALL || fbCell === undefined) {
-      fb.vel.x = -fb.vel.x; fb.vel.z = -fb.vel.z;
-      fb.pos.x += fb.vel.x * 0.5; fb.pos.z += fb.vel.z * 0.5;
+      // Find normal by scanning a small ring of offsets — a normalized vector pointing
+      // away from OOB cells toward fairway cells approximates the boundary normal.
+      let nx = 0, nz = 0, foundInside = false;
+      const PROBE = 1.2;
+      for(let a = 0; a < 8; a++) {
+        const ang = (a / 8) * Math.PI * 2;
+        const px = fb.pos.x + Math.cos(ang) * PROBE;
+        const pz = fb.pos.z + Math.sin(ang) * PROBE;
+        const pc = getCell(px, pz);
+        if(pc === CELL.FAIR) {
+          nx += Math.cos(ang); nz += Math.sin(ang);
+          foundInside = true;
+        }
+      }
+      if(foundInside) {
+        const nl = Math.hypot(nx, nz);
+        if(nl > 0.001) {
+          nx /= nl; nz /= nl;
+          const dot = fb.vel.x * nx + fb.vel.z * nz;
+          if(dot < 0) { fb.vel.x -= 2 * dot * nx; fb.vel.z -= 2 * dot * nz; }
+          // Push back toward fairway so we don't stay stuck OOB
+          fb.pos.x += nx * 0.8; fb.pos.z += nz * 0.8;
+          if(!bouncedThisFrame) { registerBounce(fb, nx, nz); bouncedThisFrame = true; }
+        }
+      } else {
+        // Deep OOB — fall back to direction flip (no fairway visible within probe radius)
+        fb.vel.x = -fb.vel.x; fb.vel.z = -fb.vel.z;
+        fb.pos.x += fb.vel.x * 0.5; fb.pos.z += fb.vel.z * 0.5;
+      }
     }
   }
 }
@@ -13612,7 +15371,7 @@ function endWalkies() {
   // Restore ball material (respecting shrink ray)
   if(G.ball) {
     const pColor = isMultiplayer() ? G.players[G.currentPlayer].color : 0xffffff;
-    G.ball.material = new THREE.MeshStandardMaterial({color:pColor, roughness:0.15, metalness:0.05});
+    G.ballMesh.material = new THREE.MeshStandardMaterial({color:pColor, roughness:0.15, metalness:0.05});
   }
   const baseScale = G.modifiers.some(m=>m.id==='shrink_ray') ? 0.35 : 1.0;
   if(G.ball) G.ball.scale.setScalar(baseScale);
@@ -13983,6 +15742,96 @@ function showGameOver(bustedBudget=false){
   // ── Analytics: persist completed run ──
   try { saveRunData(bustedBudget ? 'lost' : 'won'); } catch(e) { console.warn('saveRunData failed', e); }
 
+  // v0.18a: evaluate difficulty unlock. Run must have reached the final hole
+  // without busting HP; winReq for that star is checked inside the helper.
+  let _newStarThisRun = null;
+  try {
+    if(!bustedBudget && holesPlayed >= (G.totalHoles || 9)) {
+      const newStar = evaluateDifficultyUnlock(G.totalHoles || 9, G.difficulty || 3, {
+        holesPlayed,
+        totalHoles: G.totalHoles || 9,
+        hpRemaining: G.hp,
+        diff, // totalStrokes - totalPar, <0 = under par
+      });
+      if(newStar != null) {
+        _newStarThisRun = newStar;
+        const mods = getDifficultyMods(newStar);
+        // Queue toast after the overlay is visible so it stacks on top.
+        setTimeout(() => {
+          if(typeof showToast === 'function') {
+            showToast(`★ ${newStar} ${mods.name.toUpperCase()} UNLOCKED!`, 3200);
+          }
+          // Celebratory arpeggio SFX
+          if(typeof AC !== 'undefined' && AC) {
+            try {
+              const ac = getAC ? getAC() : AC;
+              const t0 = ac.currentTime;
+              const notes = [523, 659, 784, 1047]; // C E G C (octave)
+              notes.forEach((f, i) => {
+                const o = ac.createOscillator(); o.type = 'triangle';
+                o.frequency.value = f;
+                const g = ac.createGain();
+                g.gain.setValueAtTime(0, t0 + i*0.08);
+                g.gain.linearRampToValueAtTime(0.18, t0 + i*0.08 + 0.02);
+                g.gain.exponentialRampToValueAtTime(0.001, t0 + i*0.08 + 0.35);
+                o.connect(g); g.connect(getACDest ? getACDest() : ac.destination);
+                o.start(t0 + i*0.08); o.stop(t0 + i*0.08 + 0.4);
+              });
+            } catch(e){}
+          }
+        }, 900);
+      }
+    }
+  } catch(e) { console.warn('difficulty unlock eval failed', e); }
+
+  // ── XP deposit + unlock check (v0.19e) ──
+  // Final XP bumps: run outcome + new-star bonus. Deposited into meta.xp,
+  // then any XP-gated cosmetics that just crossed their threshold are
+  // unlocked and toasted. Per-hole XP was already accumulated in onHoled.
+  // v0.19f also bumps meta.totalRuns and runs achievement-based unlocks.
+  try {
+    const endBonus = bustedBudget ? 30 : 100;
+    const starBonus = _newStarThisRun != null ? 50 : 0;
+    G.xpThisRun = (G.xpThisRun || 0) + endBonus + starBonus;
+    const earned = G.xpThisRun;
+    const meta = getMeta();
+    meta.xp = (meta.xp || 0) + earned;
+    // Bump totalRuns BEFORE achievement check so birthday_cake counts
+    // the run that just ended as the 10th.
+    meta.totalRuns = (meta.totalRuns || 0) + 1;
+    const newlyUnlocked = checkXpUnlocks(meta);
+    const achievementUnlocks = checkAchievementUnlocks(meta, {
+      runCompleted: !bustedBudget,
+      runFailed: bustedBudget,
+      diff,
+      hpLost: !!G._hpLostThisRun,
+      perksBought: G._perksBoughtThisRun || 0,
+      holesPlayed,
+      newStar: _newStarThisRun,
+      runLength: G.totalHoles || 9,
+    });
+    // Merge XP + achievement unlocks for a single ordered toast stack.
+    const allUnlocks = newlyUnlocked.concat(achievementUnlocks);
+    setMeta(meta);
+    // Queue XP toast after the overlay is visible. Stacks timing with star toast.
+    setTimeout(() => {
+      if(typeof showToast === 'function' && earned > 0) {
+        showToast(`+${earned} XP`, 2400);
+      }
+    }, 1400);
+    // Queue unlock toasts — one per item, staggered so each reads cleanly.
+    if(allUnlocks.length > 0) {
+      allUnlocks.forEach((item, i) => {
+        setTimeout(() => {
+          if(typeof showToast === 'function') {
+            const cat = item.category === 'hat' ? 'Hat' : 'Skin';
+            showToast(`🎨 New ${cat}: ${cosmeticDisplayName(item.id)}!`, 3200);
+          }
+        }, 2000 + i * 900);
+      });
+    }
+  } catch(e) { console.warn('XP deposit failed', e); }
+
   // Render leaderboard into the game-over overlay
   renderLeaderboardInto('lb-panel-go');
   // Also refresh the main menu leaderboard
@@ -14308,7 +16157,7 @@ function initHole() {
   G.jumpsLeft = G.jumpsMax || 0;
   G._jumpPending = false;
   G._jumpPreloaded = false;
-  if(G.ball && G._jumpPreloadOrigEmissive && G.ball.material && G.ball.material.emissive) { G.ball.material.emissive.copy(G._jumpPreloadOrigEmissive); G._jumpPreloadOrigEmissive = null; }
+  if(G.ball && G._jumpPreloadOrigEmissive && G.ballMesh.material && G.ballMesh.material.emissive) { G.ballMesh.material.emissive.copy(G._jumpPreloadOrigEmissive); G._jumpPreloadOrigEmissive = null; }
   G._shotJustFired = 0;
   G.shooterAmmo   = G.modifiers.filter(m => m.id === 'shooter').length;
   G.grenadeAmmo   = G.modifiers.filter(m => m.id === 'grenade').length;
@@ -14682,6 +16531,319 @@ function openEscMenu() {
 function closeEscMenu() {
   document.getElementById('escape-menu').classList.remove('open');
 }
+
+// ── Achievements screen (v0.19g) ──
+// Shown from the main menu and from the pause menu. Lists condition-based
+// cosmetic unlocks (achievement + prestige) with their current status.
+// XP-gated cosmetics are NOT shown here — they'll live in the Locker Room
+// (M1.8) where the XP bar gives their pacing context.
+function renderAchievementsList() {
+  const list = document.getElementById('ach-list');
+  const progressEl = document.getElementById('ach-progress');
+  if(!list) return;
+  const meta = getMeta();
+  const owned = (meta.unlocks && meta.unlocks.cosmetics) || [];
+  const totalAch = ACHIEVEMENT_DEFS.length;
+  let unlockedAch = 0;
+  for(const a of ACHIEVEMENT_DEFS) if(owned.includes(a.id)) unlockedAch++;
+  if(progressEl) progressEl.textContent = `${unlockedAch} / ${totalAch} unlocked`;
+
+  // Render grouped by category: achievements first, then prestige
+  const groups = [
+    { key: 'achievement', label: 'Achievements' },
+    { key: 'prestige',    label: 'Prestige' },
+  ];
+  let html = '';
+  for(const g of groups) {
+    const items = ACHIEVEMENT_DEFS.filter(a => a.category === g.key);
+    if(items.length === 0) continue;
+    html += `<div class="ach-section-label">${g.label}</div>`;
+    for(const a of items) {
+      const unlocked = owned.includes(a.id);
+      const classes = ['ach-row'];
+      if(unlocked) classes.push('unlocked');
+      if(a.category === 'prestige') classes.push('prestige');
+      const rewardLabel = a.reward === 'hat' ? 'Hat reward' : 'Skin reward';
+      const displayName = cosmeticDisplayName(a.id);
+      html += `<div class="${classes.join(' ')}">
+        <div class="ach-icon">${a.icon}</div>
+        <div class="ach-body">
+          <div class="ach-name">${a.name}</div>
+          <div class="ach-condition">${a.condition}</div>
+          <div class="ach-reward">${rewardLabel}: ${displayName}</div>
+        </div>
+        <div class="ach-status">${unlocked ? '✓' : '🔒'}</div>
+      </div>`;
+    }
+  }
+  list.innerHTML = html;
+}
+function openAchievements() {
+  renderAchievementsList();
+  document.getElementById('achievements-overlay').classList.add('open');
+}
+function closeAchievements() {
+  document.getElementById('achievements-overlay').classList.remove('open');
+}
+window.openAchievements = openAchievements;
+window.closeAchievements = closeAchievements;
+
+// ── Locker Room (v0.19h) ──
+// Browse + equip cosmetics. Uses its own WebGLRenderer on a dedicated
+// canvas so rotating the preview doesn't fight with the game scene.
+// The big preview shows the currently-previewed hat + skin (defaults to
+// equipped on open). Tapping a grid card immediately equips that item
+// and updates both the preview and the persisted meta.
+const LockerRoom = {
+  tab: 'hats',               // 'hats' | 'skins'
+  previewHatId: null,        // what the big preview shows — may differ from equipped briefly
+  previewSkinId: null,
+  // Preview renderer state (lazy-initialized on first open)
+  _rend: null, _scene: null, _cam: null, _ballGroup: null, _hatGroup: null,
+  _light: null, _rotY: 0, _rotX: 0.35,
+  _dragging: false, _dragStartX: 0, _dragStartY: 0, _dragRotY: 0, _dragRotX: 0,
+  _raf: null,
+};
+
+function _ensureLockerPreview() {
+  if(LockerRoom._rend) return;
+  const canvas = document.getElementById('locker-preview-canvas');
+  if(!canvas) return;
+  // Use preserveDrawingBuffer=false for perf; explicit alpha=false lets the
+  // gradient CSS background show in blur during render gaps (not that there are any).
+  const rend = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  rend.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  rend.setSize(canvas.width, canvas.height, false);
+  rend.setClearColor(0x000000, 0);
+  rend.shadowMap.enabled = false;
+
+  const scene = new THREE.Scene();
+  // Ambient + key light — warmer than main scene so cosmetics pop against the dark backdrop
+  scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+  const key = new THREE.DirectionalLight(0xfff2d0, 1.0);
+  key.position.set(1.2, 2.0, 1.5);
+  scene.add(key);
+  const rim = new THREE.DirectionalLight(0x90b0ff, 0.35);
+  rim.position.set(-1.0, 0.6, -1.2);
+  scene.add(rim);
+
+  const cam = new THREE.PerspectiveCamera(28, 1, 0.1, 20);
+  cam.position.set(0, 0.18, 1.85);
+  cam.lookAt(0, 0.10, 0);
+
+  LockerRoom._rend = rend;
+  LockerRoom._scene = scene;
+  LockerRoom._cam = cam;
+
+  // Drag to rotate handlers
+  const onPointerDown = (e) => {
+    LockerRoom._dragging = true;
+    LockerRoom._dragStartX = e.clientX || (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+    LockerRoom._dragStartY = e.clientY || (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
+    LockerRoom._dragRotY = LockerRoom._rotY;
+    LockerRoom._dragRotX = LockerRoom._rotX;
+    e.preventDefault();
+  };
+  const onPointerMove = (e) => {
+    if(!LockerRoom._dragging) return;
+    const x = e.clientX || (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+    const y = e.clientY || (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
+    const dx = x - LockerRoom._dragStartX;
+    const dy = y - LockerRoom._dragStartY;
+    LockerRoom._rotY = LockerRoom._dragRotY + dx * 0.012;
+    LockerRoom._rotX = Math.max(-0.6, Math.min(0.9, LockerRoom._dragRotX + dy * 0.01));
+    e.preventDefault();
+  };
+  const onPointerUp = () => {
+    if(LockerRoom._dragging) {
+      LockerRoom._dragging = false;
+      LockerRoom._dragReleaseTime = performance.now();
+    }
+  };
+  canvas.addEventListener('mousedown', onPointerDown);
+  window.addEventListener('mousemove', onPointerMove);
+  window.addEventListener('mouseup', onPointerUp);
+  canvas.addEventListener('touchstart', onPointerDown, { passive: false });
+  window.addEventListener('touchmove', onPointerMove, { passive: false });
+  window.addEventListener('touchend', onPointerUp);
+}
+
+function _rebuildLockerPreviewMeshes() {
+  const s = LockerRoom._scene;
+  if(!s) return;
+  if(LockerRoom._ballGroup) { s.remove(LockerRoom._ballGroup); LockerRoom._ballGroup = null; }
+  if(LockerRoom._hatGroup)  { s.remove(LockerRoom._hatGroup);  LockerRoom._hatGroup = null; }
+
+  const skinDef = SKINS.find(x => x.id === LockerRoom.previewSkinId) || SKINS[0];
+  const ballGroup = skinDef.build
+    ? skinDef.build()
+    : buildBallWithDimples(skinDef.base, skinDef.dimple, skinDef.fade);
+  ballGroup.position.set(0, 0, 0);
+  s.add(ballGroup);
+  LockerRoom._ballGroup = ballGroup;
+
+  const hatDef = LockerRoom.previewHatId ? HATS.find(x => x.id === LockerRoom.previewHatId) : null;
+  if(hatDef) {
+    const hatGroup = hatDef.build();
+    hatGroup.position.set(0, BALL_R, 0);
+    s.add(hatGroup);
+    LockerRoom._hatGroup = hatGroup;
+  }
+}
+
+function _lockerRenderLoop(now) {
+  if(!document.getElementById('locker-overlay').classList.contains('open')) {
+    // Stop when overlay closes
+    LockerRoom._raf = null;
+    return;
+  }
+  // ── Auto-rotate (v0.19i) ──
+  // Y-axis only so user-set X tilt is preserved. Pauses during drag; resumes
+  // 400ms after release so a quick flick doesn't immediately get overwritten.
+  // Rate: ~one full turn every 8s → 2π/8000 ms ≈ 0.00079 rad/ms.
+  const AUTO_ROT_RATE = (Math.PI * 2) / 8000;
+  const RESUME_DELAY_MS = 400;
+  const t = now || performance.now();
+  const last = LockerRoom._lastFrameTime;
+  LockerRoom._lastFrameTime = t;
+  if(!LockerRoom._dragging && last) {
+    const dt = Math.min(t - last, 100); // clamp big gaps (tab blurred etc.)
+    const sinceRelease = LockerRoom._dragReleaseTime ? (t - LockerRoom._dragReleaseTime) : Infinity;
+    if(sinceRelease >= RESUME_DELAY_MS) {
+      LockerRoom._rotY += AUTO_ROT_RATE * dt;
+    }
+  }
+  if(LockerRoom._ballGroup) {
+    LockerRoom._ballGroup.rotation.y = LockerRoom._rotY;
+    LockerRoom._ballGroup.rotation.x = LockerRoom._rotX;
+  }
+  if(LockerRoom._hatGroup) {
+    // Hat rotates around Y with the ball but stays upright (no X rotation)
+    LockerRoom._hatGroup.rotation.y = LockerRoom._rotY;
+  }
+  LockerRoom._rend.render(LockerRoom._scene, LockerRoom._cam);
+  LockerRoom._raf = requestAnimationFrame(_lockerRenderLoop);
+}
+
+function _updateLockerCaption() {
+  const hatName  = LockerRoom.previewHatId  ? cosmeticDisplayName(LockerRoom.previewHatId)  : 'No Hat';
+  const skinName = LockerRoom.previewSkinId ? cosmeticDisplayName(LockerRoom.previewSkinId) : 'Default';
+  const el = document.getElementById('locker-preview-caption');
+  if(el) el.innerHTML = `<strong>${hatName}</strong> &middot; <strong>${skinName}</strong>`;
+}
+
+function _renderLockerGrid() {
+  const grid = document.getElementById('locker-grid');
+  if(!grid) return;
+  const meta = getMeta();
+  const owned = (meta.unlocks && meta.unlocks.cosmetics) || [];
+  const isHats = LockerRoom.tab === 'hats';
+  const items = isHats ? HATS : SKINS;
+  const equippedId = isHats ? meta.equippedHat : meta.equippedSkin;
+
+  // Progress counter updates on every render so it reflects fresh unlocks
+  const ownedCount = items.filter(it => owned.includes(it.id)).length;
+  const progressEl = document.getElementById('locker-progress');
+  if(progressEl) {
+    const cat = isHats ? 'Hats' : 'Skins';
+    progressEl.textContent = `${ownedCount} / ${items.length} ${cat} unlocked`;
+  }
+
+  // Sort: owned first, then locked (stable within each group)
+  const ordered = items.slice().sort((a, b) => {
+    const aOwned = owned.includes(a.id) ? 0 : 1;
+    const bOwned = owned.includes(b.id) ? 0 : 1;
+    return aOwned - bOwned;
+  });
+
+  let html = '';
+  for(const it of ordered) {
+    const isOwned = owned.includes(it.id);
+    const isEquipped = it.id === equippedId;
+    const classes = ['locker-card'];
+    if(!isOwned) classes.push('locked');
+    if(isEquipped) classes.push('equipped');
+    const status = isEquipped ? 'Equipped' : (isOwned ? 'Owned' : 'Locked');
+    const clickHandler = isOwned ? `equipLockerItem('${it.id}')` : '';
+    const lockBadge = isOwned ? '' : `<div class="locker-card-lock-badge">🔒</div>`;
+    html += `<div class="${classes.join(' ')}" ${isOwned ? `onclick="${clickHandler}"` : ''}>
+      ${lockBadge}
+      <div class="locker-card-icon">${it.icon || (isHats ? '🎩' : '⚪')}</div>
+      <div class="locker-card-name">${it.name}</div>
+      <div class="locker-card-status">${status}</div>
+    </div>`;
+  }
+  grid.innerHTML = html;
+}
+
+function setLockerTab(tab) {
+  LockerRoom.tab = tab;
+  document.getElementById('locker-tab-hats').classList.toggle('active',  tab === 'hats');
+  document.getElementById('locker-tab-skins').classList.toggle('active', tab === 'skins');
+  _renderLockerGrid();
+}
+window.setLockerTab = setLockerTab;
+
+function equipLockerItem(id) {
+  const meta = getMeta();
+  const owned = (meta.unlocks && meta.unlocks.cosmetics) || [];
+  if(!owned.includes(id)) return; // defensive: locked items shouldn't be clickable
+  const isHat = HATS.some(h => h.id === id);
+  if(isHat) {
+    meta.equippedHat = id;
+    LockerRoom.previewHatId = id;
+  } else {
+    meta.equippedSkin = id;
+    LockerRoom.previewSkinId = id;
+  }
+  setMeta(meta);
+  _rebuildLockerPreviewMeshes();
+  _updateLockerCaption();
+  _renderLockerGrid();
+  // If a game scene is active (e.g. opened locker from pause menu), recreate
+  // the in-game ball/hat so the equipped cosmetics take effect immediately.
+  // Only do this during active gameplay AND only when safely idle — skipping
+  // the live recreate if the player is aiming or the ball is rolling avoids
+  // nuking aim state, mid-shot physics, or active power-up material swaps.
+  // In those cases the new cosmetic will apply on the next hole.
+  if(G && G.state === 'playing' && typeof createBall === 'function'
+     && !G.aimMode && !G.rolling && !G.inHole) {
+    createBall();
+    // Restore the ball position so createBall's fresh-at-origin default
+    // doesn't snap the player out of their current shot.
+    if(G.ballPos && G.ball) G.ball.position.copy(G.ballPos);
+  }
+}
+window.equipLockerItem = equipLockerItem;
+
+function openLocker() {
+  const meta = getMeta();
+  LockerRoom.previewHatId  = meta.equippedHat || null;  // v0.19l: null-safe (top_hat is no longer a starter)
+  LockerRoom.previewSkinId = meta.equippedSkin || 'default_white';
+  LockerRoom.tab = 'hats';
+  document.getElementById('locker-overlay').classList.add('open');
+  _ensureLockerPreview();
+  _rebuildLockerPreviewMeshes();
+  _updateLockerCaption();
+  _renderLockerGrid();
+  // Reset rotation so preview always starts facing camera
+  LockerRoom._rotY = 0;
+  LockerRoom._rotX = 0.35;
+  // Reset auto-rotate timing state
+  LockerRoom._lastFrameTime = 0;
+  LockerRoom._dragReleaseTime = 0;
+  // Tab class sync
+  document.getElementById('locker-tab-hats').classList.add('active');
+  document.getElementById('locker-tab-skins').classList.remove('active');
+  // Kick off render loop if not already running
+  if(!LockerRoom._raf) LockerRoom._raf = requestAnimationFrame(_lockerRenderLoop);
+}
+function closeLocker() {
+  document.getElementById('locker-overlay').classList.remove('open');
+  // Render loop self-terminates on next frame via the open-class check
+}
+window.openLocker = openLocker;
+window.closeLocker = closeLocker;
 function escMainMenu() {
   closeEscMenu();
   // Belt-and-suspenders: clean up any active Sharpshooter state
@@ -14705,7 +16867,8 @@ function escMainMenu() {
   G.state = 'gameover'; // stop physics
   clearTimeout(G._stylePopupTimer);
   if(G.courseGroup) { scene.remove(G.courseGroup); G.courseGroup = null; }
-  if(G.ball) { scene.remove(G.ball); G.ball = null; }
+  if(G.ball) { scene.remove(G.ball); G.ball = null; G.ballMesh = null; }
+  if(G.hat) { scene.remove(G.hat); G.hat = null; }
   if(G.ballShadow) { scene.remove(G.ballShadow); G.ballShadow = null; }
   if(G.aimArrow) { scene.remove(G.aimArrow); G.aimArrow = null; }
   if(G.particles) { for(const p of G.particles) { if(p.mesh) scene.remove(p.mesh); } G.particles = []; }
@@ -14735,7 +16898,7 @@ function escMainMenu() {
   if(_deckBtn) _deckBtn.style.display = 'none';
   const ov = document.getElementById('overlay');
   ov.innerHTML = `
-    <div id="profile-chip" style="position:absolute;top:16px;right:16px;background:rgba(255,255,255,0.18);color:#fff;font-family:'Inter',sans-serif;font-size:0.75rem;font-weight:700;letter-spacing:1px;padding:7px 14px;border-radius:24px;cursor:pointer;backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,0.3);z-index:5" onclick="switchProfile()">
+    <div id="profile-chip" style="display:none;position:absolute;top:16px;right:16px;background:rgba(255,255,255,0.18);color:#fff;font-family:'Inter',sans-serif;font-size:0.75rem;font-weight:700;letter-spacing:1px;padding:7px 14px;border-radius:24px;cursor:pointer;backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,0.3);z-index:5" onclick="switchProfile()">
       <span id="profile-chip-name">—</span> ⇄
     </div>
     <div class="tagline">A Minigolf Roguelike</div>
@@ -14764,13 +16927,17 @@ function escMainMenu() {
       <div class="setting-group">
         <div class="setting-label">Difficulty</div>
         <div class="star-row" id="star-row">
-          ${[1,2,3,4,5].map(s=>`<button class="star-btn${G.difficulty===s?' active':''}" data-star="${s}" onclick="setDifficulty(${s})">★</button>`).join('')}
+          <div class="star-row-line" id="star-row-1"></div>
+          <div class="star-row-line" id="star-row-2"></div>
         </div>
+        <div class="star-diff-label" id="star-diff-label">${getDifficultyMods(G.difficulty).name}</div>
       </div>
     </div>
     <button class="play-btn" onclick="confirmStartGame()">Tee Off</button>
     <button class="play-btn" id="btn-resume" style="display:none;margin-top:6px;background:rgba(80,180,80,0.85);font-size:0.85rem" onclick="resumeGame()">▶ Resume Run</button>
-    <div style="font-size:0.55rem;color:rgba(255,255,255,0.35);letter-spacing:1.5px;margin-top:4px">Alpha ${GAME_VERSION} — Sharpshooter: no range cap, missile accelerates in flight</div>
+    <div style="font-size:0.55rem;color:rgba(255,255,255,0.35);letter-spacing:1.5px;margin-top:4px">Alpha ${GAME_VERSION} — ${CHANGE_NOTE}</div>
+    <div class="section-label" style="margin-top:14px">Save Slot</div>
+    <div id="inline-profile-row" style="display:flex;gap:8px;width:100%;max-width:320px;margin:10px 0 14px;justify-content:center;padding-top:8px"></div>
     <div class="section-label" id="lb-title">Best Scores</div>
     <div class="lb-panel" id="lb-panel"></div>`;
   ov.classList.remove('hidden');
@@ -14783,6 +16950,9 @@ function escMainMenu() {
   renderLeaderboard();
   checkAutoSave();
   if(typeof updateProfileChip === 'function') updateProfileChip();
+  // v0.18a: the overlay HTML was just rebuilt — repopulate the star row
+  // buttons now that the two container divs exist in DOM.
+  if(typeof renderStarRow === 'function') renderStarRow();
 }
 function escNewRun() {
   if(!confirm('Start a new run? This will erase your current saved run.')) return;
@@ -14852,7 +17022,7 @@ function loadPlayerState(idx) {
   G.snowballStacks = p.snowballStacks;
   // Set ball color
   if(G.ball) {
-    G.ball.material = new THREE.MeshStandardMaterial({
+    G.ballMesh.material = new THREE.MeshStandardMaterial({
       color: p.color, roughness:0.15, metalness:0.05
     });
   }
@@ -15115,7 +17285,7 @@ function switchToNextPlayer() {
   G.jumpsLeft = G.jumpsMax || 0;
   G._jumpPending = false;
   G._jumpPreloaded = false;
-  if(G.ball && G._jumpPreloadOrigEmissive && G.ball.material && G.ball.material.emissive) { G.ball.material.emissive.copy(G._jumpPreloadOrigEmissive); G._jumpPreloadOrigEmissive = null; }
+  if(G.ball && G._jumpPreloadOrigEmissive && G.ballMesh.material && G.ballMesh.material.emissive) { G.ballMesh.material.emissive.copy(G._jumpPreloadOrigEmissive); G._jumpPreloadOrigEmissive = null; }
   G.shooterAmmo = G.modifiers.filter(m => m.id === 'shooter').length;
   G.grenadeAmmo = G.modifiers.filter(m => m.id === 'grenade').length;
   G.boulderAvail = G.modifiers.some(m => m.id === 'boulder');
@@ -15165,7 +17335,7 @@ function mpOpenNextShop() {
   loadPlayerState(playerIdx);
   // Set ball color so HUD reflects player
   if(G.ball) {
-    G.ball.material = new THREE.MeshStandardMaterial({
+    G.ballMesh.material = new THREE.MeshStandardMaterial({
       color: G.players[playerIdx].color, roughness:0.15, metalness:0.05
     });
   }
@@ -15382,7 +17552,8 @@ function startGame(){
   if(sp) { sp.innerHTML = ''; sp.classList.remove('style-popup-show'); }
   // Clean up scene from previous game
   if(G.courseGroup) { scene.remove(G.courseGroup); G.courseGroup = null; }
-  if(G.ball) { scene.remove(G.ball); G.ball = null; }
+  if(G.ball) { scene.remove(G.ball); G.ball = null; G.ballMesh = null; }
+  if(G.hat) { scene.remove(G.hat); G.hat = null; }
   if(G.ballShadow) { scene.remove(G.ballShadow); G.ballShadow = null; }
   if(G.aimArrow) { scene.remove(G.aimArrow); G.aimArrow = null; }
   // Clean up particles from previous game
@@ -15397,18 +17568,28 @@ function startGame(){
   G._currentSeed = seed;
   if(seedInput) seedInput.value = seed;
 
-  // difficulty 1 = full budget (generous), 5 = tight budget
-  // Budget multiplier: 1.3× at ★1 down to 0.7× at ★5
-  G.difficultyBudgetMult = 1.3 - (G.difficulty - 1) * 0.15;
+  // v0.18a: Refresh difficulty mods for this run. Everything downstream
+  // (HP, shop rates, damage, course scaling) reads from G._diffMods.
+  G._diffMods = getDifficultyMods(G.difficulty);
+  // Legacy: still set budgetMult for any old code paths that haven't migrated.
+  // Maps the old 1.3-0.15x curve onto the new 1-10 ladder so nothing breaks:
+  // ★1=1.30, ★5=0.70, ★10=-0.05 clamped to 0.5 floor.
+  G.difficultyBudgetMult = Math.max(0.5, 1.3 - (G.difficulty - 1) * 0.08);
 
   G.hole=0; G.totalStrokes=0; G.scorecard=[]; G.modifiers=[]; G.state='playing';
+  // v0.19e: Reset per-run XP counter. Deposited into meta.xp in showGameOver.
+  G.xpThisRun = 0;
+  // v0.19f: Reset per-run achievement counters. Read at run end for unlocks.
+  G._hpLostThisRun = false;
+  G._perksBoughtThisRun = 0;
   // ── Analytics: unique run id + start timestamp ─────────
   G._runId = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
   G._runStartTime = performance.now();
   G._runSaved = false;
   G.strokeBudget = 0;
-  G.hp = 10;
-  G.hpMax = 10;
+  // v0.18a: starting HP scales with difficulty (10 at ★1-3, 8 at ★4, 7 at ★5-8, 5 at ★9-10).
+  G.hp = G._diffMods.startingHp;
+  G.hpMax = G._diffMods.startingHp;
   G.lives = 3; // legacy shim — kept in sync by applyDamage/applyHeal
   G.hasUndoPower = false;
   G.budgetBusted = false;
@@ -15429,7 +17610,7 @@ function startGame(){
   G.jumpsMax = 0;
   G._jumpPending = false;
   G._jumpPreloaded = false;
-  if(G.ball && G._jumpPreloadOrigEmissive && G.ball.material && G.ball.material.emissive) { G.ball.material.emissive.copy(G._jumpPreloadOrigEmissive); G._jumpPreloadOrigEmissive = null; }
+  if(G.ball && G._jumpPreloadOrigEmissive && G.ballMesh.material && G.ballMesh.material.emissive) { G.ballMesh.material.emissive.copy(G._jumpPreloadOrigEmissive); G._jumpPreloadOrigEmissive = null; }
   G.thinIceActive = false;
   G.magnetActive = false;
   G.snowballStacks = 0;
@@ -15448,7 +17629,9 @@ function startGame(){
   G.angledWalls = [];
   G.wallChunks = [];
   // Shop reroll tracking (resets each run) — starts at 3, doubles with each reroll
-  G.rerollCost = 3;
+  // v0.18a: 10★ doubles the baseline reroll cost (3→6) so the escalation hurts more.
+  const rerollMult = (G._diffMods && G._diffMods.rerollCostMult) || 1.0;
+  G.rerollCost = Math.round(3 * rerollMult);
   G.shopPickCount = 3;
   // ── Card system init ──
   G.deck = [...STARTER_DECKS.classic.cards];
@@ -15727,6 +17910,8 @@ function openProfileMenu(slotId) {
           if(newName && newName.trim()) {
             renameProfile(slotId, newName.trim());
             renderProfilePicker();
+            renderInlineProfileRow();  // v0.19k: keep home-screen row in sync
+            updateProfileChip();
           }
         }
       });
@@ -15750,7 +17935,10 @@ function openProfileMenu(slotId) {
           danger: true,
           onConfirm: () => {
             deleteProfile(slotId);
-            renderProfilePicker();
+            // v0.19k: re-run the boot gate so the menu auto-activates a fallback
+            // profile (or creates a new default) instead of leaving the menu
+            // rendered against a deleted/missing active profile.
+            bootProfileGate();
           }
         });
       };
@@ -15785,6 +17973,8 @@ function pickProfile(slotId) {
   updateProfileChip();
   renderLeaderboard();
   checkAutoSave();
+  // v0.18a: difficulty unlocks are per-profile. Refresh star row state.
+  if(typeof renderStarRow === 'function') renderStarRow();
 }
 
 function switchProfile() {
@@ -15810,7 +18000,9 @@ window.openProfileMenu = openProfileMenu;
 
 // ── Boot flow: if no active profile, show picker; otherwise show main menu ──
 function bootProfileGate() {
-  // First boot with legacy data? Offer one-time migration via modal.
+  // v0.19k: no more separate profile-picker screen. We always land on the main
+  // menu, where the inline save-slot row handles switch/create/rename/delete.
+  // First boot with legacy data? Offer one-time migration via modal, then menu.
   if(hasLegacySaveData()) {
     openProfileModal({
       title: 'Welcome back!',
@@ -15819,43 +18011,51 @@ function bootProfileGate() {
       confirmLabel: 'Continue',
       onConfirm: (name) => {
         migrateLegacyToP1((name && name.trim()) || 'Player 1');
-        // Hide picker, reveal main menu (migration made p1 active)
-        const picker = document.getElementById('profile-picker');
-        const overlay = document.getElementById('overlay');
-        if(picker) picker.classList.add('hidden');
-        if(overlay) overlay.classList.remove('hidden');
-        updateProfileChip();
-        checkAutoSave();
-        renderLeaderboard();
+        _revealMainMenu();
       }
     });
-    // Show a hidden picker underneath so the backdrop looks consistent
-    // (picker defaults hidden, no need to force — the modal overlays everything)
     return;
   }
-  const active = getActiveProfile();
-  if(active) {
-    // Active profile exists — reveal main menu
-    const picker = document.getElementById('profile-picker');
-    const overlay = document.getElementById('overlay');
-    if(picker) picker.classList.add('hidden');
-    if(overlay) overlay.classList.remove('hidden');
-    updateProfileChip();
-    checkAutoSave();
-    renderLeaderboard();
-    return;
+  // If there's no active profile, make sure there IS one before we show the
+  // menu — the menu's inline row works fine with empty slots, but the game
+  // itself expects an active profile for namespaced saves. Two cases:
+  //   A) At least one profile exists but none is active → activate the first.
+  //   B) Zero profiles exist (fresh install) → auto-create "Player 1" in p1.
+  if(!getActiveProfile()) {
+    const idx = loadProfilesIndex();
+    const firstFilled = idx.profiles.find(p => p.createdAt);
+    if(firstFilled) {
+      setActiveProfile(firstFilled.id);
+    } else {
+      // Fresh install — auto-create p1 with a default name so play can start
+      // immediately. User can rename via long-press on the inline row chip.
+      createProfile('p1', 'Player 1');
+    }
   }
-  // No active profile — show picker, hide main menu
+  _revealMainMenu();
+}
+
+// Helper: hide picker overlay, reveal main menu, refresh everything.
+function _revealMainMenu() {
   const picker = document.getElementById('profile-picker');
   const overlay = document.getElementById('overlay');
-  if(picker) picker.classList.remove('hidden');
-  if(overlay) overlay.classList.add('hidden');
-  renderProfilePicker();
+  if(picker) picker.classList.add('hidden');
+  if(overlay) overlay.classList.remove('hidden');
+  updateProfileChip();
+  checkAutoSave();
+  renderLeaderboard();
+  if(typeof renderStarRow === 'function') renderStarRow();
 }
 window.bootProfileGate = bootProfileGate;
 
 // ── Auto-save resume ─────────────────────────────────
 function checkAutoSave() {
+  // v0.19o: always hide first, then reveal only if the *current* profile has
+  // a valid autosave. Prior behavior: early-returns left the button in
+  // whatever state the previous profile had it in, so switching to a
+  // fresh/empty profile kept the old profile's Resume Run button visible.
+  const resumeBtn = document.getElementById('btn-resume');
+  if(resumeBtn) resumeBtn.style.display = 'none';
   try {
     const raw = localStorage.getItem(profKey('ggw_autosave'));
     if(!raw) return;
@@ -15866,7 +18066,6 @@ function checkAutoSave() {
     // the underlying save stays on disk but the user can start fresh.
     if(save.version < 2) return;
     // First-hole saves are resumable too (no save.hole <= 0 gate).
-    const resumeBtn = document.getElementById('btn-resume');
     if(resumeBtn) {
       const ago = Date.now() - (save.timestamp || 0);
       const agoText = ago < 3600000 ? Math.round(ago/60000)+'m ago' : ago < 86400000 ? Math.round(ago/3600000)+'h ago' : Math.round(ago/86400000)+'d ago';
@@ -15886,7 +18085,9 @@ function resumeGame() {
     G.biome = save.biome || 'puttputt';
     G._currentSeed = save.seed || '';
     initSeed(save.seed || null);
-    G.difficultyBudgetMult = 1.3 - (G.difficulty - 1) * 0.15;
+    // v0.18a: refresh difficulty mods on resume so all runtime reads are consistent.
+    G._diffMods = getDifficultyMods(G.difficulty);
+    G.difficultyBudgetMult = Math.max(0.5, 1.3 - (G.difficulty - 1) * 0.08);
     G.hole = save.hole;
     G.totalStrokes = save.totalStrokes || 0;
     G.scorecard = save.scorecard || [];
@@ -16821,6 +19022,8 @@ function startMusic() {
 }
 
 let _wasRolling=false;
+// Reusable temp for the ball-roll axis — avoids per-frame Vector3 allocation
+const _ballRollAxis = new THREE.Vector3();
 
 // ── Main loop ─────────────────────────────────────────
 let lastTime=performance.now();
@@ -16832,9 +19035,43 @@ function animate(now) {
   if(G._slowMoScale && G._slowMoScale < 1.0) dt *= G._slowMoScale;
   flagTime+=dt;
 
+  // ── Hat follow (v0.19c) ──
+  // Hat is a scene sibling of the ball, not a child, so it stays upright
+  // as the ball rotates for visual roll. Position tracks G.ballPos — the
+  // authoritative physics position — so this works no matter which code
+  // path last moved the ball. G.hat.rotation stays at identity intentionally.
+  if(G.hat && G.ball) {
+    G.hat.position.set(G.ballPos.x, G.ballPos.y + BALL_R, G.ballPos.z);
+    G.hat.visible = G.ball.visible;
+  }
+
   if(G.state==='playing') {
     updatePhysics(dt);
     updateParticles(dt);
+
+    // ── Visual ball rotation (v0.19d) ──
+    // Spin the skin Group so dimples read as a rolling golf ball. Rotation
+    // axis = perpendicular to horizontal movement in the XZ plane; roll
+    // angle = arc length / radius. Big jumps (respawns, warps, Three Balls
+    // resolutions) are skipped so the ball doesn't whip through dozens of
+    // rotations in a single frame.
+    if(G.ball) {
+      const dx = G.ballPos.x - (G._lastBallX !== undefined ? G._lastBallX : G.ballPos.x);
+      const dz = G.ballPos.z - (G._lastBallZ !== undefined ? G._lastBallZ : G.ballPos.z);
+      const dist = Math.hypot(dx, dz);
+      // 1.0 world unit = ~2.3 full rotations — anything above that is a teleport,
+      // not real movement. Normal rolling peaks around 0.3 units/frame.
+      const TELEPORT_THRESHOLD = 1.0;
+      if(dist > 1e-5 && dist < TELEPORT_THRESHOLD) {
+        // Axis = perpendicular to movement in the XZ plane (right-hand rule
+        // gives forward-roll: movement along +X → rotate about -Z).
+        _ballRollAxis.set(-dz, 0, dx).normalize();
+        const angle = dist / BALL_R;
+        G.ball.rotateOnWorldAxis(_ballRollAxis, angle);
+      }
+      G._lastBallX = G.ballPos.x;
+      G._lastBallZ = G.ballPos.z;
+    }
     if(G.rolling || G.inHole) focusCameraOnBall();
     else if(G._camTransitionFrames && G._camTransitionFrames > 0) {
       // v0.17v: keep lerping for N frames after Three Balls winner resolves
@@ -17243,6 +19480,61 @@ function animate(now) {
         const bob = Math.sin(t * 2.2 + c.bobOffset) * 0.07;
         const terrY = getTerrainHeight(c.wx, c.wz);
         const baseY = terrY + FLOOR_H / 2 + 0.28;
+        // v0.19j: Coin Shower drop+land state machine. Runs until landing
+        // completes, after which the coin behaves like any other bob/spin coin.
+        if(c._dropDuration !== undefined && c._landingSquash < 0.001 && c._dropProgress < 1) {
+          if(c._dropDelay > 0) {
+            c._dropDelay -= dt;
+            // Still waiting to fall — keep hidden at sky height
+            if(c.pivot) c.pivot.visible = false;
+            if(c.glowMesh) c.glowMesh.visible = false;
+            continue;  // skip bob until we've landed
+          }
+          // Fall phase
+          if(c.pivot) c.pivot.visible = true;
+          c._dropProgress = Math.min(1, c._dropProgress + dt / c._dropDuration);
+          // Ease-in quad — looks like gravity (slow start, fast at impact)
+          const ease = c._dropProgress * c._dropProgress;
+          const fallY = c._dropStartY + (c._dropEndY - c._dropStartY) * ease;
+          if(c.pivot) {
+            c.pivot.position.y = fallY;
+            c.pivot.rotation.y = t * (c.spinSpeed || 2.2) + c.bobOffset;
+            // Stretch along Y while falling
+            const stretch = 1.0 + (1 - c._dropProgress) * 0.5;
+            c.pivot.scale.set(1.0 - (stretch-1)*0.4, stretch, 1.0 - (stretch-1)*0.4);
+          }
+          if(c._dropProgress >= 1) {
+            // Landed — kick off squash decay and reveal glow
+            c._landingSquash = 1.0;
+            if(c.glowMesh) c.glowMesh.visible = true;
+            if(AC) {
+              const ac = getAC(), t0 = ac.currentTime;
+              const o = ac.createOscillator(); o.type = 'triangle';
+              o.frequency.setValueAtTime(c.isSpecial ? 900 : 650, t0);
+              o.frequency.exponentialRampToValueAtTime(c.isSpecial ? 300 : 250, t0+0.08);
+              const g = ac.createGain();
+              g.gain.setValueAtTime(c.isSpecial ? 0.22 : 0.12, t0);
+              g.gain.exponentialRampToValueAtTime(0.001, t0+0.1);
+              o.connect(g); g.connect(getACDest());
+              o.start(t0); o.stop(t0+0.1);
+            }
+          }
+          continue;  // skip bob this frame
+        }
+        // Landing squash decay — runs for ~0.3s after impact
+        if(c._landingSquash > 0.001) {
+          c._landingSquash = Math.max(0, c._landingSquash - dt / 0.3);
+          if(c.pivot) {
+            c.pivot.position.y = baseY;
+            const sq = c._landingSquash;
+            // Flatten vertically, widen horizontally
+            c.pivot.scale.set(1.0 + sq * 0.55, 1.0 - sq * 0.45, 1.0 + sq * 0.55);
+            c.pivot.rotation.y = t * (c.spinSpeed || 2.2) + c.bobOffset;
+          }
+          if(c.glowMesh) c.glowMesh.position.y = baseY - 0.01;
+          if(c._landingSquash <= 0.001 && c.pivot) c.pivot.scale.set(1,1,1);
+          continue;
+        }
         // Bob via pivot Y position
         if(c.pivot) {
           c.pivot.position.y = baseY + bob;
