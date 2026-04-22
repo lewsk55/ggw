@@ -2154,6 +2154,12 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
       <span class="shop-budget-val" id="shop-coins">0</span>
       <span class="shop-budget-label">coins available</span>
     </div>
+    <!-- v0.19p: Loadout viewer access from shop. Uses existing deck-viewer
+         (z-index 150) which overlays cleanly on top of the shop (z-index 130). -->
+    <button id="shop-loadout-btn" onclick="openDeckViewer()"
+            style="margin-top:10px;padding:8px 20px;border-radius:20px;border:1px solid rgba(255,255,255,0.28);background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.85);font-family:'Inter',sans-serif;font-size:0.72rem;font-weight:700;letter-spacing:1px;cursor:pointer">
+      🃏 View Loadout
+    </button>
   </div>
   <div class="shop-grid" id="shop-grid"></div>
   <button class="shop-reroll-btn" id="shop-reroll-btn" onclick="rerollShop()">🎲 Reroll — <span id="reroll-cost">1</span> 🪙</button>
@@ -2804,12 +2810,12 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.19o';
-const CHANGE_NOTE = 'Resume Run button now hides correctly when switching to a profile without an active run';
+const GAME_VERSION = '0.19r';
+const CHANGE_NOTE = 'Obstacle expansion: red 2-HP spikes, sliding spike balls, spiked/red-spiked spinners, 4-dir conveyors, power bumpers (atomic orange)';
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
-// v0.17x4: synced down from 1.25 to 1.0 per tuning sheet.
-const PRICE_MULTIPLIER = 1.0;
+// v0.19o1: synced 1.0 → 1.25 per tuning sheet.
+const PRICE_MULTIPLIER = 1.25;
 
 // ── Game state ────────────────────────────────────────
 const G = {
@@ -4069,25 +4075,42 @@ function generatePuttPuttCourse(holeNum) {
   }
 
   // ── 7. Cylindrical bumper data ────────────────────────
+  // v0.19r: `power` variant — atomic-orange, 1.6× larger, chaotic reflection,
+  // much stronger bounce. Rare spawn chance scales with hole + difficulty.
   const bumperData = [];
   const bumperN = Math.floor((1 + Math.floor(rng()*2) + Math.floor(diff*0.7) + Math.floor(holeNum*0.25) + (diff>=4?2:0)) * areaScale);
+  const powerBumperP = Math.min(0.25, Math.max(0, (holeNum - 2) * 0.03 + (diff - 2) * 0.04));
   const trsh = [...fair].sort(()=>rng()-0.5);
   for(let p=0,i=0; i<trsh.length&&p<Math.min(bumperN, Math.floor((4+diff+Math.floor(diff/4)*2) * areaScale)); i++) {
     const c=trsh[i];
     if(grid[c.y][c.x]!==CELL.FAIR) continue;
     if(teeDist(c)<minHazardDist||holeDist(c)<minHazardDist) continue;
     const wx=c.x*TILE_SIZE, wz=c.y*TILE_SIZE;
-    if(tooClose(wx,wz,TILE_SIZE*1.2)) continue;
-    const radius = 0.22 + rng()*0.32;
-    bumperData.push({gx:c.x,gy:c.y,wx,wz,radius});
-    register(wx,wz,TILE_SIZE*1.2);
+    const isPower = rng() < powerBumperP;
+    const baseR = 0.22 + rng()*0.32;
+    const radius = isPower ? baseR * 1.6 : baseR;
+    // Power bumpers are bigger so they need a bigger dedup radius.
+    const clear = isPower ? TILE_SIZE * 1.8 : TILE_SIZE * 1.2;
+    if(tooClose(wx,wz,clear)) continue;
+    bumperData.push({gx:c.x,gy:c.y,wx,wz,radius, variant: isPower ? 'power' : 'normal'});
+    register(wx,wz,clear);
     p++;
   }
   const triData = bumperData;
 
   // ── 8. Spin bar data ──────────────────────────────────
+  // v0.19r: spike-bar variants. Midway through a run ('spikes', 1 HP) and
+  // later into a run ('spikesRed', 2 HP). Use totalHoles as the ramp length
+  // so short 9-hole runs and long 18-hole runs both scale the same curve.
   const spinBarData = [];
   const spinN = holeNum<1?0:Math.floor((Math.floor(rng()*2)+Math.floor(diff*0.3)+(diff>=4?1:0)) * areaScale);
+  const _totalHolesForRamp = (typeof G !== 'undefined' && G.totalHoles) || 9;
+  const midHole = Math.floor(_totalHolesForRamp * 0.50);
+  const lateHole = Math.floor(_totalHolesForRamp * 0.75);
+  // Variant probabilities: before midHole only plain; mid→late a chance of
+  // spiked; late+ a chance of red-spiked (with spiked still possible).
+  const spikedBarP    = holeNum >= midHole  ? Math.min(0.50, 0.15 + (holeNum - midHole)  * 0.08 + (diff - 2) * 0.05) : 0;
+  const redSpikedBarP = holeNum >= lateHole ? Math.min(0.35, 0.10 + (holeNum - lateHole) * 0.08 + (diff - 2) * 0.04) : 0;
   const sbsh = [...fair].sort(()=>rng()-0.5);
   for(let p=0,i=0; i<sbsh.length&&p<Math.min(spinN, Math.floor((2+Math.floor(diff/2)+(diff>=4?1:0)) * areaScale)); i++) {
     const c=sbsh[i];
@@ -4098,7 +4121,12 @@ function generatePuttPuttCourse(holeNum) {
     if(!allFairInRadius(c.x,c.y,1)) continue;
     const speed=(1.0+rng()*0.8)*(diff<3?1:1.4) * (rng()<0.5?1:-1);
     const barLen = 1.2 + rng() * 1.0; // vary from 1.2 to 2.2
-    spinBarData.push({gx:c.x,gy:c.y,wx,wz,speed,len:barLen});
+    // Pick variant — red-spiked takes priority over spiked.
+    let variant = 'plain';
+    const vroll = rng();
+    if(vroll < redSpikedBarP)              variant = 'spikesRed';
+    else if(vroll < redSpikedBarP + spikedBarP) variant = 'spikes';
+    spinBarData.push({gx:c.x,gy:c.y,wx,wz,speed,len:barLen,variant});
     register(wx,wz,TILE_SIZE*2.5);
     p++;
   }
@@ -4251,19 +4279,28 @@ function generatePuttPuttCourse(holeNum) {
     if(teeDist({x:cgx,y:cgy})<minHazardDist||holeDist({x:cgx,y:cgy})<minHazardDist) continue;
     const wx=cgx*TILE_SIZE,wz=cgy*TILE_SIZE;
     if(tooClose(wx,wz,TILE_SIZE*3)) continue;
-    // Push direction is always along the segment axis (forward or backward)
-    const pushDir=si.dir; // 'H' or 'V' — along the lane
-    // Decide forward vs backward: bias toward pushing toward hole
+    // Push direction — v0.19r: can be any cardinal, not just along-lane.
+    // 60% of the time keep it along-lane (classic forward/backward); 40%
+    // chance of a cross-lane shove (perpendicular to lane axis). Cross-lane
+    // pushes will knock the ball into the wall and out the other side,
+    // which is chaotic in a good way.
+    const crossPush = rng() < 0.40;
+    const pushDir = crossPush ? (si.dir === 'H' ? 'V' : 'H') : si.dir;
+    // Decide forward vs backward: along-lane biases toward hole; cross-lane
+    // is pure coin flip.
     const holeX=holePos.x, holeY=holePos.y;
     const teeX=teePos.x, teeY=teePos.y;
     let pushSign;
-    if(pushDir==='H') {
+    if(crossPush) {
+      pushSign = rng() < 0.5 ? 1 : -1;
+    } else if(pushDir==='H') {
       pushSign = (holeX > teeX) === (b.x > a.x) ? 1 : -1;
     } else {
       pushSign = (holeY > teeY) === (b.y > a.y) ? 1 : -1;
     }
-    // 30% chance to reverse (make it a challenge instead of help)
-    if(rng() < 0.3) pushSign *= -1;
+    // 30% chance to reverse along-lane (make it a challenge); cross-lane
+    // already randomized.
+    if(!crossPush && rng() < 0.3) pushSign *= -1;
     const strength=14+rng()*10; // 75% faster: 14-24 (was 8-14)
     // Build cells: 8-14 cells long along the segment axis, full lane width
     const convLen = Math.min(Math.floor(si.len*0.6), 8 + Math.floor(rng()*7));
@@ -4344,12 +4381,21 @@ function generatePuttPuttCourse(holeNum) {
   }
 
   // ── 10b. Spike hemisphere data ─────────────────────────
-  // Dangerous obstacles — hitting one costs a life. Variable sizes.
+  // Dangerous obstacles — hitting one costs HP. Variable sizes.
   // Appear from hole 2+ at diff 2+, rare but impactful.
+  // v0.19r: density bumped ~1.5× and red (2 HP) variants added. Red spike
+  // probability scales with hole + difficulty so early holes stay white-only.
   const spikeData = [];
-  const spikeN = (holeNum < 2 || diff < 2) ? 0 : Math.floor((Math.floor(rng() * 2) + Math.floor(diff * 0.3) + (diff>=4?1:0)) * areaScale);
+  // Was: Math.floor(rng()*2) + Math.floor(diff*0.3) + (diff>=4?1:0)
+  // Now: ~1.5× average count, plus a flat boost in late holes.
+  const spikeN = (holeNum < 2 || diff < 2) ? 0
+    : Math.floor((Math.floor(rng() * 3) + Math.floor(diff * 0.5) + (diff>=4?1:0) + (holeNum>=5?1:0)) * areaScale);
+  const spikeMax = Math.floor((3 + Math.floor(diff / 2) + (holeNum>=7?1:0)) * areaScale);
+  // Red-spike probability: 0 at hole<4, ramping to ~40% by hole 10 at diff 4+.
+  // Clamp to 50% so white is always the majority look.
+  const redSpikeP = Math.min(0.50, Math.max(0, (holeNum - 3) * 0.06 + (diff - 2) * 0.05));
   const spikeSh = [...fair].sort(() => rng() - 0.5);
-  for(let sp = 0, si2 = 0; si2 < spikeSh.length && sp < Math.min(spikeN, Math.floor((2 + Math.floor(diff / 2)) * areaScale)); si2++) {
+  for(let sp = 0, si2 = 0; si2 < spikeSh.length && sp < Math.min(spikeN, spikeMax); si2++) {
     const c = spikeSh[si2];
     if(grid[c.y][c.x] !== CELL.FAIR) continue;
     if(teeDist(c) < minHazardDist + 2 || holeDist(c) < minHazardDist + 2) continue;
@@ -4357,8 +4403,70 @@ function generatePuttPuttCourse(holeNum) {
     if(tooClose(wx, wz, TILE_SIZE * 2.5)) continue;
     if(rockData.some(r => Math.hypot(wx - r.wx, wz - r.wz) < TILE_SIZE * 2)) continue;
     const radius = 0.3 + rng() * 0.5; // 0.3–0.8 world units
-    spikeData.push({ gx: c.x, gy: c.y, wx, wz, radius });
+    const variant = (rng() < redSpikeP) ? 'red' : 'white';
+    spikeData.push({ gx: c.x, gy: c.y, wx, wz, radius, variant });
     register(wx, wz, TILE_SIZE * 2);
+    sp++;
+  }
+
+  // ── 10c. Sliding spike ball data (v0.19r) ──────────────
+  // Spike hemispheres that slide back and forth between two endpoints set at
+  // hole start. Range is 3–5 spike-widths (3r–5r). Both white (1 HP) and red
+  // (2 HP) variants can appear. Endpoints are clamped to fairway so the ball
+  // never escapes the course. Appears from hole 3+ at diff 2+, rarer than
+  // static spikes and never overlapping them.
+  const slidingSpikeN = (holeNum < 3 || diff < 2) ? 0
+    : Math.floor((Math.floor(rng() * 2) + Math.floor(diff * 0.3) + (holeNum>=6?1:0)) * areaScale);
+  const slidingSpikeMax = Math.floor((2 + Math.floor(diff / 2)) * areaScale);
+  const slSpikeSh = [...fair].sort(() => rng() - 0.5);
+  for(let sp = 0, si3 = 0; si3 < slSpikeSh.length && sp < Math.min(slidingSpikeN, slidingSpikeMax); si3++) {
+    const c = slSpikeSh[si3];
+    if(grid[c.y][c.x] !== CELL.FAIR) continue;
+    if(teeDist(c) < minHazardDist + 2 || holeDist(c) < minHazardDist + 2) continue;
+    const wx = c.x * TILE_SIZE, wz = c.y * TILE_SIZE;
+    if(tooClose(wx, wz, TILE_SIZE * 2.5)) continue;
+    const radius = 0.35 + rng() * 0.35; // 0.35–0.70 — slightly smaller cap so range fits easier
+    // Range = 3–5 spike-widths. One spike-width is the DIAMETER (2r), so the
+    // range in world units is 2r * [3..5] = [6r, 10r]. That's the total
+    // center-to-center travel along the slide axis.
+    const rangeMul = 3 + rng() * 2; // 3–5
+    const fullRange = radius * 2 * rangeMul; // total travel distance
+    const halfRange = fullRange * 0.5;
+    // Pick axis perpendicular to nearest lane direction if possible, else
+    // coin-flip. We want the slide to cut across the player's line more often
+    // than run parallel to it.
+    const axis = (rng() < 0.5) ? 'X' : 'Z';
+    // Verify BOTH endpoints are within fairway (clamped to course bounds).
+    // Step out halfRange on each side in world units; reject if either endpoint
+    // falls on a non-fairway cell.
+    const endAx = axis === 'X' ? wx - halfRange : wx;
+    const endAz = axis === 'Z' ? wz - halfRange : wz;
+    const endBx = axis === 'X' ? wx + halfRange : wx;
+    const endBz = axis === 'Z' ? wz + halfRange : wz;
+    const cellAt = (cwx, cwz) => {
+      const cgx = Math.round(cwx / TILE_SIZE), cgy = Math.round(cwz / TILE_SIZE);
+      if(cgx < 0 || cgy < 0 || cgx >= W || cgy >= H) return -1;
+      return grid[cgy][cgx];
+    };
+    if(cellAt(endAx, endAz) !== CELL.FAIR) continue;
+    if(cellAt(endBx, endBz) !== CELL.FAIR) continue;
+    // Also verify the path between endpoints is clear — sample 5 intermediate points.
+    let pathClear = true;
+    for(let k = 1; k <= 4; k++) {
+      const t = k / 5;
+      const mx = endAx + (endBx - endAx) * t;
+      const mz = endAz + (endBz - endAz) * t;
+      if(cellAt(mx, mz) !== CELL.FAIR) { pathClear = false; break; }
+    }
+    if(!pathClear) continue;
+    const variant = (rng() < redSpikeP) ? 'red' : 'white';
+    const speed = 0.6 + rng() * 0.6; // rad/s-ish for sin phase advance
+    const phase = rng() * Math.PI * 2;
+    spikeData.push({
+      gx: c.x, gy: c.y, wx, wz, radius, variant,
+      slide: { axis, range: halfRange, phase, speed },
+    });
+    register(wx, wz, TILE_SIZE * Math.max(2.5, rangeMul + 0.5));
     sp++;
   }
 
@@ -5314,27 +5422,44 @@ function buildCourse(data) {
   // Bright red cylinders that bounce the ball with SFX + squash anim.
   G.bumpers = [];
   if(data.bumperData && data.bumperData.length) {
+    // v0.19r: power bumper materials — atomic orange, emissive, pulsing.
+    const powerBodyMat = new THREE.MeshStandardMaterial({
+      color: 0xff6a00, roughness: 0.22, metalness: 0.4,
+      emissive: 0xff3300, emissiveIntensity: 1.2,
+    });
+    const powerTopMat = new THREE.MeshStandardMaterial({
+      color: 0xffaa33, roughness: 0.15, metalness: 0.5,
+      emissive: 0xff7700, emissiveIntensity: 1.6,
+    });
+    const powerRingMat = new THREE.MeshStandardMaterial({
+      color: 0xffee88, roughness: 0.2, metalness: 0.3,
+      emissive: 0xffcc44, emissiveIntensity: 1.4,
+    });
+
     for(const bd of data.bumperData) {
       const baseH = ch(bd.gx, bd.gy);
-      const bumperH = 0.70;
+      const isPower = bd.variant === 'power';
+      const bumperH = isPower ? 0.95 : 0.70; // taller for power
       const r = bd.radius;
 
       // Body: cylinder — sits flush on terrain
       const bodyG = new THREE.CylinderGeometry(r, r*1.05, bumperH, 16);
-      const bodyM = new THREE.Mesh(bodyG, MAT.ppBumper);
+      const bodyM = new THREE.Mesh(bodyG, isPower ? powerBodyMat : MAT.ppBumper);
       bodyM.position.set(bd.wx, baseH + bumperH*0.5, bd.wz);
       bodyM.castShadow = true; bodyM.receiveShadow = true;
       group.add(bodyM);
 
       // Top cap disc (bright accent)
       const capG = new THREE.CylinderGeometry(r*0.7, r*0.7, 0.06, 16);
-      const capM = new THREE.Mesh(capG, MAT.ppBumperTop);
+      const capM = new THREE.Mesh(capG, isPower ? powerTopMat : MAT.ppBumperTop);
       capM.position.set(bd.wx, baseH + bumperH + 0.03, bd.wz);
       group.add(capM);
 
-      // White ring stripe
-      const ringG = new THREE.TorusGeometry(r*0.92, 0.04, 6, 20);
-      const ringMat = new THREE.MeshStandardMaterial({color:0xffffff,roughness:0.3,metalness:0.2});
+      // Ring stripe — white on normal, glowing yellow-orange on power
+      const ringG = new THREE.TorusGeometry(r*0.92, isPower ? 0.06 : 0.04, 6, 20);
+      const ringMat = isPower
+        ? powerRingMat
+        : new THREE.MeshStandardMaterial({color:0xffffff,roughness:0.3,metalness:0.2});
       const ringM = new THREE.Mesh(ringG, ringMat);
       ringM.rotation.x = Math.PI/2;
       ringM.position.set(bd.wx, baseH + bumperH*0.55, bd.wz);
@@ -5348,6 +5473,7 @@ function buildCourse(data) {
         bumperH,
         bodyM, capM,
         squashT: 0,   // squash timer (0 = idle)
+        variant: isPower ? 'power' : 'normal',
       });
     }
   }
@@ -5359,12 +5485,33 @@ function buildCourse(data) {
   if(data.spinBarData && data.spinBarData.length) {
     const barMat = MAT.ppSpinBar;
     const pivotMat = new THREE.MeshStandardMaterial({color:0x222244, roughness:0.4, metalness:0.5});
+    // v0.19r: variant materials for spiked spinners.
+    const spikedArmMat = new THREE.MeshStandardMaterial({
+      color:0xeeeeee, roughness:0.05, metalness:1.0,
+      emissive:0x333333, emissiveIntensity:0.3,
+    });
+    const spikedConeMat = new THREE.MeshStandardMaterial({
+      color:0xf0f0f0, roughness:0.06, metalness:1.0,
+      emissive:0x222222, emissiveIntensity:0.2,
+    });
+    const redArmMat = new THREE.MeshStandardMaterial({
+      color:0xff2020, roughness:0.08, metalness:0.9,
+      emissive:0xff1010, emissiveIntensity:1.0,
+    });
+    const redConeMat = new THREE.MeshStandardMaterial({
+      color:0xff3030, roughness:0.1, metalness:0.9,
+      emissive:0xdd0808, emissiveIntensity:1.0,
+    });
 
     for(const sd of data.spinBarData) {
       const baseH = ch(sd.gx, sd.gy);
       const barH = 0.28;   // bar height — ball (r=0.22) must overlap this range
       const barY = baseH + barH * 0.5 + 0.05;  // bar centre Y, just above terrain
       const barGroup = new THREE.Group();
+      const variant = sd.variant || 'plain';
+      const isSpiky = variant === 'spikes' || variant === 'spikesRed';
+      const armMatToUse  = variant === 'spikesRed' ? redArmMat  : (isSpiky ? spikedArmMat  : barMat);
+      const coneMatToUse = variant === 'spikesRed' ? redConeMat : spikedConeMat;
 
       // Pivot post
       const postG = new THREE.CylinderGeometry(0.10, 0.10, barH + 0.1, 10);
@@ -5374,7 +5521,7 @@ function buildCourse(data) {
 
       // Single bar arm spanning full length (len * 2 wide)
       const armG = new THREE.BoxGeometry(sd.len * 2, barH, 0.22);
-      const armM = new THREE.Mesh(armG, barMat);
+      const armM = new THREE.Mesh(armG, armMatToUse);
       armM.position.set(0, 0, 0);
       armM.castShadow = true;
       barGroup.add(armM);
@@ -5382,9 +5529,39 @@ function buildCourse(data) {
       // End caps
       for(const sign of [-1, 1]) {
         const capG = new THREE.SphereGeometry(0.14, 8, 6);
-        const capM = new THREE.Mesh(capG, barMat);
+        const capM = new THREE.Mesh(capG, armMatToUse);
         capM.position.set(sign * sd.len, 0, 0);
         barGroup.add(capM);
+      }
+
+      // v0.19r: spike cones protruding from the top/sides of the arm.
+      // ~2 spikes per world-unit of bar length, alternating sides.
+      if(isSpiky) {
+        const spikeCount = Math.max(6, Math.floor(sd.len * 4));
+        for(let sci = 0; sci < spikeCount; sci++) {
+          const tAlong = (sci / (spikeCount - 1)) * 2 - 1; // -1..1
+          const localX = tAlong * (sd.len - 0.15);
+          // Alternate: up, side+, up, side-
+          const slot = sci % 3;
+          const spikeH = 0.35 + Math.random() * 0.3;
+          const spikeR = 0.06 + Math.random() * 0.03;
+          const cg = new THREE.ConeGeometry(spikeR, spikeH, 5);
+          const cm = new THREE.Mesh(cg, coneMatToUse);
+          if(slot === 0) {
+            // Top spike — points +Y
+            cm.position.set(localX, barH * 0.5 + spikeH * 0.4, 0);
+          } else if(slot === 1) {
+            // +Z side spike — points +Z
+            cm.position.set(localX, 0, 0.15 + spikeH * 0.4);
+            cm.rotation.x = Math.PI / 2;
+          } else {
+            // -Z side spike — points -Z
+            cm.position.set(localX, 0, -(0.15 + spikeH * 0.4));
+            cm.rotation.x = -Math.PI / 2;
+          }
+          cm.castShadow = true;
+          barGroup.add(cm);
+        }
       }
 
       barGroup.position.set(sd.wx, barY, sd.wz);
@@ -5399,6 +5576,8 @@ function buildCourse(data) {
         speed: sd.speed,
         angle: rng() * Math.PI * 2,
         barGroup,
+        variant,        // v0.19r: 'plain' | 'spikes' | 'spikesRed'
+        spikeCooldownT: 0, // per-bar hit cooldown to avoid multi-damage
       });
     }
   }
@@ -5711,22 +5890,37 @@ function buildCourse(data) {
   }
 
   // ── Putt Putt: Spike hemispheres ────────────────────────
-  // Dangerous! Hitting one costs a life. Shiny metallic with long visible spikes.
+  // Dangerous! Hitting one costs HP. Shiny metallic with long visible spikes.
+  // v0.19r: supports variant='red' (2 HP, bright red emissive) and
+  // slide={axis,range,phase,speed} for back-and-forth sliding variants.
   G.spikes = [];
   if(data.spikeData && data.spikeData.length) {
-    const spikeMat = new THREE.MeshStandardMaterial({
+    const whiteBaseMat = new THREE.MeshStandardMaterial({
       color: 0xeeeeee, roughness: 0.02, metalness: 1.0,
       emissive: 0x333333, emissiveIntensity: 0.4,
       envMapIntensity: 2.0,
     });
-    const spikeConeMat = new THREE.MeshStandardMaterial({
+    const whiteSpikeMat = new THREE.MeshStandardMaterial({
       color: 0xf0f0f0, roughness: 0.03, metalness: 1.0,
       emissive: 0x222222, emissiveIntensity: 0.3,
+      envMapIntensity: 2.0,
+    });
+    const redBaseMat = new THREE.MeshStandardMaterial({
+      color: 0xff2020, roughness: 0.05, metalness: 0.9,
+      emissive: 0xff1010, emissiveIntensity: 1.1,
+      envMapIntensity: 2.0,
+    });
+    const redSpikeMat = new THREE.MeshStandardMaterial({
+      color: 0xff3030, roughness: 0.08, metalness: 0.9,
+      emissive: 0xdd0808, emissiveIntensity: 1.0,
       envMapIntensity: 2.0,
     });
     for(const sd of data.spikeData) {
       const baseH = ch(sd.gx, sd.gy);
       const r = sd.radius;
+      const isRed = sd.variant === 'red';
+      const spikeMat = isRed ? redBaseMat : whiteBaseMat;
+      const spikeConeMat = isRed ? redSpikeMat : whiteSpikeMat;
       const spikeGroup = new THREE.Group();
 
       // Main hemisphere body (this is the hitbox)
@@ -5754,11 +5948,12 @@ function buildCourse(data) {
         spikeGroup.add(coneMesh);
       }
 
-      // Warning ring at base — red glow
+      // Warning ring at base — red glow (always red-ish; brighter for red variant)
       const ringGeo = new THREE.TorusGeometry(r + 0.12, 0.05, 6, 16);
       const ringMesh = new THREE.Mesh(ringGeo, new THREE.MeshStandardMaterial({
-        color: 0xff4444, emissive: 0xff2222, emissiveIntensity: 0.8,
-        transparent: true, opacity: 0.7,
+        color: 0xff4444, emissive: 0xff2222,
+        emissiveIntensity: isRed ? 1.4 : 0.8,
+        transparent: true, opacity: isRed ? 0.9 : 0.7,
       }));
       ringMesh.rotation.x = Math.PI / 2;
       ringMesh.position.y = 0.02;
@@ -5768,13 +5963,25 @@ function buildCourse(data) {
       spikeGroup.position.set(sd.wx, baseH + FLOOR_H/2, sd.wz);
       group.add(spikeGroup);
 
-      G.spikes.push({
+      const spikeRec = {
         wx: sd.wx, wz: sd.wz,
+        baseWx: sd.wx, baseWz: sd.wz, // anchor for sliding
         r: r, // hitbox stays on hemisphere radius only
         baseH: baseH,
+        variant: sd.variant || 'white',
         mesh: spikeGroup,
         squashT: 0,
-      });
+      };
+      // v0.19r: copy slide state if this is a sliding spike ball.
+      if(sd.slide) {
+        spikeRec.slide = {
+          axis: sd.slide.axis,
+          range: sd.slide.range,
+          phase: sd.slide.phase,
+          speed: sd.slide.speed,
+        };
+      }
+      G.spikes.push(spikeRec);
     }
   }
 
@@ -6742,6 +6949,45 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
     return id;
   }
 
+  // ── Pending unlock toasts (v0.19p) ────────────────────
+  // Unlock toasts fire on main-menu arrival, not on the game-over overlay
+  // itself. showGameOver queues them into meta._pendingUnlockToasts; the
+  // home screen drains the queue on render. Abandoned runs never queue,
+  // so nothing fires when you bail mid-run.
+  // Queue item shapes:
+  //   { kind:'xp',         amount:N }
+  //   { kind:'difficulty', star:N, name:'Hard' }
+  //   { kind:'cosmetic',   id:'top_hat', category:'hat' }
+  function flushPendingUnlockToasts() {
+    if(typeof showToast !== 'function') return;
+    const meta = (typeof getMeta === 'function') ? getMeta() : null;
+    if(!meta || !Array.isArray(meta._pendingUnlockToasts) || meta._pendingUnlockToasts.length === 0) return;
+    const queue = meta._pendingUnlockToasts.slice();
+    // Clear + persist immediately so a double-render (e.g. star row repopulate)
+    // can't double-fire the same toasts.
+    meta._pendingUnlockToasts = [];
+    try { setMeta(meta); } catch(e){}
+    // Stagger so each toast reads cleanly. Initial delay lets the menu settle.
+    queue.forEach((item, i) => {
+      setTimeout(() => {
+        try {
+          if(item.kind === 'xp') {
+            showToast(`✨ +${item.amount} XP earned!`, 2600);
+          } else if(item.kind === 'difficulty') {
+            const nm = (item.name || '').toUpperCase();
+            showToast(`★ ${item.star} ${nm} UNLOCKED!`, 3200);
+          } else if(item.kind === 'cosmetic') {
+            const cat = item.category === 'hat' ? 'Hat'
+                      : item.category === 'skin' ? 'Ball'
+                      : 'Cosmetic';
+            showToast(`🎨 New ${cat}: ${cosmeticDisplayName(item.id)}!`, 3200);
+          }
+        } catch(e){}
+      }, 650 + i * 900);
+    });
+  }
+  window.flushPendingUnlockToasts = flushPendingUnlockToasts;
+
   // ── Achievement list for the Achievements screen (v0.19g) ──
   // Condition-based unlocks only (XP tiers live in the Locker Room). Order
   // is rough difficulty / chase-priority. `category`: 'achievement' or
@@ -7291,6 +7537,13 @@ function updatePhysics(dt) {
         if(d < 0.5) {
           G._wallSkipChecked.add(wsId);
           recordStyleEvent('wall_skip');
+          // v0.19p: wall skips also count as jump-overs for the Sky Walker
+          // challenge (and bump the hole challenge progress flash). The trick
+          // still records as 'wall_skip' for style scoring, so this isn't
+          // double-counted on the style side.
+          G._challengeJumpOvers = (G._challengeJumpOvers||0) + 1;
+          checkChallengeCompletion(true);
+          if(G._holeChallenge && G._holeChallenge.id === 'sky_walker') flashChallengeProgress();
           showToast('🦘 Wall Skip!', 700);
         }
       }
@@ -7912,12 +8165,16 @@ function updatePhysics(dt) {
         triggerShake('heavy');
         if(AC) sfxBounce(Math.max(5, Math.hypot(G.ballVel.x, G.ballVel.z)));
         // Spike damage (v0.18a: scales 1→2 HP at 7★+)
+        // v0.19r: red-variant spikes always deal at least 2 HP regardless of
+        // difficulty ramp — a visible "extra-danger" obstacle type.
         if(spike.squashT <= 0) {
           spike.squashT = 1.0;
-          const spikeDmg = (G._diffMods && G._diffMods.spikeDmg) || 1;
+          const baseDmg = (G._diffMods && G._diffMods.spikeDmg) || 1;
+          const spikeDmg = spike.variant === 'red' ? Math.max(2, baseDmg) : baseDmg;
           applyDamage(spikeDmg, 'spike');
           spawnHpDamagePopup(spikeDmg);
-          showToast(`🔺 OUCH! -${spikeDmg} HP`, 1200);
+          const label = spike.variant === 'red' ? '🟥 OUCH!' : '🔺 OUCH!';
+          showToast(`${label} -${spikeDmg} HP`, 1200);
           G._holeHazardsTouched.spikes = (G._holeHazardsTouched.spikes||0) + 1;
           // Spike blows up on contact — explosion VFX + remove from play
           spike._destroyed = true;
@@ -8031,17 +8288,40 @@ function updatePhysics(dt) {
         } else {
           const dot3 = G.ballVel.x*nx3 + G.ballVel.z*nz3;
           if(dot3 < 0) {
-            const restitution = 1.4 + (bmp.r - 0.22) / 0.32 * 0.8;
+            const isPower = bmp.variant === 'power';
+            // v0.19r: power bumpers hit *much* harder. Base restitution
+            // jumps from ~1.4 to ~2.4 and scales with radius.
+            const restitution = isPower
+              ? 2.4 + (bmp.r - 0.35) / 0.5 * 1.0
+              : 1.4 + (bmp.r - 0.22) / 0.32 * 0.8;
             G.ballVel.x -= (1+restitution)*dot3*nx3;
             G.ballVel.z -= (1+restitution)*dot3*nz3;
+            // Chaotic reflection jitter on power bumpers: ±22° azimuth rotation
+            // so the ball launches at a slightly unpredictable angle — keeps
+            // the hit feeling "wild" rather than clean-geometric.
+            if(isPower) {
+              const jitter = (Math.random() - 0.5) * 0.78; // ≈ ±22.3°
+              const cj = Math.cos(jitter), sj = Math.sin(jitter);
+              const nvx = G.ballVel.x * cj - G.ballVel.z * sj;
+              const nvz = G.ballVel.x * sj + G.ballVel.z * cj;
+              G.ballVel.x = nvx; G.ballVel.z = nvz;
+              // Also punt the ball slightly upward for extra chaos.
+              if(G.ballVel.y < 1.8) G.ballVel.y = 1.8 + Math.random() * 1.2;
+            }
             const spd = Math.hypot(G.ballVel.x, G.ballVel.z);
-            const maxSpd = 14 + bmp.r * 8;
+            const maxSpd = isPower ? 24 + bmp.r * 10 : 14 + bmp.r * 8;
             if(spd > maxSpd) { G.ballVel.x *= maxSpd/spd; G.ballVel.z *= maxSpd/spd; }
           }
-          bmp.squashT = 0.18;
+          bmp.squashT = bmp.variant === 'power' ? 0.28 : 0.18;
         }
-        if(AC) sfxBounce(Math.max(2, Math.hypot(G.ballVel.x,G.ballVel.z)*0.5));
+        const _isPowerHit = bmp.variant === 'power';
+        if(AC) sfxBounce(Math.max(2, Math.hypot(G.ballVel.x,G.ballVel.z)*(_isPowerHit ? 0.75 : 0.5)));
         spawnHitParticles(G.ballPos);
+        if(_isPowerHit) {
+          // Extra flair for power bumpers — explosion VFX + toast.
+          spawnExplosion(bmp.wx, G.ballPos.y, bmp.wz, 0.6);
+          showToast('💥 POWER BUMP!', 600);
+        }
         recordStyleEvent('bumper_hit');
         G._challengeBumperHits = (G._challengeBumperHits||0) + 1;
         G._challengeObstacleTouched = true;
@@ -8051,7 +8331,9 @@ function updatePhysics(dt) {
         trackStat('totalBounces', 1);
         G._holeBumperHits = (G._holeBumperHits||0) + 1;
         if(G._allBounceTarget > 0) G._allBounceCount = (G._allBounceCount||0) + 1;
-        triggerShake(Math.min(0.6, Math.hypot(G.ballVel.x, G.ballVel.z) / 24));
+        triggerShake(_isPowerHit
+          ? Math.min(1.0, Math.hypot(G.ballVel.x, G.ballVel.z) / 18)
+          : Math.min(0.6, Math.hypot(G.ballVel.x, G.ballVel.z) / 24));
         // Bounce & Boom on bumper hit
         if(!hasIronBall && G.modifiers.some(m=>m.id==='bounce_boom')) {
           const boomSpd = Math.hypot(G.ballVel.x, G.ballVel.z);
@@ -8168,6 +8450,19 @@ function updatePhysics(dt) {
           trackStat('spinBarHits', 1);
           trackStat('totalBounces', 1);
           triggerShake(Math.min(0.5, Math.hypot(G.ballVel.x, G.ballVel.z) / 28));
+          // v0.19r: spiked spinners damage the ball. Per-bar cooldown prevents
+          // multi-damage from a single contact (ball often sits inside the
+          // minDist for a couple substeps). Cooldown decays in the animation
+          // loop alongside squashT.
+          if(!hasIronBall && (bar.variant === 'spikes' || bar.variant === 'spikesRed') && (bar.spikeCooldownT || 0) <= 0) {
+            bar.spikeCooldownT = 1.0;
+            const baseDmg = (G._diffMods && G._diffMods.spikeDmg) || 1;
+            const barDmg = bar.variant === 'spikesRed' ? Math.max(2, baseDmg) : 1;
+            applyDamage(barDmg, 'spike_bar');
+            spawnHpDamagePopup(barDmg);
+            const label = bar.variant === 'spikesRed' ? '🟥 Spiked spinner!' : '🔺 Spiked spinner!';
+            showToast(`${label} -${barDmg} HP`, 1200);
+          }
         }
       }
     }
@@ -10707,8 +11002,8 @@ function weightedCardPicks(count) {
 function getScaledCardPrice(card) {
   // v0.18a: shop rate from difficulty mods (0.10 at ★1-2 → 0.30 at ★6+)
   const rate = (G._diffMods && G._diffMods.shopRate) || 0.15;
-  // v0.17x4: base inflation 1.5 → 1.4 per tuning sheet
-  return Math.max(1, Math.round(card.price * 1.4 * (1 + G.hole * rate) * PRICE_MULTIPLIER));
+  // v0.19o1: base inflation 1.4 → 1.5 per tuning sheet
+  return Math.max(1, Math.round(card.price * 1.5 * (1 + G.hole * rate) * PRICE_MULTIPLIER));
 }
 
 function closeShop() {
@@ -10793,10 +11088,10 @@ function weightedShopPicks(pool, count) {
 
 function getScaledPrice(perk) {
   // Base prices inflated, then scale per hole, then global PRICE_MULTIPLIER
-  // v0.17x4: base inflation 1.5 → 1.4 per tuning sheet
+  // v0.19o1: base inflation 1.4 → 1.5 per tuning sheet
   // v0.18a: shop rate from difficulty mods
   const rate = (G._diffMods && G._diffMods.shopRate) || 0.15;
-  const base = Math.max(1, Math.round(perk.price * 1.4 * (1 + G.hole * rate) * PRICE_MULTIPLIER));
+  const base = Math.max(1, Math.round(perk.price * 1.5 * (1 + G.hole * rate) * PRICE_MULTIPLIER));
   // Multiplayer: 50% off — coins are split across players
   return isMultiplayer() ? Math.max(1, Math.round(base * 0.5)) : base;
 }
@@ -13092,6 +13387,38 @@ function activateCoinShower() {
     lastValidIdx = i;
   }
 
+  // v0.19p: guarantee the coin shower delivers all 20 coins even when the aim
+  // line runs out of fairway. For every coin that couldn't fit on the straight
+  // line, scatter a replacement in a random fairway cell around the ball.
+  // Keeps the perk feeling rewarding regardless of geometry ("coin shower
+  // should still trigger even if there is not enough space").
+  const scattered = [];
+  const shortfall = LINE_COUNT - placements.length;
+  if(shortfall > 0) {
+    // Ring search outward from the ball — prefer cells close to the intended
+    // line so the shower still reads as "ahead of me" instead of all-around.
+    let scatterIdx = placements.length; // drop order continues sequentially for timing
+    const maxAttempts = shortfall * 40;
+    const usedKeys = new Set(placements.map(p => `${Math.round(p.wx*4)},${Math.round(p.wz*4)}`));
+    for(let a = 0; a < maxAttempts && scattered.length < shortfall; a++) {
+      // Bias scatter forward-and-around the ball — pick a random angle skewed
+      // toward the aim direction, and a random radius between 1.2 and 5.0.
+      const baseAngle = Math.atan2(dirZ, dirX);
+      const ang = baseAngle + (Math.random() - 0.5) * Math.PI * 1.3; // ±117° cone
+      const rad = 1.2 + Math.random() * 3.8;
+      const wx = G.ballPos.x + Math.cos(ang) * rad;
+      const wz = G.ballPos.z + Math.sin(ang) * rad;
+      const key = `${Math.round(wx*4)},${Math.round(wz*4)}`;
+      if(usedKeys.has(key)) continue;
+      const cell = getCell(wx, wz);
+      if(cell !== CELL.FAIR) continue;
+      usedKeys.add(key);
+      scattered.push({ wx, wz, idx: scatterIdx++, _scattered: true });
+    }
+    // Merge scattered coins in; they share the same drop/land animation path.
+    for(const s of scattered) placements.push(s);
+  }
+
   // If the line made it all 20 deep, append a 5× bonus coin one spacing further
   const wantBonus = lineClean && placements.length === LINE_COUNT;
   if(wantBonus) {
@@ -13154,16 +13481,18 @@ function activateCoinShower() {
     G.coinMeshes.push(coinObj);
   }
 
-  // Toast + SFX feedback — tie messaging to actual coins placed
+  // Toast + SFX feedback — tie messaging to actual coins placed.
+  // v0.19p: with scatter fallback the shower always drops ~20 coins; messaging
+  // reflects whether the line was clean (bonus unlocked) or fell back to scatter.
   const regularCount = placements.filter(p => !p.isSpecial).length;
   if(wantBonus && placements.length > LINE_COUNT) {
     showToast(`🌧️ COIN SHOWER! +${regularCount} + 5× bonus!`, 1800);
     triggerShake('med');
-  } else if(lineClean) {
+  } else if(scattered.length === 0) {
     showToast(`🌧️ Coin Shower! +${regularCount} coins`, 1500);
     triggerShake('light');
   } else {
-    showToast(`🌧️ Coin Shower cut short! +${regularCount} (aim away from walls!)`, 1800);
+    showToast(`🌧️ Coin Shower! +${regularCount} coins (scatter)`, 1600);
     triggerShake('light');
   }
   // Staggered landing blips — match visual cadence
@@ -13930,7 +14259,11 @@ function updateParticles(dt) {
 }
 
 // ── Camera ────────────────────────────────────────────
-function updateCamera() {
+function updateCamera(dt) {
+  // v0.19q: dt arg is optional — defaults preserve old behavior for legacy
+  // callsites. Used by the follow-cam bounce-catch lerp below so the catch-up
+  // rate stays consistent across framerates.
+  if(typeof dt !== 'number' || !isFinite(dt)) dt = 1/60;
   // ── Sharpshooter-Ball cinematic: trail the ball, zoom out on first contact ──
   if(G._ssBallCinematic) {
     const cin = G._ssBallCinematic;
@@ -14140,11 +14473,20 @@ function updateCamera() {
     );
     return;
   }
-  // v0.17y5: 3rd-person follow-cam during rolling shots.
-  // When the ball is rolling with meaningful horizontal velocity, lerp camTheta
-  // toward an azimuth that places the camera behind the ball (looking along the
-  // ball's motion). On sharp bounces/deflections, the lerp smooths the rotation
-  // so the camera rotates into the new direction rather than cutting.
+  // v0.17y5 / v0.19q: 3rd-person follow-cam during rolling shots.
+  // Camera distance + pitch stay exactly where the player set them; only the
+  // azimuth (camTheta) auto-rotates to sit behind the ball.
+  //
+  // Two lerp rates:
+  //   - Base (calm): gentle catch-up for smooth curves (sand drift, slopes).
+  //   - Bounce boost: when the ball's velocity direction changes sharply
+  //     (wall bounce, bumper, obstacle deflection), lerp aggressively for a
+  //     short window so the camera snaps behind the new trajectory and the
+  //     player can see what's coming instead of staring at the ball's butt.
+  //
+  // Framerate-independent — uses 1 - exp(-k*dt) so the catch-up feels the
+  // same at 30fps and 144fps.
+  //
   // Skipped when:
   //   - Ball is aiming (user is staging the next shot)
   //   - Sharpshooter / ball-cinematic cameras are active (handled above)
@@ -14155,6 +14497,28 @@ function updateCamera() {
     const vx = G.ballVel.x, vz = G.ballVel.z;
     const hSpeed = Math.hypot(vx, vz);
     if(hSpeed > 1.5) {
+      // Normalize current velocity direction for bounce detection
+      const curDirX = vx / hSpeed;
+      const curDirZ = vz / hSpeed;
+
+      // Bounce detection: compare against previous direction. Uses dot product
+      // so a 0°→25° change = dot 0.906; 90° change = dot 0. Threshold 0.94 =
+      // ~20° single-frame turn (wall hit, bumper kick, obstacle carom).
+      // First frame after rolling starts (no prev dir yet) seeds baseline.
+      const prevDirX = G._camPrevDirX, prevDirZ = G._camPrevDirZ;
+      if(typeof prevDirX === 'number' && typeof prevDirZ === 'number') {
+        const dot = curDirX * prevDirX + curDirZ * prevDirZ;
+        if(dot < 0.94) {
+          // Sharp direction change — mark a bounce event so the boost window
+          // opens. Magnitude-weighted: larger angle → longer boost.
+          // angle ≈ acos(dot); normalized 0→1 across [0.94, -1].
+          const severity = Math.max(0, Math.min(1, (0.94 - dot) / 1.94));
+          G._camBounceUntil = performance.now() + (180 + severity * 420); // 180–600ms window
+        }
+      }
+      G._camPrevDirX = curDirX;
+      G._camPrevDirZ = curDirZ;
+
       // Desired theta: camera behind ball, looking along velocity.
       // The orbital camera's forward direction is (-sin(theta), -cos(theta)),
       // so setting theta = atan2(-vx, -vz) places the camera along the OPPOSITE
@@ -14164,12 +14528,29 @@ function updateCamera() {
       let delta = targetTheta - G.camTheta;
       while(delta > Math.PI)  delta -= Math.PI * 2;
       while(delta < -Math.PI) delta += Math.PI * 2;
-      // Speed-scaled lerp: faster ball → quicker catch-up. Clamp so sharp
-      // bounces still lerp smoothly rather than snapping.
-      // 0.05 at 2 m/s rising to ~0.12 at 15+ m/s.
-      const lerpK = Math.min(0.12, 0.03 + hSpeed * 0.006);
-      G.camTheta += delta * lerpK;
+
+      // Pick catch-up rate. `k` is the continuous-time rate such that after
+      // dt seconds the camera covers (1 - exp(-k*dt)) of the remaining delta.
+      // v0.19q2: halved both rates for a gentler feel (was 2+0.15*v calm,
+      // 12+0.35*v boost). Also halved the boost window scaling so the snap
+      // still completes in a reasonable window at the new rate.
+      //   - Calm base: k = 1 + hSpeed * 0.075 →  ~18% per 150ms
+      //   - Boost:     k = 6 + hSpeed * 0.175 →  ~68% per 250ms
+      const now = performance.now();
+      const boosting = G._camBounceUntil && now < G._camBounceUntil;
+      const k = boosting ? (6 + hSpeed * 0.175) : (1 + hSpeed * 0.075);
+      const alpha = 1 - Math.exp(-k * dt);
+      G.camTheta += delta * alpha;
+    } else {
+      // Ball slow — clear bounce state so next roll starts fresh.
+      G._camPrevDirX = undefined;
+      G._camPrevDirZ = undefined;
     }
+  } else {
+    // Not eligible for follow-cam this frame — also clear so a new rolling
+    // phase seeds its own baseline direction rather than inheriting stale.
+    G._camPrevDirX = undefined;
+    G._camPrevDirZ = undefined;
   }
 
   const dist = G.camDist * (G._shrinkCamMult || 1.0);
@@ -14767,6 +15148,12 @@ function fireShot() {
   G.rolling = true;
   G.rollingSlowTimer = 0;
   G.aimMode = false;
+  // v0.19r: drag-aiming sets aimManualOverride=true so the aim arrow doesn't
+  // fight the cursor. That flag was sticking through the entire roll and
+  // silently blocking the follow-cam lerp (it gates on `!aimManualOverride`).
+  // Clear on fire — we're no longer aiming, so manual-aim intent doesn't
+  // apply anymore.
+  aimManualOverride = false;
   G._shotJustFired = performance.now();
   // Launch-grace flags: enable 200ms wall pass-through only for Catapult / pre-loaded Jumper.
   // These trigger airborne launches where colliding with a nearby wall at tee is annoying.
@@ -15689,6 +16076,8 @@ function showGameOver(bustedBudget=false){
   </div>` : '';
 
   const coinsLine = `<div style="font-size:0.8rem;color:#f5c842;margin:4px 0">🪙 ${G.coins} coins earned this run</div>`;
+  // v0.19p: XP line placeholder. Filled in after XP deposit runs below.
+  const xpLine = `<div id="go-xp-line" style="font-size:0.95rem;color:#60d4ff;font-weight:700;margin:6px 0 2px;text-shadow:0 0 10px rgba(96,212,255,0.4);opacity:0;transition:opacity 0.4s ease-out"></div>`;
 
   const runStyle = G._runStyleScore || 0;
   const bestTrick = G._bestTrickRun;
@@ -15709,7 +16098,7 @@ function showGameOver(bustedBudget=false){
       <p>You lost your last life on hole ${holesPlayed + 1}.<br>
       ${G.totalStrokes} strokes over ${holesPlayed} holes.</p>
       <div class="big-score-val" style="font-size:clamp(3rem,12vw,5rem)">${ds}</div>
-      ${styleLine}${soloAwards}${coinsLine}${seedLine}
+      ${styleLine}${soloAwards}${coinsLine}${xpLine}${seedLine}
       <button class="play-btn" onclick="startGame()">Try Again</button>
       <button class="play-btn" onclick="escMainMenu()" style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,0.4);margin-top:-8px;font-size:0.9rem;padding:12px 36px">🏠 Main Menu</button>
       <div class="section-label">Leaderboard</div>
@@ -15730,7 +16119,7 @@ function showGameOver(bustedBudget=false){
         diff<=2?'A little over par. Not bad!':
         diff<=5?'Room for improvement, champ.':
         'Hey, at least you finished!'}</p>
-      ${styleLine}${soloAwards}${coinsLine}${seedLine}
+      ${styleLine}${soloAwards}${coinsLine}${xpLine}${seedLine}
       <button class="play-btn" onclick="startGame()">Play Again</button>
       <button class="play-btn" onclick="escMainMenu()" style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,0.4);margin-top:-8px;font-size:0.9rem;padding:12px 36px">🏠 Main Menu</button>
       <div class="section-label">Leaderboard</div>
@@ -15755,31 +16144,26 @@ function showGameOver(bustedBudget=false){
       });
       if(newStar != null) {
         _newStarThisRun = newStar;
-        const mods = getDifficultyMods(newStar);
-        // Queue toast after the overlay is visible so it stacks on top.
-        setTimeout(() => {
-          if(typeof showToast === 'function') {
-            showToast(`★ ${newStar} ${mods.name.toUpperCase()} UNLOCKED!`, 3200);
-          }
-          // Celebratory arpeggio SFX
-          if(typeof AC !== 'undefined' && AC) {
-            try {
-              const ac = getAC ? getAC() : AC;
-              const t0 = ac.currentTime;
-              const notes = [523, 659, 784, 1047]; // C E G C (octave)
-              notes.forEach((f, i) => {
-                const o = ac.createOscillator(); o.type = 'triangle';
-                o.frequency.value = f;
-                const g = ac.createGain();
-                g.gain.setValueAtTime(0, t0 + i*0.08);
-                g.gain.linearRampToValueAtTime(0.18, t0 + i*0.08 + 0.02);
-                g.gain.exponentialRampToValueAtTime(0.001, t0 + i*0.08 + 0.35);
-                o.connect(g); g.connect(getACDest ? getACDest() : ac.destination);
-                o.start(t0 + i*0.08); o.stop(t0 + i*0.08 + 0.4);
-              });
-            } catch(e){}
-          }
-        }, 900);
+        // v0.19p: star toast moved to home-screen arrival (queued later with
+        // other unlock toasts). Keep the celebratory arpeggio here so the
+        // feedback lands in the moment — the toast reads when they return home.
+        if(typeof AC !== 'undefined' && AC) {
+          try {
+            const ac = getAC ? getAC() : AC;
+            const t0 = ac.currentTime;
+            const notes = [523, 659, 784, 1047]; // C E G C (octave)
+            notes.forEach((f, i) => {
+              const o = ac.createOscillator(); o.type = 'triangle';
+              o.frequency.value = f;
+              const g = ac.createGain();
+              g.gain.setValueAtTime(0, t0 + i*0.08);
+              g.gain.linearRampToValueAtTime(0.18, t0 + i*0.08 + 0.02);
+              g.gain.exponentialRampToValueAtTime(0.001, t0 + i*0.08 + 0.35);
+              o.connect(g); g.connect(getACDest ? getACDest() : ac.destination);
+              o.start(t0 + i*0.08); o.stop(t0 + i*0.08 + 0.4);
+            });
+          } catch(e){}
+        }
       }
     }
   } catch(e) { console.warn('difficulty unlock eval failed', e); }
@@ -15787,15 +16171,20 @@ function showGameOver(bustedBudget=false){
   // ── XP deposit + unlock check (v0.19e) ──
   // Final XP bumps: run outcome + new-star bonus. Deposited into meta.xp,
   // then any XP-gated cosmetics that just crossed their threshold are
-  // unlocked and toasted. Per-hole XP was already accumulated in onHoled.
+  // unlocked. Per-hole XP was already accumulated in onHoled.
   // v0.19f also bumps meta.totalRuns and runs achievement-based unlocks.
+  // v0.19p: unlock toasts moved to main-menu arrival — we queue them in
+  // meta._pendingUnlockToasts and flush on next home screen render.
+  // Abandoned runs (handled in escMainMenu) do NOT reach this branch; they
+  // forfeit all XP and unlocks as intended.
+  let _xpEarnedThisRun = 0;
   try {
     const endBonus = bustedBudget ? 30 : 100;
     const starBonus = _newStarThisRun != null ? 50 : 0;
     G.xpThisRun = (G.xpThisRun || 0) + endBonus + starBonus;
-    const earned = G.xpThisRun;
+    _xpEarnedThisRun = G.xpThisRun;
     const meta = getMeta();
-    meta.xp = (meta.xp || 0) + earned;
+    meta.xp = (meta.xp || 0) + _xpEarnedThisRun;
     // Bump totalRuns BEFORE achievement check so birthday_cake counts
     // the run that just ended as the 10th.
     meta.totalRuns = (meta.totalRuns || 0) + 1;
@@ -15810,26 +16199,32 @@ function showGameOver(bustedBudget=false){
       newStar: _newStarThisRun,
       runLength: G.totalHoles || 9,
     });
-    // Merge XP + achievement unlocks for a single ordered toast stack.
-    const allUnlocks = newlyUnlocked.concat(achievementUnlocks);
-    setMeta(meta);
-    // Queue XP toast after the overlay is visible. Stacks timing with star toast.
-    setTimeout(() => {
-      if(typeof showToast === 'function' && earned > 0) {
-        showToast(`+${earned} XP`, 2400);
-      }
-    }, 1400);
-    // Queue unlock toasts — one per item, staggered so each reads cleanly.
-    if(allUnlocks.length > 0) {
-      allUnlocks.forEach((item, i) => {
-        setTimeout(() => {
-          if(typeof showToast === 'function') {
-            const cat = item.category === 'hat' ? 'Hat' : 'Skin';
-            showToast(`🎨 New ${cat}: ${cosmeticDisplayName(item.id)}!`, 3200);
-          }
-        }, 2000 + i * 900);
-      });
+    // Merge XP + achievement unlocks into a single ordered queue for the
+    // home screen to flush. New-star is queued explicitly so it reads the
+    // same way cosmetic unlocks do ("you earned this when you got here").
+    const pending = Array.isArray(meta._pendingUnlockToasts) ? meta._pendingUnlockToasts : [];
+    if(_xpEarnedThisRun > 0) {
+      pending.push({ kind:'xp', amount: _xpEarnedThisRun });
     }
+    if(_newStarThisRun != null) {
+      const mods = getDifficultyMods(_newStarThisRun);
+      pending.push({ kind:'difficulty', star:_newStarThisRun, name: mods.name });
+    }
+    for(const item of newlyUnlocked.concat(achievementUnlocks)) {
+      pending.push({ kind:'cosmetic', id:item.id, category:item.category });
+    }
+    meta._pendingUnlockToasts = pending;
+    setMeta(meta);
+    // v0.19p: write XP earned into the inline game-over line (placeholder was
+    // rendered in the overlay HTML above). Fade-in so it reads cleanly after
+    // the style/coins count-ups settle.
+    try {
+      const xpLineEl = document.getElementById('go-xp-line');
+      if(xpLineEl && _xpEarnedThisRun > 0) {
+        xpLineEl.textContent = `✨ +${_xpEarnedThisRun} XP earned`;
+        setTimeout(() => { xpLineEl.style.opacity = '1'; }, 1100);
+      }
+    } catch(e){}
   } catch(e) { console.warn('XP deposit failed', e); }
 
   // Render leaderboard into the game-over overlay
@@ -16935,6 +17330,8 @@ function escMainMenu() {
     </div>
     <button class="play-btn" onclick="confirmStartGame()">Tee Off</button>
     <button class="play-btn" id="btn-resume" style="display:none;margin-top:6px;background:rgba(80,180,80,0.85);font-size:0.85rem" onclick="resumeGame()">▶ Resume Run</button>
+    <button class="play-btn" onclick="openLocker()" style="margin-top:6px;background:rgba(167,139,250,0.18);border:1px solid rgba(167,139,250,0.5);color:#c4a7ff;font-size:0.85rem;padding:10px 28px">🎨 Locker Room</button>
+    <button class="play-btn" onclick="openAchievements()" style="margin-top:6px;background:rgba(245,200,66,0.18);border:1px solid rgba(245,200,66,0.5);color:#f5c842;font-size:0.85rem;padding:10px 28px">🏆 Achievements</button>
     <div style="font-size:0.55rem;color:rgba(255,255,255,0.35);letter-spacing:1.5px;margin-top:4px">Alpha ${GAME_VERSION} — ${CHANGE_NOTE}</div>
     <div class="section-label" style="margin-top:14px">Save Slot</div>
     <div id="inline-profile-row" style="display:flex;gap:8px;width:100%;max-width:320px;margin:10px 0 14px;justify-content:center;padding-top:8px"></div>
@@ -16953,6 +17350,10 @@ function escMainMenu() {
   // v0.18a: the overlay HTML was just rebuilt — repopulate the star row
   // buttons now that the two container divs exist in DOM.
   if(typeof renderStarRow === 'function') renderStarRow();
+  // v0.19p: flush any unlock toasts queued during showGameOver. Only fires
+  // when returning home from a completed/lost run — abandoned runs never
+  // queue toasts in the first place.
+  if(typeof flushPendingUnlockToasts === 'function') flushPendingUnlockToasts();
 }
 function escNewRun() {
   if(!confirm('Start a new run? This will erase your current saved run.')) return;
@@ -18045,6 +18446,9 @@ function _revealMainMenu() {
   checkAutoSave();
   renderLeaderboard();
   if(typeof renderStarRow === 'function') renderStarRow();
+  // v0.19p: flush any unlock toasts queued from prior runs (e.g. game-over
+  // followed by page reload). No-op if queue empty.
+  if(typeof flushPendingUnlockToasts === 'function') flushPendingUnlockToasts();
 }
 window.bootProfileGate = bootProfileGate;
 
@@ -19055,6 +19459,10 @@ function animate(now) {
     // angle = arc length / radius. Big jumps (respawns, warps, Three Balls
     // resolutions) are skipped so the ball doesn't whip through dozens of
     // rotations in a single frame.
+    // v0.19q: flipped the roll axis — previous (-dz, 0, dx) spun the ball
+    // backwards (top moved opposite to travel). Correct forward roll for
+    // right-hand rule + Three.js +Y-up is (dz, 0, -dx): movement along +X
+    // rotates about -Z, which sends the top of the ball forward in +X.
     if(G.ball) {
       const dx = G.ballPos.x - (G._lastBallX !== undefined ? G._lastBallX : G.ballPos.x);
       const dz = G.ballPos.z - (G._lastBallZ !== undefined ? G._lastBallZ : G.ballPos.z);
@@ -19063,9 +19471,7 @@ function animate(now) {
       // not real movement. Normal rolling peaks around 0.3 units/frame.
       const TELEPORT_THRESHOLD = 1.0;
       if(dist > 1e-5 && dist < TELEPORT_THRESHOLD) {
-        // Axis = perpendicular to movement in the XZ plane (right-hand rule
-        // gives forward-roll: movement along +X → rotate about -Z).
-        _ballRollAxis.set(-dz, 0, dx).normalize();
+        _ballRollAxis.set(dz, 0, -dx).normalize();
         const angle = dist / BALL_R;
         G.ball.rotateOnWorldAxis(_ballRollAxis, angle);
       }
@@ -19724,10 +20130,23 @@ function animate(now) {
       }
     }
 
-    // ── Spike cooldown timer ──────────────────────────────
+    // ── Spike cooldown timer + slide animation (v0.19r) ────
     if(G.spikes) {
       for(const spike of G.spikes) {
         if(spike.squashT > 0) spike.squashT -= dt;
+        // Sliding spike ball: advance phase, update both the mesh position
+        // and the hitbox anchor (wx/wz) so physics collision tracks the
+        // moving ball. Frozen by Freeze Frame perk like other obstacles.
+        if(spike.slide && !spike._destroyed) {
+          const _freezeMult = G._freezeFrameActive ? 0 : 1;
+          spike.slide.phase += spike.slide.speed * dt * _freezeMult;
+          const offset = Math.sin(spike.slide.phase) * spike.slide.range;
+          const newWx = spike.baseWx + (spike.slide.axis === 'X' ? offset : 0);
+          const newWz = spike.baseWz + (spike.slide.axis === 'Z' ? offset : 0);
+          spike.wx = newWx;
+          spike.wz = newWz;
+          if(spike.mesh) spike.mesh.position.set(newWx, spike.baseH + FLOOR_H/2, newWz);
+        }
       }
     }
 
@@ -19741,6 +20160,8 @@ function animate(now) {
         if(bar.barGroup) {
           bar.barGroup.rotation.y = bar.angle;
         }
+        // v0.19r: decay per-bar spike cooldown (for spiked variants).
+        if(bar.spikeCooldownT > 0) bar.spikeCooldownT -= dt;
       }
     }
 
@@ -19859,7 +20280,7 @@ function animate(now) {
   updateKeyboardCamera(dt);
   if(G.state === 'playing') updateHandUI();
   if(G.state === 'playing') updateFloombas(dt);
-  updateCamera();
+  updateCamera(dt);
   composer.render();
 }
 initComposer();
