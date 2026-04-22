@@ -2810,8 +2810,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.19r';
-const CHANGE_NOTE = 'Obstacle expansion: red 2-HP spikes, sliding spike balls, spiked/red-spiked spinners, 4-dir conveyors, power bumpers (atomic orange)';
+const GAME_VERSION = '0.19u';
+const CHANGE_NOTE = 'Guaranteed back-half defenses, 50% front-half defenses, new rotating spike-ring defense (black/red), moving hole amplitude 3× bigger';
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
@@ -2839,6 +2839,12 @@ const G = {
   hotStreak: 0,           // consecutive par-or-better holes
   piggyBankStacks: 0,     // number of Piggy Bank perks bought
   coinMeshes: [],         // {mesh, wx, wz, collected} per-hole coin objects
+  heartMeshes: [],        // v0.19s: per-hole healing heart objects
+  // v0.19t: hole defense system — one per hole (back half only).
+  _holeDefense: null,     // {kind, ...params} copied from data.holeDefense
+  _holeDefenseGroup: null, // THREE.Group containing all defense meshes
+  _holeWorldOffset: {x:0, z:0}, // moving-hole live world-space offset
+  _holeDefenseState: null, // per-kind mutable state (phase, broken, etc.)
   // ── Perk state flags ────────────────────────────────
   swingMult: 1.0,         // multiplicative shot power (Strengthen Swing stacks)
   jumpsMax: 0,            // max jumps per hole (Jumper perk, stacks to 3)
@@ -4470,6 +4476,162 @@ function generatePuttPuttCourse(holeNum) {
     sp++;
   }
 
+  // ── 10d. Hole defense selection (v0.19u) ──────────────
+  // Every hole gets a chance at a hole defense. Back half is GUARANTEED on
+  // regular and above (with harder defenses unlocked further in); front half
+  // gets a reduced 50% chance on regular, drawn only from "easy" flavors so
+  // the early holes still feel like warm-ups.
+  //
+  // Difficulty tiers for each defense kind:
+  //   EASY    (front + back): moving_hole line, slat_ring_4 static, glass_dome,
+  //                          magnet_field (weak), force_field (default)
+  //   MEDIUM  (back, sometimes front at high diff): slat_ring_6 static,
+  //                          slat_ring_4 rotating, moving_hole circle,
+  //                          magnet_field strong, force_field (faster cycle)
+  //   HARD    (back only, later): spike_ring (4 black + rotating), slat_ring_6
+  //                          rotating, moving_hole diamond/figure8,
+  //                          force_field flickering, spike_ring_red (final)
+  let holeDefense = null;
+  {
+    const totalHolesRun = (G.totalHoles || 9);
+    const backHalfStart = Math.floor(totalHolesRun * 0.5); // 4 for 9h, 9 for 18h
+    const inBackHalf = holeNum >= backHalfStart;
+
+    // Half-relative progress 0..1 (position within this half)
+    const halfLen = inBackHalf ? Math.max(1, totalHolesRun - backHalfStart) : Math.max(1, backHalfStart);
+    const halfProg = inBackHalf
+      ? (holeNum - backHalfStart) / Math.max(1, halfLen - 1)
+      : holeNum / Math.max(1, halfLen - 1);
+
+    // Overall run progress 0..1 for severity scaling (speed, strength).
+    const runProgress = holeNum / Math.max(1, totalHolesRun - 1);
+
+    // Defense probability.
+    let defenseP;
+    if(inBackHalf) {
+      // Back half: guaranteed on regular (★3+); softer on easier diffs.
+      defenseP = diff >= 3 ? 1.0
+               : diff === 2 ? 0.85
+               : 0.70;
+    } else {
+      // Front half: 50% on ★3; ±10% per star.
+      // ★1→30%, ★2→40%, ★3→50%, ★4→60%, ★5+→70%+.
+      const base = 0.50 + (diff - 3) * 0.10;
+      defenseP = Math.max(0.20, Math.min(0.85, base));
+    }
+
+    if(rng() < defenseP) {
+      // Candidate pool marked with tier. `spike_ring` is the new rotating-
+      // spike-ball ring defense (hard).
+      const pool = [
+        // EASY
+        { kind:'moving_hole',   params:{pattern:'line'},    tier:'E', weight: 8 },
+        { kind:'slat_ring_4',   params:{rotates:false},     tier:'E', weight: 8 },
+        { kind:'glass_dome',    params:{},                  tier:'E', weight: 7 },
+        { kind:'magnet_field',  params:{strengthTier:'low'},tier:'E', weight: 6 },
+        { kind:'force_field',   params:{flicker:false},     tier:'E', weight: 6 },
+        // MEDIUM
+        { kind:'moving_hole',   params:{pattern:'circle'},  tier:'M', weight: 7 },
+        { kind:'slat_ring_6',   params:{rotates:false},     tier:'M', weight: 6 },
+        { kind:'slat_ring_4',   params:{rotates:true},      tier:'M', weight: 5 },
+        { kind:'magnet_field',  params:{strengthTier:'high'},tier:'M',weight: 5 },
+        // HARD
+        { kind:'spike_ring',    params:{variant:'black'},   tier:'H', weight: 6 },
+        { kind:'spike_ring',    params:{variant:'red'},     tier:'H', weight: 4, redOnly:true },
+        { kind:'slat_ring_6',   params:{rotates:true},      tier:'H', weight: 5 },
+        { kind:'moving_hole',   params:{pattern:'diamond'}, tier:'H', weight: 5 },
+        { kind:'moving_hole',   params:{pattern:'figure8'}, tier:'H', weight: 4 },
+        { kind:'force_field',   params:{flicker:true},      tier:'H', weight: 4 },
+      ];
+
+      // Build the allowed tier set based on half + progress.
+      const allowed = new Set();
+      if(!inBackHalf) {
+        allowed.add('E');
+        if(diff >= 4) allowed.add('M');
+      } else if(halfProg < 0.35) {
+        allowed.add('E'); allowed.add('M');
+      } else if(halfProg < 0.70) {
+        allowed.add('E'); allowed.add('M'); allowed.add('H');
+      } else {
+        allowed.add('M'); allowed.add('H');
+      }
+      // Red spike ring only appears past ~75% run progress, or on ★5+ in the
+      // late back half.
+      const eligible = pool.filter(p => {
+        if(!allowed.has(p.tier)) return false;
+        if(p.redOnly && runProgress < 0.75 && diff < 5) return false;
+        return true;
+      });
+      // Weight boosts: later holes lean into harder tiers.
+      const weightOf = (p) => {
+        let w = p.weight;
+        if(inBackHalf && halfProg >= 0.35 && p.tier === 'H') w *= 1.3;
+        if(inBackHalf && halfProg >= 0.70 && p.tier === 'H') w *= 1.3;
+        if(diff >= 4 && p.tier === 'H') w *= 1.2;
+        return w;
+      };
+      const totalW = eligible.reduce((s,p) => s + weightOf(p), 0);
+      let roll = rng() * totalW;
+      let chosen = eligible[0];
+      for(const p of eligible) {
+        const w = weightOf(p);
+        if(roll < w) { chosen = p; break; }
+        roll -= w;
+      }
+
+      const hd = { kind: chosen.kind };
+      // Speed factor: 1.0 baseline + run progress + difficulty bonus.
+      const speedFactor = 1.0 + runProgress * 1.3 + Math.max(0, diff - 2) * 0.15;
+      hd.speedFactor = speedFactor;
+
+      if(chosen.kind === 'moving_hole') {
+        hd.pattern = chosen.params.pattern;
+        // AMPLITUDE — wide range so the hole actually traverses the fairway.
+        // Previously 1.8-3.2 which felt like a subtle wobble. Bumped to 4-7 world
+        // units base; line gets more because it only needs one axis clear.
+        // Build-time amplitude check will shrink to fit the fairway if needed.
+        if(hd.pattern === 'line') {
+          hd.amplitude = 5.5 + rng() * 2.0;  // 5.5 - 7.5 world units
+        } else {
+          hd.amplitude = 3.5 + rng() * 1.5;  // 3.5 - 5.0 world units
+        }
+        hd.axis = rng() < 0.5 ? 'X' : 'Z'; // used only for 'line'
+        hd.phase = rng() * Math.PI * 2;
+      } else if(chosen.kind === 'slat_ring_4' || chosen.kind === 'slat_ring_6') {
+        hd.count = chosen.kind === 'slat_ring_4' ? 4 : 6;
+        hd.rotates = chosen.params.rotates;
+        hd.rotSpeed = hd.rotates ? (0.4 + rng() * 0.5) * speedFactor : 0;
+        hd.startAngle = rng() * Math.PI * 2;
+        hd.radius = chosen.kind === 'slat_ring_4' ? 1.35 : 1.55;
+      } else if(chosen.kind === 'spike_ring') {
+        // NEW: Four spike balls arranged around the hole in a ring. Always
+        // rotates (that's the core mechanic). Red variant unlocks at final
+        // third of the run — deals 2 HP instead of 1.
+        hd.variant = chosen.params.variant; // 'black' or 'red'
+        hd.count = 4;
+        hd.radius = 1.35;
+        hd.rotSpeed = (0.7 + rng() * 0.5) * speedFactor;
+        hd.startAngle = rng() * Math.PI * 2;
+      } else if(chosen.kind === 'magnet_field') {
+        const tier = chosen.params.strengthTier;
+        const base = tier === 'low' ? 6 : 10;
+        hd.strength = base + runProgress * 8 + Math.max(0, diff - 2) * 3;
+        hd.radius = 2.0;
+      } else if(chosen.kind === 'force_field') {
+        hd.bubbleR = 1.8;
+        const cycleScale = 1.0 / speedFactor;
+        hd.closedSecs = (1.8 + rng() * 0.4) * cycleScale;
+        hd.openSecs   = (0.9 + rng() * 0.4) * cycleScale;
+        hd.phase = rng() * (hd.closedSecs + hd.openSecs);
+        hd.flicker = !!chosen.params.flicker;
+      } else if(chosen.kind === 'glass_dome') {
+        hd.radius = 1.7;
+      }
+      holeDefense = hd;
+    }
+  }
+
   // ── 11. Par ───────────────────────────────────────────
   let pathLen = 0;
   for(let i=1; i<waypoints.length; i++) {
@@ -4483,6 +4645,9 @@ function generatePuttPuttCourse(holeNum) {
   const totalObstacles = (bumperData.length || 0) + (spinBarData.length || 0) + 
     (slideBlockData.length || 0) + (rockData.length || 0) + (spikeData.length || 0);
   if(totalObstacles >= 8) basePar += 1;
+  // v0.19t: hole defense par bump. Glass dome explicitly skipped — per design,
+  // the breakable-in-one-shot tension feels better without extra par cushion.
+  if(holeDefense && holeDefense.kind !== 'glass_dome') basePar += 1;
   // Difficulty penalty: harder stars = tighter par
   const parPenalty = diff >= 4 ? 2 : diff >= 3 ? 1 : 0;
   // v0.17y5: par cap now scales with hole number — early holes stay tight,
@@ -4609,6 +4774,35 @@ function generatePuttPuttCourse(holeNum) {
     }
   }
 
+  // ── Healing hearts (v0.19s) ──────────────────────────
+  // Spinning glowing hearts on the fairway. On pickup: heal +2 HP.
+  // Per-hole spawn rate: ~25% at regular (diff 3), scaled lightly by diff:
+  //   diff 1: 40%   diff 2: 32%   diff 3: 25%   diff 4: 18%   diff 5+: 12%
+  // 90% of holes that spawn a heart get one; 10% get two.
+  const heartData = [];
+  const heartSpawnP = diff <= 1 ? 0.40
+                    : diff === 2 ? 0.32
+                    : diff === 3 ? 0.25
+                    : diff === 4 ? 0.18
+                    : 0.12;
+  if(rng() < heartSpawnP) {
+    const heartCount = rng() < 0.10 ? 2 : 1;
+    const heartCands = [...ppFair]
+      .filter(c => ppTeeDist(c) >= 3 && ppHoleDist(c) >= 3)
+      .sort(() => rng() - 0.5);
+    for(let hi = 0; hi < heartCands.length && heartData.length < heartCount; hi++) {
+      const c = heartCands[hi];
+      const wx = c.x * TILE_SIZE, wz = c.y * TILE_SIZE;
+      // Keep hearts clear of existing coins, rocks, and spikes so they read
+      // as distinct objects, not coin-clusters.
+      if(coinData.some(cd => Math.hypot(wx-cd.wx, wz-cd.wz) < TILE_SIZE * 1.2)) continue;
+      if(rockData.some(r => Math.hypot(wx-r.wx, wz-r.wz) < TILE_SIZE * 1.5)) continue;
+      if(spikeData && spikeData.some(s => Math.hypot(wx-s.wx, wz-s.wz) < TILE_SIZE * 1.8)) continue;
+      if(heartData.some(h => Math.hypot(wx-h.wx, wz-h.wz) < TILE_SIZE * 3.0)) continue;
+      heartData.push({ wx, wz });
+    }
+  }
+
   // Build path-ordered splineWS by walking waypoint segments (proper centerline)
   const ppSplineWS = [];
   for(let i = 0; i < waypoints.length - 1; i++) {
@@ -4630,7 +4824,8 @@ function generatePuttPuttCourse(holeNum) {
   return {grid,W,H,teePos,holePos,par,heightMap,vertHeights,vmW,vmH,
           rockData, fanData:[], bumperData, spinBarData, slideBlockData,
           angledWallData, conveyorData, pendulumData, popupData, spikeData,
-          leftRail, rightRail, teeCapPts, holeCapPts, splineWS:ppSplineWS, coinData, teeDir};
+          leftRail, rightRail, teeCapPts, holeCapPts, splineWS:ppSplineWS, coinData, heartData,
+          holeDefense, teeDir};
 }
 
 
@@ -5070,6 +5265,11 @@ function buildCourse(data) {
         cupM.position.set(cx, cY + 0.03, cz);
         cupM.receiveShadow=true;
         group.add(cupM);
+        // v0.19t: keep a reference so moving-hole defense can translate the
+        // cup alongside the flag + beacon. Also stash the base position to
+        // drive offsets relatively.
+        G._cupMesh = cupM;
+        G._cupBaseY = cY + 0.03;
 
         const fg2=G.flagGroup=new THREE.Group();
         const poleG=new THREE.CylinderGeometry(0.04,0.04,2.4,8);
@@ -6098,6 +6298,70 @@ function buildCourse(data) {
     }
   }
 
+  // ── Healing hearts (v0.19s) ────────────────────────────
+  // Spinning pink hearts on the fairway that heal +2 HP on pickup.
+  // Built from two small lobe spheres + a downward cone so it reads as a
+  // classic heart shape. Spin + bob just like coins, with a brighter glow
+  // disc underneath.
+  G.heartMeshes = [];
+  if(data.heartData && data.heartData.length) {
+    const heartMat = new THREE.MeshStandardMaterial({
+      color: 0xff4488, roughness: 0.12, metalness: 0.25,
+      emissive: 0xff2266, emissiveIntensity: 1.0,
+    });
+    const heartGlowMat = new THREE.MeshStandardMaterial({
+      color: 0xff88bb, transparent: true, opacity: 0.55,
+      emissive: 0xff4488, emissiveIntensity: 2.2, depthWrite: false,
+    });
+    for(const hd of data.heartData) {
+      const terrY = getTerrainHeight(hd.wx, hd.wz);
+      const y = terrY + FLOOR_H / 2 + 0.32;
+
+      // Pivot group — spins around Y
+      const pivot = new THREE.Group();
+      pivot.position.set(hd.wx, y, hd.wz);
+      pivot.userData.noOutline = true;
+
+      // Heart body: two lobe spheres on top + downward-pointing cone beneath.
+      // Scale is tuned so it reads at camera distance; slightly larger than
+      // a coin so it stands out.
+      const lobeR = 0.14;
+      const lobeL = new THREE.Mesh(new THREE.SphereGeometry(lobeR, 10, 8), heartMat);
+      lobeL.position.set(-0.10, 0.06, 0);
+      pivot.add(lobeL);
+      const lobeR2 = new THREE.Mesh(new THREE.SphereGeometry(lobeR, 10, 8), heartMat);
+      lobeR2.position.set( 0.10, 0.06, 0);
+      pivot.add(lobeR2);
+      // Point — downward cone
+      const point = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.28, 10), heartMat);
+      point.position.set(0, -0.14, 0);
+      point.rotation.x = Math.PI; // tip points down
+      pivot.add(point);
+      // All heart parts noOutline — we'll use glow disc instead
+      lobeL.userData.noOutline = true;
+      lobeR2.userData.noOutline = true;
+      point.userData.noOutline = true;
+      group.add(pivot);
+
+      // Bloom glow disc — pink, brighter than coin glow.
+      const glowG = new THREE.CylinderGeometry(0.40, 0.40, 0.02, 16);
+      const glowM = new THREE.Mesh(glowG, heartGlowMat.clone());
+      glowM.rotation.x = Math.PI / 2;
+      glowM.position.set(hd.wx, y - 0.28, hd.wz);
+      glowM.userData.noOutline = true;
+      group.add(glowM);
+
+      G.heartMeshes.push({
+        pivot, glowMesh: glowM,
+        wx: hd.wx, wz: hd.wz,
+        y,
+        collected: false,
+        bobOffset: Math.random() * Math.PI * 2,
+        spinSpeed: 3.2 + Math.random() * 0.8,
+      });
+    }
+  }
+
   // ── Speed Hoops ────────────────────────────────────────
   G.speedHoops = [];
   if(G.modifiers.some(m=>m.id==='speed_hoops') && data.splineWS && data.splineWS.length > 4) {
@@ -6125,6 +6389,382 @@ function buildCourse(data) {
       group.add(hoopMesh);
       G.speedHoops.push({wx:pt.x, wz:pt.z, y, mesh:hoopMesh, triggered:false});
     }
+  }
+
+  // ── Hole Defense (v0.19t) ──────────────────────────────
+  // Builds meshes for the selected hole defense, if any, and installs an
+  // `update(dt)` hook used by the animate loop. Cleanup happens in initHole
+  // via the dispose path on G._holeDefenseGroup.
+  G._holeDefense = null;
+  G._holeDefenseGroup = null;
+  G._holeWorldOffset.x = 0; G._holeWorldOffset.z = 0;
+  G._holeDefenseState = null;
+  if(data.holeDefense) {
+    const hd = data.holeDefense;
+    // cx/cz from the hole-build block. Re-derive here so we don't depend on
+    // the previous block's locals.
+    const _hx = data.holePos.x, _hy = data.holePos.y;
+    const cx = _hx * T, cz = _hy * T;
+    const cY = ch(_hx, _hy);
+    const baseY = cY + FLOOR_H/2;
+
+    const defGroup = new THREE.Group();
+    defGroup.userData.noOutline = false;
+    group.add(defGroup);
+
+    const state = { kind: hd.kind, params: hd, update: null };
+
+    if(hd.kind === 'moving_hole') {
+      // MOVING HOLE — the cup + flag + beacon translate together per-frame.
+      // We don't rebuild the cup/flag — we just drive G._holeWorldOffset and
+      // the sink check + visuals read the offset. Verify amplitude stays
+      // within fairway for the chosen pattern; shrink if not.
+      const checkFair = (offx, offz) => {
+        const wx = cx + offx, wz = cz + offz;
+        const gx = Math.round(wx / T), gz = Math.round(wz / T);
+        if(gx < 0 || gz < 0 || gx >= data.W || gz >= data.H) return false;
+        return data.grid[gz][gx] === CELL.FAIR;
+      };
+      // Try full amplitude, else shrink. Check points specific to the pattern.
+      let amp = hd.amplitude;
+      const checkPoints = (a) => {
+        if(hd.pattern === 'line') {
+          // Just the two endpoints along the chosen axis
+          if(hd.axis === 'X') return checkFair(a, 0) && checkFair(-a, 0);
+          return checkFair(0, a) && checkFair(0, -a);
+        }
+        if(hd.pattern === 'diamond') {
+          // The four corners of the diamond
+          return checkFair(a, 0) && checkFair(-a, 0) && checkFair(0, a) && checkFair(0, -a);
+        }
+        if(hd.pattern === 'figure8') {
+          // Extremes of the two lemniscate lobes
+          const ha = a * 0.95;
+          return checkFair(ha, 0) && checkFair(-ha, 0);
+        }
+        // Circle — sample 12 points around the full perimeter.
+        for(let s = 0; s < 12; s++) {
+          const th = (s / 12) * Math.PI * 2;
+          if(!checkFair(Math.cos(th) * a, Math.sin(th) * a)) return false;
+        }
+        return true;
+      };
+      // Shrink in small steps (0.9×) to preserve as much amplitude as
+      // possible. Up to 8 tries means amp can drop to ~45% of its original
+      // request but only if the fairway truly can't accommodate.
+      for(let tries = 0; tries < 8; tries++) {
+        if(checkPoints(amp)) break;
+        amp *= 0.90;
+      }
+      state.amp = Math.max(1.0, amp);
+      // Visual: a subtle glowing rail along the travel envelope so the player
+      // can read the movement. Color-coded bright cyan.
+      const envMat = new THREE.MeshStandardMaterial({
+        color: 0x66ddff, emissive: 0x44aaff, emissiveIntensity: 0.7,
+        transparent: true, opacity: 0.35, depthWrite: false,
+      });
+      if(hd.pattern === 'line') {
+        // A short rail in the axis direction, 2×amp long, 0.08 thick
+        const railW = hd.axis === 'X' ? state.amp * 2 : 0.08;
+        const railD = hd.axis === 'Z' ? state.amp * 2 : 0.08;
+        const rail = new THREE.Mesh(new THREE.BoxGeometry(railW, 0.04, railD), envMat);
+        rail.position.set(cx, baseY + 0.02, cz);
+        rail.userData.noOutline = true;
+        defGroup.add(rail);
+      } else if(hd.pattern === 'circle') {
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(state.amp, 0.05, 6, 40), envMat);
+        ring.rotation.x = Math.PI / 2;
+        ring.position.set(cx, baseY + 0.02, cz);
+        ring.userData.noOutline = true;
+        defGroup.add(ring);
+      } else if(hd.pattern === 'diamond') {
+        // Four line segments forming a diamond. Use thin boxes.
+        for(let k = 0; k < 4; k++) {
+          const a1 = (k / 4) * Math.PI * 2, a2 = ((k + 1) / 4) * Math.PI * 2;
+          const ax = Math.cos(a1) * state.amp, az = Math.sin(a1) * state.amp;
+          const bx = Math.cos(a2) * state.amp, bz = Math.sin(a2) * state.amp;
+          const len = Math.hypot(bx-ax, bz-az);
+          const segGeo = new THREE.BoxGeometry(len, 0.04, 0.06);
+          const seg = new THREE.Mesh(segGeo, envMat);
+          seg.position.set(cx + (ax+bx)/2, baseY + 0.02, cz + (az+bz)/2);
+          seg.rotation.y = -Math.atan2(bz-az, bx-ax);
+          seg.userData.noOutline = true;
+          defGroup.add(seg);
+        }
+      } else if(hd.pattern === 'figure8') {
+        // Two small rings side-by-side. Drivers do proper lemniscate math.
+        const halfAmp = state.amp * 0.55;
+        for(const sx of [-1, 1]) {
+          const ring = new THREE.Mesh(new THREE.TorusGeometry(halfAmp, 0.05, 6, 30), envMat);
+          ring.rotation.x = Math.PI / 2;
+          ring.position.set(cx + sx * halfAmp, baseY + 0.02, cz);
+          ring.userData.noOutline = true;
+          defGroup.add(ring);
+        }
+      }
+      state.update = (dt, totalT) => {
+        const phase = totalT * (0.9 * hd.speedFactor) + hd.phase;
+        let ox = 0, oz = 0;
+        if(hd.pattern === 'line') {
+          const v = Math.sin(phase) * state.amp;
+          if(hd.axis === 'X') ox = v; else oz = v;
+        } else if(hd.pattern === 'circle') {
+          ox = Math.cos(phase) * state.amp;
+          oz = Math.sin(phase) * state.amp;
+        } else if(hd.pattern === 'diamond') {
+          // Triangle-wave around a diamond — move along each edge in turn.
+          const seg4 = (phase / (Math.PI * 0.5)) % 4;
+          const i = Math.floor(seg4);
+          const f = seg4 - i;
+          const corners = [
+            [ state.amp, 0], [0,  state.amp],
+            [-state.amp, 0], [0, -state.amp],
+          ];
+          const a = corners[i];
+          const b = corners[(i+1) % 4];
+          ox = a[0] + (b[0]-a[0]) * f;
+          oz = a[1] + (b[1]-a[1]) * f;
+        } else if(hd.pattern === 'figure8') {
+          // Lemniscate of Bernoulli parameterization
+          const denom = 1 + Math.sin(phase) * Math.sin(phase);
+          ox = state.amp * Math.cos(phase) / denom;
+          oz = state.amp * Math.sin(phase) * Math.cos(phase) / denom;
+        }
+        G._holeWorldOffset.x = ox;
+        G._holeWorldOffset.z = oz;
+        // Translate the cup + flag + beacon to follow.
+        if(G._cupMesh) G._cupMesh.position.set(cx + ox, G._cupBaseY || (baseY + 0.03), cz + oz);
+        if(G.flagGroup) G.flagGroup.position.set(cx + ox, baseY, cz + oz);
+        if(G.holeBeacon) {
+          G.holeBeacon.cx = cx + ox;
+          G.holeBeacon.cz = cz + oz;
+          if(G.holeBeacon.beaconCol) G.holeBeacon.beaconCol.position.set(cx + ox, baseY + 2.5, cz + oz);
+        }
+      };
+    } else if(hd.kind === 'slat_ring_4' || hd.kind === 'slat_ring_6') {
+      // STONE SLAT RING — tall pillars with gaps. Collision is a set of
+      // stone pillars; each pillar is a cylinder that reflects the ball.
+      const ringContainer = new THREE.Group();
+      ringContainer.position.set(cx, baseY, cz);
+      defGroup.add(ringContainer);
+      const stoneMat = new THREE.MeshStandardMaterial({ color: 0x7a736b, roughness: 0.9 });
+      const capMat   = new THREE.MeshStandardMaterial({ color: 0x5a544d, roughness: 0.85 });
+      const pillarH = 1.6, pillarW = 0.5, pillarD = 0.28;
+      state.pillars = []; // {localX, localZ, halfW, halfD}
+      for(let i = 0; i < hd.count; i++) {
+        const th = (i / hd.count) * Math.PI * 2 + hd.startAngle;
+        const px = Math.cos(th) * hd.radius;
+        const pz = Math.sin(th) * hd.radius;
+        const pillar = new THREE.Mesh(new THREE.BoxGeometry(pillarW, pillarH, pillarD), stoneMat);
+        pillar.position.set(px, pillarH / 2, pz);
+        pillar.lookAt(0, pillarH / 2, 0);
+        pillar.castShadow = true;
+        ringContainer.add(pillar);
+        const cap = new THREE.Mesh(new THREE.BoxGeometry(pillarW * 1.12, 0.08, pillarD * 1.12), capMat);
+        cap.position.set(px, pillarH + 0.04, pz);
+        cap.lookAt(0, pillarH + 0.04, 0);
+        ringContainer.add(cap);
+        // Physics store — we track in local space + cx/cz + current ring angle.
+        state.pillars.push({ baseAngle: th, halfW: pillarW/2, halfD: pillarD/2 });
+      }
+      state.ringAngle = 0;
+      state.cx = cx; state.cz = cz; state.baseY = baseY;
+      state.ringContainer = ringContainer;
+      state.update = (dt) => {
+        if(hd.rotSpeed) {
+          state.ringAngle += hd.rotSpeed * dt;
+          ringContainer.rotation.y = state.ringAngle;
+        }
+      };
+    } else if(hd.kind === 'spike_ring') {
+      // SPIKE RING — four spike balls rotating around the hole. Damages the
+      // ball on contact (1 HP black, 2 HP red). Ball bounces off. Mighty Egg
+      // absorbs one hit just like regular spikes.
+      const ringContainer = new THREE.Group();
+      ringContainer.position.set(cx, baseY, cz);
+      defGroup.add(ringContainer);
+      const isRed = hd.variant === 'red';
+      const bodyMat = isRed
+        ? new THREE.MeshStandardMaterial({ color: 0xff2020, roughness: 0.06, metalness: 0.9, emissive: 0xff1010, emissiveIntensity: 1.1 })
+        : new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.15, metalness: 0.85, emissive: 0x220000, emissiveIntensity: 0.3 });
+      const spikeMat = isRed
+        ? new THREE.MeshStandardMaterial({ color: 0xff3030, roughness: 0.08, metalness: 0.9, emissive: 0xdd0808, emissiveIntensity: 1.0 })
+        : new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.18, metalness: 0.8 });
+      const ballR = 0.28;
+      state.balls = []; // {baseAngle, worldX, worldZ}
+      for(let i = 0; i < hd.count; i++) {
+        const th = (i / hd.count) * Math.PI * 2 + hd.startAngle;
+        const ballG = new THREE.Group();
+        ballG.position.set(Math.cos(th) * hd.radius, 0.5, Math.sin(th) * hd.radius);
+        // Sphere body
+        const body = new THREE.Mesh(new THREE.SphereGeometry(ballR, 12, 10), bodyMat);
+        ballG.add(body);
+        // 22 spikes arranged on the sphere surface
+        for(let s = 0; s < 22; s++) {
+          const sTheta = Math.random() * Math.PI * 2;
+          const sPhi = Math.random() * Math.PI;
+          const sx = Math.sin(sPhi) * Math.cos(sTheta) * ballR * 0.88;
+          const sy = Math.cos(sPhi) * ballR * 0.88;
+          const sz = Math.sin(sPhi) * Math.sin(sTheta) * ballR * 0.88;
+          const spikeH = 0.30 + Math.random() * 0.18;
+          const spikeR = 0.04 + Math.random() * 0.025;
+          const cone = new THREE.Mesh(new THREE.ConeGeometry(spikeR, spikeH, 4), spikeMat);
+          cone.position.set(sx, sy, sz);
+          cone.lookAt(sx * 2, sy * 2, sz * 2);
+          cone.rotateX(Math.PI / 2);
+          ballG.add(cone);
+        }
+        ballG.userData.noOutline = true;
+        ringContainer.add(ballG);
+        state.balls.push({ baseAngle: th });
+      }
+      state.ringAngle = 0;
+      state.cx = cx; state.cz = cz; state.baseY = baseY;
+      state.ballR = ballR;
+      state.isRed = isRed;
+      state.cooldown = 0; // global hit cooldown so ball can't double-damage
+      state.update = (dt) => {
+        state.ringAngle += hd.rotSpeed * dt;
+        ringContainer.rotation.y = state.ringAngle;
+        if(state.cooldown > 0) state.cooldown -= dt;
+      };
+    } else if(hd.kind === 'magnet_field') {
+      // MAGNET FIELD — reuses gravity_pull's ring visual but flipped (outward)
+      // and tinted red. Physics pushes the ball radially away from the hole.
+      const rings = [];
+      const ringRadii = [0.9, 1.8, 2.8, 4.0]; // reversed so pulses travel outward
+      for(let r = 0; r < ringRadii.length; r++) {
+        const rad = ringRadii[r];
+        const rGeo = new THREE.TorusGeometry(rad, 0.045, 6, 48);
+        const rMat = new THREE.MeshStandardMaterial({
+          color: 0xff6666, emissive: 0xff3333, emissiveIntensity: 1.2,
+          transparent: true, opacity: 0.0, depthWrite: false,
+        });
+        const rm = new THREE.Mesh(rGeo, rMat);
+        rm.rotation.x = Math.PI / 2;
+        rm.position.set(cx, baseY + 0.04, cz);
+        rm.userData.noOutline = true;
+        defGroup.add(rm);
+        rings.push({ mesh: rm, baseRadius: rad, phase: r / ringRadii.length });
+      }
+      state.rings = rings;
+      state.cx = cx; state.cz = cz;
+      state.update = (dt, totalT) => {
+        const t = totalT;
+        const ballDist = G.ballPos ? Math.hypot(G.ballPos.x - cx, G.ballPos.z - cz) : 999;
+        const inField = ballDist < hd.radius + 2.0;
+        for(const gr of state.rings) {
+          // Phases travel OUTWARD — inverse of gravity pull. phasedT goes 0→1,
+          // ring scales from 0 out to baseRadius.
+          const phasedT = (t * 0.55 + gr.phase) % 1.0;
+          const animR = gr.baseRadius * phasedT;
+          const s = animR / gr.baseRadius;
+          gr.mesh.scale.set(s, s, 1);
+          const alpha = inField
+            ? 0.55 * Math.sin(phasedT * Math.PI)
+            : 0.30 * Math.sin(phasedT * Math.PI);
+          gr.mesh.material.opacity = alpha;
+          gr.mesh.material.emissiveIntensity = inField ? 2.0 : 1.2;
+        }
+      };
+    } else if(hd.kind === 'force_field') {
+      // FORCE FIELD — pulsing plasma bubble that phases on/off. Contains the
+      // flag entirely (bubbleR large enough at 1.5m).
+      const bubbleMat = new THREE.MeshStandardMaterial({
+        color: 0x66ddff, transparent: true, opacity: 0.35,
+        emissive: 0x33bbff, emissiveIntensity: 1.2, roughness: 0.2,
+        side: THREE.DoubleSide, depthWrite: false,
+      });
+      const bubble = new THREE.Mesh(new THREE.SphereGeometry(hd.bubbleR, 22, 16), bubbleMat);
+      // Bubble center at ~1.2m so a 1.8m-radius sphere covers 0→3m vertical —
+      // fully encloses the 2.45m flag pole + ball ornament on top.
+      const bubbleCenterY = baseY + 1.2;
+      bubble.position.set(cx, bubbleCenterY, cz);
+      bubble.userData.noOutline = true;
+      defGroup.add(bubble);
+      // Inner wireframe core for the "plasma" feel
+      const coreMat = new THREE.MeshBasicMaterial({ color: 0xaaeeff, wireframe: true, transparent: true, opacity: 0.55 });
+      const core = new THREE.Mesh(new THREE.SphereGeometry(hd.bubbleR * 1.01, 10, 8), coreMat);
+      core.position.set(cx, bubbleCenterY, cz);
+      core.userData.noOutline = true;
+      defGroup.add(core);
+      // Outer "glow" halo — bigger sphere, very transparent, makes the field read
+      const haloMat = new THREE.MeshBasicMaterial({ color: 0x99e5ff, transparent: true, opacity: 0.18, depthWrite: false });
+      const halo = new THREE.Mesh(new THREE.SphereGeometry(hd.bubbleR * 1.4, 16, 12), haloMat);
+      halo.position.set(cx, bubbleCenterY, cz);
+      halo.userData.noOutline = true;
+      defGroup.add(halo);
+      state.bubble = bubble; state.core = core; state.halo = halo;
+      state.cx = cx; state.cz = cz; state.bubbleY = bubbleCenterY;
+      state.closed = true;
+      state.phase = hd.phase || 0;
+      state.update = (dt, totalT) => {
+        state.phase += dt;
+        const cycle = hd.closedSecs + hd.openSecs;
+        const c = state.phase % cycle;
+        state.closed = c < hd.closedSecs;
+        // Visual: solid while closed, fade out while open.
+        const transition = 0.15; // s blend at each boundary
+        let alpha = 0;
+        if(state.closed) {
+          // Fade in over first `transition`s of closed phase
+          const fin = Math.min(1, c / transition);
+          // Fade out over last `transition`s (before open)
+          const fout = Math.min(1, (hd.closedSecs - c) / transition);
+          alpha = Math.min(fin, fout);
+        }
+        // Asymmetric flicker on hardest holes — random dips in alpha during closed
+        if(state.closed && hd.flicker) {
+          alpha *= (0.7 + 0.3 * Math.random());
+        }
+        bubble.material.opacity = 0.35 * alpha;
+        core.material.opacity   = 0.55 * alpha;
+        halo.material.opacity   = 0.30 * alpha;
+        // Subtle breathing scale
+        const breathe = 1.0 + Math.sin(totalT * 3) * 0.03;
+        bubble.scale.setScalar(breathe);
+        core.scale.setScalar(breathe);
+        halo.scale.setScalar(breathe * 1.05);
+      };
+    } else if(hd.kind === 'glass_dome') {
+      // GLASS DOME — geodesic ish dome built from an icosahedron, breaks on
+      // first contact. Covers the flag. Uses panel meshes that can be
+      // scattered on break for the dramatic shatter.
+      const icosGeo = new THREE.IcosahedronGeometry(hd.radius, 1);
+      const glassMat = new THREE.MeshStandardMaterial({
+        color: 0xccffff, transparent: true, opacity: 0.32,
+        emissive: 0xaaccee, emissiveIntensity: 0.4, roughness: 0.15, metalness: 0.3,
+        side: THREE.DoubleSide, depthWrite: false,
+      });
+      // Dome center raised so the top of the sphere clears the 2.45m flag.
+      // Radius 1.7 + center-Y 0.9 = top at 2.6m → just clears the pole ornament.
+      const domeCenterY = baseY + 0.9;
+      const dome = new THREE.Mesh(icosGeo, glassMat);
+      dome.position.set(cx, domeCenterY, cz);
+      dome.userData.noOutline = true;
+      defGroup.add(dome);
+      // Wireframe over it to emphasize geodesic lines
+      const wireMat = new THREE.MeshBasicMaterial({ color: 0xddeeff, wireframe: true, transparent: true, opacity: 0.55 });
+      const wire = new THREE.Mesh(icosGeo, wireMat);
+      wire.position.set(cx, domeCenterY, cz);
+      wire.userData.noOutline = true;
+      defGroup.add(wire);
+      state.dome = dome; state.wire = wire;
+      state.cx = cx; state.cz = cz; state.baseY = baseY; state.domeCenterY = domeCenterY;
+      state.broken = false;
+      state.update = (dt, totalT) => {
+        if(!state.broken) {
+          // Subtle shimmer
+          const s = 1.0 + Math.sin(totalT * 2.5) * 0.01;
+          dome.scale.setScalar(s);
+          wire.scale.setScalar(s);
+        }
+      };
+    }
+
+    G._holeDefense = hd;
+    G._holeDefenseGroup = defGroup;
+    G._holeDefenseState = state;
   }
 
   // ── Lot of Heart: spawn a healing heart on ~12% of holes (v0.17x: was 25%) ──
@@ -8167,14 +8807,18 @@ function updatePhysics(dt) {
         // Spike damage (v0.18a: scales 1→2 HP at 7★+)
         // v0.19r: red-variant spikes always deal at least 2 HP regardless of
         // difficulty ramp — a visible "extra-danger" obstacle type.
+        // v0.19s: Mighty Egg soaks the whole hit (spike still destructs).
         if(spike.squashT <= 0) {
           spike.squashT = 1.0;
           const baseDmg = (G._diffMods && G._diffMods.spikeDmg) || 1;
           const spikeDmg = spike.variant === 'red' ? Math.max(2, baseDmg) : baseDmg;
-          applyDamage(spikeDmg, 'spike');
-          spawnHpDamagePopup(spikeDmg);
-          const label = spike.variant === 'red' ? '🟥 OUCH!' : '🔺 OUCH!';
-          showToast(`${label} -${spikeDmg} HP`, 1200);
+          const absorbed = consumeMightyEgg();
+          if(!absorbed) {
+            applyDamage(spikeDmg, 'spike');
+            spawnHpDamagePopup(spikeDmg);
+            const label = spike.variant === 'red' ? '🟥 OUCH!' : '🔺 OUCH!';
+            showToast(`${label} -${spikeDmg} HP`, 1200);
+          }
           G._holeHazardsTouched.spikes = (G._holeHazardsTouched.spikes||0) + 1;
           // Spike blows up on contact — explosion VFX + remove from play
           spike._destroyed = true;
@@ -8454,14 +9098,18 @@ function updatePhysics(dt) {
           // multi-damage from a single contact (ball often sits inside the
           // minDist for a couple substeps). Cooldown decays in the animation
           // loop alongside squashT.
+          // v0.19s: Mighty Egg absorbs the whole hit (spinner continues spinning).
           if(!hasIronBall && (bar.variant === 'spikes' || bar.variant === 'spikesRed') && (bar.spikeCooldownT || 0) <= 0) {
             bar.spikeCooldownT = 1.0;
             const baseDmg = (G._diffMods && G._diffMods.spikeDmg) || 1;
             const barDmg = bar.variant === 'spikesRed' ? Math.max(2, baseDmg) : 1;
-            applyDamage(barDmg, 'spike_bar');
-            spawnHpDamagePopup(barDmg);
-            const label = bar.variant === 'spikesRed' ? '🟥 Spiked spinner!' : '🔺 Spiked spinner!';
-            showToast(`${label} -${barDmg} HP`, 1200);
+            const absorbed = consumeMightyEgg();
+            if(!absorbed) {
+              applyDamage(barDmg, 'spike_bar');
+              spawnHpDamagePopup(barDmg);
+              const label = bar.variant === 'spikesRed' ? '🟥 Spiked spinner!' : '🔺 Spiked spinner!';
+              showToast(`${label} -${barDmg} HP`, 1200);
+            }
           }
         }
       }
@@ -8737,9 +9385,82 @@ function updatePhysics(dt) {
     }
   }
 
+  // ── Healing heart pickup (v0.19s) ──────────────────────
+  // Roll over a heart → +2 HP (capped at hpMax). Spawns sparkle particles
+  // and plays a warm chime SFX. Hearts don't magnetize — they're landmarks,
+  // not collectibles you scoop up on the way past.
+  if(G.heartMeshes && G.heartMeshes.length && G.rolling && !ghostActive) {
+    const HEART_R = 0.55;
+    for(const h of G.heartMeshes) {
+      if(h.collected) continue;
+      const dx = G.ballPos.x - h.wx;
+      const dz = G.ballPos.z - h.wz;
+      const dist2D = Math.hypot(dx, dz);
+      if(dist2D < HEART_R) {
+        h.collected = true;
+        if(G.courseGroup) {
+          if(h.pivot) G.courseGroup.remove(h.pivot);
+          if(h.glowMesh) G.courseGroup.remove(h.glowMesh);
+        }
+        // Heal +2 HP, cap at hpMax.
+        const healAmt = Math.min(2, (G.hpMax || 10) - (G.hp || 0));
+        if(healAmt > 0) {
+          G.hp = Math.min(G.hpMax || 10, (G.hp || 0) + healAmt);
+          // Reuse existing floating heart VFX if it exists, else just toast.
+          if(typeof spawnHpHealPopup === 'function') spawnHpHealPopup(healAmt);
+          else {
+            // Inline fallback popup — green floating "+2 HP"
+            try {
+              const el = document.createElement('div');
+              el.textContent = `+${healAmt} HP`;
+              el.className = 'heart-explode';
+              el.style.position = 'fixed';
+              el.style.color = '#44ff66';
+              el.style.fontFamily = 'Inter,sans-serif';
+              el.style.fontWeight = '900';
+              el.style.fontSize = '1.8rem';
+              el.style.textShadow = '0 0 14px rgba(68,255,102,0.7)';
+              el.style.top = '45%';
+              el.style.left = '50%';
+              el.style.transform = 'translate(-50%,-50%)';
+              el.style.zIndex = 200;
+              el.style.pointerEvents = 'none';
+              document.body.appendChild(el);
+              setTimeout(() => { try { document.body.removeChild(el); } catch(e){} }, 900);
+            } catch(e){}
+          }
+          showToast(`💖 +${healAmt} HP!`, 1200);
+          updateUI();
+        } else {
+          showToast(`💖 Full HP!`, 900);
+        }
+        // Warm chime SFX
+        if(AC) {
+          try {
+            const ac = getAC(), t = ac.currentTime;
+            const notes = [659, 988, 1319]; // E5 B5 E6
+            notes.forEach((f, i) => {
+              const o = ac.createOscillator(); o.type = 'triangle';
+              o.frequency.value = f;
+              const g = ac.createGain();
+              g.gain.setValueAtTime(0, t + i*0.06);
+              g.gain.linearRampToValueAtTime(0.14, t + i*0.06 + 0.02);
+              g.gain.exponentialRampToValueAtTime(0.001, t + i*0.06 + 0.34);
+              o.connect(g); g.connect(getACDest()); o.start(t + i*0.06); o.stop(t + i*0.06 + 0.38);
+            });
+          } catch(e){}
+        }
+        triggerShake('light');
+        trackStat && trackStat('heartsPickedUp', 1);
+      }
+    }
+  }
+
   const hp = G.holePos;
-  const holeWX = hp.x*TILE_SIZE, holeWZ = hp.y*TILE_SIZE;
-  const holeTerrainY = G.heightMap.length ? getTerrainHeight(holeWX, holeWZ) : 0;
+  // v0.19t: moving hole adds a live world-space offset on top of the grid pos.
+  const _hoff = G._holeWorldOffset || {x:0, z:0};
+  const holeWX = hp.x*TILE_SIZE + _hoff.x, holeWZ = hp.y*TILE_SIZE + _hoff.z;
+  const holeTerrainY = G.heightMap.length ? getTerrainHeight(hp.x*TILE_SIZE, hp.y*TILE_SIZE) : 0;
   const holePosWorld = new THREE.Vector3(holeWX, holeTerrainY + FLOOR_H/2, holeWZ);
   const holeDistXZ = Math.hypot(G.ballPos.x - holeWX, G.ballPos.z - holeWZ);
   const holeRadius = G.modifiers.find(m=>m.id==='big_hole') ? 1.1 : 0.55;
@@ -8923,6 +9644,215 @@ function updatePhysics(dt) {
     const pdz = (holeWZ - G.ballPos.z) / holeDistXZ;
     G.ballVel.x += pdx * pullStrength * dt;
     G.ballVel.z += pdz * pullStrength * dt;
+  }
+
+  // ── Hole Defense collisions (v0.19t) ──────────────────
+  // All defenses share: center at (holeWX, holeWZ) including moving-hole
+  // offset; baseY from G.heightMap at the hole's grid cell.
+  if(G._holeDefense && G._holeDefenseState) {
+    const hd  = G._holeDefense;
+    const hds = G._holeDefenseState;
+    const hw = holeWX, hz = holeWZ;
+
+    // --- (a) MAGNET FIELD — radial push (flipped gravity pull). -----
+    if(hd.kind === 'magnet_field' && holeDistXZ < hd.radius && holeDistXZ > holeRadius) {
+      // Strength profile mirrors gravity pull but pushes OUT. Zero at the
+      // outer edge, max at the hole lip. Uses hd.strength as a multiplier.
+      const pushStrength = hd.strength * (1 - holeDistXZ / hd.radius);
+      const pdx = (G.ballPos.x - hw) / Math.max(0.001, holeDistXZ);
+      const pdz = (G.ballPos.z - hz) / Math.max(0.001, holeDistXZ);
+      G.ballVel.x += pdx * pushStrength * dt;
+      G.ballVel.z += pdz * pushStrength * dt;
+    }
+
+    // --- (b) FORCE FIELD — bubble bounce while closed. -------------
+    if(hd.kind === 'force_field' && hds.closed) {
+      // 3D sphere collision vs bubble centered at (hw, bubbleY, hz).
+      const bdy = hds.bubbleY - G.ballPos.y;
+      const bdxz = Math.hypot(G.ballPos.x - hw, G.ballPos.z - hz);
+      const d3 = Math.hypot(bdxz, bdy);
+      const minD = hd.bubbleR + BALL_R;
+      if(d3 < minD && d3 > 0.001) {
+        // Normal points from bubble center to ball.
+        const nx = (G.ballPos.x - hw) / d3;
+        const nz = (G.ballPos.z - hz) / d3;
+        const ny = -(bdy) / d3;
+        // Push the ball out of the bubble.
+        const pen = minD - d3;
+        G.ballPos.x += nx * pen;
+        G.ballPos.z += nz * pen;
+        G.ballPos.y += ny * pen;
+        const dot = G.ballVel.x * nx + G.ballVel.y * ny + G.ballVel.z * nz;
+        if(dot < 0) {
+          // STRONG bounce per spec: restitution 1.6 for a lively repel.
+          const REST = 1.6;
+          G.ballVel.x -= (1 + REST) * dot * nx;
+          G.ballVel.y -= (1 + REST) * dot * ny;
+          G.ballVel.z -= (1 + REST) * dot * nz;
+          // SFX + small spawn particles
+          if(AC) sfxBounce(Math.max(4, Math.hypot(G.ballVel.x, G.ballVel.z) * 0.6));
+          spawnHitParticles(G.ballPos);
+          triggerShake('light');
+        }
+      }
+    }
+
+    // --- (c) SLAT RING — pillar cylinder reflection. ---------------
+    // Each pillar is a thin box in local space oriented to face the center.
+    // We approximate as circles for collision (radius = max(halfW, halfD)+BALL_R)
+    // since the ball rolls past the corner curvatures fine at these sizes.
+    if((hd.kind === 'slat_ring_4' || hd.kind === 'slat_ring_6') && hds.pillars) {
+      const cxR = hds.cx, czR = hds.cz, ringAng = hds.ringAngle || 0;
+      const pillarR = 0.30; // approximate pillar collision radius
+      for(const p of hds.pillars) {
+        const ang = p.baseAngle + ringAng;
+        const px = cxR + Math.cos(ang) * hd.radius;
+        const pz = czR + Math.sin(ang) * hd.radius;
+        const pdx = G.ballPos.x - px, pdz = G.ballPos.z - pz;
+        const dist = Math.hypot(pdx, pdz);
+        const minD = pillarR + BALL_R;
+        if(dist < minD && dist > 0.001) {
+          const nx = pdx / dist, nz = pdz / dist;
+          G.ballPos.x += nx * (minD - dist);
+          G.ballPos.z += nz * (minD - dist);
+          const dot = G.ballVel.x * nx + G.ballVel.z * nz;
+          if(dot < 0) {
+            G.ballVel.x -= (1 + BOUNCE) * dot * nx;
+            G.ballVel.z -= (1 + BOUNCE) * dot * nz;
+          }
+          if(AC) sfxBounce(Math.max(2, Math.hypot(G.ballVel.x, G.ballVel.z) * 0.4));
+          spawnHitParticles(G.ballPos);
+          trackStat && trackStat('totalBounces', 1);
+        }
+      }
+    }
+
+    // --- (c2) SPIKE RING — rotating spike balls, bounce + HP damage. ---
+    if(hd.kind === 'spike_ring' && hds.balls) {
+      const cxR = hds.cx, czR = hds.cz, ringAng = hds.ringAngle || 0;
+      const ballColR = hds.ballR || 0.28;
+      const hasIronBall = G._ironBallActive;
+      for(const b of hds.balls) {
+        const ang = b.baseAngle + ringAng;
+        const px = cxR + Math.cos(ang) * hd.radius;
+        const pz = czR + Math.sin(ang) * hd.radius;
+        const pdx = G.ballPos.x - px, pdz = G.ballPos.z - pz;
+        const dist = Math.hypot(pdx, pdz);
+        const minD = ballColR + BALL_R;
+        if(dist < minD && dist > 0.001) {
+          const nx = pdx / dist, nz = pdz / dist;
+          // Push ball out of spike ball
+          G.ballPos.x += nx * (minD - dist);
+          G.ballPos.z += nz * (minD - dist);
+          const dot = G.ballVel.x * nx + G.ballVel.z * nz;
+          if(dot < 0) {
+            G.ballVel.x -= (1 + BOUNCE) * dot * nx;
+            G.ballVel.z -= (1 + BOUNCE) * dot * nz;
+          }
+          if(AC) sfxBounce(Math.max(3, Math.hypot(G.ballVel.x, G.ballVel.z) * 0.5));
+          spawnHitParticles(G.ballPos);
+          trackStat && trackStat('totalBounces', 1);
+          // HP damage — iron ball immune, Mighty Egg absorbs. Global cooldown
+          // so the ball can't be double-dinged from a single penetration.
+          if(!hasIronBall && hds.cooldown <= 0) {
+            hds.cooldown = 0.6; // seconds
+            const baseDmg = (G._diffMods && G._diffMods.spikeDmg) || 1;
+            const dmg = hds.isRed ? Math.max(2, baseDmg) : baseDmg;
+            const absorbed = (typeof consumeMightyEgg === 'function') && consumeMightyEgg();
+            if(!absorbed) {
+              applyDamage(dmg, 'spike_ring');
+              if(typeof spawnHpDamagePopup === 'function') spawnHpDamagePopup(dmg);
+              const label = hds.isRed ? '🟥 Spike ring!' : '⚫ Spike ring!';
+              showToast(`${label} -${dmg} HP`, 1200);
+            }
+            G._holeHazardsTouched = G._holeHazardsTouched || {};
+            G._holeHazardsTouched.spikeRings = (G._holeHazardsTouched.spikeRings||0) + 1;
+          }
+        }
+      }
+    }
+
+    // --- (d) GLASS DOME — first hit shatters, then free access. -----
+    if(hd.kind === 'glass_dome' && !hds.broken) {
+      // 3D sphere containment test — dome center raised to domeCenterY (~baseY+0.9)
+      // so the top covers the 2.45m flag.
+      const cxD = hds.cx, czD = hds.cz, cyD = hds.domeCenterY || (hds.baseY + 0.9);
+      const dxD = G.ballPos.x - cxD, dzD = G.ballPos.z - czD, dyD = G.ballPos.y - cyD;
+      const d3 = Math.hypot(dxD, dzD, dyD);
+      const minD = hd.radius + BALL_R;
+      // If ball is outside-trying-to-enter OR already touching the shell, break.
+      // Trigger on first penetration (ball within minD + small buffer).
+      if(d3 < minD + 0.08) {
+        hds.broken = true;
+        // Hide the dome + wire, spawn fragment shards for drama.
+        if(hds.dome) hds.dome.visible = false;
+        if(hds.wire) hds.wire.visible = false;
+        // Spawn 18 glassy shards flying outward with gravity + fade.
+        if(!G._debrisParticles) G._debrisParticles = [];
+        const shardMat = new THREE.MeshStandardMaterial({
+          color: 0xddeeff, roughness: 0.12, metalness: 0.35,
+          transparent: true, opacity: 0.9,
+          emissive: 0xaaccee, emissiveIntensity: 0.6,
+          side: THREE.DoubleSide,
+        });
+        for(let s = 0; s < 18; s++) {
+          const th = (s / 18) * Math.PI * 2 + Math.random() * 0.3;
+          const phi = Math.random() * Math.PI * 0.5;
+          const g = new THREE.ConeGeometry(0.12 + Math.random() * 0.08, 0.32 + Math.random() * 0.12, 3);
+          const m = new THREE.Mesh(g, shardMat.clone());
+          const rx = Math.cos(th) * Math.sin(phi);
+          const ry = Math.cos(phi);
+          const rz = Math.sin(th) * Math.sin(phi);
+          m.position.set(cxD + rx * hd.radius, cyD + ry * hd.radius, czD + rz * hd.radius);
+          m.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+          m.userData.noOutline = true;
+          if(G.courseGroup) G.courseGroup.add(m);
+          G._debrisParticles.push({
+            mesh: m,
+            vx: rx * (4 + Math.random() * 3),
+            vy: ry * 3 + 2 + Math.random() * 2,
+            vz: rz * (4 + Math.random() * 3),
+            spinX: (Math.random() - 0.5) * 10,
+            spinY: (Math.random() - 0.5) * 10,
+            spinZ: (Math.random() - 0.5) * 10,
+            life: 1.6, maxLife: 1.6, gravity: 16,
+          });
+        }
+        triggerShake('heavy');
+        showToast('💥 Glass shattered!', 1200);
+        // Layered shatter SFX — high crystalline tinkle + midrange crunch
+        if(AC) {
+          try {
+            const ac = getAC(), t0 = ac.currentTime;
+            // Crystalline — short noise through highpass
+            const sr = ac.sampleRate;
+            const bufSec = 0.5;
+            const buf = ac.createBuffer(1, Math.floor(sr * bufSec), sr);
+            const dd = buf.getChannelData(0);
+            for(let i = 0; i < dd.length; i++) {
+              const tt = i / dd.length;
+              dd[i] = (Math.random() * 2 - 1) * Math.exp(-tt * 2.5);
+            }
+            const src = ac.createBufferSource(); src.buffer = buf;
+            const hp = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 3200;
+            const gn = ac.createGain(); gn.gain.setValueAtTime(0.7, t0); gn.gain.exponentialRampToValueAtTime(0.001, t0 + 0.5);
+            src.connect(hp); hp.connect(gn); gn.connect(getACDest()); src.start(t0);
+            // A quick bright chime
+            const notes = [1320, 1760, 2637];
+            notes.forEach((f, i) => {
+              const o = ac.createOscillator(); o.type = 'sine';
+              o.frequency.value = f;
+              const g = ac.createGain();
+              g.gain.setValueAtTime(0, t0 + i * 0.03);
+              g.gain.linearRampToValueAtTime(0.12, t0 + i * 0.03 + 0.01);
+              g.gain.exponentialRampToValueAtTime(0.001, t0 + i * 0.03 + 0.35);
+              o.connect(g); g.connect(getACDest()); o.start(t0 + i * 0.03); o.stop(t0 + i * 0.03 + 0.4);
+            });
+          } catch(e){}
+        }
+        // Don't reflect the ball — let it sail right through the break point.
+      }
+    }
   }
 
   // ── Lot of Heart pickup ──────────────────────────────
@@ -10149,9 +11079,12 @@ function calcHoleEarnings(strokes, par, coinsPickedUp, wallCoins = 0) {
   }
   total += scoreBonus;
 
-  // Hot streak (requires perk)
+  // Hot streak (requires perk) — v0.19s: nerfed. Was 15% per level capped
+  // at streak 6 (max 90%). Now 10% per level capped at streak 4 (max 40%) so
+  // it still rewards consistency without snowballing into a late-run economy
+  // doubling.
   if(G.hotStreak >= 2 && G.modifiers.some(m => m.id === 'hot_streak')) {
-    const pct = Math.min(G.hotStreak, 6) * 15;  // 15% per streak level, cap 6
+    const pct = Math.min(G.hotStreak, 4) * 10;  // 10% per streak level, cap 4
     const streakBonus = Math.floor(total * pct / 100);
     if(streakBonus > 0) {
       rows.push({ label:`🔥 Hot streak ×${G.hotStreak} (+${pct}%)`, amount: streakBonus });
@@ -12062,6 +12995,7 @@ const CARD_DEFS = {
   perpetual_motion: { id:'perpetual_motion', emoji:'♾️', name:'Perpetual Motion', desc:'Zero friction and perfect wall bounces. Pure chaos.', rarity:'rare', price:20, context:'any', holdable:false },
   wall_magnet:  { id:'wall_magnet',  emoji:'🧲', name:'Wall Magnet',     desc:'This swing: ball curves toward the nearest wall. Bounce synergy!', rarity:'rare',      price:15,  context:'pre',    holdable:false },
   catapult:     { id:'catapult',     emoji:'🪤', name:'Catapult',         desc:'This swing: launch in a huge arc with bouncy landings. Skip walls!', rarity:'common',  price:12,  context:'pre',    holdable:false, weight:5 },
+  mighty_egg:   { id:'mighty_egg',   emoji:'🥚', name:'Mighty Egg',        desc:'Encase your ball in a protective egg. Absorbs one 1-HP hit from spikes or other damage obstacles. Cracks on impact.', rarity:'common', price:10, context:'any', holdable:false, weight:2 },
 };
 
 // Starter deck definitions
@@ -12397,6 +13331,7 @@ function executeCardAbility(id) {
     case 'floomba':      spawnFloombaFromCard(); break;
     case 'perpetual_motion': activatePerpetualMotion(); break;
     case 'wall_magnet':  G._wallMagnetActive = true; showToast('🧲 Wall Magnet armed!', 800); break;
+    case 'mighty_egg':   activateMightyEgg(); break;
   }
 }
 
@@ -12935,6 +13870,145 @@ function applyIronBallVisual() {
   if(G.ball) {
     G.ballMesh.material = new THREE.MeshStandardMaterial({color:0xcccccc, roughness:0.05, metalness:1.0});
   }
+}
+
+// ── Mighty Egg (v0.19s) ────────────────────────────────
+// Purely cosmetic shell around the ball that absorbs ONE damage-obstacle hit.
+// Physics is unchanged — this is a child mesh of G.ball and gets removed on
+// consume. Crack spawns 6 shards that fly outward with gravity + fade.
+function activateMightyEgg() {
+  if(!G.ball) return;
+  // If already armed, just refresh the toast (no double-shell; card got picked
+  // up twice in a hand).
+  if(G._mightyEggActive) {
+    showToast('🥚 Egg already armed!', 800);
+    return;
+  }
+  G._mightyEggActive = true;
+  // Egg shell: slightly taller than the ball, 90% transparent white with a
+  // soft outline. Positioned as a child of G.ball so it tracks the ball
+  // exactly (including the visual rotation) without any physics impact.
+  const eggGroup = new THREE.Group();
+  eggGroup.userData.noOutline = false; // we WANT an outline for readability
+  // Egg shape = sphere scaled in Y. Radius ~1.55× ball radius so it's clearly
+  // a shell around the ball, not a reskin.
+  const eggR = BALL_R * 1.55;
+  const eggGeo = new THREE.SphereGeometry(eggR, 18, 14);
+  const eggMat = new THREE.MeshStandardMaterial({
+    color: 0xfff6dc,
+    transparent: true,
+    opacity: 0.10,       // 90% transparent
+    roughness: 0.35,
+    metalness: 0.0,
+    depthWrite: false,   // avoid sorting issues with the ball beneath
+    side: THREE.DoubleSide,
+  });
+  const eggMesh = new THREE.Mesh(eggGeo, eggMat);
+  eggMesh.scale.y = 1.25; // stretch into egg shape
+  eggGroup.add(eggMesh);
+  // Thin outline wireframe for readability — same geometry, low-poly version.
+  const outlineGeo = new THREE.SphereGeometry(eggR * 1.01, 10, 8);
+  const outlineMat = new THREE.MeshBasicMaterial({
+    color: 0xffeebb,
+    wireframe: true,
+    transparent: true,
+    opacity: 0.55,
+  });
+  const outlineMesh = new THREE.Mesh(outlineGeo, outlineMat);
+  outlineMesh.scale.y = 1.25;
+  eggGroup.add(outlineMesh);
+  G.ball.add(eggGroup);
+  G._mightyEggMesh = eggGroup;
+  showToast('🥚 Mighty Egg armed — absorbs 1 hit!', 1400);
+  triggerShake('light');
+  if(AC) {
+    try {
+      const ac = getAC(), t = ac.currentTime;
+      const o = ac.createOscillator(); o.type = 'sine';
+      o.frequency.setValueAtTime(540, t); o.frequency.exponentialRampToValueAtTime(880, t+0.18);
+      const g = ac.createGain(); g.gain.setValueAtTime(0.12, t); g.gain.exponentialRampToValueAtTime(0.001, t+0.22);
+      o.connect(g); g.connect(getACDest()); o.start(t); o.stop(t+0.25);
+    } catch(e){}
+  }
+}
+
+// Returns true if the egg absorbed the hit (caller should skip HP damage);
+// false if no egg was armed. Call this from any damage-causing collision
+// BEFORE applyDamage so the egg soaks the hit.
+function consumeMightyEgg() {
+  if(!G._mightyEggActive) return false;
+  G._mightyEggActive = false;
+  crackMightyEgg();
+  return true;
+}
+
+// Spawn 6 shards that fly outward + gravity + fade, loud crack SFX.
+function crackMightyEgg() {
+  // Remove the shell mesh from the ball.
+  if(G._mightyEggMesh && G.ball) {
+    G.ball.remove(G._mightyEggMesh);
+    G._mightyEggMesh = null;
+  }
+  // Spawn 6 shell fragments. Use cones flattened along one axis so they read
+  // as shell-shaped slivers. Fragments get added to courseGroup with their
+  // own tiny physics (velocity + gravity + lifetime).
+  if(!G.courseGroup) return;
+  const shardMat = new THREE.MeshStandardMaterial({
+    color: 0xfff6dc, roughness: 0.5, metalness: 0.0,
+    emissive: 0x887755, emissiveIntensity: 0.1,
+    transparent: true, opacity: 0.95,
+    side: THREE.DoubleSide,
+  });
+  if(!G._debrisParticles) G._debrisParticles = [];
+  const bx = G.ballPos.x, by = G.ballPos.y + BALL_R * 0.5, bz = G.ballPos.z;
+  for(let i = 0; i < 6; i++) {
+    const ang = (i / 6) * Math.PI * 2 + Math.random() * 0.3;
+    const geo = new THREE.ConeGeometry(0.12 + Math.random()*0.06, 0.26 + Math.random()*0.08, 4);
+    const mesh = new THREE.Mesh(geo, shardMat.clone());
+    mesh.position.set(bx, by, bz);
+    mesh.rotation.set(Math.random()*Math.PI, Math.random()*Math.PI, Math.random()*Math.PI);
+    mesh.userData.noOutline = true;
+    G.courseGroup.add(mesh);
+    // Outward + up velocity
+    const outSpeed = 3 + Math.random() * 3;
+    G._debrisParticles.push({
+      mesh,
+      vx: Math.cos(ang) * outSpeed,
+      vy: 2.5 + Math.random() * 2.0,
+      vz: Math.sin(ang) * outSpeed,
+      spinX: (Math.random() - 0.5) * 8,
+      spinY: (Math.random() - 0.5) * 8,
+      spinZ: (Math.random() - 0.5) * 8,
+      life: 1.2,
+      maxLife: 1.2,
+      gravity: 14,
+    });
+  }
+  triggerShake('med');
+  // Loud crack SFX — two-layer: sharp attack + low thump.
+  if(AC) {
+    try {
+      const ac = getAC(), t = ac.currentTime;
+      // Sharp crack: narrow bandpass on noise
+      const bufSec = 0.18;
+      const buf = ac.createBuffer(1, Math.floor(ac.sampleRate * bufSec), ac.sampleRate);
+      const d = buf.getChannelData(0);
+      for(let i = 0; i < d.length; i++) {
+        const t2 = i / d.length;
+        d[i] = (Math.random() * 2 - 1) * Math.exp(-t2 * 8);
+      }
+      const src = ac.createBufferSource(); src.buffer = buf;
+      const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2600; bp.Q.value = 2.2;
+      const g = ac.createGain(); g.gain.setValueAtTime(0.8, t); g.gain.exponentialRampToValueAtTime(0.001, t+0.2);
+      src.connect(bp); bp.connect(g); g.connect(getACDest()); src.start(t);
+      // Low thump underlay
+      const o2 = ac.createOscillator(); o2.type = 'sine';
+      o2.frequency.setValueAtTime(150, t); o2.frequency.exponentialRampToValueAtTime(55, t+0.14);
+      const g2 = ac.createGain(); g2.gain.setValueAtTime(0.55, t); g2.gain.exponentialRampToValueAtTime(0.001, t+0.18);
+      o2.connect(g2); g2.connect(getACDest()); o2.start(t); o2.stop(t+0.2);
+    } catch(e){}
+  }
+  showToast('💥 Egg cracked! Hit absorbed.', 1400);
 }
 
 function activateMulligan() {
@@ -14090,12 +15164,12 @@ function applyPerkEffect(id) {
     case 'speed_hoops':      /* placed in initHole */ break;
     case 'money_bounce':     /* counted live via modifiers.filter in wall bounce */ break;
     case 'extra_heart':
-      // v0.17x: was +1 life (cap 9); now +3 max HP and heal 3.
-      // v0.18a: at ★9+, heal reduced by 1 (max HP gain unchanged — you still
-      // get the ceiling raise, you just don't top off as much from the perk itself).
+      // v0.17x: was +1 life (cap 9); later +3 max HP and heal 3.
+      // v0.18a: at ★9+, heal reduced by 1.
+      // v0.19s: nerfed to heal 2 only (no max HP increase). Price also
+      // dropped 25% (14→11) in the perk definition to match the weaker effect.
       {
-        const heartHeal = Math.max(1, 3 - ((G._diffMods && G._diffMods.healReduction) || 0));
-        G.hpMax += 3;
+        const heartHeal = Math.max(1, 2 - ((G._diffMods && G._diffMods.healReduction) || 0));
         applyHeal(heartHeal, 'extra_heart_perk');
         updateUI();
       }
@@ -15939,11 +17013,11 @@ const ALL_PERKS = [
   { id:'bouncy_walls',     name:'Rubber Walls',        emoji:'🧱', rarity:'common',    price:15,  stackable:true,  weight:6,
     desc:'Increased wall and surface restitution — bouncier everything. Stacks!' },
   { id:'hot_streak',       name:'Hot Streak',          emoji:'🔥', rarity:'common',    price:20,  stackable:false, weight:6,
-    desc:'Each consecutive par-or-better hole adds +15% to coin earnings. Resets on bogey.' },
+    desc:'Each consecutive par-or-better hole adds +10% to coin earnings (max ×4). Resets on bogey.' },
   { id:'magnet',           name:'Coin Magnet',         emoji:'🧲', rarity:'common',    price:15,  stackable:true,  weight:8,
     desc:'Coins are pulled toward your ball. Buy up to 3× to increase range and pull strength.' },
-  { id:'extra_heart',     name:'Heart',                emoji:'❤️‍🩹', rarity:'common',   price:14,  stackable:true,  weight:4,
-    desc:'+3 max HP and heal 3 instantly. Stacks.' },
+  { id:'extra_heart',     name:'Heart',                emoji:'❤️‍🩹', rarity:'common',   price:11,  stackable:true,  weight:4,
+    desc:'Heal +2 HP instantly. Stacks.' },
   { id:'high_speed_finish', name:'High Speed Finish',  emoji:'🏁', rarity:'common',   price:15,  stackable:false, weight:8,
     desc:'Score +10 coins when you fly into the hole at high speed. Checkered flag celebration!' },
   // RARE — base weight 4
@@ -16581,7 +17655,16 @@ function initHole() {
   G._allBounceTarget = 0;
   G._allBounceCount = 0;
   G.coinMeshes = [];
+  G.heartMeshes = [];
   G.holeBeacon = null;
+  // v0.19t: cleanup last hole's defense meshes and reset live offset.
+  if(G._holeDefenseGroup && G._holeDefenseGroup.parent) {
+    G._holeDefenseGroup.parent.remove(G._holeDefenseGroup);
+  }
+  G._holeDefense = null;
+  G._holeDefenseGroup = null;
+  G._holeDefenseState = null;
+  G._holeWorldOffset = {x:0, z:0};
   G._shopUsedThisHole = false;
   G._cardRemoveUsedThisHole = false;
   G._lifeDeductedThisHole = false;
@@ -16708,6 +17791,11 @@ function initHole() {
   setTimeout(() => showDonPrompt(), 800);
 
   // ── Card system: shuffle deck and draw opening hand ──
+  // v0.19s: reset ALL per-swing card flags here (not just arc shot). Previous
+  // bug: when a Catapult shot sank the hole, `onHoled` bypassed the usual
+  // ball-stop reset, leaving `_catapultActive=true`. The next hole's aim
+  // preview + fireShot then treated every swing as a catapult until the ball
+  // went OOB (which finally hit the reset at line ~9226).
   G._arcShotActive = false;
         G._anglerCardActive = false;
         G._wallMagnetActive = false;
@@ -16715,6 +17803,21 @@ function initHole() {
   G._powerShotStacks = 0;
   G._powerShotTensionActive = false;
   G._cannonballActive = false;
+  G._catapultActive = false;
+  G._catapultBounceBoost = 0;
+  G._catapultGroundBounce = false;
+  G._catapultLaunchGrace = false;
+  G._jumpPreloadLaunchGrace = false;
+  // v0.19s: clear Mighty Egg shell if it somehow carried over. Egg is hole-
+  // scoped — it discards with the rest of the hand on hole end, so there
+  // shouldn't be a visual to remove, but if the flag is set, clear it.
+  if(G._mightyEggActive || G._mightyEggMesh) {
+    if(G._mightyEggMesh && G._mightyEggMesh.parent) {
+      G._mightyEggMesh.parent.remove(G._mightyEggMesh);
+    }
+    G._mightyEggMesh = null;
+    G._mightyEggActive = false;
+  }
   G._freezeFrameActive = false;
   G._freezeFrameTimer = 0;
   G._perpetualMotionActive = false;
@@ -18020,6 +19123,7 @@ function startGame(){
   G.grenadeAmmo = 0;
   G.boulderAvail = false;
   G.coinMeshes = [];
+  G.heartMeshes = [];
   G.spinBars = [];
   G.slideBlocks = [];
   G.bumpers = [];
@@ -19453,6 +20557,107 @@ function animate(now) {
     updatePhysics(dt);
     updateParticles(dt);
 
+    // ── Moving hole catches resting ball (v0.19t) ─────────
+    // User spec: if the hole touches the ball at any point (even if the ball
+    // is prepping for a swing) that counts as a successful hole. updatePhysics
+    // only advances the hole-offset + sink check during rolling — this block
+    // runs it during aim mode too. Guarded on the moving_hole defense so it's
+    // a no-op for every other defense or a plain hole.
+    if(G.aimMode && !G.rolling && !G.inHole && G.holePos && G._holeDefense
+       && G._holeDefense.kind === 'moving_hole' && G.ballPos) {
+      const hp = G.holePos;
+      const off = G._holeWorldOffset || {x:0,z:0};
+      const hwx = hp.x * TILE_SIZE + off.x;
+      const hwz = hp.y * TILE_SIZE + off.z;
+      const dxR = G.ballPos.x - hwx, dzR = G.ballPos.z - hwz;
+      const hRad = G.modifiers.find(m=>m.id==='big_hole') ? 1.1 : 0.55;
+      if(Math.hypot(dxR, dzR) < hRad) {
+        // Snap ball visually to the hole position so the drop-in animation
+        // reads properly. Ball velocity is already zero.
+        G.ballPos.x = hwx;
+        G.ballPos.z = hwz;
+        if(G.ball) G.ball.position.set(hwx, G.ballPos.y, hwz);
+        G.aimMode = false;
+        G.rolling = false;
+        G.ballVel.set(0,0,0);
+        showToast('🎯 The hole caught you!', 1000);
+        if(typeof onHoled === 'function') onHoled();
+      }
+    }
+
+    // ── OOB grace continues during aim (v0.19s) ───────────
+    // Previously the OOB countdown only advanced inside updatePhysics's
+    // rolling branch, so stopping the ball in the rough and lining up a
+    // new swing paused the timer. That removed tension. This block
+    // re-drives the countdown whenever the ball is at rest in OOB terrain
+    // in aim mode. Uses the same state, UI, and expire path as the rolling
+    // branch (spawnSplash + stroke + resetToLastShot).
+    if(G.aimMode && !G.rolling && !G.inHole && !G.ghostBallActive && G.ballPos) {
+      const ballCell = (typeof getCell === 'function') ? getCell(G.ballPos.x, G.ballPos.z) : null;
+      const isOutside = (ballCell === CELL.EMPTY || ballCell === CELL.WALL);
+      if(isOutside) {
+        G._oobGraceTimer = (G._oobGraceTimer || 0) + dt;
+        const baseGrace = (G._diffMods && G._diffMods.oobGrace) || 1.5;
+        const OOB_GRACE = G.modifiers.some(m=>m.id==='off_roading') ? 10.0 : baseGrace;
+        if(G._oobGraceTimer < OOB_GRACE) {
+          // UI countdown + strobe, identical to the rolling branch.
+          const remaining = OOB_GRACE - G._oobGraceTimer;
+          const tEl = document.getElementById('oob-timer');
+          const vEl = document.getElementById('oob-timer-val');
+          if(tEl && vEl) {
+            if(tEl.style.display !== 'block') tEl.style.display = 'block';
+            vEl.textContent = remaining.toFixed(1);
+          }
+          if(G.ballMesh && G.ballMesh.material && G.ballMesh.material.emissive) {
+            const progress = G._oobGraceTimer / OOB_GRACE;
+            const freq = 4 + progress * 16;
+            const phase = Math.sin(G._oobGraceTimer * freq * Math.PI * 2);
+            const strobeOn = phase > 0;
+            const intensity = strobeOn ? (0.3 + progress * 0.7) : 0;
+            G.ballMesh.material.emissive.setRGB(intensity, 0, 0);
+            if(G.ballMesh.material.emissiveIntensity !== undefined) {
+              G.ballMesh.material.emissiveIntensity = 1.0;
+            }
+          }
+        } else {
+          // Timer expired mid-aim — apply standard OOB penalty now.
+          G._oobGraceTimer = 0;
+          const tEl = document.getElementById('oob-timer');
+          if(tEl) tEl.style.display = 'none';
+          if(G.ballMesh && G.ballMesh.material && G.ballMesh.material.emissive) {
+            G.ballMesh.material.emissive.setRGB(0, 0, 0);
+          }
+          if(typeof spawnSplash === 'function') spawnSplash(G.ballPos);
+          if(G.ball) G.ball.visible = false;
+          if(G.ballShadow) G.ballShadow.visible = false;
+          G.strokes++;
+          showToast('💨 Out of bounds! +1', 1800);
+          updateUI(); if(typeof updateUndoBtn === 'function') updateUndoBtn();
+          G.aimMode = false; // block further input during the reset animation
+          setTimeout(() => {
+            if(typeof resetToLastShot === 'function') resetToLastShot();
+            if(G.ball) G.ball.visible = true;
+            if(G.ballShadow) G.ballShadow.visible = true;
+            G.aimMode = true;
+            if(!G.aimArrow && typeof createAimArrow === 'function') createAimArrow();
+            if(typeof updateUndoBtn === 'function') updateUndoBtn();
+            if(typeof updateHandUI === 'function') updateHandUI();
+          }, 600);
+        }
+      } else {
+        // Ball is in-bounds during aim (e.g. after user nudge / mulligan).
+        // Clear stale OOB UI + reset timer.
+        if(G._oobGraceTimer > 0) {
+          const tEl = document.getElementById('oob-timer');
+          if(tEl) tEl.style.display = 'none';
+          if(G.ballMesh && G.ballMesh.material && G.ballMesh.material.emissive) {
+            G.ballMesh.material.emissive.setRGB(0, 0, 0);
+          }
+          G._oobGraceTimer = 0;
+        }
+      }
+    }
+
     // ── Visual ball rotation (v0.19d) ──
     // Spin the skin Group so dimples read as a rolling golf ball. Rotation
     // axis = perpendicular to horizontal movement in the XZ plane; roll
@@ -19498,6 +20703,12 @@ function animate(now) {
     if(G.flagGroup) {
       const fl=G.flagGroup.children[1];
       if(fl) fl.rotation.y=Math.sin(flagTime*2.5)*0.3;
+    }
+    // v0.19t: advance the active hole defense each frame.
+    if(G._holeDefenseState && G._holeDefenseState.update) {
+      try {
+        G._holeDefenseState.update(dt, now * 0.001);
+      } catch(e) { console.warn('hole defense update failed', e); }
     }
     if(G.rolling && !_wasRolling) sfxRollStart();
     if(!G.rolling && _wasRolling) sfxRollStop();
@@ -19981,6 +21192,24 @@ function animate(now) {
               ),
               life: 0.4 + Math.random()*0.3, maxLife: 0.7,
             });
+          }
+        }
+      }
+    }
+    // ── Heart bob + spin animation (v0.19s) ─────────────
+    if(G.heartMeshes && G.heartMeshes.length) {
+      const t = now * 0.001;
+      for(const h of G.heartMeshes) {
+        if(h.collected) continue;
+        const bob = Math.sin(t * 2.4 + h.bobOffset) * 0.10;
+        if(h.pivot) {
+          h.pivot.position.y = h.y + bob;
+          h.pivot.rotation.y = t * (h.spinSpeed || 3.2) + h.bobOffset;
+        }
+        if(h.glowMesh) {
+          h.glowMesh.position.y = h.y - 0.28;
+          if(h.glowMesh.material) {
+            h.glowMesh.material.opacity = 0.45 + Math.sin(t * 4.0 + h.bobOffset) * 0.25;
           }
         }
       }
