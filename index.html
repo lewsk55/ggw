@@ -311,6 +311,34 @@ white-space:nowrap;
   100% { transform: scale(1);   filter: brightness(1); }
 }
 
+/* ── Confetti (v0.19z) ── */
+/* Fires when an XP tier is crossed on the game-over screen.
+   Container is fixed-position, full-screen, z-index above the overlay (#overlay z=100).
+   Each confetti piece is an absolutely-positioned div animated with a single
+   keyframe that scales translateY + rotates + opacity. Colors randomized in JS. */
+#confetti-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 400;
+  overflow: hidden;
+}
+.confetti-piece {
+  position: absolute;
+  top: -20px;
+  width: 10px;
+  height: 14px;
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: confetti-fall 3.0s cubic-bezier(0.4, 0, 0.7, 1) forwards;
+}
+@keyframes confetti-fall {
+  0%   { opacity: 0; transform: translate(0, -20px) rotate(0deg) scale(1); }
+  8%   { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--confetti-x, 0), 110vh) rotate(var(--confetti-rot, 720deg)) scale(0.8); }
+}
+
 /* ── Multiplayer turn banner ── */
 #turn-banner {
 position:absolute; top:0; left:0; right:0;
@@ -2231,16 +2259,6 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
   <div class="hs-score-word" id="hs-score-word">Birdie</div>
   <div class="hs-score-detail" id="hs-score-detail">2 strokes · Par 3</div>
   <div class="hs-earnings" id="hs-earnings"></div>
-  <!-- v0.19w: cosmetic unlock progress bar. Populated by renderCosmoProgress()
-       when this summary is shown. Hidden by default so it doesn't flash empty. -->
-  <div id="hs-cosmo-progress" class="cosmo-progress" style="display:none">
-    <div class="cp-label">
-      <span>Next Unlock</span>
-      <span class="cp-next" id="hs-cp-next-name">—</span>
-    </div>
-    <div class="cp-track"><div class="cp-fill" id="hs-cp-fill" style="width:0%"></div></div>
-    <div class="cp-xp" id="hs-cp-xp">0 / 0 XP</div>
-  </div>
   <button class="hs-continue-btn" id="hs-continue-btn" onclick="onSummaryDismiss()">🛍 Shop →</button>
 </div>
 
@@ -2965,8 +2983,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.19w';
-const CHANGE_NOTE = 'Camera toggle moved to pause menu, cosmetic XP progress bar moved from home screen to hole summary + game over';
+const GAME_VERSION = '0.19z6';
+const CHANGE_NOTE = 'Parkour Vault shown as standard purple combo (no flashy glow), parkour now detects + vaults over ground spikes and rotating spike-ring balls';
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
@@ -4795,8 +4813,11 @@ function generatePuttPuttCourse(holeNum) {
       } else if(chosen.kind === 'force_field') {
         hd.bubbleR = 1.8;
         const cycleScale = 1.0 / speedFactor;
-        hd.closedSecs = (1.8 + rng() * 0.4) * cycleScale;
-        hd.openSecs   = (0.9 + rng() * 0.4) * cycleScale;
+        // v0.19y: swap open/closed ratio — force field was too punishing. Now
+        // open ~1.8s (was closed ~1.8s), closed ~0.9s (was open ~0.9s). Gives
+        // the player clear windows to plan a shot instead of a constant wall.
+        hd.closedSecs = (0.9 + rng() * 0.4) * cycleScale;
+        hd.openSecs   = (1.8 + rng() * 0.4) * cycleScale;
         hd.phase = rng() * (hd.closedSecs + hd.openSecs);
         hd.flicker = !!chosen.params.flicker;
       } else if(chosen.kind === 'glass_dome') {
@@ -7905,6 +7926,88 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
     const catIcon = prog.nextCategory === 'hat' ? '🎩' : '⚪';
     if(nameEl) nameEl.textContent = `${catIcon} ${name}`;
     const pct = Math.round(prog.pct * 100);
+
+    // v0.19z: if caller supplies opts.fromXp (previous total XP before the
+    // just-deposited run), we animate the fill + counter from the old pct
+    // up to the new pct over ~1.2s. This is used on the game-over screen
+    // so the player sees the bar visibly fill with their earned XP.
+    if(opts.fromXp != null && fillEl && xpEl) {
+      // Compute the starting pct by temporarily treating meta.xp = fromXp
+      const fakeMeta = { ...meta, xp: opts.fromXp };
+      const fromProg = getNextCosmeticUnlock(fakeMeta);
+      // If the "from" and "to" point at the same tier, simple interpolation.
+      // If they differ (tier crossed this run), we run from fromPct → 100%
+      // → 0% (instant reset with burst flash) → toPct. That reads as the
+      // bar filling, flashing for the unlock, and starting the next tier.
+      let fromPct = 0;
+      if(fromProg && fromProg.nextId === prog.nextId) {
+        fromPct = Math.round(fromProg.pct * 100);
+      } else if(fromProg) {
+        // Different tier → start near full
+        fromPct = Math.round(fromProg.pct * 100);
+      } else {
+        fromPct = 0;
+      }
+      const tierCrossed = fromProg && fromProg.nextId !== prog.nextId;
+      const dur = 1200;  // ms
+      const startT = performance.now();
+      fillEl.style.transition = 'none';
+      fillEl.style.width = fromPct + '%';
+      // Force reflow before re-enabling
+      void fillEl.offsetWidth;
+      const startXp = opts.fromXp || 0;
+      const endXp = prog.current;
+
+      // Helper to drive one pass of (fromPct → targetPct) over (dur)
+      const runPass = (f, to, ms, onDone) => {
+        const st = performance.now();
+        const step = () => {
+          const t = Math.min(1, (performance.now() - st) / ms);
+          const eased = 1 - Math.pow(1 - t, 2); // ease-out quad
+          const w = f + (to - f) * eased;
+          fillEl.style.width = w + '%';
+          if(t < 1) requestAnimationFrame(step);
+          else if(onDone) onDone();
+        };
+        requestAnimationFrame(step);
+      };
+
+      if(tierCrossed) {
+        // Pass 1: fromPct → 100
+        runPass(fromPct, 100, Math.max(400, dur * 0.5), () => {
+          // Burst flash
+          wrap.classList.remove('cp-unlock');
+          void wrap.offsetWidth;
+          wrap.classList.add('cp-unlock');
+          setTimeout(() => { wrap.classList.remove('cp-unlock'); }, 900);
+          // Reset to 0, then animate to new target pct
+          fillEl.style.transition = 'none';
+          fillEl.style.width = '0%';
+          void fillEl.offsetWidth;
+          setTimeout(() => {
+            runPass(0, pct, Math.max(400, dur * 0.5));
+          }, 200);
+        });
+      } else {
+        runPass(fromPct, pct, dur);
+      }
+
+      // Count up the XP number
+      if(xpEl) {
+        xpEl.textContent = `${startXp} / ${prog.nextCost} XP`;
+        const xpStep = () => {
+          const t = Math.min(1, (performance.now() - startT) / dur);
+          const eased = 1 - Math.pow(1 - t, 2);
+          const v = Math.round(startXp + (endXp - startXp) * eased);
+          xpEl.textContent = `${v} / ${prog.nextCost} XP`;
+          if(t < 1) requestAnimationFrame(xpStep);
+        };
+        requestAnimationFrame(xpStep);
+      }
+      wrap._lastPct = pct;
+      return;
+    }
+
     const prevPct = wrap._lastPct || 0;
     if(fillEl) fillEl.style.width = pct + '%';
     if(xpEl) xpEl.textContent = `${prog.current} / ${prog.nextCost} XP`;
@@ -7923,6 +8026,82 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
     wrap._lastPct = pct;
   }
   window.renderCosmoProgress = renderCosmoProgress;
+
+  // v0.19z: Confetti burst for XP tier unlocks on the game-over screen.
+  // Creates a fixed-position overlay, spawns N confetti divs with randomized
+  // colors / start X / drift X / rotation, then removes the layer after
+  // animations settle. Non-blocking — SFX fires in parallel.
+  function spawnConfettiBurst(count) {
+    count = count || 60;
+    // Reuse or create the layer
+    let layer = document.getElementById('confetti-layer');
+    if(!layer) {
+      layer = document.createElement('div');
+      layer.id = 'confetti-layer';
+      document.body.appendChild(layer);
+    }
+    const colors = ['#ff4757', '#2ed573', '#1e90ff', '#ffa502', '#ff6b81', '#7bed9f', '#70a1ff', '#eccc68', '#ff7f50', '#a29bfe'];
+    const shapes = ['', 'border-radius:50%;', 'border-radius:2px;transform:rotate(45deg);'];
+    for(let i = 0; i < count; i++) {
+      const piece = document.createElement('div');
+      piece.className = 'confetti-piece';
+      const color = colors[(Math.random() * colors.length) | 0];
+      const shape = shapes[(Math.random() * shapes.length) | 0];
+      const startX = Math.random() * 100; // vw
+      const driftX = (Math.random() - 0.5) * 240; // px
+      const rot = 360 + Math.random() * 1440 * (Math.random() < 0.5 ? -1 : 1);
+      const delay = Math.random() * 400; // ms
+      const w = 6 + Math.random() * 8;
+      const h = 8 + Math.random() * 10;
+      piece.style.cssText = `left:${startX}vw;background:${color};width:${w}px;height:${h}px;${shape}--confetti-x:${driftX}px;--confetti-rot:${rot}deg;animation-delay:${delay}ms;`;
+      layer.appendChild(piece);
+    }
+    // Clean up after last animation completes
+    setTimeout(() => {
+      if(layer && layer.parentNode) layer.parentNode.removeChild(layer);
+    }, 3600);
+
+    // Confetti SFX — ascending "pop-pop-pop" of small bursts. Layered so it
+    // reads as a cheer, not a single note.
+    if(typeof AC !== 'undefined' && AC) {
+      try {
+        const ac = (typeof getAC === 'function') ? getAC() : AC;
+        const t0 = ac.currentTime;
+        const destNode = (typeof getACDest === 'function') ? getACDest() : ac.destination;
+        // Triad arpeggio
+        const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+        notes.forEach((f, i) => {
+          const t = t0 + i * 0.07;
+          const o = ac.createOscillator(); o.type = 'triangle';
+          o.frequency.setValueAtTime(f, t);
+          o.frequency.exponentialRampToValueAtTime(f * 1.5, t + 0.18);
+          const g = ac.createGain();
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.linearRampToValueAtTime(0.14, t + 0.015);
+          g.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+          o.connect(g); g.connect(destNode);
+          o.start(t); o.stop(t + 0.25);
+        });
+        // Sparkle noise burst
+        const sr = ac.sampleRate, bufSec = 0.5;
+        const buf = ac.createBuffer(1, Math.floor(sr * bufSec), sr);
+        const d = buf.getChannelData(0);
+        for(let i = 0; i < d.length; i++) {
+          const tt = i / d.length;
+          // Crackle: noise with sparse peaks
+          d[i] = (Math.random() < 0.04 ? (Math.random()*2 - 1) : 0) * Math.exp(-tt * 1.8);
+        }
+        const src = ac.createBufferSource(); src.buffer = buf;
+        const hp = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 3500;
+        const g2 = ac.createGain();
+        g2.gain.setValueAtTime(0.6, t0);
+        g2.gain.exponentialRampToValueAtTime(0.001, t0 + 0.6);
+        src.connect(hp); hp.connect(g2); g2.connect(destNode);
+        src.start(t0);
+      } catch(e){}
+    }
+  }
+  window.spawnConfettiBurst = spawnConfettiBurst;
 
   // ── Achievement list for the Achievements screen (v0.19g) ──
   // Condition-based unlocks only (XP tiers live in the Locker Room). Order
@@ -8345,6 +8524,118 @@ function updatePhysics(dt) {
     // Mark jump start position for obstacle-over detection
     G._jumpStartX = G.ballPos.x;
     G._jumpStartZ = G.ballPos.z;
+  }
+
+  // ── Parkour arc driver (v0.19z2, fixed v0.19z3) ─────
+  // When G._parkourArc is set, we drive the ball's position along a scripted
+  // lerp from start → end, with a smooth bell-curve Y (apex 0.55m). Velocity
+  // stays frozen during the arc and is restored at landing.
+  // v0.19z3 fix: updatePhysics normally calls G.ball.position.copy(G.ballPos)
+  // at its end, but the early `return` below skipped that — so the ball mesh
+  // (and hat) stayed put visually while G.ballPos updated. Now we push ball +
+  // shadow + hat position here before returning so the visual follows.
+  if(G._parkourArc) {
+    const arc = G._parkourArc;
+    arc.elapsed += dt;
+    const t = Math.min(1, arc.elapsed / arc.durationSec);
+    // Ease-in-out cubic for XZ — starts slow, mid-acceleration, ease out.
+    const tXZ = t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t + 2, 3) / 2;
+    // Y uses sin bell so apex lands in middle and hits endY exactly at t=1.
+    const tY = Math.sin(Math.PI * t);
+    G.ballPos.x = arc.startX + (arc.endX - arc.startX) * tXZ;
+    G.ballPos.z = arc.startZ + (arc.endZ - arc.startZ) * tXZ;
+    G.ballPos.y = arc.startY + (arc.endY - arc.startY) * tXZ + arc.apexY * tY;
+    G.ballVel.x = 0; G.ballVel.y = 0; G.ballVel.z = 0;
+    if(t >= 1) {
+      G.ballVel.x = arc.dirX * arc.spd;
+      G.ballVel.z = arc.dirZ * arc.spd;
+      G.ballVel.y = 0;
+      G.ballPos.y = arc.endY;
+      G._parkourArc = null;
+    }
+    // v0.19z3: explicitly push the visual ball + shadow to match G.ballPos
+    // since the early return skips the usual render line at the end of
+    // updatePhysics. The hat follows automatically in animate() since it
+    // reads G.ballPos directly each frame.
+    if(G.ball) G.ball.position.copy(G.ballPos);
+    if(G.ballShadow) {
+      const terrainY = G.heightMap && G.heightMap.length ? getTerrainHeight(G.ballPos.x, G.ballPos.z) : 0;
+      G.ballShadow.position.set(G.ballPos.x, terrainY + 0.02, G.ballPos.z);
+      const airHeight = Math.max(0, G.ballPos.y - (terrainY + FLOOR_H/2 + BALL_R));
+      const shadowScale = Math.max(0.2, 1 - airHeight * 0.15);
+      G.ballShadow.scale.setScalar(shadowScale);
+    }
+    return;
+  }
+
+  // ── Parkour obstacle detection (v0.19x, v0.19z, v0.19z2) ─────
+  // When parkour is armed and the ball is rolling, we check whether the ball
+  // is about to contact any nearby obstacle. v0.19z2: trigger distance
+  // tightened significantly — previously triggered at up to 4m (half a
+  // hole length) which looked like the ball vanishes and reappears. Now
+  // fires at ~0.25m of empty space between ball edge and obstacle edge,
+  // so the vault begins the moment the ball would otherwise collide.
+  if(G._parkourCardActive && !G._parkourCardUsed && G.rolling && !G.inHole) {
+    const pvx = G.ballVel.x, pvz = G.ballVel.z;
+    const pspd = Math.hypot(pvx, pvz);
+    if(pspd > 0.3) {
+      const pdirX = pvx / pspd, pdirZ = pvz / pspd;
+      // Per-tag collision radius (matches values used in obstacle collision
+      // code). Ball is heading toward an obstacle center; once the clear
+      // distance (center-to-center minus BALL_R and obstacle R) drops below
+      // CONTACT_MARGIN, vault.
+      const OBST_R = { rock: 0.65, bumper: 0.55, spin_bar: 0.8, slide_block: 0.7, spike: 0.55, spike_ring_ball: 0.32 };
+      const CONTACT_MARGIN = 0.25; // meters of clear air before triggering
+      // Must also be moving toward the obstacle: dot(ballDir, center-ball) > 0.7
+      // (∼45° cone tolerance so an obstacle sideswipe still triggers).
+      const DIR_DOT_MIN = 0.7;
+      let bestTarget = null, bestClear = Infinity;
+      const ptest = (tx, tz, tag) => {
+        const odx = tx - G.ballPos.x, odz = tz - G.ballPos.z;
+        const d = Math.hypot(odx, odz);
+        if(d < 0.01) return;
+        const r = OBST_R[tag] || 0.7;
+        const clear = d - r - BALL_R;
+        if(clear > CONTACT_MARGIN) return;     // too far — wait
+        const dn = (odx/d) * pdirX + (odz/d) * pdirZ;
+        if(dn < DIR_DOT_MIN) return;           // not moving toward it
+        if(clear < bestClear) { bestClear = clear; bestTarget = { wx: tx, wz: tz, tag }; }
+      };
+      const tryList = (arr, tag) => {
+        if(!arr) return;
+        for(const o of arr) {
+          if(!o || o._destroyed) continue;
+          if(o.wx == null || o.wz == null) continue;
+          ptest(o.wx, o.wz, tag);
+        }
+      };
+      tryList(G.rocks, 'rock');
+      tryList(G.bumpers, 'bumper');
+      tryList(G.spinBars, 'spin_bar');
+      tryList(G.slideBlocks, 'slide_block');
+      tryList(G.spikes, 'spike');   // v0.19z6: vault ground spikes too
+      // v0.19z6: scan spike-ring balls (rotating hazards around the hole).
+      // Each ball's world position depends on ring angle, so we compute it
+      // fresh from the defense state. Also apply a slightly smaller contact
+      // radius since spike balls are small.
+      if(G._holeDefense && G._holeDefenseState
+         && G._holeDefense.kind === 'spike_ring'
+         && G._holeDefenseState.balls) {
+        const hds = G._holeDefenseState;
+        const cxR = hds.cx, czR = hds.cz, ringAng = hds.ringAngle || 0;
+        const hd = G._holeDefense;
+        for(const b of hds.balls) {
+          if(b.destroyed) continue;
+          const ang = b.baseAngle + ringAng;
+          const bx = cxR + Math.cos(ang) * hd.radius;
+          const bz = czR + Math.sin(ang) * hd.radius;
+          ptest(bx, bz, 'spike_ring_ball');
+        }
+      }
+      if(bestTarget && typeof parkourLeap === 'function') {
+        parkourLeap(bestTarget.wx, bestTarget.wz, bestTarget.tag);
+      }
+    }
   }
 
   // ── Jump-over obstacle detection (trigger-volume architecture) ──
@@ -8830,21 +9121,99 @@ function updatePhysics(dt) {
           G.ballPos.z += nz * overlap;
           const dot = G.ballVel.x*nx + G.ballVel.z*nz;
           if(dot < 0) {
-            G.ballVel.x -= (1+wb)*dot*nx;
-            G.ballVel.z -= (1+wb)*dot*nz;
-            if(G.snowballStacks > 0 && G.snowballCount < G.snowballStacks * 5) {
-              const boost = 1.0 + 0.50;  // +50% per bounce
-              G.ballVel.x *= boost;
-              G.ballVel.z *= boost;
-              G.snowballCount++;
-            }
-            // Money Bounce perk: 1 coin per wall bounce, capped at 3 bounces per stack.
-            // (Merged with former Coin Bouncer perk in v0.17r — Money Bounce is now the sole wall-coin perk.)
-            const moneyBounceStacks = G.modifiers.filter(m=>m.id==='money_bounce').length;
-            if(moneyBounceStacks > 0 && !pushed) {
-              G._moneyBounceCount = (G._moneyBounceCount||0) + 1;
-              if(G._moneyBounceCount <= moneyBounceStacks * 3) {
-                G._bounceCoinsPending = (G._bounceCoinsPending||0) + 1;
+            // v0.19x: STICKY card — on first wall contact, freeze the ball in
+            // place instead of reflecting. Big juicy squash visual + gross
+            // squish SFX. Treat the stick as a valid hole-end state.
+            if(G._stickyCardActive && !G._stickyCardTriggered) {
+              G._stickyCardTriggered = true;
+              G.ballVel.x = 0; G.ballVel.y = 0; G.ballVel.z = 0;
+              // Squash scale animation on the ball along the wall normal.
+              // The ball flattens against the wall (perpendicular to normal)
+              // and stretches parallel to the wall. We apply this by marking
+              // a timer; the per-frame ball-visual update reads it.
+              G._stickyCardSquash = {
+                timer: 0, duration: 0.55,
+                nx, nz, // wall normal the ball is stuck against
+              };
+              // Immediately freeze the aim/slow state so the usual "rolling
+              // slow timer" finishes and finalizes this shot.
+              G.rollingSlowTimer = 999; // force immediate stop
+              // v0.19z: treble-y cartoon squish (was a bassy thud).
+              // - Downward pitch-bend SINE starting high (900Hz → 320Hz) gives
+              //   the "boioioi" wobble of something squishing.
+              // - Short bright high-passed noise burst as the "squelch" edge.
+              // - Tiny triangle chirp on top for brightness.
+              // No low-freq thump — keep it firmly in the mids/highs.
+              if(AC) {
+                const ac = getAC(), t = ac.currentTime;
+                // Main squish body — bouncy falling pitch
+                try {
+                  const o = ac.createOscillator(); o.type = 'sine';
+                  o.frequency.setValueAtTime(900, t);
+                  o.frequency.exponentialRampToValueAtTime(320, t + 0.22);
+                  // Add vibrato for the "boing" feel
+                  const lfo = ac.createOscillator(); lfo.type = 'sine';
+                  lfo.frequency.value = 22;
+                  const lfoG = ac.createGain(); lfoG.gain.value = 110;
+                  lfo.connect(lfoG); lfoG.connect(o.frequency);
+                  const g = ac.createGain();
+                  g.gain.setValueAtTime(0.22, t);
+                  g.gain.exponentialRampToValueAtTime(0.001, t + 0.28);
+                  o.connect(g); g.connect(getACDest());
+                  lfo.start(t); lfo.stop(t + 0.3);
+                  o.start(t); o.stop(t + 0.3);
+                } catch(e){}
+                // Squelch: high-passed noise burst
+                try {
+                  const sr = ac.sampleRate, bufSec = 0.18;
+                  const buf = ac.createBuffer(1, Math.floor(sr*bufSec), sr);
+                  const d2 = buf.getChannelData(0);
+                  for(let i = 0; i < d2.length; i++) {
+                    const tt = i/d2.length;
+                    d2[i] = (Math.random()*2-1) * Math.exp(-tt*6.0) * 0.6;
+                  }
+                  const src = ac.createBufferSource(); src.buffer = buf;
+                  const hp = ac.createBiquadFilter(); hp.type='highpass'; hp.frequency.value = 2200;
+                  const g2 = ac.createGain();
+                  g2.gain.setValueAtTime(0.18, t);
+                  g2.gain.exponentialRampToValueAtTime(0.001, t+0.2);
+                  src.connect(hp); hp.connect(g2); g2.connect(getACDest()); src.start(t);
+                } catch(e){}
+                // Top-end brightness chirp
+                try {
+                  const o2 = ac.createOscillator(); o2.type = 'triangle';
+                  o2.frequency.setValueAtTime(2400, t + 0.02);
+                  o2.frequency.exponentialRampToValueAtTime(1400, t + 0.14);
+                  const g3 = ac.createGain();
+                  g3.gain.setValueAtTime(0.0001, t);
+                  g3.gain.linearRampToValueAtTime(0.08, t + 0.03);
+                  g3.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+                  o2.connect(g3); g3.connect(getACDest());
+                  o2.start(t); o2.stop(t + 0.2);
+                } catch(e){}
+              }
+              triggerShake('med');  // v0.19z: 'heavy' was too much for a splat
+              spawnHitParticles(G.ballPos);
+              showToast('🟢 SPLAT!', 1200);
+              // Skip the normal reflection — ball is stuck.
+              pushed = true;
+            } else {
+              G.ballVel.x -= (1+wb)*dot*nx;
+              G.ballVel.z -= (1+wb)*dot*nz;
+              if(G.snowballStacks > 0 && G.snowballCount < G.snowballStacks * 5) {
+                const boost = 1.0 + 0.50;  // +50% per bounce
+                G.ballVel.x *= boost;
+                G.ballVel.z *= boost;
+                G.snowballCount++;
+              }
+              // Money Bounce perk: 1 coin per wall bounce, capped at 3 bounces per stack.
+              // (Merged with former Coin Bouncer perk in v0.17r — Money Bounce is now the sole wall-coin perk.)
+              const moneyBounceStacks = G.modifiers.filter(m=>m.id==='money_bounce').length;
+              if(moneyBounceStacks > 0 && !pushed) {
+                G._moneyBounceCount = (G._moneyBounceCount||0) + 1;
+                if(G._moneyBounceCount <= moneyBounceStacks * 3) {
+                  G._bounceCoinsPending = (G._bounceCoinsPending||0) + 1;
+                }
               }
             }
           }
@@ -9026,6 +9395,8 @@ function updatePhysics(dt) {
   if(G.rocks && G.rocks.length && !ghostActive) {
     for(const rock of G.rocks) {
       if(rock._destroyed) continue;
+      // v0.19z: parkour immunity — skip entirely during vault window
+      if(G._parkourImmunity || G._vacuumImmunity) continue;
       // Jump-over forgiveness: skip collision when ball is clearly above the rock
       // and not diving hard. Rock top ≈ terrain + r*0.8 (rocks are squashed spheres).
       const rockBaseH = G.heightMap.length ? getTerrainHeight(rock.wx, rock.wz) : 0;
@@ -9081,6 +9452,9 @@ function updatePhysics(dt) {
   if(G.spikes && G.spikes.length && !ghostActive) {
     for(const spike of G.spikes) {
       if(spike._destroyed) continue;
+      // v0.19z4: parkour + vacuum immunity — both abilities should let the
+      // ball clear spikes without damage/bounce.
+      if(G._parkourImmunity || G._vacuumImmunity) continue;
       // Height gate: skip if ball is above the spike hemisphere
       const spikeTop = spike.baseH + spike.r + 0.65; // hemisphere + tallest visual spike
       // Jump-over forgiveness: ball clearly above hemisphere dome and not diving = clear jump
@@ -9207,6 +9581,8 @@ function updatePhysics(dt) {
   if(G.bumpers && G.bumpers.length) {
     for(const bmp of G.bumpers) {
       if(bmp._destroyed) continue;
+      // v0.19z: parkour immunity — skip entirely during vault window
+      if(G._parkourImmunity || G._vacuumImmunity) continue;
       // Height gate: skip collision if ball is clearly above the bumper (jump-over forgiveness).
       // Forgiveness margin = 30% of bumper height → easier to clear on a normal hop.
       const bmpTop = bmp.baseH + bmp.bumperH + 0.05;
@@ -9298,6 +9674,8 @@ function updatePhysics(dt) {
   if(G.spinBars && G.spinBars.length) {
     for(const bar of G.spinBars) {
       if(bar._destroyed) continue;
+      // v0.19z: parkour immunity — skip entirely during vault window
+      if(G._parkourImmunity || G._vacuumImmunity) continue;
       // Advance bar angle for this substep FIRST — must happen regardless
       // of whether ball is near enough to collide, so the bar always spins.
       const prevAngle = bar.angle;
@@ -9424,6 +9802,8 @@ function updatePhysics(dt) {
   if(G.slideBlocks && G.slideBlocks.length) {
     for(const sb of G.slideBlocks) {
       if(sb._destroyed) continue;
+      // v0.19z: parkour immunity — skip entirely during vault window
+      if(G._parkourImmunity || G._vacuumImmunity) continue;
       const offset = Math.sin(sb.phase)*sb.range;
       const prevOffset = Math.sin(sb.prevPhase)*sb.range;
       const bx = sb.wx+(sb.axis==='X'?offset:0);
@@ -9984,8 +10364,12 @@ function updatePhysics(dt) {
         G.ballPos.y += ny * pen;
         const dot = G.ballVel.x * nx + G.ballVel.y * ny + G.ballVel.z * nz;
         if(dot < 0) {
-          // STRONG bounce per spec: restitution 1.6 for a lively repel.
-          const REST = 1.6;
+          // v0.19y: restitution dropped from 1.6 → 0.6. Previously the bubble
+          // punted the ball back harder than it arrived (1.6 = 60% amplified
+          // reflection), which made hitting a closed bubble feel like hitting
+          // a trampoline wall. 0.6 gives a clear "blocked" feel without
+          // rocketing the ball away.
+          const REST = 0.6;
           G.ballVel.x -= (1 + REST) * dot * nx;
           G.ballVel.y -= (1 + REST) * dot * ny;
           G.ballVel.z -= (1 + REST) * dot * nz;
@@ -10028,7 +10412,9 @@ function updatePhysics(dt) {
     }
 
     // --- (c2) SPIKE RING — rotating spike balls, bounce + HP damage. ---
-    if(hd.kind === 'spike_ring' && hds.balls) {
+    // v0.19z4: parkour + vacuum immunity — if either ability is active,
+    // skip the spike ring collision entirely so the ball can pass through.
+    if(hd.kind === 'spike_ring' && hds.balls && !G._parkourImmunity && !G._vacuumImmunity) {
       const cxR = hds.cx, czR = hds.cz, ringAng = hds.ringAngle || 0;
       const ballColR = hds.ballR || 0.28;
       const hasIronBall = G._ironBallActive;
@@ -10344,6 +10730,10 @@ function updatePhysics(dt) {
         G._powerShotStacks = 0;
         G._powerShotTensionActive = false;
         G._cannonballActive = false;
+        // v0.19x: clear sticky + parkour state if armed but not triggered
+        if(typeof clearStickyState === 'function') clearStickyState();
+        if(typeof clearParkourState === 'function') clearParkourState();
+        G._vacuumImmunity = false; // v0.19z2: safety — clear in case animation was mid-flight
         // Draw 1 card to refill an empty slot (if any) — but not before first swing.
         // Quick Draw perk: draw 2 per swing (respects hand space — drawCards handles clamping).
         const hasEmptySlot = G.cardSlots.some(s => s === null);
@@ -10710,6 +11100,10 @@ const STYLE_PTS = {
   corner_deflect: 75,
   ghost_oob: 6000,  // ghost ball through OOB and back
   jump_oob: 4800,   // jumped over OOB and landed in bounds
+  // v0.19z5: Parkour vault is a flagship combo event — big points + purple
+  // display so it reads as a headline moment, not a dim glitchy text tag.
+  parkour_vault: 800,
+  obstacle_dodge: 250,
 };
 
 // Named tricks: [condition_fn(events, shotCtx), name, bonusPts]
@@ -10791,7 +11185,14 @@ const STYLE_NAMES = {
   obstacle_destroyed:'DESTROYED', wall_destroyed:'WALL DOWN', slide_dodge:'SLIDE BLOCK', jump_over:'JUMP OVER', wall_skip:'WALL SKIP', jump:'JUMP',
   explosivo_rolling:'EXPLOSIVO', corner_deflect:'DEFLECT',
   ghost_oob:'GHOST SHORTCUT', jump_oob:'OOB JUMP',
+  // v0.19z5: parkour vault is a flagship purple combo (see FLAGSHIP_EVENTS)
+  parkour_vault:'🤸 PARKOUR VAULT', obstacle_dodge:'DODGE',
 };
+
+// v0.19z5: events that render with flagship styling — big purple glow,
+// larger text — instead of plain white. These are "you pulled off something
+// special" moments (currently just parkour_vault; easy to extend).
+const FLAGSHIP_EVENTS = new Set(['parkour_vault']);
 
 // Compute the current shot's live score (single source of truth)
 function computeLiveShotScore() {
@@ -10845,7 +11246,12 @@ function showLiveStyleEvent(type, pts, mult, isNewType) {
   // Build/update combo chain elements
   if(!G._comboChainItems) G._comboChainItems = [];
   const name = STYLE_NAMES[type] || type.toUpperCase();
-  G._comboChainItems.push({ name, pts, isTrick: false });
+  // v0.19z6: parkour_vault is flagged as a "purple" event (same styling as
+  // named tricks like PINBALL or BANK SHOT — white-on-purple accent, no
+  // extra bright glow or pulse). Previously used a separate isFlagship path
+  // with huge glow/pulse — visually too much, removed.
+  const isTrick = FLAGSHIP_EVENTS && FLAGSHIP_EVENTS.has(type);
+  G._comboChainItems.push({ name, pts, isTrick });
 
   // Single source of truth for live score
   const live = computeLiveShotScore();
@@ -12025,11 +12431,6 @@ function showHoleSummary(earnings, bustedBudget, _epoch) {
   continueBtn.classList.remove('show');
 
   hs.classList.add('visible');
-  // v0.19w: refresh the cosmetic-unlock progress bar. Delayed slightly so it
-  // animates in after the score word lands, not in the same frame.
-  setTimeout(() => {
-    if(typeof renderCosmoProgress === 'function') renderCosmoProgress({ target: 'hs', animate: true });
-  }, 420);
 
   // Staggered reveal of each earnings row with count-up animation
   let delay = d > 0 ? 500 : 250;
@@ -13387,6 +13788,10 @@ const CARD_DEFS = {
   wall_magnet:  { id:'wall_magnet',  emoji:'🧲', name:'Wall Magnet',     desc:'This swing: ball curves toward the nearest wall. Bounce synergy!', rarity:'rare',      price:15,  context:'pre',    holdable:false },
   catapult:     { id:'catapult',     emoji:'🪤', name:'Catapult',         desc:'This swing: launch in a huge arc with bouncy landings. Skip walls!', rarity:'common',  price:12,  context:'pre',    holdable:false, weight:5 },
   mighty_egg:   { id:'mighty_egg',   emoji:'🥚', name:'Mighty Egg',        desc:'Encase your ball in a protective egg. Absorbs one 1-HP hit from spikes or other damage obstacles. Cracks on impact.', rarity:'common', price:10, context:'any', holdable:false, weight:2 },
+  sticky:       { id:'sticky',       emoji:'🟢', name:'Sticky',           desc:'This swing: ball sticks to the first wall it hits with a big juicy squish.', rarity:'common', price:15, context:'pre', holdable:false, weight:4 },
+  parkour:      { id:'parkour',      emoji:'🤸', name:'Parkour',          desc:'This swing: automatically vault the first obstacle in your path with a slow-mo cartwheel.', rarity:'rare', price:20, context:'pre', holdable:false, weight:3 },
+  vacuum:       { id:'vacuum',       emoji:'🌪️', name:'Vacuum',            desc:'Suck up all coins and obstacles in a V-shaped cone in front of you.', rarity:'rare', price:30, context:'pre', holdable:false, weight:2 },
+  goal_oriented:{ id:'goal_oriented',emoji:'🎯', name:'Goal Oriented',    desc:'Instantly redirect your ball toward the hole mid-swing.', rarity:'epic', price:25, context:'during', holdable:false, weight:3 },
 };
 
 // Starter deck definitions
@@ -13605,6 +14010,17 @@ function playCard(instanceId) {
   }
   sfxCardDiscard();
 
+  // v0.19x: track cancellable card plays. Sniper + Sharpshooter open a scope
+  // overlay with a cancel button. If the player cancels, we need to push the
+  // card back to hand instead of sending it to discard. Set a flag here with
+  // the instanceId + card.id; exitSharpshooter({refund:true}) reads this and
+  // re-adds the card to hand. Normal play (fire) will null this out.
+  if(card.id === 'sniper' || card.id === 'sharpshooter') {
+    G._pendingCancellableCard = { id: card.id, instanceId, slotIdx: playedSlotIdx };
+  } else {
+    G._pendingCancellableCard = null;
+  }
+
   // Execute the card ability. Abilities like Mulligan may replace G.hand
   // wholesale (restoring from undoState) — so the cached `idx` is now stale.
   executeCardAbility(card.id);
@@ -13723,6 +14139,10 @@ function executeCardAbility(id) {
     case 'perpetual_motion': activatePerpetualMotion(); break;
     case 'wall_magnet':  G._wallMagnetActive = true; showToast('🧲 Wall Magnet armed!', 800); break;
     case 'mighty_egg':   activateMightyEgg(); break;
+    case 'sticky':       activateSticky(); break;
+    case 'parkour':      activateParkour(); break;
+    case 'vacuum':       activateVacuum(); break;
+    case 'goal_oriented':activateGoalOriented(); break;
   }
 }
 
@@ -14393,6 +14813,498 @@ function crackMightyEgg() {
   showToast('💥 Egg cracked! Hit absorbed.', 1400);
 }
 
+// ── Sticky (v0.19x) ───────────────────────────────────
+// Armed as a per-swing buff. The actual "stick" fires in updatePhysics wall
+// code when the ball first touches a wall. See block there for the squish
+// visuals + SFX.
+function activateSticky() {
+  if(G._stickyCardActive) { showToast('🟢 Sticky already armed!', 800); return; }
+  G._stickyCardActive = true;
+  G._stickyCardTriggered = false;
+  // Tint the ball green for clarity
+  if(G.ball && G.ballMesh && G.ballMesh.material && G.ballMesh.material.emissive) {
+    G._stickyOrigEmissive = G.ballMesh.material.emissive.getHex();
+    G.ballMesh.material.emissive.setRGB(0.0, 0.6, 0.2);
+    if(G.ballMesh.material.emissiveIntensity !== undefined) {
+      G._stickyOrigEmissiveIntensity = G.ballMesh.material.emissiveIntensity;
+      G.ballMesh.material.emissiveIntensity = 0.7;
+    }
+  }
+  showToast('🟢 Sticky armed — sticks on first wall!', 1200);
+  if(AC) {
+    try {
+      const ac = getAC(), t = ac.currentTime;
+      const o = ac.createOscillator(); o.type = 'triangle';
+      o.frequency.setValueAtTime(400, t); o.frequency.exponentialRampToValueAtTime(240, t + 0.18);
+      const g = ac.createGain(); g.gain.setValueAtTime(0.10, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+      o.connect(g); g.connect(getACDest()); o.start(t); o.stop(t + 0.25);
+    } catch(e){}
+  }
+}
+
+// Helper used from per-swing reset to clear sticky state and restore visuals
+function clearStickyState() {
+  G._stickyCardActive = false;
+  G._stickyCardTriggered = false;
+  G._stickyCardSquash = null;
+  if(G.ball && G.ballMesh && G.ballMesh.material && G.ballMesh.material.emissive) {
+    if(G._stickyOrigEmissive !== undefined) {
+      G.ballMesh.material.emissive.setHex(G._stickyOrigEmissive);
+      G._stickyOrigEmissive = undefined;
+    }
+    if(G._stickyOrigEmissiveIntensity !== undefined && G.ballMesh.material.emissiveIntensity !== undefined) {
+      G.ballMesh.material.emissiveIntensity = G._stickyOrigEmissiveIntensity;
+      G._stickyOrigEmissiveIntensity = undefined;
+    }
+  }
+  // Reset ball scale in case a squash animation was in progress
+  if(G.ball) G.ball.scale.set(1, 1, 1);
+}
+
+// ── Parkour (v0.19x) ──────────────────────────────────
+// Armed as a per-swing buff. When the ball first approaches an obstacle mid-
+// flight, we engage slow-mo, spawn walkies legs/arms on the ball, arc the
+// ball up and over with a spinning cartwheel, then resume the shot.
+// Implementation: set a flag + "scan radius" on activation. The physics loop
+// checks each frame whether the ball is within scan range of any obstacle
+// and flying toward it; if so, hands off to parkourLeap() which runs a
+// scripted 0.6s slow-mo vault.
+function activateParkour() {
+  if(G._parkourCardActive) { showToast('🤸 Parkour already armed!', 800); return; }
+  G._parkourCardActive = true;
+  G._parkourCardUsed = false; // fires only once per swing
+  showToast('🤸 Parkour armed — leap the first obstacle!', 1200);
+  if(AC) {
+    try {
+      const ac = getAC(), t = ac.currentTime;
+      const o = ac.createOscillator(); o.type = 'sine';
+      o.frequency.setValueAtTime(520, t); o.frequency.exponentialRampToValueAtTime(980, t + 0.14);
+      const g = ac.createGain(); g.gain.setValueAtTime(0.10, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+      o.connect(g); g.connect(getACDest()); o.start(t); o.stop(t + 0.2);
+    } catch(e){}
+  }
+}
+
+// Fired from the physics loop when conditions are met. Teleports the ball to
+// just past the obstacle at elevated Y (so it "rolls over" it), engages
+// slow-mo, adds the small vault hop, spawns walkies limbs, cartwheels the
+// ball through the air, then restores normal time.
+// v0.19z: immunity flag prevents obstacle collisions from firing during the
+// leap so tall bumpers can't knock the ball backwards mid-vault.
+function parkourLeap(obstacleWX, obstacleWZ, obstacleTag) {
+  if(G._parkourCardUsed || !G.ball) return;
+  G._parkourCardUsed = true;
+  G._parkourCardActive = false;
+
+  // Preserve current velocity direction + magnitude for arc + landing.
+  const vx = G.ballVel.x, vz = G.ballVel.z;
+  const spd = Math.hypot(vx, vz);
+  if(spd < 0.1) return;
+  const dirX = vx/spd, dirZ = vz/spd;
+
+  // v0.19z: IMMUNITY — suppress obstacle collisions for the whole leap so no
+  // bumper/rock/bar/slide can reflect the ball backwards mid-vault.
+  G._parkourImmunity = true;
+
+  // v0.19z2: SCRIPTED LERP PATH. Drives ball along a smooth low arc from
+  // current position to just past the obstacle. Trigger now fires at last-
+  // second contact (~0.25m clearance) so the arc covers a short distance:
+  // scale duration + apex accordingly so the vault reads as a single crisp
+  // hop, not a slow-mo cinematic.
+  const OBST_R = { rock: 0.65, bumper: 0.55, spin_bar: 0.8, slide_block: 0.7, spike: 0.55, spike_ring_ball: 0.32 }[obstacleTag] || 0.7;
+  const CLEAR = OBST_R + BALL_R + 0.15;
+
+  G._parkourArc = {
+    startX: G.ballPos.x, startZ: G.ballPos.z, startY: G.ballPos.y,
+    // Landing just past the far edge of the obstacle
+    endX: obstacleWX + dirX * CLEAR,
+    endZ: obstacleWZ + dirZ * CLEAR,
+    endY: G.ballPos.y, // land at same terrain Y as start
+    apexY: 0.55,       // v0.19z2: tighter apex (was 0.8) — short arc over obstacle
+    elapsed: 0,
+    durationSec: 0.40, // v0.19z2: was 0.65 — snappier, matches the shorter travel
+    dirX, dirZ, spd,   // stash for landing-velocity restore
+  };
+  // Freeze velocity during the arc — the lerp is position-driven.
+  G.ballVel.set(0, 0, 0);
+  G.rolling = true;
+
+  // Slow mo
+  G._parkourOrigSlowMo = G._slowMoScale || 1.0;
+  G._slowMoScale = 0.40; // v0.19z2: was 0.18 — less molasses now that arc is shorter
+
+  // Spin animation — set a timer and let per-frame ball rotation override
+  G._parkourSpinTimer = 0;
+  G._parkourSpinDuration = 0.45; // v0.19z2: was 0.85, now matches shorter arc
+  G._parkourSpinAxis = new THREE.Vector3(-dirZ, 0, dirX).normalize(); // perp to travel
+
+  // Sprout walkies-like limbs for the leap
+  try { spawnParkourLimbs(); } catch(e){}
+
+  // SFX — a whoosh + slow-mo "vwoom"
+  if(AC) {
+    try {
+      const ac = getAC(), t = ac.currentTime;
+      const o = ac.createOscillator(); o.type = 'sine';
+      o.frequency.setValueAtTime(800, t);
+      o.frequency.exponentialRampToValueAtTime(200, t + 0.5);
+      const g = ac.createGain(); g.gain.setValueAtTime(0.28, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.55);
+      o.connect(g); g.connect(getACDest()); o.start(t); o.stop(t + 0.6);
+    } catch(e){}
+  }
+  showToast('🤸 PARKOUR!', 900);
+  triggerShake('light');
+
+  // v0.19z: COMBO STYLE BOOST — parkour vaults should reward big. Fire three
+  // style events: jump-over, obstacle-dodge, and a dedicated parkour marker.
+  // recordStyleEvent stacks combos multiplicatively so this compounds with
+  // anything already going.
+  try {
+    if(typeof recordStyleEvent === 'function') {
+      recordStyleEvent('jump_over');
+      recordStyleEvent('parkour_vault');
+      recordStyleEvent('obstacle_dodge');
+    }
+  } catch(e){}
+
+  // End slow-mo + immunity after the scripted duration (real-time ms).
+  // Note: the arc itself finishes inside updatePhysics when elapsed >= duration.
+  // v0.19z2: 700ms → 420ms to match the tighter arc.
+  setTimeout(() => {
+    G._slowMoScale = G._parkourOrigSlowMo || 1.0;
+    G._parkourOrigSlowMo = null;
+    if(G._parkourLimbs && G.ball) {
+      for(const limb of G._parkourLimbs) G.ball.remove(limb);
+      G._parkourLimbs = null;
+    }
+    G._parkourSpinTimer = null;
+    G._parkourSpinDuration = 0;
+    G._parkourImmunity = false;  // collisions re-enabled
+  }, 420);
+}
+
+// Quick walkies-style limbs: 2 arms + 2 legs sticking out of the ball
+function spawnParkourLimbs() {
+  if(!G.ball || G._parkourLimbs) return;
+  const limbMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.6, metalness: 0.2 });
+  const limbs = [];
+  // Legs — downward + slightly splayed
+  for(const side of [-1, 1]) {
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.45, 6), limbMat);
+    leg.position.set(side * 0.12, -0.28, 0);
+    leg.rotation.z = side * 0.25;
+    leg.userData.noOutline = true;
+    G.ball.add(leg);
+    limbs.push(leg);
+  }
+  // Arms — out + forward
+  for(const side of [-1, 1]) {
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.38, 6), limbMat);
+    arm.position.set(side * 0.22, 0.08, 0.1);
+    arm.rotation.z = side * Math.PI * 0.5;
+    arm.userData.noOutline = true;
+    G.ball.add(arm);
+    limbs.push(arm);
+  }
+  G._parkourLimbs = limbs;
+}
+
+// Helper used from per-swing reset to clear parkour state
+function clearParkourState() {
+  G._parkourCardActive = false;
+  G._parkourCardUsed = false;
+  G._parkourSpinTimer = null;
+  G._parkourSpinDuration = 0;
+  G._parkourImmunity = false;  // v0.19z: ensure immunity can't leak across shots
+  G._parkourArc = null;        // v0.19z2: cancel any in-flight scripted arc
+  if(G._parkourOrigSlowMo != null) {
+    G._slowMoScale = G._parkourOrigSlowMo;
+    G._parkourOrigSlowMo = null;
+  }
+  if(G._parkourLimbs && G.ball) {
+    for(const limb of G._parkourLimbs) { try { G.ball.remove(limb); } catch(e){} }
+    G._parkourLimbs = null;
+  }
+}
+
+// ── Vacuum (v0.19x) ───────────────────────────────────
+// V-shaped cone in front of the ball. All coins inside the cone fly to the
+// ball; all destructible obstacles inside the cone get destroyed. Preview
+// arc is shown before fire (aim phase) — here we just apply instantly on
+// activation since this is `context:'pre'`.
+function activateVacuum() {
+  if(!G.ballPos) return;
+  // Direction: use current shotDir (what the aim arrow faces)
+  let dirX, dirZ;
+  if(G.shotDir && G.shotDir.length() > 0.01) {
+    dirX = G.shotDir.x; dirZ = G.shotDir.z;
+  } else {
+    dirX = -Math.sin(G.camTheta || 0); dirZ = -Math.cos(G.camTheta || 0);
+  }
+  const dirLen = Math.hypot(dirX, dirZ) || 1;
+  dirX /= dirLen; dirZ /= dirLen;
+
+  // Cone: v0.19z: +30% coverage — length 8.0 → 10.4m, half-angle 60° → 69°.
+  const CONE_HALF_ANGLE = Math.PI / 180 * 69;
+  const CONE_LEN = 10.4;
+  const cosHalf = Math.cos(CONE_HALF_ANGLE);
+
+  // Spawn a quick visual burst showing the cone coverage.
+  spawnVacuumConeVfx(G.ballPos.x, G.ballPos.z, dirX, dirZ, CONE_LEN, CONE_HALF_ANGLE);
+
+  const inCone = (tx, tz) => {
+    const odx = tx - G.ballPos.x, odz = tz - G.ballPos.z;
+    const d = Math.hypot(odx, odz);
+    if(d < 0.001 || d > CONE_LEN) return false;
+    const ndx = odx/d, ndz = odz/d;
+    return (ndx*dirX + ndz*dirZ) >= cosHalf;
+  };
+
+  // v0.19z2: while obstacles are flying to the ball, the ball itself must
+  // be immune to their collision so they don't bonk it on arrival.
+  G._vacuumImmunity = true;
+
+  // Coins: pull toward ball in a staggered sequence
+  // v0.19z3: staggered one-by-one suction. Coins sorted nearest-first, then
+  // fire in sequence with a 120ms gap between each. Each coin's flight itself
+  // takes ~700ms so the overall vacuum reads as a slow progressive suck.
+  let coinsTaken = 0;
+  const coinQueue = [];
+  if(G.coinMeshes) {
+    for(const c of G.coinMeshes) {
+      if(c.collected) continue;
+      if(!inCone(c.wx, c.wz)) continue;
+      const dx = c.wx - G.ballPos.x, dz = c.wz - G.ballPos.z;
+      coinQueue.push({ coin: c, dist: Math.hypot(dx, dz) });
+    }
+    coinQueue.sort((a, b) => a.dist - b.dist);
+    coinQueue.forEach(({ coin: c }, idx) => {
+      c.collected = true;
+      coinsTaken++;
+      const delay = idx * 120; // ms between each coin
+      const startX = c.wx, startZ = c.wz;
+      const duration = 700; // per-coin flight time (was 450)
+      setTimeout(() => {
+        const startT = performance.now();
+        const anim = () => {
+          const t = Math.min(1, (performance.now() - startT) / duration);
+          const e = t * t;
+          const tx = G.ballPos.x, tz = G.ballPos.z;
+          const x = startX + (tx - startX) * e;
+          const z = startZ + (tz - startZ) * e;
+          if(c.pivot) { c.pivot.position.x = x; c.pivot.position.z = z; }
+          else if(c.mesh) { c.mesh.position.x = x; c.mesh.position.z = z; }
+          if(c.glowMesh) { c.glowMesh.position.x = x; c.glowMesh.position.z = z; }
+          if(t < 1) requestAnimationFrame(anim);
+          else {
+            if(G.courseGroup) {
+              if(c.pivot) G.courseGroup.remove(c.pivot);
+              else if(c.mesh) G.courseGroup.remove(c.mesh);
+              if(c.glowMesh) G.courseGroup.remove(c.glowMesh);
+            }
+            if(typeof collectCoin === 'function') collectCoin(G.ballPos.x, G.ballPos.z);
+          }
+        };
+        requestAnimationFrame(anim);
+      }, delay);
+    });
+  }
+
+  // v0.19z2: OBSTACLES FLY TO BALL. v0.19z3: sorted nearest-first, each
+  // obstacle's flight delayed by 180ms * index so they suck in visibly one
+  // at a time. Each flight takes 1100ms (was 650) so the overall vacuum
+  // reads ~2× as long for a satisfying progressive effect.
+  let obstaclesDestroyed = 0;
+  const obstacleQueue = []; // {obstacle, dist, meshList}
+
+  const collectObstacle = (o, meshList) => {
+    if(!o || o._destroyed) return;
+    if(!inCone(o.wx, o.wz)) return;
+    o._destroyed = true;
+    obstaclesDestroyed++;
+    const dx = o.wx - G.ballPos.x, dz = o.wz - G.ballPos.z;
+    obstacleQueue.push({ o, dist: Math.hypot(dx, dz), meshList });
+  };
+
+  if(G.rocks) for(const r of G.rocks) collectObstacle(r, r.meshes || []);
+  if(G.bumpers) for(const b of G.bumpers) collectObstacle(b, b.meshes || (b.bodyM || b.capM ? [b.bodyM, b.capM].filter(Boolean) : []));
+  if(G.spinBars) for(const s of G.spinBars) collectObstacle(s, s.meshes || (s.mesh ? [s.mesh] : []));
+  if(G.slideBlocks) for(const s of G.slideBlocks) collectObstacle(s, s.meshes || (s.mesh ? [s.mesh] : []));
+
+  // Sort nearest-first for satisfying progressive suction
+  obstacleQueue.sort((a, b) => a.dist - b.dist);
+
+  const STAGGER_MS = 180;
+  const FLY_DURATION_MS = 1100;
+  let lastObstacleLandT = 0;
+
+  obstacleQueue.forEach(({ o, meshList }, idx) => {
+    const delay = idx * STAGGER_MS;
+    const landT = delay + FLY_DURATION_MS;
+    if(landT > lastObstacleLandT) lastObstacleLandT = landT;
+    setTimeout(() => {
+      const startT = performance.now();
+      // Snapshot starting transforms now (not at activateVacuum time) since
+      // obstacles may have moved during the preceding stagger (e.g. spin bars).
+      const perMeshStart = meshList.filter(Boolean).map(m => ({
+        mesh: m,
+        startX: m.position.x, startZ: m.position.z, startY: m.position.y,
+        startRotX: m.rotation.x, startRotY: m.rotation.y, startRotZ: m.rotation.z,
+        startScale: m.scale ? m.scale.x : 1,
+        jitter: Math.random() * 0.15, // tiny per-mesh stagger within one obstacle
+      }));
+      const flyAnim = () => {
+        const now = performance.now();
+        let allDone = true;
+        for(const pm of perMeshStart) {
+          const t = Math.min(1, Math.max(0, (now - startT) / FLY_DURATION_MS - pm.jitter * 0.1));
+          if(t < 1) allDone = false;
+          // Ease-in cubic — slow pull, fast snap
+          const e = t * t * t;
+          const tx = G.ballPos.x, tz = G.ballPos.z, ty = G.ballPos.y;
+          pm.mesh.position.x = pm.startX + (tx - pm.startX) * e;
+          pm.mesh.position.z = pm.startZ + (tz - pm.startZ) * e;
+          const loft = Math.sin(Math.PI * t) * 1.2;
+          pm.mesh.position.y = pm.startY + (ty - pm.startY) * e + loft;
+          pm.mesh.rotation.x = pm.startRotX + t * 12;
+          pm.mesh.rotation.y = pm.startRotY + t * 14;
+          pm.mesh.rotation.z = pm.startRotZ + t * 9;
+          const s = Math.max(0.01, pm.startScale * (1 - e * 0.9));
+          if(pm.mesh.scale) pm.mesh.scale.set(s, s, s);
+        }
+        if(!allDone) requestAnimationFrame(flyAnim);
+        else {
+          for(const pm of perMeshStart) {
+            if(pm.mesh.parent) pm.mesh.parent.remove(pm.mesh);
+          }
+        }
+      };
+      requestAnimationFrame(flyAnim);
+    }, delay);
+  });
+
+  // Release ball immunity after the LAST obstacle has landed (total =
+  // lastObstacleLandT + a small buffer).
+  if(obstacleQueue.length > 0) {
+    setTimeout(() => { G._vacuumImmunity = false; }, lastObstacleLandT + 100);
+  } else {
+    G._vacuumImmunity = false; // no obstacles — release immediately
+  }
+
+  // v0.19z2: LOUD VACUUM-STYLE WHIRRING SFX — sustained motor sound over the
+  // full duration. v0.19z3: duration stretched from 1.0s → 2.5s to cover the
+  // longer staggered suction animation.
+  // v0.19z4: layer gains dropped to ~40% of prior values — the motor was
+  // louder than other in-game SFX. New peaks: 0.14 / 0.06 / 0.04 / 0.09.
+  if(AC) {
+    try {
+      const ac = getAC(), t = ac.currentTime;
+      const dest = getACDest();
+      const dur = 2.5;
+
+      // Layer 1: Low motor drone with rising pitch (build-up feel)
+      const o1 = ac.createOscillator(); o1.type = 'sawtooth';
+      o1.frequency.setValueAtTime(80, t);
+      o1.frequency.exponentialRampToValueAtTime(180, t + 0.4);
+      o1.frequency.linearRampToValueAtTime(160, t + dur);
+      const lp1 = ac.createBiquadFilter(); lp1.type = 'lowpass'; lp1.frequency.value = 600;
+      const g1 = ac.createGain();
+      g1.gain.setValueAtTime(0.0001, t);
+      g1.gain.linearRampToValueAtTime(0.14, t + 0.2);
+      g1.gain.setValueAtTime(0.14, t + dur - 0.3);
+      g1.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      o1.connect(lp1); lp1.connect(g1); g1.connect(dest);
+      o1.start(t); o1.stop(t + dur + 0.02);
+
+      // Layer 2: Mid harmonic buzz (motor body)
+      const o2 = ac.createOscillator(); o2.type = 'square';
+      o2.frequency.setValueAtTime(160, t);
+      o2.frequency.exponentialRampToValueAtTime(360, t + 0.4);
+      o2.frequency.linearRampToValueAtTime(320, t + dur);
+      const bp2 = ac.createBiquadFilter(); bp2.type = 'bandpass'; bp2.frequency.value = 400; bp2.Q.value = 2.0;
+      const g2 = ac.createGain();
+      g2.gain.setValueAtTime(0.0001, t);
+      g2.gain.linearRampToValueAtTime(0.06, t + 0.2);
+      g2.gain.setValueAtTime(0.06, t + dur - 0.3);
+      g2.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      o2.connect(bp2); bp2.connect(g2); g2.connect(dest);
+      o2.start(t); o2.stop(t + dur + 0.02);
+
+      // Layer 3: High whine (spinning impeller) with vibrato
+      const o3 = ac.createOscillator(); o3.type = 'sine';
+      o3.frequency.setValueAtTime(2400, t);
+      o3.frequency.exponentialRampToValueAtTime(3600, t + 0.35);
+      o3.frequency.linearRampToValueAtTime(3400, t + dur);
+      const lfo = ac.createOscillator(); lfo.type = 'sine';
+      lfo.frequency.value = 18;
+      const lfoG = ac.createGain(); lfoG.gain.value = 180;
+      lfo.connect(lfoG); lfoG.connect(o3.frequency);
+      const g3 = ac.createGain();
+      g3.gain.setValueAtTime(0.0001, t);
+      g3.gain.linearRampToValueAtTime(0.04, t + 0.25);
+      g3.gain.setValueAtTime(0.04, t + dur - 0.3);
+      g3.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      o3.connect(g3); g3.connect(dest);
+      lfo.start(t); lfo.stop(t + dur + 0.02);
+      o3.start(t); o3.stop(t + dur + 0.02);
+
+      // Layer 4: Airflow turbulence (noise)
+      const sr = ac.sampleRate;
+      const buf = ac.createBuffer(1, Math.floor(sr * (dur + 0.05)), sr);
+      const d = buf.getChannelData(0);
+      for(let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * 0.7;
+      const src = ac.createBufferSource(); src.buffer = buf;
+      const hp = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 600;
+      const g4 = ac.createGain();
+      g4.gain.setValueAtTime(0.0001, t);
+      g4.gain.linearRampToValueAtTime(0.09, t + 0.25);
+      g4.gain.setValueAtTime(0.09, t + dur - 0.3);
+      g4.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      src.connect(hp); hp.connect(g4); g4.connect(dest);
+      src.start(t);
+    } catch(e){}
+  }
+  triggerShake('med');
+  showToast(`🌪️ VACUUM! ${coinsTaken} coins, ${obstaclesDestroyed} obstacles`, 1600);
+}
+
+// V-shaped preview fan that flashes on activation. Not persistent.
+function spawnVacuumConeVfx(x, z, dirX, dirZ, len, halfAngle) {
+  if(!G.courseGroup) return;
+  // Build a triangle-fan mesh representing the cone footprint.
+  const segments = 12;
+  const verts = [0, 0, 0]; // apex (local)
+  for(let i = 0; i <= segments; i++) {
+    const a = -halfAngle + (i/segments) * halfAngle * 2;
+    verts.push(Math.sin(a) * len, 0, Math.cos(a) * len);
+  }
+  const idx = [];
+  for(let i = 1; i <= segments; i++) idx.push(0, i, i+1);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+  geo.setIndex(idx);
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0x66ccff, transparent: true, opacity: 0.45,
+    side: THREE.DoubleSide, depthWrite: false,
+  });
+  const cone = new THREE.Mesh(geo, mat);
+  cone.position.set(x, 0.12, z);
+  cone.rotation.y = Math.atan2(dirX, dirZ);
+  cone.userData.noOutline = true;
+  G.courseGroup.add(cone);
+  // Fade out + remove
+  const startT = performance.now();
+  const duration = 600;
+  const fade = () => {
+    const t = (performance.now() - startT) / duration;
+    if(t >= 1) { if(G.courseGroup) G.courseGroup.remove(cone); return; }
+    cone.material.opacity = 0.45 * (1 - t);
+    requestAnimationFrame(fade);
+  };
+  requestAnimationFrame(fade);
+}
+
 function activateMulligan() {
   if(!G.undoState || G.strokes < 1) return;
   G.ballPos.copy(G.undoState.pos);
@@ -14427,6 +15339,44 @@ function activateReverse() {
   triggerShake(0.15);
   spawnHitParticles(G.ballPos);
   if(AC) sfxBounce(6);
+}
+
+// ── Goal Oriented (v0.19y) ────────────────────────────
+// Mid-swing redirect toward the hole. Preserves horizontal speed magnitude,
+// replaces direction with (hole - ball) unit vector. Y velocity is untouched
+// so airborne balls stay airborne. Respects moving-hole world offset.
+function activateGoalOriented() {
+  if(!G.rolling) return;
+  // World coordinates for ball + hole. G.holePos is grid-based (tile units);
+  // world pos uses TILE_SIZE. Moving-hole systems write the current world
+  // offset into G._holeWorldOffset, so we add that when present.
+  const hx = (G.holePos.x * TILE_SIZE) + (G._holeWorldOffset ? G._holeWorldOffset.x : 0);
+  const hz = (G.holePos.y * TILE_SIZE) + (G._holeWorldOffset ? G._holeWorldOffset.z : 0);
+  const dx = hx - G.ballPos.x;
+  const dz = hz - G.ballPos.z;
+  const d = Math.hypot(dx, dz);
+  if(d < 0.05) { showToast('🎯 Already there!', 700); return; }
+  const ndx = dx / d, ndz = dz / d;
+  const spd = Math.hypot(G.ballVel.x, G.ballVel.z);
+  if(spd < 0.1) { showToast('🎯 Too slow!', 700); return; }
+  G.ballVel.x = ndx * spd;
+  G.ballVel.z = ndz * spd;
+  G.shotAngle = Math.atan2(ndx, ndz);
+  if(G.shotDir) G.shotDir.set(ndx, 0, ndz);
+  showToast('🎯 Goal Oriented!', 900);
+  triggerShake('light');
+  spawnHitParticles(G.ballPos);
+  // SFX: a rising "lock-on" chirp
+  if(AC) {
+    try {
+      const ac = getAC(), t = ac.currentTime;
+      const o = ac.createOscillator(); o.type = 'sine';
+      o.frequency.setValueAtTime(440, t);
+      o.frequency.exponentialRampToValueAtTime(1200, t + 0.18);
+      const g = ac.createGain(); g.gain.setValueAtTime(0.18, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+      o.connect(g); g.connect(getACDest()); o.start(t); o.stop(t + 0.25);
+    } catch(e){}
+  }
 }
 
 // ── Sharpshooter: zoomed-scope missile ─────────────────
@@ -14492,15 +15442,40 @@ function activateSharpshooter() {
     else fireSharpshooter();
   };
   // v0.19v: cancel button — exits the scope without consuming the card/perk
+  // v0.19x: properly refunds the card by pulling it back from discard and
+  // dropping it into the original slot (or a free slot if the original was
+  // filled by draw).
   const cancelBtn = document.getElementById('sharpshooter-cancel-btn');
   if(cancelBtn) cancelBtn.onclick = () => {
-    // Refund the card if a card-context sniper/sharpshooter triggered this
-    // (exitSharpshooter just tears down scope state — it doesn't re-add the
-    // card). Per-swing perks vs card dispatch: the card was already discarded
-    // when activated. To preserve progression, we push it back onto the hand
-    // if a slot is open.
+    const pending = G._pendingCancellableCard;
+    if(pending) {
+      // Remove the card from discard (it was pushed there during playCard)
+      const discardIdx = G.discard.lastIndexOf(pending.id);
+      if(discardIdx !== -1) G.discard.splice(discardIdx, 1);
+      // Reinsert into hand with a fresh instanceId (original one is already
+      // gone). Try to place into the original slot if it's empty; else any
+      // empty slot; else append.
+      const refundedCard = { id: pending.id, instanceId: 'c_' + Math.random().toString(36).slice(2, 10) };
+      const slots = G.cardSlots || [];
+      let placed = false;
+      if(pending.slotIdx >= 0 && pending.slotIdx < slots.length && !slots[pending.slotIdx]) {
+        slots[pending.slotIdx] = refundedCard;
+        placed = true;
+      } else {
+        for(let i = 0; i < slots.length; i++) {
+          if(!slots[i]) { slots[i] = refundedCard; placed = true; break; }
+        }
+      }
+      // If no slot was free, push into hand; it'll be placed on next draw.
+      if(!placed) G.hand.push(refundedCard);
+      else G.hand.push(refundedCard);
+      G._pendingCancellableCard = null;
+      if(typeof updateHandUI === 'function') updateHandUI();
+      if(typeof showToast === 'function') showToast(`↩️ ${pending.id === 'sniper' ? 'Sniper' : 'Sharpshooter'} refunded`, 1000);
+    } else {
+      if(typeof showToast === 'function') showToast('✕ Cancelled', 800);
+    }
     if(typeof exitSharpshooter === 'function') exitSharpshooter();
-    if(typeof showToast === 'function') showToast('✕ Cancelled', 800);
   };
   // Toast
   showToast('🎯 Sharpshooter — drag to aim, tap FIRE', 1800);
@@ -14516,6 +15491,9 @@ function activateSharpshooter() {
 
 function fireSharpshooter() {
   if(!G._sharpshooterActive) return;
+  // v0.19x: card was consumed — clear pending-cancel flag so exit doesn't try
+  // to refund it.
+  G._pendingCancellableCard = null;
   // Compute horizontal forward using camTheta (same spherical frame as the scope view).
   // The missile flies at obstacle height so we don't want any pitch component — just azimuth.
   const fx = -Math.sin(G.camTheta);
@@ -14616,6 +15594,13 @@ function exitSharpshooter() {
   }
   // Restore aim arrow / aim mode so the player can take their shot afterwards
   G.aimMode = true;
+  // v0.19x: clear aimManualOverride on exit. If the user dragged the scope to
+  // aim during sharpshooter, that drag set aimManualOverride=true, which
+  // blocks the aim arrow from following the camera after exit. Also re-sync
+  // the aim direction to camera so the arrow is visually aligned with the
+  // current view direction.
+  aimManualOverride = false;
+  if(typeof syncAimToCamera === 'function') syncAimToCamera();
   if(!G.aimArrow && !G.rolling && !G.inHole && G.state === 'playing') createAimArrow();
 }
 window.fireSharpshooter = fireSharpshooter;
@@ -14645,6 +15630,8 @@ function activateSharpshooterBall() {
 
 function fireSharpshooterBall() {
   if(!G._sharpshooterActive || !G._sharpshooterBallMode) return;
+  // v0.19x: card was consumed — clear pending-cancel flag
+  G._pendingCancellableCard = null;
   // Compute launch direction from camera spherical (matches scope forward)
   const fx = -Math.sin(G.camPhi) * Math.sin(G.camTheta);
   const fy = -Math.cos(G.camPhi);
@@ -16330,6 +17317,81 @@ function snapCameraToPos(pos) {
 const raycaster = new THREE.Raycaster();
 const _ndc = new THREE.Vector2();
 
+// ── Camera occluder fade (v0.19x) ─────────────────────
+// Raycasts from the camera toward the ball each frame. Any mesh in between —
+// trees, walls, course geometry — gets its material.opacity + transparent
+// flag flipped so it fades out temporarily. When it leaves the ray (camera
+// moved, or ball moved past it), opacity restores. Ball mesh + its own
+// subtree are excluded so we never fade the ball or its hat.
+const _occluderRay = new THREE.Raycaster();
+const _occluderTempVec = new THREE.Vector3();
+// Track currently-faded meshes so we can restore them each frame:
+// { mesh, origOpacity, origTransparent, origDepthWrite }
+const _currentOccluders = new Map();
+function updateCameraOccluderFade() {
+  if(!G.ball || !G.courseGroup || !camera) return;
+  // Target = ball position (slightly above the ball so we don't pick the
+  // shadow disc).
+  _occluderTempVec.copy(G.ballPos);
+  _occluderTempVec.y += 0.1;
+  const dir = _occluderTempVec.clone().sub(camera.position);
+  const dist = dir.length();
+  if(dist < 0.01) return;
+  dir.divideScalar(dist);
+  _occluderRay.set(camera.position, dir);
+  _occluderRay.far = Math.max(0.5, dist - 0.3); // stop just before the ball
+
+  // Meshes to test: course geometry only. We skip the ball + hat (scene
+  // siblings, not in courseGroup). Skip outline-skip flagged meshes (beacons,
+  // glow discs, debris) since fading those is ugly.
+  const hits = _occluderRay.intersectObject(G.courseGroup, true);
+  const nowFaded = new Set();
+  const FADE_OPACITY = 0.22;
+  for(const h of hits) {
+    const m = h.object;
+    if(!m || !m.isMesh) continue;
+    if(m.userData && m.userData.noOutline) continue; // noOutline marks "don't mess with"
+    if(!m.material) continue;
+    // Don't touch materials we've already faded (don't re-record orig)
+    if(!_currentOccluders.has(m)) {
+      _currentOccluders.set(m, {
+        origOpacity: m.material.opacity,
+        origTransparent: m.material.transparent,
+        origDepthWrite: m.material.depthWrite,
+      });
+      // Can't share materials safely — clone so we don't dim siblings
+      try {
+        m.material = m.material.clone();
+        m.material.transparent = true;
+        m.material.depthWrite = false;
+      } catch(e) { /* some materials can't clone cleanly — skip */ continue; }
+    }
+    // Lerp toward fade target
+    const cur = m.material.opacity;
+    m.material.opacity = cur + (FADE_OPACITY - cur) * 0.25;
+    nowFaded.add(m);
+  }
+
+  // Restore any mesh that WAS faded but is no longer occluding
+  for(const [m, saved] of _currentOccluders) {
+    if(nowFaded.has(m)) continue;
+    // Lerp back up
+    const target = saved.origOpacity != null ? saved.origOpacity : 1.0;
+    const cur = m.material ? m.material.opacity : target;
+    const next = cur + (target - cur) * 0.25;
+    if(m.material) m.material.opacity = next;
+    // If we're basically restored, revert clone + original flags and drop.
+    if(Math.abs(next - target) < 0.02) {
+      if(m.material) {
+        m.material.opacity = target;
+        m.material.transparent = saved.origTransparent;
+        m.material.depthWrite = saved.origDepthWrite;
+      }
+      _currentOccluders.delete(m);
+    }
+  }
+}
+
 function getPointerNDC(clientX, clientY) {
   _ndc.set(
     (clientX/window.innerWidth)*2 - 1,
@@ -17691,17 +18753,21 @@ function showGameOver(bustedBudget=false){
   // Abandoned runs (handled in escMainMenu) do NOT reach this branch; they
   // forfeit all XP and unlocks as intended.
   let _xpEarnedThisRun = 0;
+  let _preXpThisRun = 0;         // v0.19z: snapshot BEFORE the deposit so the bar can animate from old pct to new
+  let _tierCrossedThisRun = false; // v0.19z: drives confetti
   try {
     const endBonus = bustedBudget ? 30 : 100;
     const starBonus = _newStarThisRun != null ? 50 : 0;
     G.xpThisRun = (G.xpThisRun || 0) + endBonus + starBonus;
     _xpEarnedThisRun = G.xpThisRun;
     const meta = getMeta();
-    meta.xp = (meta.xp || 0) + _xpEarnedThisRun;
+    _preXpThisRun = meta.xp || 0;
+    meta.xp = _preXpThisRun + _xpEarnedThisRun;
     // Bump totalRuns BEFORE achievement check so birthday_cake counts
     // the run that just ended as the 10th.
     meta.totalRuns = (meta.totalRuns || 0) + 1;
     const newlyUnlocked = checkXpUnlocks(meta);
+    _tierCrossedThisRun = newlyUnlocked.length > 0;
     const achievementUnlocks = checkAchievementUnlocks(meta, {
       runCompleted: !bustedBudget,
       runFailed: bustedBudget,
@@ -17738,16 +18804,27 @@ function showGameOver(bustedBudget=false){
         setTimeout(() => { xpLineEl.style.opacity = '1'; }, 1100);
       }
     } catch(e){}
-    // v0.19w: refresh the cosmetic-unlock progress bar. Fires after XP has
-    // been deposited (which happens right above this block), and delayed
-    // slightly so the fill animates in — feels like the XP is flowing into
-    // the bar. `burst:true` lights up any tier-cross that just happened.
+    // v0.19z: bar now animates from pre-run XP → post-run XP. On a tier
+    // cross we also fire confetti + the confetti SFX once, timed to land
+    // when the bar hits 100% on its first pass.
     try {
       setTimeout(() => {
         if(typeof renderCosmoProgress === 'function') {
-          renderCosmoProgress({ target: 'go', animate: true, burst: (_xpEarnedThisRun || 0) > 0 });
+          renderCosmoProgress({
+            target: 'go',
+            animate: true,
+            burst: _tierCrossedThisRun,
+            fromXp: _preXpThisRun,
+          });
         }
       }, 1300);
+      if(_tierCrossedThisRun) {
+        // Fire confetti right around when the bar hits 100%. The bar anim
+        // runs for ~600ms on the first-pass portion before the burst flash.
+        setTimeout(() => {
+          if(typeof spawnConfettiBurst === 'function') spawnConfettiBurst(80);
+        }, 1300 + 600);
+      }
     } catch(e){}
   } catch(e) { console.warn('XP deposit failed', e); }
 
@@ -18829,6 +19906,8 @@ function escMainMenu() {
   if(G.hat) { scene.remove(G.hat); G.hat = null; }
   if(G.ballShadow) { scene.remove(G.ballShadow); G.ballShadow = null; }
   if(G.aimArrow) { scene.remove(G.aimArrow); G.aimArrow = null; }
+  // v0.19x: drop any occluder fade refs — their meshes are gone now
+  if(typeof _currentOccluders !== 'undefined' && _currentOccluders.clear) _currentOccluders.clear();
   if(G.particles) { for(const p of G.particles) { if(p.mesh) scene.remove(p.mesh); } G.particles = []; }
   // Clean up multiplayer idle balls
   for(const ib of G.idleBalls) { if(ib.mesh) scene.remove(ib.mesh); if(ib.shadow) scene.remove(ib.shadow); }
@@ -19520,6 +20599,8 @@ function startGame(){
   if(G.hat) { scene.remove(G.hat); G.hat = null; }
   if(G.ballShadow) { scene.remove(G.ballShadow); G.ballShadow = null; }
   if(G.aimArrow) { scene.remove(G.aimArrow); G.aimArrow = null; }
+  // v0.19x: drop any occluder fade refs — their meshes are gone now
+  if(typeof _currentOccluders !== 'undefined' && _currentOccluders.clear) _currentOccluders.clear();
   // Clean up particles from previous game
   if(G.particles) {
     for(const p of G.particles) { if(p.mesh) scene.remove(p.mesh); }
@@ -21166,6 +22247,46 @@ function animate(now) {
       }
       G._lastBallX = G.ballPos.x;
       G._lastBallZ = G.ballPos.z;
+
+      // v0.19x: Parkour spin override — rapid cartwheel while leap is active.
+      // Runs on top of the normal rolling rotation; spin is fast enough to
+      // dominate visually during the 0.85s window.
+      if(G._parkourSpinTimer != null && G._parkourSpinDuration > 0) {
+        G._parkourSpinTimer += dt;
+        if(G._parkourSpinTimer < G._parkourSpinDuration) {
+          // 4 full rotations over the duration — feels snappy
+          const spinRate = (Math.PI * 2 * 4) / G._parkourSpinDuration;
+          const axis = G._parkourSpinAxis || new THREE.Vector3(1, 0, 0);
+          G.ball.rotateOnWorldAxis(axis, spinRate * dt);
+        }
+      }
+
+      // v0.19x: Sticky squash animation — ball flattens against the wall it
+      // stuck to. nx/nz is the wall normal; we squash along that axis and
+      // stretch perpendicular to it. Decays back to 1,1,1 over `duration`.
+      if(G._stickyCardSquash) {
+        const sq = G._stickyCardSquash;
+        sq.timer += dt;
+        const t = Math.min(1, sq.timer / sq.duration);
+        // Intensity peaks early then eases back. Uses classic 1-abs(2t-1) bell.
+        const peak = Math.max(0, 1 - Math.abs(2*t - 1));
+        const squash = 1 - peak * 0.55;  // min 0.45 along normal
+        const stretch = 1 + peak * 0.40; // max 1.40 perpendicular
+        // Apply in the direction of the wall normal. For a 2D wall normal
+        // (nx, nz), we build a diagonal matrix in that frame:
+        //   scale along (nx,nz) by squash
+        //   scale along perpendicular (-nz,nx) by stretch
+        //   scale Y by stretch for a bit of upward bulge
+        // We emulate this by setting ball.scale.x/y/z for a rough approximation.
+        // Since the ball is radially symmetric, uniform XZ scaling still reads
+        // the stick visually via Y scaling. Simpler: flatten Y slightly,
+        // stretch XZ.
+        G.ball.scale.set(stretch, squash, stretch);
+        if(t >= 1) {
+          G.ball.scale.set(1, 1, 1);
+          G._stickyCardSquash = null;
+        }
+      }
     }
     if(G.rolling || G.inHole) focusCameraOnBall();
     else if(G._camTransitionFrames && G._camTransitionFrames > 0) {
@@ -21174,6 +22295,8 @@ function animate(now) {
       focusCameraOnBall();
       G._camTransitionFrames--;
     }
+    // v0.19x: fade anything between the camera and the ball
+    if(typeof updateCameraOccluderFade === 'function') updateCameraOccluderFade();
     if(G.aimArrow && G.aimMode) updateAimArrow();
     // ── Power Shot tension shake at full pull ──
     if(G._powerShotTensionActive && G.aimMode && G.shotPower > 0.85) {
