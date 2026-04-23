@@ -107,6 +107,27 @@ letter-spacing:-1px;
 }
 #h-hp-dots {
   display:flex;
+  flex-direction:row;
+  gap:5px;
+  align-items:center;
+}
+#h-hp-dots .hp-num {
+  color:#e05555;
+  font-weight:800;
+  font-size:12px;
+  letter-spacing:0.3px;
+  text-shadow:0 0 4px rgba(224,85,85,0.45);
+  min-width:30px;
+  line-height:1;
+  font-family:'Inter',system-ui,sans-serif;
+}
+#h-hp-dots .hp-rows {
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+}
+#h-hp-dots .hp-row {
+  display:flex;
   gap:3px;
   align-items:center;
 }
@@ -126,10 +147,18 @@ letter-spacing:-1px;
 #h-hp-dots.hp-pulse .hp-dot.filled {
   animation: hp-pulse 0.5s ease-out;
 }
+#h-hp-dots.hp-pulse .hp-num {
+  animation: hp-num-pulse 0.5s ease-out;
+}
 @keyframes hp-pulse {
   0%   { transform:scale(1);   filter:brightness(1); }
   35%  { transform:scale(1.35); filter:brightness(1.8) saturate(1.3); }
   100% { transform:scale(1);   filter:brightness(1); }
+}
+@keyframes hp-num-pulse {
+  0%   { transform:scale(1);   color:#e05555; }
+  35%  { transform:scale(1.45); color:#ffffff; text-shadow:0 0 10px rgba(255,120,120,0.9); }
+  100% { transform:scale(1);   color:#e05555; }
 }
 /* Floating "-1" popup under the HP row on per-swing damage (v0.17y) */
 .hp-damage-popup {
@@ -181,13 +210,106 @@ font-weight:700;
 color:#fff;
 text-shadow:0 2px 20px rgba(0,0,0,0.3), 0 0 60px rgba(100,200,50,0.6);
 pointer-events:none;
-z-index:20;
+z-index:300;  /* v0.19v: was 20, raised above #overlay (100) + profile picker so unlock toasts render on home screen */
 opacity:0;
 transition:opacity 0.4s;
 text-align:center;
 white-space:nowrap;
 }
 #toast.show { opacity:1; }
+
+/* ── Cosmetic Unlock Progress Bar (v0.19v) ── */
+/* Lives on the main menu; fills as XP accrues toward the next cosmetic. */
+.cosmo-progress {
+  width: min(320px, 86vw);
+  margin: 6px auto 2px;
+  padding: 10px 14px;
+  background: rgba(255,255,255,0.14);
+  border: 1px solid rgba(255,255,255,0.28);
+  border-radius: 14px;
+  backdrop-filter: blur(6px);
+  font-family: 'Inter', sans-serif;
+  color: #fff;
+  box-shadow: 0 2px 14px rgba(0,0,0,0.15);
+}
+.cosmo-progress .cp-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+  opacity: 0.95;
+}
+.cosmo-progress .cp-next {
+  color: #ffea40;
+  text-shadow: 0 0 10px rgba(255,200,60,0.65);
+}
+.cosmo-progress .cp-track {
+  position: relative;
+  height: 18px;
+  border-radius: 9px;
+  background: rgba(0,0,0,0.32);
+  overflow: hidden;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.25);
+  transform-origin: center;
+  transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.cosmo-progress .cp-fill {
+  position: absolute; left: 0; top: 0; bottom: 0;
+  background: linear-gradient(90deg, #ffd24a 0%, #ff9f00 50%, #ff6e40 100%);
+  border-radius: 9px;
+  box-shadow: 0 0 14px rgba(255,170,40,0.6), inset 0 1px 0 rgba(255,255,255,0.25);
+  transition: width 0.7s cubic-bezier(0.22, 1.12, 0.36, 1);
+  min-width: 2px;
+}
+.cosmo-progress .cp-fill::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.55) 50%, transparent 100%);
+  background-size: 60% 100%;
+  background-repeat: no-repeat;
+  animation: cp-shimmer 2.4s linear infinite;
+}
+@keyframes cp-shimmer {
+  0%   { background-position: -60% 0; }
+  100% { background-position: 160% 0; }
+}
+.cosmo-progress .cp-xp {
+  font-size: 0.68rem;
+  letter-spacing: 0.8px;
+  text-align: right;
+  margin-top: 4px;
+  opacity: 0.8;
+}
+/* Squash/stretch pop when the bar ticks up */
+.cosmo-progress.cp-pop .cp-track {
+  animation: cp-squash 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes cp-squash {
+  0%   { transform: scale(1, 1); }
+  30%  { transform: scale(1.06, 0.78); }  /* squash — wider, flatter */
+  60%  { transform: scale(0.97, 1.12); }  /* stretch — taller, narrower */
+  100% { transform: scale(1, 1); }
+}
+.cosmo-progress.cp-pop .cp-fill {
+  animation: cp-fill-glow 0.6s ease-out;
+}
+@keyframes cp-fill-glow {
+  0%   { filter: brightness(1)   saturate(1); }
+  40%  { filter: brightness(1.5) saturate(1.35); }
+  100% { filter: brightness(1)   saturate(1); }
+}
+.cosmo-progress.cp-unlock .cp-track {
+  animation: cp-burst 0.8s cubic-bezier(0.22, 1.3, 0.36, 1);
+}
+@keyframes cp-burst {
+  0%   { transform: scale(1);   filter: brightness(1); }
+  30%  { transform: scale(1.18); filter: brightness(1.8) saturate(1.5); }
+  100% { transform: scale(1);   filter: brightness(1); }
+}
 
 /* ── Multiplayer turn banner ── */
 #turn-banner {
@@ -1629,6 +1751,20 @@ display:flex; align-items:center; gap:10px; width:100%;
 }
 .esc-vol-row label { font-size:0.8rem; color:rgba(255,255,255,0.7); flex:1; }
 .esc-vol-row input[type=range] { flex:2; accent-color:#f5c842; }
+/* v0.19w: pause-menu toggle row (camera mode) */
+.esc-toggle-row { display:flex; align-items:center; gap:10px; width:100%; }
+.esc-toggle-row label { font-size:0.8rem; color:rgba(255,255,255,0.7); flex:1; }
+.esc-toggle-row .toggle-btns { flex:2; display:flex; gap:4px; }
+.esc-toggle-row .toggle-btn {
+  flex:1; padding:6px 4px; border-radius:8px; border:1px solid rgba(255,255,255,0.2);
+  background:rgba(255,255,255,0.05); color:rgba(255,255,255,0.75);
+  font-family:'Inter',sans-serif; font-size:0.72rem; letter-spacing:1px;
+  text-transform:uppercase; font-weight:700; cursor:pointer;
+  transition:background 0.15s, color 0.15s, border-color 0.15s;
+}
+.esc-toggle-row .toggle-btn.active {
+  background:rgba(245,200,66,0.25); color:#ffea40; border-color:rgba(245,200,66,0.6);
+}
 .esc-close {
 font-size:0.7rem; color:rgba(255,255,255,0.35);
 cursor:pointer; margin-top:4px; letter-spacing:1px;
@@ -1892,6 +2028,13 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
       <label>🔊 SFX</label>
       <input type="range" id="vol-sfx" min="0" max="1" step="0.02" value="1.0" oninput="setSFXVolume(this.value)">
     </div>
+    <div class="esc-toggle-row">
+      <label>🎥 Camera</label>
+      <div class="toggle-btns">
+        <button class="toggle-btn" id="esc-cam-follow" onclick="setCameraMode('follow')">Follow</button>
+        <button class="toggle-btn" id="esc-cam-classic" onclick="setCameraMode('classic')">Classic</button>
+      </div>
+    </div>
     </div>
   </div>
   <div class="esc-settings">
@@ -2078,6 +2221,8 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
   </div>
   <!-- Fire button (large, bottom center) -->
   <button id="sharpshooter-fire-btn" style="position:absolute;bottom:24px;left:50%;transform:translateX(-50%);pointer-events:auto;background:rgba(255,60,40,0.85);color:#fff;border:2px solid rgba(255,220,180,0.9);padding:14px 48px;border-radius:14px;font-family:'Inter',sans-serif;font-weight:800;font-size:1rem;letter-spacing:3px;cursor:pointer;box-shadow:0 0 28px rgba(255,80,40,0.45);">🎯 FIRE</button>
+  <!-- Cancel button (v0.19v) — abort the sniper/sharpshooter without firing -->
+  <button id="sharpshooter-cancel-btn" style="position:absolute;bottom:24px;right:18px;pointer-events:auto;background:rgba(40,40,50,0.78);color:#fff;border:1px solid rgba(255,255,255,0.4);padding:12px 22px;border-radius:12px;font-family:'Inter',sans-serif;font-weight:700;font-size:0.9rem;letter-spacing:2px;cursor:pointer;">✕ CANCEL</button>
 </div>
 
 <!-- Hole Summary Screen -->
@@ -2086,6 +2231,16 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
   <div class="hs-score-word" id="hs-score-word">Birdie</div>
   <div class="hs-score-detail" id="hs-score-detail">2 strokes · Par 3</div>
   <div class="hs-earnings" id="hs-earnings"></div>
+  <!-- v0.19w: cosmetic unlock progress bar. Populated by renderCosmoProgress()
+       when this summary is shown. Hidden by default so it doesn't flash empty. -->
+  <div id="hs-cosmo-progress" class="cosmo-progress" style="display:none">
+    <div class="cp-label">
+      <span>Next Unlock</span>
+      <span class="cp-next" id="hs-cp-next-name">—</span>
+    </div>
+    <div class="cp-track"><div class="cp-fill" id="hs-cp-fill" style="width:0%"></div></div>
+    <div class="cp-xp" id="hs-cp-xp">0 / 0 XP</div>
+  </div>
   <button class="hs-continue-btn" id="hs-continue-btn" onclick="onSummaryDismiss()">🛍 Shop →</button>
 </div>
 
@@ -2810,8 +2965,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.19u';
-const CHANGE_NOTE = 'Guaranteed back-half defenses, 50% front-half defenses, new rotating spike-ring defense (black/red), moving hole amplitude 3× bigger';
+const GAME_VERSION = '0.19w';
+const CHANGE_NOTE = 'Camera toggle moved to pause menu, cosmetic XP progress bar moved from home screen to hole summary + game over';
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
@@ -3634,6 +3789,25 @@ window.setHoles = function(n) {
   document.getElementById('holes-18').classList.toggle('active', n===18);
   // v0.18a: star unlocks are per-length, so re-render when length toggles.
   if(typeof renderStarRow === 'function') renderStarRow();
+};
+
+// v0.19v: camera mode toggle. 'follow' (default) enables the auto-rotation
+// behind-the-ball camera added in 0.19q; 'classic' restores the pre-0.19q
+// orbital-only behaviour (camera stays where you point it).
+window.setCameraMode = function(mode) {
+  if(mode !== 'follow' && mode !== 'classic') return;
+  const meta = getMeta();
+  meta.cameraMode = mode;
+  setMeta(meta);
+  // Re-render the toggle in the menu so the active state flips without
+  // rebuilding the whole overlay.
+  const btns = document.querySelectorAll('[onclick^="setCameraMode"]');
+  btns.forEach(b => {
+    const isFollow = b.getAttribute('onclick').includes("'follow'");
+    const isActive = (mode === 'follow') === isFollow;
+    b.classList.toggle('active', isActive);
+  });
+  showToast(mode === 'follow' ? '🎥 Follow camera' : '🎥 Classic camera', 1200);
 };
 
 window.setDifficulty = function(n) {
@@ -5969,22 +6143,28 @@ function buildCourse(data) {
         }
       }
 
-      // Arrow chevrons along the belt — pointing in push direction
+      // Arrow chevrons along the belt — pointing in push direction.
+      // v0.19v: bumped size + brightness + emissive so direction reads at a
+      // glance. Thinner cone (8 segments) reads as a triangular arrow point
+      // rather than a pyramid.
       const arrowGroup = new THREE.Group();
       const beltLen = isHoriz ? beltW : beltD;
-      const arrowSpacing = T * 1.2;
+      const arrowSpacing = T * 1.0;
       const arrowCount = Math.max(2, Math.floor(beltLen / arrowSpacing));
-      // Compute arrow rotation to point in push direction
-      // Cone points up (+Y) by default. We rotate to point along (dvx, 0, dvz).
       const pushAngle = Math.atan2(dvx, dvz); // angle from +Z toward +X
+      const arrowMatBright = new THREE.MeshStandardMaterial({
+        color: 0xffdd33, emissive: 0xffaa00, emissiveIntensity: 1.2,
+        roughness: 0.35, metalness: 0.1,
+      });
       for(let ai = 0; ai < arrowCount; ai++) {
         const frac = (ai + 0.5) / arrowCount - 0.5; // -0.5 to 0.5
         const ax = isHoriz ? beltCX + frac * beltLen * 0.85 : beltCX;
         const az = isHoriz ? beltCZ : beltCZ + frac * beltLen * 0.85;
-        const ag = new THREE.ConeGeometry(0.22, 0.5, 4);
-        const am = new THREE.Mesh(ag, stripeMat);
-        am.position.set(ax, baseH + 0.03, az);
-        // Point cone along push direction: rotate -90° around X to lay flat, then Y-rotate to face push dir
+        // Flat chevron: 3-vert cone with radial segments = 3 (triangle fan).
+        // Larger footprint (0.34 rad × 0.72 len), thinner in the long direction.
+        const ag = new THREE.ConeGeometry(0.34, 0.72, 3);
+        const am = new THREE.Mesh(ag, arrowMatBright);
+        am.position.set(ax, baseH + 0.04, az);
         am.rotation.set(-Math.PI / 2, 0, 0);
         am.rotateOnWorldAxis(new THREE.Vector3(0, 1, 0), pushAngle);
         am.userData.noOutline = true;
@@ -6425,27 +6605,59 @@ function buildCourse(data) {
         if(gx < 0 || gz < 0 || gx >= data.W || gz >= data.H) return false;
         return data.grid[gz][gx] === CELL.FAIR;
       };
-      // Try full amplitude, else shrink. Check points specific to the pattern.
+      // Check a point plus a small buffer around it (the hole lip, not the
+      // center, is what matters for "on fairway"). 0.55 is baseline holeRadius;
+      // big_hole makes it 1.1 but that's a perk modifier, worst case we shrink
+      // a bit more than strictly needed.
+      const checkWithBuffer = (offx, offz) => {
+        const buf = 0.8;
+        if(!checkFair(offx, offz)) return false;
+        // 4 buffered samples in the cardinal directions — cheap
+        if(!checkFair(offx + buf, offz)) return false;
+        if(!checkFair(offx - buf, offz)) return false;
+        if(!checkFair(offx, offz + buf)) return false;
+        if(!checkFair(offx, offz - buf)) return false;
+        return true;
+      };
+      // Dense path sampling — walk the full trajectory for the chosen pattern
+      // and reject the amplitude if ANY sample step falls outside the fairway.
+      // N=40 samples covers a full cycle finely enough for TILE_SIZE=2.
       let amp = hd.amplitude;
-      const checkPoints = (a) => {
+      const pathSamples = (a) => {
+        const pts = [];
+        const N = 40;
         if(hd.pattern === 'line') {
-          // Just the two endpoints along the chosen axis
-          if(hd.axis === 'X') return checkFair(a, 0) && checkFair(-a, 0);
-          return checkFair(0, a) && checkFair(0, -a);
+          for(let i = 0; i <= N; i++) {
+            const t = i / N;
+            const v = Math.sin(t * Math.PI * 2) * a;
+            pts.push(hd.axis === 'X' ? [v, 0] : [0, v]);
+          }
+        } else if(hd.pattern === 'circle') {
+          for(let i = 0; i <= N; i++) {
+            const t = (i / N) * Math.PI * 2;
+            pts.push([Math.cos(t) * a, Math.sin(t) * a]);
+          }
+        } else if(hd.pattern === 'diamond') {
+          for(let i = 0; i <= N; i++) {
+            const seg4 = (i / N) * 4;
+            const k = Math.floor(seg4) % 4;
+            const f = seg4 - Math.floor(seg4);
+            const corners = [[a,0],[0,a],[-a,0],[0,-a]];
+            const pA = corners[k], pB = corners[(k+1)%4];
+            pts.push([pA[0]+(pB[0]-pA[0])*f, pA[1]+(pB[1]-pA[1])*f]);
+          }
+        } else if(hd.pattern === 'figure8') {
+          for(let i = 0; i <= N; i++) {
+            const t = (i / N) * Math.PI * 2;
+            const denom = 1 + Math.sin(t) * Math.sin(t);
+            pts.push([a * Math.cos(t) / denom, a * Math.sin(t) * Math.cos(t) / denom]);
+          }
         }
-        if(hd.pattern === 'diamond') {
-          // The four corners of the diamond
-          return checkFair(a, 0) && checkFair(-a, 0) && checkFair(0, a) && checkFair(0, -a);
-        }
-        if(hd.pattern === 'figure8') {
-          // Extremes of the two lemniscate lobes
-          const ha = a * 0.95;
-          return checkFair(ha, 0) && checkFair(-ha, 0);
-        }
-        // Circle — sample 12 points around the full perimeter.
-        for(let s = 0; s < 12; s++) {
-          const th = (s / 12) * Math.PI * 2;
-          if(!checkFair(Math.cos(th) * a, Math.sin(th) * a)) return false;
+        return pts;
+      };
+      const checkPoints = (a) => {
+        for(const [ox, oz] of pathSamples(a)) {
+          if(!checkWithBuffer(ox, oz)) return false;
         }
         return true;
       };
@@ -6503,6 +6715,10 @@ function buildCourse(data) {
         }
       }
       state.update = (dt, totalT) => {
+        // v0.19v: Once the hole is hit, freeze the hole's position so the
+        // sink animation completes at the ball's contact point rather than
+        // having the flag/cup drift away mid-drop.
+        if(state.frozen) return;
         const phase = totalT * (0.9 * hd.speedFactor) + hd.phase;
         let ox = 0, oz = 0;
         if(hd.pattern === 'line') {
@@ -6616,7 +6832,7 @@ function buildCourse(data) {
         }
         ballG.userData.noOutline = true;
         ringContainer.add(ballG);
-        state.balls.push({ baseAngle: th });
+        state.balls.push({ baseAngle: th, mesh: ballG, destroyed: false });
       }
       state.ringAngle = 0;
       state.cx = cx; state.cz = cz; state.baseY = baseY;
@@ -6951,7 +7167,7 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
     band.position.y = 0.030;
     g.add(band);
     g.scale.setScalar(1.2);
-    g.position.y = -0.055;
+    g.position.y = -0.10;  // v0.19v: lowered from -0.055 to sit snug on the ball
     return g;
   }
 
@@ -6968,7 +7184,7 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
     ridge.position.y = 0.09;
     g.add(brim, dome, ridge);
     g.scale.setScalar(1.2);
-    g.position.y = -0.055;
+    g.position.y = -0.10;  // v0.19v: lowered from -0.055 to sit snug on the ball
     return g;
   }
 
@@ -7507,6 +7723,36 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
     return newly;
   }
 
+  // v0.19v: Return the next cosmetic unlock progress info for the home-screen
+  // progress bar. Sorts the XP-unlock table by cost, finds the lowest cost the
+  // player doesn't own yet. Returns {nextId, nextCategory, nextCost, prevCost,
+  // current, pct} or null when every XP-gated cosmetic is already owned.
+  function getNextCosmeticUnlock(meta) {
+    if(!meta) return null;
+    const owned = (meta.unlocks && Array.isArray(meta.unlocks.cosmetics)) ? meta.unlocks.cosmetics : [];
+    const curXp = meta.xp || 0;
+    const sorted = COSMETIC_XP_UNLOCKS.slice().sort((a, b) => a.xpCost - b.xpCost);
+    let prevCost = 0;
+    for(const item of sorted) {
+      if(!owned.includes(item.id)) {
+        const span = Math.max(1, item.xpCost - prevCost);
+        const within = Math.max(0, curXp - prevCost);
+        const pct = Math.max(0, Math.min(1, within / span));
+        return {
+          nextId: item.id,
+          nextCategory: item.category,
+          nextCost: item.xpCost,
+          prevCost,
+          current: curXp,
+          pct,
+        };
+      }
+      prevCost = item.xpCost;
+    }
+    return null; // all XP cosmetics unlocked
+  }
+  window.getNextCosmeticUnlock = getNextCosmeticUnlock;
+
   // ── Achievement-based cosmetic unlocks (v0.19f) ──
   // Checked at run end. `ctx` carries the flags the conditions depend on.
   // Returns the list of newly unlocked item definitions (same shape as
@@ -7627,6 +7873,56 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
     });
   }
   window.flushPendingUnlockToasts = flushPendingUnlockToasts;
+
+  // v0.19v/w: Render a cosmetic-progress bar in a DOM target. target:
+  //   ''  → the main-menu instance (legacy; still works if present)
+  //   'hs'→ hole-summary instance (#hs-cosmo-progress, ids hs-cp-*)
+  //   'go'→ game-over instance (#go-cosmo-progress, ids go-cp-*)
+  // Uses getNextCosmeticUnlock to decide name/cost/pct. Plays the squash
+  // animation on value tick-ups when {animate:true}.
+  function renderCosmoProgress(opts) {
+    opts = opts || {};
+    const prefix = opts.target ? (opts.target + '-') : '';
+    const wrapId = prefix ? prefix + 'cosmo-progress' : 'cosmo-progress';
+    const wrap = document.getElementById(wrapId);
+    if(!wrap) return;
+    const meta = (typeof getMeta === 'function') ? getMeta() : null;
+    if(!meta) { wrap.style.display = 'none'; return; }
+    const prog = getNextCosmeticUnlock(meta);
+    const nameEl = document.getElementById(prefix + 'cp-next-name');
+    const fillEl = document.getElementById(prefix + 'cp-fill');
+    const xpEl   = document.getElementById(prefix + 'cp-xp');
+    if(!prog) {
+      // All XP cosmetics owned — show a "MAX" state
+      wrap.style.display = '';
+      if(nameEl) nameEl.textContent = 'All unlocked 🏆';
+      if(fillEl) fillEl.style.width = '100%';
+      if(xpEl) xpEl.textContent = `${meta.xp || 0} XP`;
+      return;
+    }
+    wrap.style.display = '';
+    const name = (typeof cosmeticDisplayName === 'function') ? cosmeticDisplayName(prog.nextId) : prog.nextId;
+    const catIcon = prog.nextCategory === 'hat' ? '🎩' : '⚪';
+    if(nameEl) nameEl.textContent = `${catIcon} ${name}`;
+    const pct = Math.round(prog.pct * 100);
+    const prevPct = wrap._lastPct || 0;
+    if(fillEl) fillEl.style.width = pct + '%';
+    if(xpEl) xpEl.textContent = `${prog.current} / ${prog.nextCost} XP`;
+    if(opts.animate && pct > prevPct) {
+      wrap.classList.remove('cp-pop');
+      void wrap.offsetWidth;
+      wrap.classList.add('cp-pop');
+      setTimeout(() => { wrap.classList.remove('cp-pop'); }, 500);
+    }
+    if(opts.burst) {
+      wrap.classList.remove('cp-unlock');
+      void wrap.offsetWidth;
+      wrap.classList.add('cp-unlock');
+      setTimeout(() => { wrap.classList.remove('cp-unlock'); }, 900);
+    }
+    wrap._lastPct = pct;
+  }
+  window.renderCosmoProgress = renderCosmoProgress;
 
   // ── Achievement list for the Achievements screen (v0.19g) ──
   // Condition-based unlocks only (XP tiers live in the Locker Room). Order
@@ -8207,7 +8503,11 @@ function updatePhysics(dt) {
   // so under Shrink Ray the ball visually floated since its collision radius is smaller.
   const BALL_FLOOR_R   = BALL_R_EFF;
   const ghostActive    = G.ghostBallActive; // pass-through rocks/walls
-  const hasIronBall    = G._ironBallActive || G._cannonballActive;
+  // v0.19v: cannonball is now a WALLS-ONLY tool (smash through walls during
+  // off-roading), separate from iron ball which destroys obstacles. hasIronBall
+  // remains the flag for obstacle destruction. Wall-smashing uses its own flag
+  // (G._cannonballActive) directly at the wall-collision site.
+  const hasIronBall    = G._ironBallActive;
 
   // ── Substep loop — prevents wall tunneling on fast shots ──
   // Max travel per substep ≈ wall thickness so ball can't skip past geometry.
@@ -9733,6 +10033,10 @@ function updatePhysics(dt) {
       const ballColR = hds.ballR || 0.28;
       const hasIronBall = G._ironBallActive;
       for(const b of hds.balls) {
+        // v0.19v: spike balls are single-use — once hit, they destruct and
+        // are skipped from subsequent collision checks. Visuals hide via
+        // b.mesh.visible=false on destruction.
+        if(b.destroyed) continue;
         const ang = b.baseAngle + ringAng;
         const px = cxR + Math.cos(ang) * hd.radius;
         const pz = czR + Math.sin(ang) * hd.radius;
@@ -9768,6 +10072,40 @@ function updatePhysics(dt) {
             G._holeHazardsTouched = G._holeHazardsTouched || {};
             G._holeHazardsTouched.spikeRings = (G._holeHazardsTouched.spikeRings||0) + 1;
           }
+          // Destroy this spike ball — one and done. Spawn debris for the
+          // shatter feel, hide the mesh. Iron-ball hits still destroy too.
+          b.destroyed = true;
+          if(b.mesh) b.mesh.visible = false;
+          // Scatter a few black/red shards from the ball position
+          if(!G._debrisParticles) G._debrisParticles = [];
+          const shardMat = new THREE.MeshStandardMaterial({
+            color: hds.isRed ? 0xff3030 : 0x2a2a2a,
+            roughness: 0.2, metalness: 0.6,
+            emissive: hds.isRed ? 0xaa0000 : 0x110000, emissiveIntensity: 0.6,
+          });
+          const by = hds.baseY + 0.5;
+          for(let sh = 0; sh < 8; sh++) {
+            const a2 = Math.random() * Math.PI * 2;
+            const g = new THREE.ConeGeometry(0.06, 0.18, 4);
+            const m = new THREE.Mesh(g, shardMat.clone());
+            m.position.set(px, by, pz);
+            m.rotation.set(Math.random()*Math.PI, Math.random()*Math.PI, Math.random()*Math.PI);
+            m.userData.noOutline = true;
+            if(G.courseGroup) G.courseGroup.add(m);
+            const outS = 2.5 + Math.random() * 2.5;
+            G._debrisParticles.push({
+              mesh: m,
+              vx: Math.cos(a2) * outS,
+              vy: 2 + Math.random() * 2,
+              vz: Math.sin(a2) * outS,
+              spinX: (Math.random()-0.5)*12,
+              spinY: (Math.random()-0.5)*12,
+              spinZ: (Math.random()-0.5)*12,
+              life: 1.1, maxLife: 1.1, gravity: 14,
+            });
+          }
+          triggerShake('light');
+          break; // one ball per frame is plenty
         }
       }
     }
@@ -9948,6 +10286,11 @@ function updatePhysics(dt) {
   }
 
   if(holeDistXZ < holeRadius && G.ballVel.y < 4.0 && !G._bowlingPins && !G._allBounceTarget) {
+    // v0.19v: if this is a moving hole, freeze it and snap the ball to the
+    // hole's current position so the drop animation lands on the cup.
+    if(G._holeDefense && G._holeDefense.kind === 'moving_hole' && G._holeDefenseState) {
+      G._holeDefenseState.frozen = true;
+    }
     onHoled();
     return;
   }
@@ -11237,23 +11580,66 @@ function spawnHpDamagePopup(amount) {
 window.spawnHpDamagePopup = spawnHpDamagePopup;
 
 // Render the HP dots row in the pill HUD. Called from updateUI + applyDamage/Heal.
-// Builds one dot per hpMax; filled dots represent current hp.
+// v0.19v: now shows the numeric HP value (e.g. "7/10") alongside the dot row,
+// and splits dots into two equal rows when hpMax exceeds a threshold to keep
+// the pill compact. Structure:
+//   #h-hp-dots
+//     .hp-num    "7/10"
+//     .hp-rows
+//       .hp-row  [dots...]   (row 1 — always present)
+//       .hp-row  [dots...]   (row 2 — only when hpMax > SPLIT_THRESH)
 function updateHpDots() {
   const strip = document.getElementById('h-hp-dots');
   if(!strip) return;
   const max = Math.max(1, G.hpMax || 10);
   const cur = Math.max(0, Math.min(max, G.hp || 0));
-  // Only rebuild DOM if dot count changed (hpMax changed via Extra Heart perk).
-  if(strip.childElementCount !== max) {
+  const SPLIT_THRESH = 12;
+  const splitRows = max > SPLIT_THRESH;
+  const row1Count = splitRows ? Math.ceil(max / 2) : max;
+  const row2Count = splitRows ? max - row1Count : 0;
+
+  // Cache the last-rendered structure on the element so we only rebuild the
+  // DOM when max or the split boundary changes. Cheap path: just toggle
+  // filled classes in-place each call.
+  const prev = strip._hpLayout;
+  const needRebuild = !prev || prev.max !== max || prev.row1 !== row1Count || prev.row2 !== row2Count;
+  if(needRebuild) {
     strip.innerHTML = '';
-    for(let i = 0; i < max; i++) {
+    // Numeric label
+    const num = document.createElement('span');
+    num.className = 'hp-num';
+    strip.appendChild(num);
+    // Rows container
+    const rows = document.createElement('div');
+    rows.className = 'hp-rows';
+    const r1 = document.createElement('div');
+    r1.className = 'hp-row';
+    for(let i = 0; i < row1Count; i++) {
       const d = document.createElement('span');
       d.className = 'hp-dot';
-      strip.appendChild(d);
+      r1.appendChild(d);
     }
+    rows.appendChild(r1);
+    if(row2Count > 0) {
+      const r2 = document.createElement('div');
+      r2.className = 'hp-row';
+      for(let i = 0; i < row2Count; i++) {
+        const d = document.createElement('span');
+        d.className = 'hp-dot';
+        r2.appendChild(d);
+      }
+      rows.appendChild(r2);
+    }
+    strip.appendChild(rows);
+    strip._hpLayout = { max, row1: row1Count, row2: row2Count };
   }
-  // Update filled state in place (cheap).
-  const dots = strip.children;
+
+  // Update number label
+  const numEl = strip.querySelector('.hp-num');
+  if(numEl) numEl.textContent = cur + '/' + max;
+
+  // Update filled state on each dot in flat reading order
+  const dots = strip.querySelectorAll('.hp-dot');
   for(let i = 0; i < dots.length; i++) {
     dots[i].classList.toggle('filled', i < cur);
   }
@@ -11639,6 +12025,11 @@ function showHoleSummary(earnings, bustedBudget, _epoch) {
   continueBtn.classList.remove('show');
 
   hs.classList.add('visible');
+  // v0.19w: refresh the cosmetic-unlock progress bar. Delayed slightly so it
+  // animates in after the score word lands, not in the same frame.
+  setTimeout(() => {
+    if(typeof renderCosmoProgress === 'function') renderCosmoProgress({ target: 'hs', animate: true });
+  }, 420);
 
   // Staggered reveal of each earnings row with count-up animation
   let delay = d > 0 ? 500 : 250;
@@ -12982,7 +13373,7 @@ const CARD_DEFS = {
   iron_ball:    { id:'iron_ball',    emoji:'🔩', name:'Iron Ball',       desc:'Plow through obstacles, destroying them on contact. Play anytime!', rarity:'rare',      price:18,  context:'any',    holdable:false },
   mulligan:     { id:'mulligan',     emoji:'↩️', name:'Mulligan',        desc:'Undo your last swing. Ball returns, stroke refunded.',            rarity:'rare',      price:22,  context:'post',   holdable:false },
   airstrike:    { id:'airstrike',    emoji:'🎯', name:'Airstrike',       desc:'Tap a spot. After 2s, massive explosion rains down.',             rarity:'epic',      price:28,  context:'pre',    holdable:false },
-  cannonball:   { id:'cannonball',   emoji:'💣', name:'Cannonball',      desc:'This swing: plow through obstacles AND blast through walls.',     rarity:'epic',      price:25,  context:'pre',    holdable:false },
+  cannonball:   { id:'cannonball',   emoji:'💣', name:'Cannonball',      desc:'This swing: blast through walls. Great for off-roading through the rough.',     rarity:'epic',      price:25,  context:'pre',    holdable:false },
   wrecking_ball:{ id:'wrecking_ball',emoji:'⛓️', name:'Wrecking Ball',   desc:'Ball swings on a chain arc, destroying everything in the sweep.', rarity:'epic',      price:24,  context:'during', holdable:false },
   reverse:      { id:'reverse',      emoji:'⏪', name:'Reverse',         desc:'Instantly reverse the ball\'s direction. Full speed.',             rarity:'common',    price:10,  context:'during', holdable:false },
   portal_pair:  { id:'portal_pair',  emoji:'🕳️', name:'Portal Pair',     desc:'Place two portals. Ball enters one, exits the other.',            rarity:'legendary', price:30,  context:'pre',    holdable:false },
@@ -13325,7 +13716,7 @@ function executeCardAbility(id) {
     case 'angler':       G._anglerCardActive = true; showToast('📐 Angler armed!', 800); break;
     // Placeholder for future cards:
     case 'airstrike':    showToast('🎯 Airstrike coming soon!', 1000); break;
-    case 'cannonball':   G._cannonballActive = true; G._ironBallActive = true; applyIronBallVisual(); showToast('💣 Cannonball armed!', 800); break;
+    case 'cannonball':   G._cannonballActive = true; showToast('💣 Cannonball armed — smash through walls!', 1000); break;
     case 'wrecking_ball': showToast('⛓️ Wrecking Ball coming soon!', 1000); break;
     case 'portal_pair':  showToast('🕳️ Portals coming soon!', 1000); break;
     case 'floomba':      spawnFloombaFromCard(); break;
@@ -13889,34 +14280,25 @@ function activateMightyEgg() {
   // soft outline. Positioned as a child of G.ball so it tracks the ball
   // exactly (including the visual rotation) without any physics impact.
   const eggGroup = new THREE.Group();
-  eggGroup.userData.noOutline = false; // we WANT an outline for readability
+  eggGroup.userData.noOutline = true; // v0.19v: no outline — rim glow reads it
   // Egg shape = sphere scaled in Y. Radius ~1.55× ball radius so it's clearly
   // a shell around the ball, not a reskin.
   const eggR = BALL_R * 1.55;
-  const eggGeo = new THREE.SphereGeometry(eggR, 18, 14);
+  const eggGeo = new THREE.SphereGeometry(eggR, 24, 18);
   const eggMat = new THREE.MeshStandardMaterial({
     color: 0xfff6dc,
     transparent: true,
-    opacity: 0.10,       // 90% transparent
-    roughness: 0.35,
-    metalness: 0.0,
-    depthWrite: false,   // avoid sorting issues with the ball beneath
+    opacity: 0.22,       // slightly more visible so it reads clearly
+    roughness: 0.12,     // smoother/glossier so highlight is stronger
+    metalness: 0.2,
+    emissive: 0xfff0c0,
+    emissiveIntensity: 0.35,
+    depthWrite: false,
     side: THREE.DoubleSide,
   });
   const eggMesh = new THREE.Mesh(eggGeo, eggMat);
   eggMesh.scale.y = 1.25; // stretch into egg shape
   eggGroup.add(eggMesh);
-  // Thin outline wireframe for readability — same geometry, low-poly version.
-  const outlineGeo = new THREE.SphereGeometry(eggR * 1.01, 10, 8);
-  const outlineMat = new THREE.MeshBasicMaterial({
-    color: 0xffeebb,
-    wireframe: true,
-    transparent: true,
-    opacity: 0.55,
-  });
-  const outlineMesh = new THREE.Mesh(outlineGeo, outlineMat);
-  outlineMesh.scale.y = 1.25;
-  eggGroup.add(outlineMesh);
   G.ball.add(eggGroup);
   G._mightyEggMesh = eggGroup;
   showToast('🥚 Mighty Egg armed — absorbs 1 hit!', 1400);
@@ -14108,6 +14490,17 @@ function activateSharpshooter() {
   if(fireBtn) fireBtn.onclick = () => {
     if(G._sharpshooterBallMode) fireSharpshooterBall();
     else fireSharpshooter();
+  };
+  // v0.19v: cancel button — exits the scope without consuming the card/perk
+  const cancelBtn = document.getElementById('sharpshooter-cancel-btn');
+  if(cancelBtn) cancelBtn.onclick = () => {
+    // Refund the card if a card-context sniper/sharpshooter triggered this
+    // (exitSharpshooter just tears down scope state — it doesn't re-add the
+    // card). Per-swing perks vs card dispatch: the card was already discarded
+    // when activated. To preserve progression, we push it back onto the hand
+    // if a slot is open.
+    if(typeof exitSharpshooter === 'function') exitSharpshooter();
+    if(typeof showToast === 'function') showToast('✕ Cancelled', 800);
   };
   // Toast
   showToast('🎯 Sharpshooter — drag to aim, tap FIRE', 1800);
@@ -14419,11 +14812,11 @@ function activateFreezeFrame() {
 
 function activateCoinShower() {
   if(!G.courseGroup) return;
-  // v0.19j rewrite: straight-line shower along the aim arrow.
-  // 20 regular coins spaced ahead of the ball + a single 5× bonus coin at the end,
-  // but ONLY if every coin in the line landed in-bounds (fairway). If the line
-  // clips OOB or an obstacle column, we stop placing and skip the bonus coin.
-  // Each coin falls from the sky with a staggered delay and squashes on impact.
+  // v0.19v rewrite: coin shower now ALWAYS fires in a line ahead of the ball.
+  // When the straight line hits a wall, the trajectory reflects off it — same
+  // math as the Angler perk's predictor — so the shower follows the ball's
+  // likely bounce path. This keeps the perk's identity (rewarding setup of a
+  // clean line) while guaranteeing all 20 coins go somewhere predictable.
 
   // Safe shotDir fallback — mirrors missile/boulder logic
   let dirX, dirZ;
@@ -14446,39 +14839,87 @@ function activateCoinShower() {
   const coinMat = new THREE.MeshStandardMaterial({color:0xffd700, roughness:0.15, metalness:0.9, emissive:0xaa8800, emissiveIntensity:0.3});
   const glowMat = new THREE.MeshStandardMaterial({color:0xffd700, emissive:0xffaa00, emissiveIntensity:2.0, transparent:true, opacity:0.35, roughness:1, metalness:0, depthWrite:false});
 
-  // Walk the line, place coins only while still in fairway; break on OOB.
-  let placed = 0;
-  let lineClean = true;  // false if we hit OOB before reaching the end
-  let lastValidIdx = -1;
-  const placements = [];
-  for(let i = 0; i < LINE_COUNT; i++) {
-    const dist = START_OFFSET + i * SPACING;
-    const wx = G.ballPos.x + dirX * dist;
-    const wz = G.ballPos.z + dirZ * dist;
-    const cell = getCell(wx, wz);
-    if(cell !== CELL.FAIR) { lineClean = false; break; }
-    placements.push({ wx, wz, idx: i });
-    lastValidIdx = i;
+  // Build a polyline of the path using Angler's bounce tracer. Total length
+  // needs to be enough to accommodate all LINE_COUNT coins plus the bonus one,
+  // with start offset baked in.
+  const TOTAL_DIST = START_OFFSET + (LINE_COUNT + 1) * SPACING + 2;
+  let pathSegs = null;
+  if(typeof traceMultiBounce === 'function' && G.wallPolylines && G.wallPolylines.length) {
+    try {
+      pathSegs = traceMultiBounce(G.ballPos.x, G.ballPos.z, dirX, dirZ, TOTAL_DIST, 6);
+    } catch(e) { pathSegs = null; }
+  }
+  // Fallback: a single straight segment if the tracer failed.
+  if(!pathSegs || !pathSegs.length) {
+    pathSegs = [{
+      sx: G.ballPos.x, sz: G.ballPos.z,
+      ex: G.ballPos.x + dirX * TOTAL_DIST,
+      ez: G.ballPos.z + dirZ * TOTAL_DIST,
+    }];
   }
 
-  // v0.19p: guarantee the coin shower delivers all 20 coins even when the aim
-  // line runs out of fairway. For every coin that couldn't fit on the straight
-  // line, scatter a replacement in a random fairway cell around the ball.
-  // Keeps the perk feeling rewarding regardless of geometry ("coin shower
-  // should still trigger even if there is not enough space").
-  const scattered = [];
+  // Walk the polyline by arc-length and emit a point every SPACING, starting
+  // at START_OFFSET. Accept the point if its cell is FAIR; if not, we break
+  // the line there (hit an interior obstacle we can't reflect off). The wall
+  // bounce tracer already handles wall deflection so points stay in-bounds.
+  const placements = [];
+  let travelled = 0;
+  let target = START_OFFSET;
+  let placeIdx = 0;
+  let lineClean = true;
+  outer: for(const seg of pathSegs) {
+    const segLen = Math.hypot(seg.ex - seg.sx, seg.ez - seg.sz);
+    if(segLen < 0.001) continue;
+    const enx = (seg.ex - seg.sx) / segLen;
+    const enz = (seg.ez - seg.sz) / segLen;
+    // Keep walking until we've consumed this whole segment or filled the line
+    while(target <= travelled + segLen) {
+      const along = target - travelled;
+      const wx = seg.sx + enx * along;
+      const wz = seg.sz + enz * along;
+      const cell = getCell(wx, wz);
+      if(cell !== CELL.FAIR) { lineClean = false; break outer; }
+      placements.push({ wx, wz, idx: placeIdx++ });
+      target += SPACING;
+      if(placements.length >= LINE_COUNT) break outer;
+    }
+    travelled += segLen;
+  }
+
+  // If the full line landed cleanly, append a 5× bonus at the next step.
+  const wantBonus = lineClean && placements.length === LINE_COUNT;
+  if(wantBonus) {
+    // Walk one more SPACING along the same polyline.
+    let trav2 = 0;
+    let t2 = START_OFFSET + LINE_COUNT * SPACING;
+    for(const seg of pathSegs) {
+      const segLen = Math.hypot(seg.ex - seg.sx, seg.ez - seg.sz);
+      if(t2 <= trav2 + segLen) {
+        const along = t2 - trav2;
+        const enx = (seg.ex - seg.sx) / segLen;
+        const enz = (seg.ez - seg.sz) / segLen;
+        const wx = seg.sx + enx * along;
+        const wz = seg.sz + enz * along;
+        if(getCell(wx, wz) === CELL.FAIR) {
+          placements.push({ wx, wz, idx: LINE_COUNT, isSpecial: true });
+        }
+        break;
+      }
+      trav2 += segLen;
+    }
+  }
+
+  // If the tracer hit a dead-end short — guarantee at least the coins can be
+  // scattered so the perk doesn't feel wasted. This falls back to the old
+  // scatter logic only for what didn't fit on the bounce path.
   const shortfall = LINE_COUNT - placements.length;
   if(shortfall > 0) {
-    // Ring search outward from the ball — prefer cells close to the intended
-    // line so the shower still reads as "ahead of me" instead of all-around.
-    let scatterIdx = placements.length; // drop order continues sequentially for timing
-    const maxAttempts = shortfall * 40;
     const usedKeys = new Set(placements.map(p => `${Math.round(p.wx*4)},${Math.round(p.wz*4)}`));
-    for(let a = 0; a < maxAttempts && scattered.length < shortfall; a++) {
-      // Bias scatter forward-and-around the ball — pick a random angle skewed
-      // toward the aim direction, and a random radius between 1.2 and 5.0.
+    let scatterIdx = placements.length;
+    const maxAttempts = shortfall * 40;
+    for(let a = 0; a < maxAttempts && (scatterIdx - placements.length) < shortfall; a++) {
       const baseAngle = Math.atan2(dirZ, dirX);
-      const ang = baseAngle + (Math.random() - 0.5) * Math.PI * 1.3; // ±117° cone
+      const ang = baseAngle + (Math.random() - 0.5) * Math.PI * 0.9; // narrower cone now (±80°)
       const rad = 1.2 + Math.random() * 3.8;
       const wx = G.ballPos.x + Math.cos(ang) * rad;
       const wz = G.ballPos.z + Math.sin(ang) * rad;
@@ -14487,21 +14928,7 @@ function activateCoinShower() {
       const cell = getCell(wx, wz);
       if(cell !== CELL.FAIR) continue;
       usedKeys.add(key);
-      scattered.push({ wx, wz, idx: scatterIdx++, _scattered: true });
-    }
-    // Merge scattered coins in; they share the same drop/land animation path.
-    for(const s of scattered) placements.push(s);
-  }
-
-  // If the line made it all 20 deep, append a 5× bonus coin one spacing further
-  const wantBonus = lineClean && placements.length === LINE_COUNT;
-  if(wantBonus) {
-    const dist = START_OFFSET + LINE_COUNT * SPACING;
-    const wx = G.ballPos.x + dirX * dist;
-    const wz = G.ballPos.z + dirZ * dist;
-    const cell = getCell(wx, wz);
-    if(cell === CELL.FAIR) {
-      placements.push({ wx, wz, idx: LINE_COUNT, isSpecial: true });
+      placements.push({ wx, wz, idx: scatterIdx++, _scattered: true });
     }
   }
 
@@ -15566,8 +15993,14 @@ function updateCamera(dt) {
   //   - Sharpshooter / ball-cinematic cameras are active (handled above)
   //   - User is actively panning (aimManualOverride during rolling = user intent)
   //   - Ball speed is too low to have a meaningful direction
+  // v0.19v: follow-cam behaviour is now gated on meta.cameraMode. Classic
+  // mode (the pre-0.19q orbital camera) skips the auto-rotation entirely, so
+  // the camera stays where the player points it until they drag it elsewhere.
+  const _camMeta = (typeof getMeta === 'function') ? getMeta() : null;
+  const _camClassic = _camMeta && _camMeta.cameraMode === 'classic';
   if(G.rolling && !G.aimMode && !G._sharpshooterActive && !G._ssBallCinematic
-     && !G._ssCinematic && typeof aimManualOverride !== 'undefined' && !aimManualOverride) {
+     && !G._ssCinematic && typeof aimManualOverride !== 'undefined' && !aimManualOverride
+     && !_camClassic) {
     const vx = G.ballVel.x, vz = G.ballVel.z;
     const hSpeed = Math.hypot(vx, vz);
     if(hSpeed > 1.5) {
@@ -17017,7 +17450,7 @@ const ALL_PERKS = [
   { id:'magnet',           name:'Coin Magnet',         emoji:'🧲', rarity:'common',    price:15,  stackable:true,  weight:8,
     desc:'Coins are pulled toward your ball. Buy up to 3× to increase range and pull strength.' },
   { id:'extra_heart',     name:'Heart',                emoji:'❤️‍🩹', rarity:'common',   price:11,  stackable:true,  weight:4,
-    desc:'Heal +2 HP instantly. Stacks.' },
+    desc:'Heal +2 HP instantly.' },
   { id:'high_speed_finish', name:'High Speed Finish',  emoji:'🏁', rarity:'common',   price:15,  stackable:false, weight:8,
     desc:'Score +10 coins when you fly into the hole at high speed. Checkered flag celebration!' },
   // RARE — base weight 4
@@ -17164,6 +17597,20 @@ function showGameOver(bustedBudget=false){
 
   const soloAwards = computeSoloAwards();
 
+  // v0.19w: cosmetic unlock progress bar markup, shared by both game-over paths
+  // (busted & completed). Populated by renderCosmoProgress({target:'go'}) after
+  // XP deposit below. IDs are prefixed go-cp-* so they don't collide with the
+  // hole-summary copy.
+  const cosmoProgressBlock = `
+    <div id="go-cosmo-progress" class="cosmo-progress" style="display:none;margin-top:10px">
+      <div class="cp-label">
+        <span>Next Unlock</span>
+        <span class="cp-next" id="go-cp-next-name">—</span>
+      </div>
+      <div class="cp-track"><div class="cp-fill" id="go-cp-fill" style="width:0%"></div></div>
+      <div class="cp-xp" id="go-cp-xp">0 / 0 XP</div>
+    </div>`;
+
   const ov=document.getElementById('overlay');
   if(bustedBudget) {
     ov.innerHTML=`
@@ -17173,6 +17620,7 @@ function showGameOver(bustedBudget=false){
       ${G.totalStrokes} strokes over ${holesPlayed} holes.</p>
       <div class="big-score-val" style="font-size:clamp(3rem,12vw,5rem)">${ds}</div>
       ${styleLine}${soloAwards}${coinsLine}${xpLine}${seedLine}
+      ${cosmoProgressBlock}
       <button class="play-btn" onclick="startGame()">Try Again</button>
       <button class="play-btn" onclick="escMainMenu()" style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,0.4);margin-top:-8px;font-size:0.9rem;padding:12px 36px">🏠 Main Menu</button>
       <div class="section-label">Leaderboard</div>
@@ -17182,18 +17630,9 @@ function showGameOver(bustedBudget=false){
       <div class="tagline">Round Complete</div>
       <h1>Final<br>Score</h1>
       <div class="big-score-val">${ds}</div>
-      <p style="margin-top:-8px">${G.totalStrokes} total strokes · Par ${totalPar}<br>
-      ${diff<=-12?'🤯 IMPOSSIBLE! Are you cheating?!':
-        diff<=-9?'🏆👑 LEGENDARY performance!':
-        diff<=-6?'🏆🔥 Absolutely UNHINGED round!':
-        diff<=-4?'🏆 Incredible! Tour-level golf!':
-        diff<=-2?'🏆 Exceptional round!':
-        diff<=-1?'Nice! Under par is always sweet.':
-        diff===0?'Dead level par. Solid as a rock.':
-        diff<=2?'A little over par. Not bad!':
-        diff<=5?'Room for improvement, champ.':
-        'Hey, at least you finished!'}</p>
+      <p style="margin-top:-8px">${G.totalStrokes} total strokes · Par ${totalPar}</p>
       ${styleLine}${soloAwards}${coinsLine}${xpLine}${seedLine}
+      ${cosmoProgressBlock}
       <button class="play-btn" onclick="startGame()">Play Again</button>
       <button class="play-btn" onclick="escMainMenu()" style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,0.4);margin-top:-8px;font-size:0.9rem;padding:12px 36px">🏠 Main Menu</button>
       <div class="section-label">Leaderboard</div>
@@ -17298,6 +17737,17 @@ function showGameOver(bustedBudget=false){
         xpLineEl.textContent = `✨ +${_xpEarnedThisRun} XP earned`;
         setTimeout(() => { xpLineEl.style.opacity = '1'; }, 1100);
       }
+    } catch(e){}
+    // v0.19w: refresh the cosmetic-unlock progress bar. Fires after XP has
+    // been deposited (which happens right above this block), and delayed
+    // slightly so the fill animates in — feels like the XP is flowing into
+    // the bar. `burst:true` lights up any tier-cross that just happened.
+    try {
+      setTimeout(() => {
+        if(typeof renderCosmoProgress === 'function') {
+          renderCosmoProgress({ target: 'go', animate: true, burst: (_xpEarnedThisRun || 0) > 0 });
+        }
+      }, 1300);
     } catch(e){}
   } catch(e) { console.warn('XP deposit failed', e); }
 
@@ -18005,6 +18455,16 @@ function openEscMenu() {
   if(musicSlider && _musicGainNode) musicSlider.value = _musicGainNode.gain.value;
   const sfxSlider = document.getElementById('vol-sfx');
   if(sfxSlider && _sfxGainNode) sfxSlider.value = _sfxGainNode.gain.value;
+  // v0.19w: reflect current camera mode on the pause-menu toggle. Defaults
+  // to 'follow' when the meta flag is unset.
+  try {
+    const meta = getMeta();
+    const mode = meta.cameraMode === 'classic' ? 'classic' : 'follow';
+    const f = document.getElementById('esc-cam-follow');
+    const c = document.getElementById('esc-cam-classic');
+    if(f) f.classList.toggle('active', mode === 'follow');
+    if(c) c.classList.toggle('active', mode === 'classic');
+  } catch(e){}
   // Render perk list in pause menu
   const escPerks = document.getElementById('esc-perk-list');
   if(escPerks) {
@@ -20547,10 +21007,31 @@ function animate(now) {
   // Hat is a scene sibling of the ball, not a child, so it stays upright
   // as the ball rotates for visual roll. Position tracks G.ballPos — the
   // authoritative physics position — so this works no matter which code
-  // path last moved the ball. G.hat.rotation stays at identity intentionally.
+  // path last moved the ball.
+  // v0.19v: Hat tilts backward proportional to ball speed — sells the wind
+  // rushing past and is just funny. Tilt axis is perpendicular to travel
+  // direction; magnitude ramps from 0 at rest to ~0.9 rad at fast speeds.
   if(G.hat && G.ball) {
     G.hat.position.set(G.ballPos.x, G.ballPos.y + BALL_R, G.ballPos.z);
     G.hat.visible = G.ball.visible;
+    // Compute XZ speed from physics velocity for a stable reading.
+    const vx = G.ballVel ? G.ballVel.x : 0;
+    const vz = G.ballVel ? G.ballVel.z : 0;
+    const vMag = Math.hypot(vx, vz);
+    const targetTilt = vMag < 0.15 ? 0 : Math.min(0.9, vMag * 0.05);
+    // Smooth the tilt so quick transitions don't pop.
+    G._hatTilt = (G._hatTilt || 0) + (targetTilt - (G._hatTilt || 0)) * Math.min(1, dt * 8);
+    if(vMag >= 0.15) {
+      const travelAng = Math.atan2(vx, vz); // yaw direction of travel
+      G.hat.rotation.set(0, 0, 0);
+      G.hat.rotation.y = travelAng;
+      // Tilt backward around the local X axis. Positive X rotation leans
+      // the hat's top AWAY from the travel direction — backward.
+      G.hat.rotation.x = G._hatTilt;
+    } else {
+      // At rest, smoothly return to upright.
+      G.hat.rotation.x += (0 - G.hat.rotation.x) * Math.min(1, dt * 6);
+    }
   }
 
   if(G.state==='playing') {
@@ -20572,6 +21053,9 @@ function animate(now) {
       const dxR = G.ballPos.x - hwx, dzR = G.ballPos.z - hwz;
       const hRad = G.modifiers.find(m=>m.id==='big_hole') ? 1.1 : 0.55;
       if(Math.hypot(dxR, dzR) < hRad) {
+        // v0.19v: freeze the hole immediately so flag/cup/beacon don't drift
+        // away while the sink animation plays.
+        if(G._holeDefenseState) G._holeDefenseState.frozen = true;
         // Snap ball visually to the hole position so the drop-in animation
         // reads properly. Ball velocity is already zero.
         G.ballPos.x = hwx;
@@ -21481,8 +21965,9 @@ function animate(now) {
     if(G.conveyors) {
       for(const cv of G.conveyors) {
         if(!cv.arrowGroup) continue;
-        // Scroll arrows along push direction — loop when they reach the end
-        const scrollSpeed = cv.strength * 0.25; // faster scroll = stronger belt
+        // Scroll arrows along push direction — loop when they reach the end.
+        // v0.19v: scroll speed 0.25× → 0.6× for clearer directional read.
+        const scrollSpeed = cv.strength * 0.6;
         const children = cv.arrowGroup.children;
         for(const arrow of children) {
           if(cv.isHoriz) {
