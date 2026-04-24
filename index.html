@@ -179,6 +179,36 @@ letter-spacing:-1px;
   40%  { transform:translate(-50%, 2px)  scale(1.1);  opacity:1; }
   100% { transform:translate(-50%, 22px) scale(0.9);  opacity:0; }
 }
+/* v0.19z8: Dart flies from stroke counter to ball when player takes over-par damage */
+.over-par-dart {
+  position:fixed;
+  pointer-events:none;
+  z-index:260;
+  font-size:1.6rem;
+  transform-origin:center;
+  filter:drop-shadow(0 0 6px rgba(255,0,0,0.9)) drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+  will-change:left, top, transform, opacity;
+}
+/* v0.19z8: Stroke-counter color states — yellow when next stroke = par (warn),
+   red when next stroke = bogey (danger). Pulse attention-getting. */
+.stroke-val.stroke-warn {
+  color:#ffd54a;
+  text-shadow:0 0 8px rgba(255,213,74,0.6);
+  animation:stroke-warn-pulse 1.2s ease-in-out infinite;
+}
+.stroke-val.stroke-danger {
+  color:#ff3030;
+  text-shadow:0 0 10px rgba(255,48,48,0.85);
+  animation:stroke-danger-pulse 0.75s ease-in-out infinite;
+}
+@keyframes stroke-warn-pulse {
+  0%, 100% { transform:scale(1); }
+  50%      { transform:scale(1.08); }
+}
+@keyframes stroke-danger-pulse {
+  0%, 100% { transform:scale(1); }
+  50%      { transform:scale(1.15); }
+}
 .info-row .info-div {
 width:3px; height:3px; border-radius:50%; background:rgba(0,0,0,0.2);
 }
@@ -852,6 +882,102 @@ margin-top:2px;
 text-transform:uppercase;
 min-height:0.7rem;
 }
+
+/* v0.20a: Character picker — compact portraits + details popup */
+.char-portrait {
+position:relative;
+display:flex; flex-direction:column; align-items:center;
+width:62px; padding:8px 6px 6px;
+background:rgba(0,0,0,0.22);
+border:2px solid rgba(255,255,255,0.2);
+border-radius:10px;
+cursor:pointer;
+transition:transform 0.12s, border-color 0.15s, background 0.15s;
+}
+.char-portrait:hover, .char-portrait:active { transform:translateY(-2px); background:rgba(0,0,0,0.35); }
+.char-portrait.active { border-color:#fff; background:rgba(255,255,255,0.12); box-shadow:0 0 14px rgba(255,255,255,0.35); }
+.char-portrait .char-emoji {
+font-size:1.7rem; line-height:1; margin-bottom:3px;
+filter:drop-shadow(0 2px 3px rgba(0,0,0,0.45));
+}
+.char-portrait .char-name {
+font-size:0.55rem; letter-spacing:1px; text-transform:uppercase;
+color:#fff; font-weight:700; text-align:center;
+}
+.char-info-btn {
+position:absolute; top:-6px; right:-6px;
+width:20px; height:20px; border-radius:50%;
+background:rgba(80,80,80,0.9); color:#fff;
+font-size:0.7rem; font-weight:900; line-height:20px;
+border:1px solid rgba(255,255,255,0.5);
+cursor:pointer; padding:0;
+transition:background 0.12s;
+}
+.char-info-btn:hover, .char-info-btn:active { background:rgba(120,120,120,1); }
+
+/* Full-screen details overlay — uses existing overlay-like styling but scoped */
+#char-details-overlay {
+position:fixed; inset:0;
+z-index:400;
+display:none; justify-content:center; align-items:center;
+background:rgba(10,15,22,0.88);
+backdrop-filter:blur(6px);
+padding:16px;
+font-family:'Lato', sans-serif;
+}
+#char-details-overlay.open { display:flex; }
+#char-details-panel {
+background:linear-gradient(160deg, rgba(30,40,55,0.95), rgba(15,22,34,0.95));
+border:1px solid rgba(255,255,255,0.18);
+border-radius:14px;
+padding:20px 18px 16px;
+max-width:340px; width:100%;
+max-height:90vh; overflow-y:auto;
+color:#fff;
+box-shadow:0 18px 48px rgba(0,0,0,0.55);
+}
+#char-details-panel .char-details-emoji {
+font-size:3.2rem; text-align:center; margin-bottom:2px; line-height:1;
+filter:drop-shadow(0 4px 8px rgba(0,0,0,0.45));
+}
+#char-details-panel .char-details-name {
+text-align:center; font-family:'Playfair Display', serif;
+font-size:1.6rem; font-weight:700; margin-bottom:2px;
+}
+#char-details-panel .char-details-tag {
+text-align:center; font-size:0.72rem; color:rgba(255,255,255,0.7);
+letter-spacing:1px; text-transform:uppercase; margin-bottom:14px;
+}
+#char-details-panel .char-details-section {
+margin:10px 0;
+}
+#char-details-panel .char-details-section-label {
+font-size:0.58rem; letter-spacing:2px; text-transform:uppercase;
+color:rgba(255,255,255,0.55); margin-bottom:4px;
+}
+#char-details-panel .char-details-list {
+font-size:0.82rem; line-height:1.35;
+}
+#char-details-panel .char-details-list.blessings { color:#8de88d; }
+#char-details-panel .char-details-list.curses    { color:#ff8a8a; }
+#char-details-panel .char-details-loadout {
+display:flex; flex-wrap:wrap; gap:4px;
+}
+#char-details-panel .char-details-chip {
+display:inline-flex; align-items:center; gap:3px;
+background:rgba(255,255,255,0.08);
+border:1px solid rgba(255,255,255,0.18);
+border-radius:6px;
+padding:4px 8px; font-size:0.72rem;
+}
+#char-details-panel .char-details-close {
+width:100%; margin-top:12px;
+padding:10px; border-radius:10px;
+background:rgba(255,255,255,0.12); border:1px solid rgba(255,255,255,0.25);
+color:#fff; font-weight:700; font-size:0.85rem; cursor:pointer;
+transition:background 0.12s;
+}
+#char-details-panel .char-details-close:hover { background:rgba(255,255,255,0.2); }
 
 .big-score-val {
 font-family:'Playfair Display', serif;
@@ -2040,6 +2166,7 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
   <button class="esc-btn" onclick="openAchievements()">🏆 Achievements</button>
   <button class="esc-btn" onclick="escNewRun()">🔄 New Run</button>
   <button class="esc-btn" onclick="downloadRunHistory()">📥 Download Run Data</button>
+  <button class="esc-btn" onclick="deleteRunHistory()" style="font-size:0.75rem;padding:8px 20px;background:rgba(120,60,60,0.4);border:1px solid rgba(255,80,80,0.3)">🗑️ Delete Run Data</button>
   <button class="esc-btn" onclick="exportSave()">💾 Export Save</button>
   <button class="esc-btn danger" onclick="escMainMenu()">🏠 Main Menu</button>
   <div class="esc-settings">
@@ -2070,6 +2197,11 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
     <div id="esc-perk-list" style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;padding:4px 0 8px"></div>
   </div>
   <div class="esc-close" onclick="closeEscMenu()">press Escape to close</div>
+</div>
+
+<!-- v0.20a: Character details popup — shown when user taps the ⓘ on a char portrait -->
+<div id="char-details-overlay" onclick="if(event.target===this) closeCharDetails()">
+  <div id="char-details-panel"></div>
 </div>
 
 <!-- Achievements overlay (v0.19g) — opened from main menu and pause menu -->
@@ -2111,6 +2243,12 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
     <div style="font-family:'Playfair Display',serif;font-size:0.72rem;color:#5a7a3a;letter-spacing:1px;text-transform:uppercase" id="hud-player-name">Player 1</div>
     <div id="hud-player-dot" style="width:16px;height:16px;border-radius:50%;margin:2px auto;border:2px solid rgba(255,255,255,0.7);box-shadow:0 0 8px currentColor"></div>
   </div>
+</div>
+
+<!-- v0.20a: Speedball timer — visible only when current character has speedballTimer trait -->
+<div id="speedball-timer" style="display:none;position:fixed;top:12px;left:12px;z-index:240;pointer-events:none;font-family:'Playfair Display',serif;background:linear-gradient(140deg,rgba(40,15,10,0.82),rgba(80,30,20,0.82));backdrop-filter:blur(8px);border:2px solid rgba(255,170,80,0.7);border-radius:12px;padding:8px 14px 6px;box-shadow:0 0 18px rgba(255,120,40,0.4),0 2px 10px rgba(0,0,0,0.4)">
+  <div style="font-size:0.5rem;letter-spacing:2.5px;color:#ffb060;text-transform:uppercase;text-align:center;margin-bottom:1px">⏱ Timer</div>
+  <div id="speedball-timer-val" style="font-size:1.6rem;font-weight:700;color:#fff;line-height:1;text-shadow:0 0 10px rgba(255,140,50,0.7);text-align:center">—</div>
 </div>
 
 <!-- OOB grace countdown — shown only while ball is OOB and counting down -->
@@ -2405,6 +2543,14 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
   <div class="seed-row">
     <input class="seed-input" id="seed-input" placeholder="Seed (optional)" maxlength="12" spellcheck="false" autocomplete="off"/>
     <button class="seed-btn" id="btn-random-seed">🎲 Random</button>
+  </div>
+
+  <!-- v0.20a: Character picker row. Click portrait to select; tap ⓘ for details. -->
+  <div class="settings-row" style="margin-top:-4px">
+    <div class="setting-group" style="width:100%">
+      <div class="setting-label">Character</div>
+      <div id="character-row" style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;padding:6px 0"></div>
+    </div>
   </div>
 
   <div class="settings-row">
@@ -2983,8 +3129,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.19z6';
-const CHANGE_NOTE = 'Parkour Vault shown as standard purple combo (no flashy glow), parkour now detects + vaults over ground spikes and rotating spike-ring balls';
+const GAME_VERSION = '0.20a1';
+const CHANGE_NOTE = 'Speedball timer now scales with hole par (par × 7s): par-3 = 21s, par-5 = 35s, par-8 = 56s. Warning colors scale proportionally.';
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
@@ -3115,6 +3261,9 @@ const G = {
   wallPolylines: [],
   // Seeded run
   seed: null,   // null = random run; string = seeded run
+  // Character selection (v0.20a) — id of current run's ball archetype.
+  // See CHARACTERS constant. Defaults to 'classic' for fresh runs.
+  currentCharacter: 'classic',
   // ── Multiplayer ──────────────────────────────────────
   playerCount: 1,       // 1 = solo, 2-4 = couch coop
   currentPlayer: 0,     // index into G.players[]
@@ -3130,43 +3279,43 @@ const G = {
 // Reward scaling is modest (coins/style) — prestige is the real reward.
 // ═══════════════════════════════════════════════════════
 const DIFFICULTY_TABLE = {
-  1:  { name:'Casual',     pathMult:0.70, shopRate:0.10, startingHp:10, overParDmg:1, spikeDmg:1,
+  1:  { name:'Casual',     pathMult:0.70, shopRate:0.20, startingHp:10, overParDmg:1, spikeDmg:1,
         oobGrace:1.5, coinMult:1.00, styleMult:1.00, bogeyDmgExtra:0, rerollCostMult:1.0,
         cardRemoveCostMult:1.0, lateHoleExtraPath:0, healReduction:0, forcedHardShopCards:false,
         winReq:'finish' },
-  2:  { name:'Easy',       pathMult:0.85, shopRate:0.10, startingHp:10, overParDmg:1, spikeDmg:1,
+  2:  { name:'Easy',       pathMult:0.85, shopRate:0.20, startingHp:10, overParDmg:1, spikeDmg:1,
         oobGrace:1.5, coinMult:1.00, styleMult:1.00, bogeyDmgExtra:0, rerollCostMult:1.0,
         cardRemoveCostMult:1.0, lateHoleExtraPath:0, healReduction:0, forcedHardShopCards:false,
         winReq:'finish' },
-  3:  { name:'Standard',   pathMult:1.00, shopRate:0.15, startingHp:10, overParDmg:1, spikeDmg:1,
+  3:  { name:'Standard',   pathMult:1.00, shopRate:0.25, startingHp:10, overParDmg:1, spikeDmg:1,
         oobGrace:1.5, coinMult:1.00, styleMult:1.00, bogeyDmgExtra:0, rerollCostMult:1.0,
         cardRemoveCostMult:1.0, lateHoleExtraPath:0, healReduction:0, forcedHardShopCards:false,
         winReq:'finish' },
-  4:  { name:'Hard',       pathMult:1.15, shopRate:0.20, startingHp:8,  overParDmg:1, spikeDmg:1,
+  4:  { name:'Hard',       pathMult:1.15, shopRate:0.30, startingHp:8,  overParDmg:1, spikeDmg:1,
         oobGrace:1.5, coinMult:1.10, styleMult:1.05, bogeyDmgExtra:0, rerollCostMult:1.0,
         cardRemoveCostMult:1.0, lateHoleExtraPath:0, healReduction:0, forcedHardShopCards:false,
         winReq:'noHpLoss' },
-  5:  { name:'Nightmare',  pathMult:1.30, shopRate:0.25, startingHp:7,  overParDmg:2, spikeDmg:1,
+  5:  { name:'Nightmare',  pathMult:1.30, shopRate:0.30, startingHp:7,  overParDmg:2, spikeDmg:1,
         oobGrace:1.5, coinMult:1.20, styleMult:1.10, bogeyDmgExtra:0, rerollCostMult:1.0,
         cardRemoveCostMult:1.0, lateHoleExtraPath:0, healReduction:0, forcedHardShopCards:false,
         winReq:'noHpLoss' },
-  6:  { name:'Cursed',     pathMult:1.40, shopRate:0.30, startingHp:7,  overParDmg:2, spikeDmg:1,
+  6:  { name:'Cursed',     pathMult:1.40, shopRate:0.35, startingHp:7,  overParDmg:2, spikeDmg:1,
         oobGrace:1.5, coinMult:1.30, styleMult:1.15, bogeyDmgExtra:0, rerollCostMult:1.0,
         cardRemoveCostMult:1.0, lateHoleExtraPath:0.20, healReduction:0, forcedHardShopCards:false,
         winReq:'noHpLoss' },
-  7:  { name:'Punishing',  pathMult:1.40, shopRate:0.30, startingHp:7,  overParDmg:2, spikeDmg:2,
+  7:  { name:'Punishing',  pathMult:1.40, shopRate:0.35, startingHp:7,  overParDmg:2, spikeDmg:2,
         oobGrace:1.5, coinMult:1.40, styleMult:1.20, bogeyDmgExtra:0, rerollCostMult:1.0,
         cardRemoveCostMult:2.0, lateHoleExtraPath:0.20, healReduction:0, forcedHardShopCards:false,
         winReq:'underPar' },
-  8:  { name:'Brutal',     pathMult:1.40, shopRate:0.30, startingHp:7,  overParDmg:2, spikeDmg:2,
+  8:  { name:'Brutal',     pathMult:1.40, shopRate:0.35, startingHp:7,  overParDmg:2, spikeDmg:2,
         oobGrace:1.0, coinMult:1.50, styleMult:1.25, bogeyDmgExtra:0, rerollCostMult:1.0,
         cardRemoveCostMult:2.0, lateHoleExtraPath:0.20, healReduction:0, forcedHardShopCards:true,
         winReq:'underPar' },
-  9:  { name:'Masochist',  pathMult:1.40, shopRate:0.30, startingHp:5,  overParDmg:2, spikeDmg:2,
+  9:  { name:'Masochist',  pathMult:1.40, shopRate:0.35, startingHp:5,  overParDmg:2, spikeDmg:2,
         oobGrace:1.0, coinMult:1.60, styleMult:1.30, bogeyDmgExtra:0, rerollCostMult:1.0,
         cardRemoveCostMult:2.0, lateHoleExtraPath:0.20, healReduction:1, forcedHardShopCards:true,
         winReq:'underPar' },
-  10: { name:'Impossible', pathMult:1.40, shopRate:0.30, startingHp:5,  overParDmg:2, spikeDmg:2,
+  10: { name:'Impossible', pathMult:1.40, shopRate:0.35, startingHp:5,  overParDmg:2, spikeDmg:2,
         oobGrace:1.0, coinMult:1.75, styleMult:1.40, bogeyDmgExtra:1, rerollCostMult:2.0,
         cardRemoveCostMult:2.0, lateHoleExtraPath:0.20, healReduction:1, forcedHardShopCards:true,
         winReq:'underPar' },
@@ -3798,6 +3947,7 @@ setTimeout(() => {
   // also calls this, but this catches the fallback + protects against
   // ordering edge cases where the overlay is revealed synchronously.
   if(typeof renderStarRow === 'function') renderStarRow();
+  if(typeof renderCharacterRow === 'function') renderCharacterRow();
 }, 0);
 
 // ── Settings UI ───────────────────────────────────────
@@ -3827,6 +3977,122 @@ window.setCameraMode = function(mode) {
   });
   showToast(mode === 'follow' ? '🎥 Follow camera' : '🎥 Classic camera', 1200);
 };
+
+// ── Character picker (v0.20a) ────────────────────────
+// Sets the active character id and refreshes the portrait row.
+window.setCharacter = function(id) {
+  if(typeof CHARACTERS === 'undefined' || !CHARACTERS[id]) return;
+  G.currentCharacter = id;
+  // Persist on meta so the pick survives reloads
+  try {
+    const meta = getMeta();
+    meta.lastCharacter = id;
+    setMeta(meta);
+  } catch(e){}
+  if(typeof renderCharacterRow === 'function') renderCharacterRow();
+};
+
+// Render the horizontal portrait row at the top of the main menu.
+// Each portrait is a compact card with an emoji, the character name, and a
+// small ⓘ button that opens the details popup. The active character gets a
+// bright outline. No-op if the markup isn't mounted yet.
+function renderCharacterRow() {
+  const row = document.getElementById('character-row');
+  if(!row || typeof CHARACTERS === 'undefined') return;
+  row.innerHTML = '';
+  const order = ['classic','smashy','speedball','precision'];
+  const cur = (G && G.currentCharacter) || 'classic';
+  for(const id of order) {
+    const ch = CHARACTERS[id];
+    if(!ch) continue;
+    const el = document.createElement('div');
+    el.className = 'char-portrait' + (id === cur ? ' active' : '');
+    el.onclick = (e) => {
+      // Clicking anywhere in the portrait (except the ⓘ) selects the character
+      if(e.target && e.target.classList && e.target.classList.contains('char-info-btn')) return;
+      window.setCharacter(id);
+    };
+    el.innerHTML = `
+      <button class="char-info-btn" onclick="event.stopPropagation(); showCharacterDetails('${id}')" aria-label="Details">ⓘ</button>
+      <div class="char-emoji">${ch.emoji}</div>
+      <div class="char-name">${ch.name}</div>
+    `;
+    row.appendChild(el);
+  }
+}
+window.renderCharacterRow = renderCharacterRow;
+
+// Open the details popup for a given character id.
+// Lays out: large emoji, name, tagline, blessings list, curses list,
+// starter deck chip row (card emojis + names), starter perks chip row.
+function showCharacterDetails(id) {
+  const ch = (typeof CHARACTERS !== 'undefined') ? CHARACTERS[id] : null;
+  if(!ch) return;
+  const ov = document.getElementById('char-details-overlay');
+  const panel = document.getElementById('char-details-panel');
+  if(!ov || !panel) return;
+
+  // Build chip list for starter deck — pull emoji from CARD_DEFS when available
+  const deckChips = (ch.starter && ch.starter.deck ? ch.starter.deck : []).map(cid => {
+    const def = (typeof CARD_DEFS !== 'undefined') ? CARD_DEFS[cid] : null;
+    const em = def ? def.emoji : '🃏';
+    const nm = def ? def.name : cid;
+    return `<span class="char-details-chip">${em} ${nm}</span>`;
+  }).join('');
+
+  // Starter perks — pull emoji/name from ALL_PERKS. Collapse duplicate ids
+  // into a single chip with ×N suffix.
+  const perkCounts = {};
+  for(const pid of (ch.starter && ch.starter.perks ? ch.starter.perks : [])) {
+    perkCounts[pid] = (perkCounts[pid] || 0) + 1;
+  }
+  const perkChips = Object.keys(perkCounts).map(pid => {
+    const def = (typeof ALL_PERKS !== 'undefined') ? ALL_PERKS.find(p => p.id === pid) : null;
+    const em = def ? def.emoji : '✨';
+    const nm = def ? def.name : pid;
+    const n = perkCounts[pid];
+    const mult = n > 1 ? ` ×${n}` : '';
+    return `<span class="char-details-chip">${em} ${nm}${mult}</span>`;
+  }).join('');
+
+  const blessHtml = (ch.blessings && ch.blessings.length)
+    ? ch.blessings.map(b => `<div>• ${b}</div>`).join('')
+    : '<div style="color:rgba(255,255,255,0.5)">—</div>';
+  const curseHtml = (ch.curses && ch.curses.length)
+    ? ch.curses.map(c => `<div>• ${c}</div>`).join('')
+    : '<div style="color:rgba(255,255,255,0.5)">—</div>';
+
+  panel.innerHTML = `
+    <div class="char-details-emoji">${ch.emoji}</div>
+    <div class="char-details-name">${ch.name}</div>
+    <div class="char-details-tag">${ch.tagline || ''}</div>
+    <div class="char-details-section">
+      <div class="char-details-section-label">Blessings</div>
+      <div class="char-details-list blessings">${blessHtml}</div>
+    </div>
+    <div class="char-details-section">
+      <div class="char-details-section-label">Curses</div>
+      <div class="char-details-list curses">${curseHtml}</div>
+    </div>
+    ${deckChips ? `<div class="char-details-section">
+      <div class="char-details-section-label">Starter Cards</div>
+      <div class="char-details-loadout">${deckChips}</div>
+    </div>` : ''}
+    ${perkChips ? `<div class="char-details-section">
+      <div class="char-details-section-label">Starter Perks</div>
+      <div class="char-details-loadout">${perkChips}</div>
+    </div>` : ''}
+    <button class="char-details-close" onclick="closeCharDetails()">Close</button>
+  `;
+  ov.classList.add('open');
+}
+window.showCharacterDetails = showCharacterDetails;
+
+function closeCharDetails() {
+  const ov = document.getElementById('char-details-overlay');
+  if(ov) ov.classList.remove('open');
+}
+window.closeCharDetails = closeCharDetails;
 
 window.setDifficulty = function(n) {
   const len = G.totalHoles || 9;
@@ -4584,10 +4850,12 @@ function generatePuttPuttCourse(holeNum) {
   // v0.19r: density bumped ~1.5× and red (2 HP) variants added. Red spike
   // probability scales with hole + difficulty so early holes stay white-only.
   const spikeData = [];
-  // Was: Math.floor(rng()*2) + Math.floor(diff*0.3) + (diff>=4?1:0)
-  // Now: ~1.5× average count, plus a flat boost in late holes.
+  // v0.19z8: spike count tuned down ~20-25%. Was: rng*3 + diff*0.5 + (diff>=4?1) + (holeNum>=5?1).
+  // Now: rng*3 + diff*0.4 + (diff>=4?1) — removed the late-hole flat +1 which
+  // pushed standard-diff holes 5+ from "fair" into "spiky". Red variants still
+  // ramp up by hole for late-run tension.
   const spikeN = (holeNum < 2 || diff < 2) ? 0
-    : Math.floor((Math.floor(rng() * 3) + Math.floor(diff * 0.5) + (diff>=4?1:0) + (holeNum>=5?1:0)) * areaScale);
+    : Math.floor((Math.floor(rng() * 3) + Math.floor(diff * 0.4) + (diff>=4?1:0)) * areaScale);
   const spikeMax = Math.floor((3 + Math.floor(diff / 2) + (holeNum>=7?1:0)) * areaScale);
   // Red-spike probability: 0 at hole<4, ramping to ~40% by hole 10 at diff 4+.
   // Clamp to 50% so white is always the majority look.
@@ -4840,9 +5108,11 @@ function generatePuttPuttCourse(holeNum) {
   const totalObstacles = (bumperData.length || 0) + (spinBarData.length || 0) + 
     (slideBlockData.length || 0) + (rockData.length || 0) + (spikeData.length || 0);
   if(totalObstacles >= 8) basePar += 1;
-  // v0.19t: hole defense par bump. Glass dome explicitly skipped — per design,
-  // the breakable-in-one-shot tension feels better without extra par cushion.
-  if(holeDefense && holeDefense.kind !== 'glass_dome') basePar += 1;
+  // v0.19z8: REMOVED par bump for hole defenses. Previously: non-glass-dome
+  // defenses added +1 to par, but combined with the obstacle-density +1 this
+  // pushed short straight holes to par 7. Par now comes from path length +
+  // density only; hole defenses rely on the player's skill + cards to handle.
+  // (Was: if(holeDefense && holeDefense.kind !== 'glass_dome') basePar += 1;)
   // Difficulty penalty: harder stars = tighter par
   const parPenalty = diff >= 4 ? 2 : diff >= 3 ? 1 : 0;
   // v0.17y5: par cap now scales with hole number — early holes stay tight,
@@ -4858,6 +5128,21 @@ function generatePuttPuttCourse(holeNum) {
   if(holeNum >= 9)  parCap = 8;
   if(holeNum >= 14 && rng() < 0.15) parCap = 10; // rare par 9-10 surprise
   let par = Math.max(3, Math.min(parCap, basePar - parPenalty - 1));
+
+  // v0.20a: character par offset (Precision: -1, floor 2). Applied AFTER the
+  // normal clamp so the global par logic stays untouched for other characters.
+  // Floor drops to 2 only for characters with a negative parOffset — normal
+  // characters keep the par-3 minimum.
+  try {
+    if(typeof getCurrentCharacter === 'function') {
+      const _char = getCurrentCharacter();
+      const parOff = (_char && _char.traits && _char.traits.parOffset) || 0;
+      if(parOff !== 0) {
+        const parFloor = parOff < 0 ? 2 : 3;
+        par = Math.max(parFloor, par + parOff);
+      }
+    }
+  } catch(e){}
 
   // ── 12. Flat terrain ─────────────────────────────────
   const vmW = W+1, vmH = H+1;
@@ -4906,7 +5191,10 @@ function generatePuttPuttCourse(holeNum) {
   const ppTeeDist  = c => Math.hypot(c.x-teePos.x,  c.y-teePos.y);
   const ppHoleDist = c => Math.hypot(c.x-holePos.x, c.y-holePos.y);
   const coinData = [];
-  const ppCoinMult = G.modifiers && G.modifiers.some(m=>m.id==='money_pit') ? 1.5 : 1.0;
+  // v0.19z8a2: money_pit now stackable. Each stack = +50% coins on the hole
+  // (1×, 1.5×, 2.0×, 2.5×…). Was previously boolean 1.5×.
+  const moneyPitStacks = (G.modifiers || []).filter(m => m.id === 'money_pit').length;
+  const ppCoinMult = 1 + moneyPitStacks * 0.5;
   const ppCoinTarget = Math.round((6 + par * 2 + Math.floor(rng() * 3)) * ppCoinMult);
 
   // Build path from tee to hole through fairway cells for line placement
@@ -7004,8 +7292,8 @@ function buildCourse(data) {
     G._holeDefenseState = state;
   }
 
-  // ── Lot of Heart: spawn a healing heart on ~12% of holes (v0.17x: was 25%) ──
-  if(G.modifiers.some(m=>m.id==='lot_of_heart') && Math.random() < 0.12) {
+  // ── Lot of Heart: spawn a healing heart on ~33% of holes (v0.19z8: was 12%) ──
+  if(G.modifiers.some(m=>m.id==='lot_of_heart') && Math.random() < 0.33) {
     // Place heart at a random fair cell along the path
     const fairCells = [];
     for(let gy=0;gy<data.H;gy++) for(let gx=0;gx<data.W;gx++) {
@@ -8183,6 +8471,105 @@ function createBall() {
     G.hat = null;
   }
 
+  // ── Character attachments (v0.20a) ───────────────────
+  // Attach character-specific decorations (rhino horns/ears, glasses, etc.).
+  // All attachments live as scene siblings — same non-rotating pattern as
+  // hats — and are tracked on G._charAttachment for per-frame position sync.
+  // NOTE: ball color always comes from the equipped locker-room skin. Character
+  // identity is conveyed purely through the attached features, not tint.
+  if(G._charAttachment) {
+    scene.remove(G._charAttachment);
+    G._charAttachment = null;
+  }
+  try {
+    const _char = (typeof getCurrentCharacter === 'function') ? getCurrentCharacter() : null;
+    if(_char) {
+      // Build attachment group based on traits
+      const traits = _char.traits || {};
+      if(traits.rhinoHorns || traits.glasses) {
+        const grp = new THREE.Group();
+
+        if(traits.rhinoHorns) {
+          // Two horns — larger front horn, smaller rear horn.
+          // Cones pointing up-forward, tilted slightly so they look offensive.
+          const hornMat = new THREE.MeshStandardMaterial({color:0xe8e4d0, roughness:0.45, metalness:0.05});
+          const bigHornGeo = new THREE.ConeGeometry(0.09, 0.26, 12);
+          const bigHorn = new THREE.Mesh(bigHornGeo, hornMat);
+          bigHorn.position.set(0, 0.08, 0.16);
+          bigHorn.rotation.x = -0.45; // lean forward
+          grp.add(bigHorn);
+          const smallHornGeo = new THREE.ConeGeometry(0.055, 0.14, 10);
+          const smallHorn = new THREE.Mesh(smallHornGeo, hornMat);
+          smallHorn.position.set(0, 0.1, 0.05);
+          smallHorn.rotation.x = -0.2;
+          grp.add(smallHorn);
+
+          // Two rounded ears — squashed hemispheres on either side, tilted.
+          const earMat = new THREE.MeshStandardMaterial({color:0x858d97, roughness:0.6, metalness:0.02});
+          const earGeo = new THREE.SphereGeometry(0.08, 10, 8);
+          const earL = new THREE.Mesh(earGeo, earMat);
+          earL.position.set(-0.17, 0.08, -0.02);
+          earL.scale.set(0.55, 0.95, 0.85);
+          earL.rotation.z = 0.35;
+          grp.add(earL);
+          const earR = new THREE.Mesh(earGeo, earMat);
+          earR.position.set(0.17, 0.08, -0.02);
+          earR.scale.set(0.55, 0.95, 0.85);
+          earR.rotation.z = -0.35;
+          grp.add(earR);
+
+          // Tiny inner-ear highlight (cute)
+          const innerMat = new THREE.MeshStandardMaterial({color:0xffb5c2, roughness:0.7});
+          const innerGeo = new THREE.SphereGeometry(0.04, 8, 6);
+          const innerL = new THREE.Mesh(innerGeo, innerMat);
+          innerL.position.set(-0.18, 0.09, 0.01);
+          innerL.scale.set(0.4, 0.8, 0.4);
+          grp.add(innerL);
+          const innerR = new THREE.Mesh(innerGeo, innerMat);
+          innerR.position.set(0.18, 0.09, 0.01);
+          innerR.scale.set(0.4, 0.8, 0.4);
+          grp.add(innerR);
+        }
+
+        if(traits.glasses) {
+          // Thick-rimmed rectangular frames. Two dark tori for lenses, a
+          // bridge connecting them, and small temple tips extending back.
+          const frameMat = new THREE.MeshStandardMaterial({color:0x111418, roughness:0.3, metalness:0.3});
+          // Use flat rectangular rings instead of tori — readable from
+          // the typical orbit camera angle.
+          const lensGeo = new THREE.TorusGeometry(0.075, 0.018, 8, 20);
+          const lensL = new THREE.Mesh(lensGeo, frameMat);
+          lensL.position.set(-0.085, 0.02, 0.2);
+          grp.add(lensL);
+          const lensR = new THREE.Mesh(lensGeo, frameMat);
+          lensR.position.set(0.085, 0.02, 0.2);
+          grp.add(lensR);
+          // Bridge
+          const bridgeGeo = new THREE.BoxGeometry(0.04, 0.02, 0.02);
+          const bridge = new THREE.Mesh(bridgeGeo, frameMat);
+          bridge.position.set(0, 0.025, 0.2);
+          grp.add(bridge);
+          // Subtle lens tint (a very dark semi-transparent disc behind each frame)
+          const lensTintMat = new THREE.MeshStandardMaterial({color:0x2a3344, transparent:true, opacity:0.5, roughness:0.1});
+          const lensTintGeo = new THREE.CircleGeometry(0.07, 16);
+          const tintL = new THREE.Mesh(lensTintGeo, lensTintMat);
+          tintL.position.set(-0.085, 0.02, 0.195);
+          tintL.rotation.y = Math.PI;
+          grp.add(tintL);
+          const tintR = new THREE.Mesh(lensTintGeo, lensTintMat);
+          tintR.position.set(0.085, 0.02, 0.195);
+          tintR.rotation.y = Math.PI;
+          grp.add(tintR);
+        }
+
+        // Mark group so outline pass leaves it alone (optional polish)
+        grp.traverse(m => { if(m && m.userData) m.userData.noOutline = true; });
+        scene.add(grp);
+        G._charAttachment = grp;
+      }
+    }
+  } catch(e) { console.warn('character attachment build failed', e); }
+
   // Reset ball-rotation tracking so the first frame of a new hole doesn't
   // compute a big delta against the previous hole's end position.
   G._lastBallX = undefined;
@@ -8995,7 +9382,11 @@ function updatePhysics(dt) {
     if(G.ballVel.y < 0) {
       // Catapult: one-shot super-bounce on first meaningful landing (velY < -4)
       if(G._catapultGroundBounce && G.ballVel.y < -4) {
-        G.ballVel.y = -G.ballVel.y * 0.7; // strong bounce-back, no velocity floor
+        // v0.19z8: bounce restitution 0.7 -> 0.2. The post-landing super-bounce
+        // was sending the ball on a huge second arc that frequently landed OOB.
+        // Dropping hard to 0.2 tames the trajectory — still a visible hop with
+        // BOING SFX, but the ball stays in-bounds and on-path.
+        G.ballVel.y = -G.ballVel.y * 0.2;
         G._catapultGroundBounce = false;
         triggerShake(0.3);
         showToast('🪤 BOING!', 700);
@@ -9206,13 +9597,14 @@ function updatePhysics(dt) {
                 G.ballVel.z *= boost;
                 G.snowballCount++;
               }
-              // Money Bounce perk: 1 coin per wall bounce, capped at 3 bounces per stack.
+              // Money Bounce perk: 2 coins per wall bounce, capped at 3 bounces per stack.
               // (Merged with former Coin Bouncer perk in v0.17r — Money Bounce is now the sole wall-coin perk.)
+              // v0.19z8a1: per-bounce payout 1 -> 2 (sheet update).
               const moneyBounceStacks = G.modifiers.filter(m=>m.id==='money_bounce').length;
               if(moneyBounceStacks > 0 && !pushed) {
                 G._moneyBounceCount = (G._moneyBounceCount||0) + 1;
                 if(G._moneyBounceCount <= moneyBounceStacks * 3) {
-                  G._bounceCoinsPending = (G._bounceCoinsPending||0) + 1;
+                  G._bounceCoinsPending = (G._bounceCoinsPending||0) + 2;
                 }
               }
             }
@@ -11143,7 +11535,16 @@ function recordStyleEvent(type) {
   G._shotEventTypes.add(type);
   // Live floating text for each event
   const mult = G._shotEventTypes.size;
-  const pts = STYLE_PTS[type] || 0;
+  let pts = STYLE_PTS[type] || 0;
+  // v0.20a: Smashy's destroyStyleBonus — +50% style on obstacle/wall destruction.
+  // Applied at record-time so downstream scoring (finalizeShot, popup) reads
+  // the boosted value naturally.
+  if(pts > 0 && (type === 'obstacle_destroyed' || type === 'wall_destroyed')) {
+    const _ch = (typeof getCurrentCharacter === 'function') ? getCurrentCharacter() : null;
+    if(_ch && _ch.traits && _ch.traits.destroyStyleBonus) {
+      pts = Math.round(pts * 1.5);
+    }
+  }
   if(pts > 0 || isNewType) {
     showLiveStyleEvent(type, pts, mult, isNewType);
   }
@@ -11197,7 +11598,20 @@ const FLAGSHIP_EVENTS = new Set(['parkour_vault']);
 // Compute the current shot's live score (single source of truth)
 function computeLiveShotScore() {
   let base = 0;
-  for(const ev of (G._shotEvents || [])) base += STYLE_PTS[ev.type] || 0;
+  // v0.20a: Smashy's destroyStyleBonus — +50% style on destruction events.
+  // Multiplies the base STYLE_PTS for obstacle/wall destroys only. All other
+  // event types use their base STYLE_PTS value.
+  const _ch = (typeof getCurrentCharacter === 'function') ? getCurrentCharacter() : null;
+  const _destroyMult = (_ch && _ch.traits && _ch.traits.destroyStyleBonus) ? 1.5 : 1.0;
+  for(const ev of (G._shotEvents || [])) {
+    const basePts = STYLE_PTS[ev.type] || 0;
+    if(basePts > 0 && _destroyMult > 1.0
+       && (ev.type === 'obstacle_destroyed' || ev.type === 'wall_destroyed')) {
+      base += Math.round(basePts * _destroyMult);
+    } else {
+      base += basePts;
+    }
+  }
   // Add trick bonus points
   const shownTricks = G._tricksShownThisShot || new Set();
   for(const td of TRICK_DEFS) {
@@ -11610,20 +12024,20 @@ function getHeatMult() {
 // ═══════════════════════════════════════════════════════
 
 const CHALLENGE_POOL = [
-  { id:'speed_demon',   label:'⏱️ Speed Demon',    desc:'Hole out in under 10s',          reward:8,
+  { id:'speed_demon',   label:'⏱️ Speed Demon',    desc:'Hole out in under 10s',          reward:20,
     guard:()=>true, checkMid:()=>false, checkEnd:()=>G._challengeRollingTime < 10 },
-  { id:'coin_hoarder',  label:'🪙 Coin Hoarder',   desc:'Collect 10+ coins this hole',    reward:5,
+  { id:'coin_hoarder',  label:'🪙 Coin Hoarder',   desc:'Collect 10+ coins this hole',    reward:10,
     guard:()=>true, checkMid:()=>(G.coinMeshes?G.coinMeshes.filter(c=>c.collected).length:0)>=10, checkEnd:()=>(G.coinMeshes?G.coinMeshes.filter(c=>c.collected).length:0)>=10 },
   { id:'sky_walker',    label:'🦘 Sky Walker',      desc:'Jump over an obstacle',          reward:10,
     guard:()=>G.deck.includes('jumper'), checkMid:()=>G._challengeJumpOvers>0, checkEnd:()=>G._challengeJumpOvers>0 },
   { id:'combo_king',    label:'🔥 Combo King',      desc:'10,000+ style score',            reward:12,
     guard:()=>true, checkMid:()=>(G._holeStyleScore||0)>=10000, checkEnd:()=>(G._holeStyleScore||0)>=10000 },
-  { id:'demolition',    label:'💥 Demolition',      desc:'Destroy 5+ obstacles',           reward:10,
+  { id:'demolition',    label:'💥 Demolition',      desc:'Destroy 5+ obstacles',           reward:15,
     guard:()=>G.deck.some(c=>['shooter','grenade','boulder','cannonball','explosivo','iron_ball'].includes(c))||G.modifiers.some(m=>m.id==='bounce_boom'),
     checkMid:()=>G._challengeObstaclesDestroyed>=5, checkEnd:()=>G._challengeObstaclesDestroyed>=5 },
-  { id:'wall_rider',    label:'🏓 Wall Rider',      desc:'5+ wall bounces in one shot',    reward:8,
+  { id:'wall_rider',    label:'🏓 Wall Rider',      desc:'5+ wall bounces in one shot',    reward:15,
     guard:()=>true, checkMid:()=>G._challengeShotWallBounces>=5, checkEnd:()=>false },
-  { id:'clean_run',     label:'✨ Clean Run',       desc:"Don't touch any obstacle",       reward:10,
+  { id:'clean_run',     label:'✨ Clean Run',       desc:"Don't touch any obstacle",       reward:20,
     guard:(data)=>{const obs=(data.bumperData?.length||0)+(data.rockData?.length||0)+(data.spinBarData?.length||0)+(data.spikeData?.length||0);return obs>0;},
     checkMid:()=>false, checkEnd:()=>!G._challengeObstacleTouched },
   { id:'bumper_lover',  label:'🎯 Bumper Lover',    desc:'Hit 5+ bumpers this hole',       reward:10,
@@ -11812,10 +12226,19 @@ function calcHoleEarnings(strokes, par, coinsPickedUp, wallCoins = 0) {
 
   // Score bonus: under-par pays 10 coins per stroke under (v0.19j — scales with par)
   // Par-5 HIO = 40, Par-4 eagle = 20, Par-3 birdie = 20, etc.
+  // v0.20a: Precision's underParMult doubles this (20 coins per stroke under).
   let scoreBonus = 0;
   const underPar = par - strokes;  // positive when under par
   if(underPar > 0) {
-    scoreBonus = underPar * 10;
+    let perStroke = 10;
+    try {
+      if(typeof getCurrentCharacter === 'function') {
+        const _char = getCurrentCharacter();
+        const mult = (_char && _char.traits && _char.traits.underParMult) || 1;
+        if(mult > 1) perStroke *= mult;
+      }
+    } catch(e){}
+    scoreBonus = underPar * perStroke;
     let label;
     if(strokes === 1)       label = `🏆 Hole in One! (${underPar} under)`;
     else if(underPar >= 3)  label = `👑 ${underPar} UNDER PAR!`;
@@ -11827,6 +12250,23 @@ function calcHoleEarnings(strokes, par, coinsPickedUp, wallCoins = 0) {
     rows.push({ label:'⛳ Par bonus', amount: scoreBonus });
   }
   total += scoreBonus;
+
+  // v0.20a: Speedball timer bonus — 1 coin per full second remaining on the
+  // hole timer. Paid once on hole-out. No penalty at 0. Only paid out when
+  // the active character has the speedballTimer trait AND the timer actually
+  // started (first swing was taken — guards against the edge case where the
+  // ball rolls into the hole on stroke 0, e.g. from a conveyor nudge).
+  try {
+    const _chS = (typeof getCurrentCharacter === 'function') ? getCurrentCharacter() : null;
+    if(_chS && _chS.traits && _chS.traits.speedballTimer && G._speedballTimerActive) {
+      const timeLeft = Math.max(0, G._speedballTimerRemaining || 0);
+      const timerBonus = Math.floor(timeLeft);
+      if(timerBonus > 0) {
+        rows.push({ label:`⏱ Timer bonus (${timerBonus.toFixed ? timerBonus : timerBonus}s left)`, amount: timerBonus });
+        total += timerBonus;
+      }
+    }
+  } catch(e){}
 
   // Hot streak (requires perk) — v0.19s: nerfed. Was 15% per level capped
   // at streak 6 (max 90%). Now 10% per level capped at streak 4 (max 40%) so
@@ -11857,7 +12297,10 @@ function calcHoleEarnings(strokes, par, coinsPickedUp, wallCoins = 0) {
   const styleScore = G._lastHoleStyle || G._holeStyleScore || 0;
   const threshold = getStyleThreshold();
   if(styleScore >= threshold) {
-    let styleBonus = Math.max(1, Math.floor(styleScore / 1000) + 1);
+    // v0.19z8a1: base payout halved (1000 -> 2000 divisor). Style bonuses were
+    // swamping regular coin income at mid/high style levels. 10k style now
+    // pays 6 coins (was 11), 50k pays 26 (was 51), before multipliers.
+    let styleBonus = Math.max(1, Math.floor(styleScore / 2000) + 1);
     // Showboat perk: multiply style coin bonus
     const showboatStacks = G.modifiers.filter(m=>m.id==='showboat').length;
     if(showboatStacks > 0) styleBonus = Math.ceil(styleBonus * (1 + showboatStacks * 0.5)); // +50% per stack (1.5×, 2.0×, 2.5×, …)
@@ -11964,6 +12407,8 @@ function applyOverParDamageIfNeeded() {
   const dmg = (G._diffMods && G._diffMods.overParDmg) || 1;
   applyDamage(dmg, 'over_par');
   spawnHpDamagePopup(dmg);
+  // v0.19z8: fire a dart from the stroke counter to the ball for extra juice
+  fireDartAtBall();
 }
 window.applyOverParDamageIfNeeded = applyOverParDamageIfNeeded;
 
@@ -11984,6 +12429,89 @@ function spawnHpDamagePopup(amount) {
   setTimeout(() => { if(el.parentNode) el.remove(); }, 950);
 }
 window.spawnHpDamagePopup = spawnHpDamagePopup;
+
+// v0.19z8: Stroke-counter color feedback.
+// - Yellow + gentle pulse when the NEXT stroke will land on par (warning).
+// - Red + urgent pulse when the NEXT stroke will go over par (danger).
+// Called every time we update the strokes HUD value.
+function updateStrokeColor() {
+  const el = document.getElementById('h-strokes');
+  if(!el) return;
+  el.classList.remove('stroke-warn', 'stroke-danger');
+  if(G.inHole) return;
+  if(typeof G.par !== 'number' || typeof G.strokes !== 'number') return;
+  // Use strokes already taken. "One under par" means strokes === par - 1
+  // (next swing lands on par). "At par" means strokes === par (next swing is bogey).
+  if(G.strokes >= G.par) {
+    el.classList.add('stroke-danger');
+  } else if(G.strokes === G.par - 1) {
+    el.classList.add('stroke-warn');
+  }
+}
+window.updateStrokeColor = updateStrokeColor;
+
+// v0.19z8: Fire a dart from the stroke counter toward the ball when the
+// player takes over-par damage. Pure visual — no gameplay effect. The dart
+// follows a short cubic-bezier flight path, rotates to face its trajectory,
+// and fades in the last 100ms before removal.
+function fireDartAtBall() {
+  const strokesEl = document.getElementById('h-strokes');
+  if(!strokesEl) return;
+  // Ball screen position via camera projection
+  if(!G.ballPos || !camera) return;
+  const ballScreen = G.ballPos.clone().project(camera);
+  // Reject if ball is behind camera or off-screen — just skip the dart, damage still applies.
+  if(ballScreen.z > 1) return;
+  const bx = (ballScreen.x + 1) * 0.5 * window.innerWidth;
+  const by = (-ballScreen.y + 1) * 0.5 * window.innerHeight;
+  const sRect = strokesEl.getBoundingClientRect();
+  const sx = sRect.left + sRect.width / 2;
+  const sy = sRect.top + sRect.height / 2;
+  const dart = document.createElement('div');
+  dart.className = 'over-par-dart';
+  dart.textContent = '🎯';
+  dart.style.left = sx + 'px';
+  dart.style.top  = sy + 'px';
+  dart.style.transform = 'translate(-50%, -50%) rotate(0deg)';
+  document.body.appendChild(dart);
+  const dx = bx - sx, dy = by - sy;
+  const angleDeg = Math.atan2(dy, dx) * 180 / Math.PI;
+  // Animate over 420ms using rAF for a slight arc (minor curve via -40 Y offset at midpoint)
+  const dur = 420;
+  const t0 = performance.now();
+  function step() {
+    const t = Math.min(1, (performance.now() - t0) / dur);
+    // Slight arc: offset midpoint vertically so dart "flies"
+    const arc = -32 * Math.sin(Math.PI * t);
+    const cx = sx + dx * t;
+    const cy = sy + dy * t + arc;
+    dart.style.left = cx + 'px';
+    dart.style.top  = cy + 'px';
+    // Rotate to match instantaneous velocity direction (tangent of the arc)
+    const tangentY = dy - 32 * Math.PI * Math.cos(Math.PI * t);
+    const tAng = Math.atan2(tangentY, dx) * 180 / Math.PI;
+    const scale = 0.8 + 0.4 * t;
+    const fade = t < 0.75 ? 1 : (1 - (t - 0.75) / 0.25);
+    dart.style.transform = `translate(-50%, -50%) rotate(${tAng}deg) scale(${scale})`;
+    dart.style.opacity = fade.toFixed(3);
+    if(t < 1) requestAnimationFrame(step);
+    else dart.remove();
+  }
+  requestAnimationFrame(step);
+  // Tiny "thwip" SFX
+  if(AC) {
+    const ac = getAC(), t = ac.currentTime;
+    const o = ac.createOscillator(); o.type = 'triangle';
+    o.frequency.setValueAtTime(1200, t);
+    o.frequency.exponentialRampToValueAtTime(300, t + 0.18);
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0.18, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+    o.connect(g); g.connect(getACDest());
+    o.start(t); o.stop(t + 0.24);
+  }
+}
+window.fireDartAtBall = fireDartAtBall;
 
 // Render the HP dots row in the pill HUD. Called from updateUI + applyDamage/Heal.
 // v0.19v: now shows the numeric HP value (e.g. "7/10") alongside the dot row,
@@ -12676,7 +13204,13 @@ function openShop() {
   if(G._sharpshooterActive) exitSharpshooter();
   cancelTickUpSounds(); // kill any lingering summary tick-up sounds
   const count = G.shopPickCount || 3;
-  G._shopCurrentPicks = weightedShopPicks(ALL_PERKS, count);
+  // v0.20a: filter perk pool by character bans
+  const _char = (typeof getCurrentCharacter === 'function') ? getCurrentCharacter() : null;
+  const bannedPerks = (_char && _char.bannedPerks) || [];
+  const perkPool = bannedPerks.length
+    ? ALL_PERKS.filter(p => !bannedPerks.includes(p.id))
+    : ALL_PERKS;
+  G._shopCurrentPicks = weightedShopPicks(perkPool, count);
   // Generate card picks for the card row
   G._shopCardPicks = weightedCardPicks(3);
   G._shopRerolledThisHole = false;
@@ -12704,7 +13238,13 @@ function openShop() {
 
 // Pick N random cards from CARD_DEFS, weighted by rarity
 function weightedCardPicks(count) {
-  const pool = Object.values(CARD_DEFS);
+  // v0.20a: filter by character card bans (Smashy bans airborne cards,
+  // Speedball bans destruction cards, etc.). Classic has empty bans array.
+  const _char = (typeof getCurrentCharacter === 'function') ? getCurrentCharacter() : null;
+  const bannedCards = (_char && _char.bannedCards) || [];
+  const pool = bannedCards.length
+    ? Object.values(CARD_DEFS).filter(c => !bannedCards.includes(c.id))
+    : Object.values(CARD_DEFS);
   const rarityWeights = { common:8, rare:4, epic:2, legendary:1 };
   // Per-card weight override: use card.weight when defined, else fall back to rarity weight.
   const weightOf = c => (c.weight != null ? c.weight : (rarityWeights[c.rarity] || 1));
@@ -12772,10 +13312,16 @@ function rerollShop() {
   }
   updateCoinHUD();
   const count = G.shopPickCount || 3;
-  // Exclude perks from the previous set to prevent duplicates on reroll
+  // v0.20a: reroll pool also filtered by character bans (in addition to
+  // excluding prev shop items, which was the original dedup behavior).
+  const _charR = (typeof getCurrentCharacter === 'function') ? getCurrentCharacter() : null;
+  const bannedPerksR = (_charR && _charR.bannedPerks) || [];
   const prevIds = (G._shopCurrentPicks || []).map(p => p.id);
-  const filteredPool = ALL_PERKS.filter(p => !prevIds.includes(p.id));
-  G._shopCurrentPicks = weightedShopPicks(filteredPool.length >= count ? filteredPool : ALL_PERKS, count);
+  const basePool = bannedPerksR.length
+    ? ALL_PERKS.filter(p => !bannedPerksR.includes(p.id))
+    : ALL_PERKS;
+  const filteredPool = basePool.filter(p => !prevIds.includes(p.id));
+  G._shopCurrentPicks = weightedShopPicks(filteredPool.length >= count ? filteredPool : basePool, count);
   // Also reroll card picks
   G._shopCardPicks = weightedCardPicks(3);
   // v0.18a: re-apply forced hard perk after reroll so ★8+ players can't just
@@ -13200,9 +13746,11 @@ function destroyWallChunk(chunk, epicX, epicZ) {
   triggerShake(0.25);
   if(AC) sfxBounce(8);
   recordStyleEvent('wall_destroyed');
-  // Scorched Earth: +2 coins per wall chunk
-  if(G.modifiers.some(m=>m.id==='scorched_earth')) {
-    G.coins += 2; updateCoinHUD();
+  // Scorched Earth: +2 coins per wall chunk per stack (v0.19z8a2: now stackable)
+  const scorchedStacksW = G.modifiers.filter(m=>m.id==='scorched_earth').length;
+  if(scorchedStacksW > 0) {
+    G.coins += 2 * scorchedStacksW;
+    updateCoinHUD();
   }
   showToast('💥 Wall destroyed!', 800);
 }
@@ -13287,8 +13835,9 @@ function destroyObstacles(hits, epicentreX, epicentreY, epicentreZ) {
     if(hit.type === 'angledWall') G.angledWalls = G.angledWalls.filter(a=>a!==hit.physRef);
     if(hit.type === 'pendulum')   G.pendulums   = G.pendulums.filter(p=>p!==hit.physRef);
     coinsEarned++;
-    // Scorched Earth: bonus coins for destruction
-    if(G.modifiers.some(m=>m.id==='scorched_earth')) coinsEarned++;
+    // Scorched Earth: bonus coins for destruction — +1 per stack (v0.19z8a2: now stackable)
+    const scorchedStacksO = G.modifiers.filter(m=>m.id==='scorched_earth').length;
+    if(scorchedStacksO > 0) coinsEarned += scorchedStacksO;
     recordStyleEvent('obstacle_destroyed');
     G._obstaclesDestroyedRun = (G._obstaclesDestroyedRun || 0) + 1;
     G._challengeObstaclesDestroyed = (G._challengeObstaclesDestroyed||0) + 1;
@@ -13762,7 +14311,7 @@ const CARD_DEFS = {
   sharpshooter: { id:'sharpshooter', emoji:'🏌️‍♂️', name:'Sharpshooter',    desc:'Zoom a scope and launch YOUR BALL precisely down the barrel.',       rarity:'epic',      price:30,  context:'pre',    holdable:false, weight:2 },
   grenade:      { id:'grenade',      emoji:'🧨', name:'Grenade',         desc:'Lob an explosive. Bounces 3×, then boom.',                      rarity:'common',    price:15,  context:'pre',    holdable:false },
   boulder:      { id:'boulder',      emoji:'🪨', name:'Boulder',         desc:'Summon an unstoppable boulder that smashes everything.',          rarity:'rare',      price:22,  context:'pre',    holdable:false },
-  dodgeball:    { id:'dodgeball',    emoji:'🔴', name:'Dodgeball',       desc:'Fire a super-bouncy red ball that ricochets off everything.',     rarity:'common',    price:15,  context:'pre',    holdable:false },
+  dodgeball:    { id:'dodgeball',    emoji:'🔴', name:'Dodgeball',       desc:'Fire a super-bouncy red ball that ricochets off everything.',     rarity:'rare',      price:35,  context:'pre',    holdable:false },
   explosivo:    { id:'explosivo',    emoji:'💥', name:'Explosivo',       desc:'Detonate a huge explosion at the ball\'s position.',              rarity:'epic',      price:21,  context:'any',    holdable:false },
   ghost_ball:   { id:'ghost_ball',   emoji:'👻', name:'Ghost Ball',      desc:'Hold to pass through walls, rocks and obstacles. 4s.',            rarity:'epic',      price:21,  context:'any',    holdable:true },
   backspin:     { id:'backspin',     emoji:'🔄', name:'Backspin',        desc:'Slam the brakes mid-roll for precise placement.',                rarity:'common',    price:8,   context:'during', holdable:false },
@@ -13802,6 +14351,114 @@ const STARTER_DECKS = {
     cards: ['lil_scootch','jumper','power_shot','shooter'],
   },
 };
+
+// ═══════════════════════════════════════════════════════
+//  CHARACTERS (v0.20a) — ball archetypes with blessings & curses
+// ═══════════════════════════════════════════════════════
+// Each character defines:
+//   id           — machine id (used by G.currentCharacter, save field)
+//   name, emoji  — display
+//   color        — main tint for the ball (hex int)
+//   tagline      — one-liner for the picker card
+//   blessings[]  — array of readable strings for the details popup
+//   curses[]     — array of readable strings for the details popup
+//   starter:     — run-start loadout
+//     deck[]     — card ids applied as G.deck
+//     perks[]    — perk ids applied as G.modifiers (each entry pushes one stack)
+//   bannedCards[]— card ids removed from starter deck + shop pool this run
+//   bannedPerks[]— perk ids removed from shop pool this run
+//   traits{}     — boolean flags the gameplay layer reads:
+//                  parOffset, underParMult, destroyStyleBonus, speedballTimer,
+//                  flameTrail, glasses, rhinoHorns
+const CHARACTERS = {
+  classic: {
+    id: 'classic',
+    name: 'Classic Ball',
+    emoji: '🏌️',
+    color: 0xffffff,
+    tagline: 'Balanced starter — approachable, flexible.',
+    blessings: ['No special modifiers — pure golf'],
+    curses: [],
+    starter: {
+      deck: ['lil_scootch','jumper','power_shot','shooter'],
+      perks: [],
+    },
+    bannedCards: [],
+    bannedPerks: [],
+    traits: {},
+  },
+  smashy: {
+    id: 'smashy',
+    name: 'Smashy',
+    emoji: '🦏',
+    color: 0x6b7680, // slate gray
+    tagline: 'Nothing stays standing.',
+    blessings: [
+      '💥 Starts with 2× Scorched Earth (stacks)',
+      '🎯 +50% style score on obstacle destruction',
+    ],
+    curses: [
+      '🚫 Cannot use airborne cards (Jumper, Catapult)',
+    ],
+    starter: {
+      deck: ['iron_ball','iron_ball','explosivo','power_shot'],
+      perks: ['scorched_earth','scorched_earth'],
+    },
+    bannedCards: ['jumper','catapult','arc_shot','sharpshooter'],
+    bannedPerks: [],
+    traits: { destroyStyleBonus: true, rhinoHorns: true },
+  },
+  speedball: {
+    id: 'speedball',
+    name: 'Speedball',
+    emoji: '🔥',
+    color: 0xff6a3a, // orange-red
+    tagline: '60 seconds per hole. Every second pays.',
+    blessings: [
+      '💪 Starts with 2× Stronger Swing (stacks)',
+      '⏱️ Hole timer = par × 7s — coins per second remaining',
+      '🔥 Flaming trail at high speed',
+    ],
+    curses: [
+      '🚫 No destruction cards (Missile, Grenade, Boulder, Dodgeball, Explosivo, Iron Ball, Cannonball, Floomba)',
+      '🚫 No Bounce & Boom perk',
+    ],
+    starter: {
+      deck: ['power_shot','power_shot','jumper','parkour'],
+      perks: ['strengthen_swing','strengthen_swing'],
+    },
+    bannedCards: ['shooter','grenade','boulder','dodgeball','explosivo','iron_ball','airstrike','cannonball','wrecking_ball','floomba'],
+    bannedPerks: ['bounce_boom'],
+    traits: { speedballTimer: true, flameTrail: true },
+  },
+  precision: {
+    id: 'precision',
+    name: 'Precision',
+    emoji: '🎯',
+    color: 0x5a9ef2, // cool blue
+    tagline: 'Tighter par. Bigger payouts. Focus.',
+    blessings: [
+      '🏆 Double coins for every stroke under par',
+    ],
+    curses: [
+      '📉 Par is reduced by 1 on every hole (floor: par 2)',
+    ],
+    starter: {
+      deck: ['goal_oriented','sharpshooter','freeze_frame','perpetual_motion'],
+      perks: [],
+    },
+    bannedCards: [],
+    bannedPerks: [],
+    traits: { parOffset: -1, underParMult: 2, glasses: true },
+  },
+};
+
+// Resolve the currently selected character (from G.currentCharacter, fallback classic).
+function getCurrentCharacter() {
+  const id = (G && G.currentCharacter) || 'classic';
+  return CHARACTERS[id] || CHARACTERS.classic;
+}
+window.getCurrentCharacter = getCurrentCharacter;
 
 // Apply active filtering after all definitions are complete
 // Filter CARD_DEFS to only include active cards
@@ -16662,6 +17319,46 @@ function spawnSplash(pos) {
   if(AC) sfxSplash();
 }
 
+// v0.20a: Speedball flame trail. Emits small orange particles behind the ball,
+// scaled in count/intensity with speed. Stops when ball is near-stationary or
+// airborne above a hop threshold (only grounded fast movement trails).
+// Uses .isAir=true so the particle ignores gravity and floats up slowly,
+// which reads like heat rising instead of embers dropping.
+function spawnFlameTrail(pos, speed) {
+  // Fewer particles at lower speeds; saturate at high speed.
+  const intensity = Math.min(1, Math.max(0, (speed - 4) / 18));
+  if(intensity <= 0) return;
+  const count = 1 + Math.floor(intensity * 3); // 1-4 particles per call
+  for(let i = 0; i < count; i++) {
+    // Orange-yellow gradient — lighter = hotter core, deeper = trailing edge
+    const hue = 0.04 + Math.random() * 0.06; // 0.04 (orange) .. 0.10 (yellow)
+    const sat = 0.95;
+    const lum = 0.50 + Math.random() * 0.15;
+    const col = new THREE.Color().setHSL(hue, sat, lum);
+    const g = new THREE.SphereGeometry(0.08 + Math.random() * 0.05, 5, 4);
+    const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({
+      color: col, roughness: 0.6, transparent: true, opacity: 0.9,
+      emissive: col, emissiveIntensity: 0.8,
+    }));
+    m.userData.noOutline = true;
+    // Spawn slightly behind and under the ball to form a ground-level trail
+    m.position.set(
+      pos.x + (Math.random() - 0.5) * 0.15,
+      pos.y - 0.05 + Math.random() * 0.05,
+      pos.z + (Math.random() - 0.5) * 0.15
+    );
+    scene.add(m);
+    // Slow rising drift + slight horizontal noise
+    const v = new THREE.Vector3(
+      (Math.random() - 0.5) * 0.4,
+      0.3 + Math.random() * 0.4,
+      (Math.random() - 0.5) * 0.4
+    );
+    const life = 0.35 + intensity * 0.35;  // 0.35-0.70s
+    G.particles.push({ mesh: m, vel: v, life, maxLife: life, isAir: true });
+  }
+}
+
 function spawnHoleParticles(pos) {
   for(let i=0;i<20;i++){
     const g=new THREE.SphereGeometry(0.06+Math.random()*0.06,4,4);
@@ -17500,6 +18197,15 @@ function onPointerDown(x, y, id) {
     G._arcShotActive = false;
         G._anglerCardActive = false;
         G._wallMagnetActive = false;
+    // v0.19z8: catapult flags MUST also clear on manual-stop reset. Without
+    // this, tapping to stop the ball early after a Catapult shot leaves
+    // _catapultActive=true, so the next swing's aim preview still shows the
+    // magenta catapult arc.
+    G._catapultActive = false;
+    G._catapultBounceBoost = 0;
+    G._catapultGroundBounce = false;
+    G._catapultLaunchGrace = false;
+    G._jumpPreloadLaunchGrace = false;
     if(G._ironBallActive || G._cannonballActive) {
       if(G.ball) {
         const pColor = isMultiplayer() ? G.players[G.currentPlayer].color : 0xffffff;
@@ -17554,6 +18260,7 @@ function onPointerMove(x, y) {
     }
     updateAimArrow();
     document.getElementById('h-strokes').textContent = G.strokes + ' (' + Math.round(G.shotPower*100) + '%)';
+    updateStrokeColor();
     return;
   }
   if(input.dragging) {
@@ -17571,6 +18278,13 @@ function onPointerMove(x, y) {
       // Wider Y clamp accommodates Shrink Ray's lower seed pitch (1.15) and
       // lets players look further up/down in general.
       G.camPhi   = Math.max(0.15, Math.min(1.45, G.camPhi + dy * 0.006));
+      // v0.19z8: if the player drags the camera WHILE the ball is rolling in
+      // follow-cam mode, stop fighting them. Setting aimManualOverride=true
+      // disables the auto-rotate follow-cam branch at line ~17112 for the rest
+      // of this swing. Gets cleared on fireShot so auto-cam resumes next shot.
+      if(G.rolling && (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5)) {
+        aimManualOverride = true;
+      }
     }
     input.lastX = x; input.lastY = y;
   }
@@ -17598,10 +18312,19 @@ function onPointerUp() {
   input.dragging = false;
   G.pullStart = null; G.pullCurrent = null;
   document.getElementById('h-strokes').textContent = G.strokes;
+  updateStrokeColor();
 }
 
 function fireShot() {
   if(!G.aimMode || G.rolling || G.inHole) return;
+  // v0.20a: Speedball timer starts on FIRST swing of a hole. From then on it
+  // runs through planning/aiming/OOB — no pausing. Reset to 60s in initHole.
+  {
+    const _chF = (typeof getCurrentCharacter === 'function') ? getCurrentCharacter() : null;
+    if(_chF && _chF.traits && _chF.traits.speedballTimer && !G._speedballTimerActive) {
+      G._speedballTimerActive = true;
+    }
+  }
   // Immediately resolve any pending combo animation — snap purple HUD to correct value
   clearTimeout(G._stylePopupTimer);
   G._stylePopupTimer = null;
@@ -18007,6 +18730,7 @@ window.addEventListener('keydown', e => {
       G.pullStart = null; G.pullCurrent = null;
       updateAimArrow();
       document.getElementById('h-strokes').textContent = G.strokes;
+      updateStrokeColor();
       showToast('Shot cancelled', 600);
       return;
     }
@@ -18350,6 +19074,7 @@ function updateUI() {
   if(thEl) thEl.textContent = G.totalHoles || 9;
   document.getElementById('h-par').textContent = G.par;
   document.getElementById('h-strokes').textContent = G.strokes;
+  updateStrokeColor();
   document.getElementById('h-total').textContent = G.totalStrokes + G.strokes;
   // Multiplayer player indicator
   const hudPlayer = document.getElementById('hud-player');
@@ -18534,9 +19259,9 @@ const ALL_PERKS = [
   { id:'bounce_boom',     name:'Bounce & Boom',        emoji:'🔥', rarity:'rare',     price:20, stackable:false, weight:4,
     desc:'Every wall/obstacle bounce triggers an explosion that destroys nearby obstacles. Bigger bounce = bigger boom.' },
   { id:'money_bounce',    name:'Money Bounce',         emoji:'💸', rarity:'rare',      price:15, stackable:true,  weight:3,
-    desc:'Earn 1 coin per wall bounce, up to 3 bounces per stack. Stack for more bounces!' },
+    desc:'Earn 2 coins per wall bounce, up to 3 bounces per stack. Stack for more bounces!' },
   { id:'lot_of_heart',    name:'Lot of Heart',         emoji:'💝', rarity:'rare',     price:15, stackable:false, weight:4,
-    desc:'A floating heart spawns on ~12% of holes. Pick it up to heal 2 HP.' },
+    desc:'A floating heart spawns on 1/3rd of holes. Pick it up to heal 2 HP.' },
   { id:'inbounds',        name:'Inbounds',              emoji:'🟩', rarity:'rare',     price:12, stackable:false, weight:5,
     desc:'Blue grid walls prevent you from ever going out of bounds. Ghost ball still passes through.' },
   { id:'chain_reaction',  name:'Chain Reaction',        emoji:'💥', rarity:'rare',     price:18, stackable:false, weight:4,
@@ -18558,16 +19283,16 @@ const ALL_PERKS = [
     desc:'Ball is half its normal size — harder to sink, but slips past rocks and gaps.' },
   { id:'four_choices',    name:'Four!',                emoji:'4️⃣', rarity:'epic',      price:15, stackable:false, weight:1,
     desc:'The shop now shows 4 options instead of 3.' },
-  { id:'money_pit',       name:'Money Pit',            emoji:'💰', rarity:'epic',      price:22, stackable:false, weight:1,
-    desc:'50% more coins on every remaining hole. Fill your pockets.' },
+  { id:'money_pit',       name:'Money Pit',            emoji:'💰', rarity:'epic',      price:22, stackable:true,  weight:1,
+    desc:'50% more coins on every remaining hole. Stacks! (1.5×, 2×, 2.5×…)' },
   { id:'bowling_ball',    name:'Bowling Ball',          emoji:'🎳', rarity:'epic',     price:25, stackable:false, weight:2,
     desc:'10 pins replace the hole. Knock down at least one to sink. Strike for massive bonus!' },
   { id:'all_bounce',      name:'All Bounce No Hole',    emoji:'🏐', rarity:'epic',     price:25, stackable:false, weight:2,
     desc:'No hole needed! Hit a bounce target instead. Rack up bounces within your stroke limit to clear each hole.' },
   { id:'big_boom',        name:'Big Boom',              emoji:'💥', rarity:'epic',     price:30, stackable:false, weight:2,
     desc:'ALL your explosions are 100% larger. Missiles, grenades, Explosivo, Bounce & Boom — everything goes KABOOM.' },
-  { id:'scorched_earth',  name:'Scorched Earth',        emoji:'🔥', rarity:'epic',     price:20, stackable:false, weight:2,
-    desc:'+1 coin per obstacle destroyed, +2 per wall chunk destroyed. Destruction pays!' },
+  { id:'scorched_earth',  name:'Scorched Earth',        emoji:'🔥', rarity:'epic',     price:20, stackable:true,  weight:2,
+    desc:'+1 coin per obstacle destroyed, +2 per wall chunk destroyed. Stacks!' },
   { id:'combo_multiplier',name:'Combo Multiplier',      emoji:'✨', rarity:'epic',     price:20, stackable:false, weight:2,
     desc:'Each unique trick type in a shot adds 1.5× multiplier to style score.' },
   // LEGENDARY — base weight 1
@@ -18681,8 +19406,9 @@ function showGameOver(bustedBudget=false){
       <p>You lost your last life on hole ${holesPlayed + 1}.<br>
       ${G.totalStrokes} strokes over ${holesPlayed} holes.</p>
       <div class="big-score-val" style="font-size:clamp(3rem,12vw,5rem)">${ds}</div>
-      ${styleLine}${soloAwards}${coinsLine}${xpLine}${seedLine}
+      ${xpLine}
       ${cosmoProgressBlock}
+      ${styleLine}${soloAwards}${coinsLine}${seedLine}
       <button class="play-btn" onclick="startGame()">Try Again</button>
       <button class="play-btn" onclick="escMainMenu()" style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,0.4);margin-top:-8px;font-size:0.9rem;padding:12px 36px">🏠 Main Menu</button>
       <div class="section-label">Leaderboard</div>
@@ -18693,8 +19419,9 @@ function showGameOver(bustedBudget=false){
       <h1>Final<br>Score</h1>
       <div class="big-score-val">${ds}</div>
       <p style="margin-top:-8px">${G.totalStrokes} total strokes · Par ${totalPar}</p>
-      ${styleLine}${soloAwards}${coinsLine}${xpLine}${seedLine}
+      ${xpLine}
       ${cosmoProgressBlock}
+      ${styleLine}${soloAwards}${coinsLine}${seedLine}
       <button class="play-btn" onclick="startGame()">Play Again</button>
       <button class="play-btn" onclick="escMainMenu()" style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,0.4);margin-top:-8px;font-size:0.9rem;padding:12px 36px">🏠 Main Menu</button>
       <div class="section-label">Leaderboard</div>
@@ -18781,6 +19508,10 @@ function showGameOver(bustedBudget=false){
     // Merge XP + achievement unlocks into a single ordered queue for the
     // home screen to flush. New-star is queued explicitly so it reads the
     // same way cosmetic unlocks do ("you earned this when you got here").
+    // v0.19z8: cap cosmetics shown per run to avoid unlock-flood on first
+    // successful run (previously a first win could cross 6-8 thresholds in
+    // one go). Overflow stays on `meta._pendingCosmeticBacklog` and drains
+    // at 2 per subsequent run so every unlock gets its moment.
     const pending = Array.isArray(meta._pendingUnlockToasts) ? meta._pendingUnlockToasts : [];
     if(_xpEarnedThisRun > 0) {
       pending.push({ kind:'xp', amount: _xpEarnedThisRun });
@@ -18789,9 +19520,17 @@ function showGameOver(bustedBudget=false){
       const mods = getDifficultyMods(_newStarThisRun);
       pending.push({ kind:'difficulty', star:_newStarThisRun, name: mods.name });
     }
-    for(const item of newlyUnlocked.concat(achievementUnlocks)) {
+    // Drain any backlog from previous runs FIRST (oldest wins).
+    const backlog = Array.isArray(meta._pendingCosmeticBacklog) ? meta._pendingCosmeticBacklog : [];
+    const newCosmetics = newlyUnlocked.concat(achievementUnlocks);
+    const combined = backlog.concat(newCosmetics.map(item => ({ id: item.id, category: item.category })));
+    const COSMETICS_PER_RUN = 2;
+    const toShow = combined.slice(0, COSMETICS_PER_RUN);
+    const remaining = combined.slice(COSMETICS_PER_RUN);
+    for(const item of toShow) {
       pending.push({ kind:'cosmetic', id:item.id, category:item.category });
     }
+    meta._pendingCosmeticBacklog = remaining;
     meta._pendingUnlockToasts = pending;
     setMeta(meta);
     // v0.19p: write XP earned into the inline game-over line (placeholder was
@@ -18879,11 +19618,27 @@ function saveRunData(outcome) {
     if(history.length > MAX_RUN_HISTORY) history = history.slice(history.length - MAX_RUN_HISTORY);
     localStorage.setItem(profKey('ggw_run_history'), JSON.stringify(history));
   } catch(err) {
-    // Quota exceeded or storage unavailable — try once more with a trimmed history
+    // Quota exceeded or storage unavailable — try once more with a trimmed history.
+    // v0.19z8: was `trimmed=[run]` which nuked ALL prior run history. Now we
+    // keep the most recent 20 runs to preserve the player's run log. Only
+    // wipes fully if even that trimmed version still exceeds quota.
     try {
-      const trimmed = [run];
-      localStorage.setItem(profKey('ggw_run_history'), JSON.stringify(trimmed));
-      console.warn('saveRunData: quota hit, reset history to just this run');
+      const raw = localStorage.getItem(profKey('ggw_run_history'));
+      let existing = [];
+      if(raw) {
+        try { existing = JSON.parse(raw); } catch(_) { existing = []; }
+        if(!Array.isArray(existing)) existing = [];
+      }
+      existing.push(run);
+      const trimmed = existing.slice(-20);
+      try {
+        localStorage.setItem(profKey('ggw_run_history'), JSON.stringify(trimmed));
+        console.warn('saveRunData: quota hit, trimmed history to last 20 runs');
+      } catch(e3) {
+        // Still over quota — last resort, save just the current run
+        localStorage.setItem(profKey('ggw_run_history'), JSON.stringify([run]));
+        console.warn('saveRunData: quota hit even with 20-run trim, reset to just this run');
+      }
     } catch(e2) {
       console.warn('saveRunData: localStorage write failed', e2);
     }
@@ -18949,6 +19704,31 @@ async function downloadRunHistory() {
   }
 }
 window.downloadRunHistory = downloadRunHistory;
+
+// v0.19z8: Explicitly delete the local run-history log. Guarded by a two-step
+// confirm and a suggestion to download first. Never called automatically —
+// run history is preserved across save deletes, autosave clears, etc.
+function deleteRunHistory() {
+  try {
+    const raw = localStorage.getItem(profKey('ggw_run_history'));
+    const data = raw ? JSON.parse(raw) : [];
+    const arr = Array.isArray(data) ? data : [];
+    if(arr.length === 0) {
+      showToast('No run data to delete', 1600);
+      return;
+    }
+    const msg = `Delete ${arr.length} saved run${arr.length!==1?'s':''}?\n\nThis is permanent. You may want to Download Run Data first.`;
+    if(!confirm(msg)) return;
+    // Second confirm so this can't be fat-fingered
+    if(!confirm('Really delete? This cannot be undone.')) return;
+    localStorage.removeItem(profKey('ggw_run_history'));
+    showToast(`🗑️ Deleted ${arr.length} run${arr.length!==1?'s':''}`, 1800);
+  } catch(err) {
+    console.warn('deleteRunHistory failed', err);
+    showToast('Delete failed — check console', 2000);
+  }
+}
+window.deleteRunHistory = deleteRunHistory;
 
 // ── Save Export / Import (defense-in-depth against storage eviction) ──
 // Writes the current ggw_autosave (plus a minimal wrapper) to a file via
@@ -19070,6 +19850,8 @@ function initHole() {
   G._slowMoPerkActive = false;
   G._slowMoScale = 1.0;
   G._slowMoPerkTimer = 0;
+  // Speedball timer reset moved below — deferred until G.par is known for
+  // this hole so the timer can scale with par (par × 7 seconds).
   // ── Auto-save at hole start ─────────────────────────
   if(!isMultiplayer()) {
     try {
@@ -19095,6 +19877,11 @@ function initHole() {
         _runStyleScore: G._runStyleScore || 0,
         biome: G.biome || 'puttputt',
         deck: G.deck.slice(),
+        // v0.20a: persist character id so resume preserves the run's ball archetype
+        currentCharacter: G.currentCharacter || 'classic',
+        // Speedball timer state so mid-hole resume keeps remaining time
+        _speedballTimerRemaining: G._speedballTimerRemaining,
+        _speedballTimerActive: !!G._speedballTimerActive,
         timestamp: Date.now(),
       };
       const json = JSON.stringify(saveData);
@@ -19102,12 +19889,13 @@ function initHole() {
         localStorage.setItem(profKey('ggw_autosave'), json);
       } catch(writeErr) {
         // Quota exceeded — try dropping the analytics history to make room, then retry autosave.
+        // v0.19z8: keep 20 runs instead of 5 — wiping user history too aggressively.
         try {
           const rh = localStorage.getItem(profKey('ggw_run_history'));
           if(rh) {
             const hist = JSON.parse(rh);
-            if(Array.isArray(hist) && hist.length > 5) {
-              localStorage.setItem(profKey('ggw_run_history'), JSON.stringify(hist.slice(-5)));
+            if(Array.isArray(hist) && hist.length > 20) {
+              localStorage.setItem(profKey('ggw_run_history'), JSON.stringify(hist.slice(-20)));
             }
           }
           localStorage.setItem(profKey('ggw_autosave'), json);
@@ -19128,6 +19916,13 @@ function initHole() {
   G.teePos = {x:data.teePos.x, y:data.teePos.y};
   G.holePos = {x:data.holePos.x, y:data.holePos.y};
   G.par = data.par;
+  // v0.20a1: Speedball timer scales with par — par × 7 seconds per hole.
+  // A par-3 = 21s, par-5 = 35s, par-8 = 56s. Resets on every new hole;
+  // active flag clears so the timer doesn't tick until the first swing.
+  // Note: G.par already reflects Precision's -1 parOffset when applicable
+  // (the offset is applied in generatePuttPuttCourse before returning data).
+  G._speedballTimerRemaining = Math.max(1, (G.par || 3) * 7);
+  G._speedballTimerActive = false;
   G.strokes = 0;
   G.rolling = false;
   G.inHole = false;
@@ -19904,6 +20699,7 @@ function escMainMenu() {
   if(G.courseGroup) { scene.remove(G.courseGroup); G.courseGroup = null; }
   if(G.ball) { scene.remove(G.ball); G.ball = null; G.ballMesh = null; }
   if(G.hat) { scene.remove(G.hat); G.hat = null; }
+  if(G._charAttachment) { scene.remove(G._charAttachment); G._charAttachment = null; }
   if(G.ballShadow) { scene.remove(G.ballShadow); G.ballShadow = null; }
   if(G.aimArrow) { scene.remove(G.aimArrow); G.aimArrow = null; }
   // v0.19x: drop any occluder fade refs — their meshes are gone now
@@ -20597,6 +21393,7 @@ function startGame(){
   if(G.courseGroup) { scene.remove(G.courseGroup); G.courseGroup = null; }
   if(G.ball) { scene.remove(G.ball); G.ball = null; G.ballMesh = null; }
   if(G.hat) { scene.remove(G.hat); G.hat = null; }
+  if(G._charAttachment) { scene.remove(G._charAttachment); G._charAttachment = null; }
   if(G.ballShadow) { scene.remove(G.ballShadow); G.ballShadow = null; }
   if(G.aimArrow) { scene.remove(G.aimArrow); G.aimArrow = null; }
   // v0.19x: drop any occluder fade refs — their meshes are gone now
@@ -20622,6 +21419,27 @@ function startGame(){
   G.difficultyBudgetMult = Math.max(0.5, 1.3 - (G.difficulty - 1) * 0.08);
 
   G.hole=0; G.totalStrokes=0; G.scorecard=[]; G.modifiers=[]; G.state='playing';
+  // v0.20a: apply character starter perks. Each id in starter.perks pushes one
+  // stack of that perk into G.modifiers. For stackable perks (scorched_earth,
+  // strengthen_swing) this means repeating ids will stack naturally.
+  {
+    const _charForPerks = getCurrentCharacter();
+    if(_charForPerks.starter && Array.isArray(_charForPerks.starter.perks)) {
+      for(const pid of _charForPerks.starter.perks) {
+        const def = ALL_PERKS.find(p => p.id === pid);
+        if(def) {
+          G.modifiers.push({
+            id: def.id,
+            name: def.name,
+            emoji: def.emoji,
+            rarity: def.rarity,
+            price: def.price,
+            stackable: def.stackable,
+          });
+        }
+      }
+    }
+  }
   // v0.19e: Reset per-run XP counter. Deposited into meta.xp in showGameOver.
   G.xpThisRun = 0;
   // v0.19f: Reset per-run achievement counters. Read at run end for unlocks.
@@ -20680,7 +21498,10 @@ function startGame(){
   G.rerollCost = Math.round(3 * rerollMult);
   G.shopPickCount = 3;
   // ── Card system init ──
-  G.deck = [...STARTER_DECKS.classic.cards];
+  // v0.20a: character starter deck. Classic defaults to the old 4-card hand.
+  // Other characters (Smashy, Speedball, Precision) provide their own deck.
+  const _char = getCurrentCharacter();
+  G.deck = (_char.starter && _char.starter.deck) ? [..._char.starter.deck] : [...STARTER_DECKS.classic.cards];
   G.hand = [];
   G.discard = [];
   G.drawPile = [];
@@ -21091,6 +21912,17 @@ function _revealMainMenu() {
   checkAutoSave();
   renderLeaderboard();
   if(typeof renderStarRow === 'function') renderStarRow();
+  // v0.20a: also refresh character picker row (restores last-selected char
+  // from meta.lastCharacter if present).
+  if(typeof renderCharacterRow === 'function') {
+    try {
+      const _m = getMeta();
+      if(_m && _m.lastCharacter && typeof CHARACTERS !== 'undefined' && CHARACTERS[_m.lastCharacter]) {
+        G.currentCharacter = _m.lastCharacter;
+      }
+    } catch(e){}
+    renderCharacterRow();
+  }
   // v0.19p: flush any unlock toasts queued from prior runs (e.g. game-over
   // followed by page reload). No-op if queue empty.
   if(typeof flushPendingUnlockToasts === 'function') flushPendingUnlockToasts();
@@ -21176,6 +22008,26 @@ function resumeGame() {
     G.hasUndoPower = G.modifiers.some(m => m.id === 'undo_shot');
     // Restore deck
     G.deck = save.deck || [...STARTER_DECKS.classic.cards];
+    // v0.20a: restore character id (defaults to classic for pre-0.20 saves).
+    // Also validate the id still exists in CHARACTERS so stale/renamed chars
+    // don't break resume; fall through to classic if invalid.
+    const savedChar = save.currentCharacter;
+    if(savedChar && typeof CHARACTERS !== 'undefined' && CHARACTERS[savedChar]) {
+      G.currentCharacter = savedChar;
+    } else {
+      G.currentCharacter = 'classic';
+    }
+    // Speedball timer state: preserve time remaining if mid-hole resume, else
+    // leave it for initHole to compute based on G.par (par × 7 seconds).
+    if(typeof save._speedballTimerRemaining === 'number') {
+      G._speedballTimerRemaining = save._speedballTimerRemaining;
+      G._speedballTimerActive = !!save._speedballTimerActive;
+    } else {
+      // initHole will set the correct par-scaled timer once G.par is known.
+      // Conservative fallback in case someone reads the field before then.
+      G._speedballTimerRemaining = 30;
+      G._speedballTimerActive = false;
+    }
     G.hand = [];
     G.discard = [];
     G.drawPile = [];
@@ -22084,6 +22936,54 @@ function animate(now) {
   if(G._slowMoScale && G._slowMoScale < 1.0) dt *= G._slowMoScale;
   flagTime+=dt;
 
+  // ── Speedball 60s hole timer (v0.20a) ────────────────
+  // Uses the shared `dt` which already incorporates Slow Mo — so using Slow Mo
+  // actually buys Speedball extra real time, making the defensive card a
+  // clutch offensive tool in this class. Timer starts on first swing of the
+  // hole, keeps running across swings and OOB grace, stops on hole-out.
+  // Coins awarded on onHoled() = floor(remaining). No penalty at 0 — just
+  // upside pressure.
+  {
+    const _chT = (typeof getCurrentCharacter === 'function') ? getCurrentCharacter() : null;
+    const isSpeedball = !!(_chT && _chT.traits && _chT.traits.speedballTimer);
+    const tEl = document.getElementById('speedball-timer');
+    if(isSpeedball && G.state === 'playing' && !G.inHole) {
+      // Timer starts running once the player takes their first swing of the hole
+      if(G._speedballTimerActive && typeof G._speedballTimerRemaining === 'number') {
+        G._speedballTimerRemaining = Math.max(0, G._speedballTimerRemaining - dt);
+      }
+      if(tEl) {
+        tEl.style.display = '';
+        const valEl = document.getElementById('speedball-timer-val');
+        if(valEl) {
+          const t = G._speedballTimerRemaining != null ? G._speedballTimerRemaining : 0;
+          // Format: show 1 decimal when under 10s, integer otherwise for readability
+          valEl.textContent = t < 10 ? t.toFixed(1) : Math.floor(t).toString();
+          // v0.20a1: thresholds scale with hole's starting timer (par × 7).
+          // Red = final ~20% (urgent), Yellow = 20-40% (warning), White otherwise.
+          const startT = Math.max(1, (G.par || 3) * 7);
+          const redT = Math.min(10, startT * 0.2);
+          const yellowT = Math.min(20, startT * 0.4);
+          if(t <= 0) {
+            valEl.style.color = '#888';
+            valEl.style.textShadow = '0 0 4px rgba(255,255,255,0.2)';
+          } else if(t < redT) {
+            valEl.style.color = '#ff4a4a';
+            valEl.style.textShadow = '0 0 14px rgba(255,60,60,0.9)';
+          } else if(t < yellowT) {
+            valEl.style.color = '#ffcc40';
+            valEl.style.textShadow = '0 0 12px rgba(255,200,60,0.7)';
+          } else {
+            valEl.style.color = '#fff';
+            valEl.style.textShadow = '0 0 10px rgba(255,140,50,0.7)';
+          }
+        }
+      }
+    } else if(tEl) {
+      tEl.style.display = 'none';
+    }
+  }
+
   // ── Hat follow (v0.19c) ──
   // Hat is a scene sibling of the ball, not a child, so it stays upright
   // as the ball rotates for visual roll. Position tracks G.ballPos — the
@@ -22112,6 +23012,54 @@ function animate(now) {
     } else {
       // At rest, smoothly return to upright.
       G.hat.rotation.x += (0 - G.hat.rotation.x) * Math.min(1, dt * 6);
+    }
+  }
+
+  // v0.20a: Character attachment (rhino horns, glasses) — follows ball
+  // position, stays upright. For characters facing a travel direction, the
+  // attachment rotates around Y so "forward-facing" decorations (horns tilt
+  // forward, glasses face out front) actually orient with ball motion.
+  // At rest, lerps back to zero yaw so the attachment doesn't snap.
+  if(G._charAttachment && G.ball) {
+    G._charAttachment.position.set(G.ballPos.x, G.ballPos.y + BALL_R * 0.7, G.ballPos.z);
+    G._charAttachment.visible = G.ball.visible;
+    const vx = G.ballVel ? G.ballVel.x : 0;
+    const vz = G.ballVel ? G.ballVel.z : 0;
+    const vMag = Math.hypot(vx, vz);
+    if(vMag >= 0.15) {
+      const travelAng = Math.atan2(vx, vz);
+      G._charAttachmentYaw = travelAng;
+      G._charAttachment.rotation.set(0, travelAng, 0);
+    } else if(typeof G._charAttachmentYaw === 'number') {
+      // Smoothly return to last-known travel yaw at rest (avoid snap)
+      G._charAttachment.rotation.set(0, G._charAttachmentYaw, 0);
+    } else {
+      G._charAttachment.rotation.set(0, 0, 0);
+    }
+  }
+
+  // v0.20a: Speedball flame trail. Only when character has flameTrail trait,
+  // ball is rolling, and close to the ground (so it doesn't emit during
+  // Catapult airborne phases). Rate-limited via an accumulator so fast
+  // systems don't emit every frame (which would tank mobile framerate).
+  if(G.state === 'playing' && G.ball && G.rolling) {
+    const _chF = (typeof getCurrentCharacter === 'function') ? getCurrentCharacter() : null;
+    if(_chF && _chF.traits && _chF.traits.flameTrail) {
+      const vx = G.ballVel ? G.ballVel.x : 0;
+      const vz = G.ballVel ? G.ballVel.z : 0;
+      const speed = Math.hypot(vx, vz);
+      const nearGround = G.ballPos.y < 0.8;
+      if(speed > 4 && nearGround) {
+        G._flameTrailAccum = (G._flameTrailAccum || 0) + dt;
+        // Emit every ~60ms at the threshold speed, faster as speed climbs.
+        const emitInterval = Math.max(0.025, 0.08 - (speed - 4) * 0.003);
+        while(G._flameTrailAccum >= emitInterval) {
+          G._flameTrailAccum -= emitInterval;
+          spawnFlameTrail(G.ballPos, speed);
+        }
+      } else {
+        G._flameTrailAccum = 0;
+      }
     }
   }
 
