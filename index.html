@@ -2245,10 +2245,11 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
   </div>
 </div>
 
-<!-- v0.20a: Speedball timer — visible only when current character has speedballTimer trait -->
-<div id="speedball-timer" style="display:none;position:fixed;top:12px;left:12px;z-index:240;pointer-events:none;font-family:'Playfair Display',serif;background:linear-gradient(140deg,rgba(40,15,10,0.82),rgba(80,30,20,0.82));backdrop-filter:blur(8px);border:2px solid rgba(255,170,80,0.7);border-radius:12px;padding:8px 14px 6px;box-shadow:0 0 18px rgba(255,120,40,0.4),0 2px 10px rgba(0,0,0,0.4)">
-  <div style="font-size:0.5rem;letter-spacing:2.5px;color:#ffb060;text-transform:uppercase;text-align:center;margin-bottom:1px">⏱ Timer</div>
-  <div id="speedball-timer-val" style="font-size:1.6rem;font-weight:700;color:#fff;line-height:1;text-shadow:0 0 10px rgba(255,140,50,0.7);text-align:center">—</div>
+<!-- v0.20a: Speedball timer — visible only when current character has speedballTimer trait
+     v0.20a2: shrunk + repositioned (smaller padding, font; mobile media-query bumps it lower so it doesn't sit under the ☰ Menu button) -->
+<div id="speedball-timer" style="display:none;position:fixed;top:12px;left:12px;z-index:240;pointer-events:none;font-family:'Playfair Display',serif;background:linear-gradient(140deg,rgba(40,15,10,0.82),rgba(80,30,20,0.82));backdrop-filter:blur(8px);border:2px solid rgba(255,170,80,0.7);border-radius:10px;padding:5px 10px 4px;box-shadow:0 0 14px rgba(255,120,40,0.35),0 2px 8px rgba(0,0,0,0.4)">
+  <div style="font-size:0.42rem;letter-spacing:2px;color:#ffb060;text-transform:uppercase;text-align:center;margin-bottom:1px">⏱ Timer</div>
+  <div id="speedball-timer-val" style="font-size:1.15rem;font-weight:700;color:#fff;line-height:1;text-shadow:0 0 10px rgba(255,140,50,0.7);text-align:center">—</div>
 </div>
 
 <!-- OOB grace countdown — shown only while ball is OOB and counting down -->
@@ -2588,7 +2589,7 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
   <button class="play-btn" onclick="openAchievements()" style="margin-top:6px;background:rgba(245,200,66,0.18);border:1px solid rgba(245,200,66,0.5);color:#f5c842;font-size:0.85rem;padding:10px 28px">🏆 Achievements</button>
   <button class="play-btn" id="btn-import-save" style="margin-top:6px;background:rgba(120,120,120,0.6);font-size:0.7rem;padding:8px 20px" onclick="importSaveFile()">📂 Import Save</button>
   <input type="file" id="import-save-input" accept=".ggwsave,application/json" style="display:none">
-  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.19o</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Resume Run button correctly hides when switching to a profile without an active run</div></div>
+  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.20a2</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Vacuum mid-roll, easier 1-2★, REVERSE = big purple combo, see-thru hole, freeze frame stops spike rings, char picker fix, "Penguin!"</div></div>
 
   <!-- v0.19j: Inline profile picker — skip the separate slot-picks screen -->
   <div class="section-label" style="margin-top:14px">Save Slot</div>
@@ -3129,8 +3130,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.20a1';
-const CHANGE_NOTE = 'Speedball timer now scales with hole par (par × 7s): par-3 = 21s, par-5 = 35s, par-8 = 56s. Warning colors scale proportionally.';
+const GAME_VERSION = '0.20a2';
+const CHANGE_NOTE = 'Vacuum playable mid-roll w/ slow-mo, lower glasses, easier 1-2★, REVERSE = big purple combo, see-thru hole/flag, freeze frame stops spike rings + moving holes, char picker fixed on menu return, sniper banned from speedball, smaller speedball timer, "Penguin!"';
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
@@ -3279,46 +3280,46 @@ const G = {
 // Reward scaling is modest (coins/style) — prestige is the real reward.
 // ═══════════════════════════════════════════════════════
 const DIFFICULTY_TABLE = {
-  1:  { name:'Casual',     pathMult:0.70, shopRate:0.20, startingHp:10, overParDmg:1, spikeDmg:1,
-        oobGrace:1.5, coinMult:1.00, styleMult:1.00, bogeyDmgExtra:0, rerollCostMult:1.0,
+  1:  { name:'Casual',     pathMult:0.70, shopRate:0.10, startingHp:14, overParDmg:1, spikeDmg:1,
+        oobGrace:1.5, coinMult:1.40, styleMult:1.00, bogeyDmgExtra:0, rerollCostMult:1.0,
         cardRemoveCostMult:1.0, lateHoleExtraPath:0, healReduction:0, forcedHardShopCards:false,
-        winReq:'finish' },
-  2:  { name:'Easy',       pathMult:0.85, shopRate:0.20, startingHp:10, overParDmg:1, spikeDmg:1,
-        oobGrace:1.5, coinMult:1.00, styleMult:1.00, bogeyDmgExtra:0, rerollCostMult:1.0,
+        priceBaseMult:1.20, winReq:'finish' },
+  2:  { name:'Easy',       pathMult:0.85, shopRate:0.15, startingHp:12, overParDmg:1, spikeDmg:1,
+        oobGrace:1.5, coinMult:1.20, styleMult:1.00, bogeyDmgExtra:0, rerollCostMult:1.0,
         cardRemoveCostMult:1.0, lateHoleExtraPath:0, healReduction:0, forcedHardShopCards:false,
-        winReq:'finish' },
+        priceBaseMult:1.35, winReq:'finish' },
   3:  { name:'Standard',   pathMult:1.00, shopRate:0.25, startingHp:10, overParDmg:1, spikeDmg:1,
         oobGrace:1.5, coinMult:1.00, styleMult:1.00, bogeyDmgExtra:0, rerollCostMult:1.0,
         cardRemoveCostMult:1.0, lateHoleExtraPath:0, healReduction:0, forcedHardShopCards:false,
-        winReq:'finish' },
+        priceBaseMult:1.50, winReq:'finish' },
   4:  { name:'Hard',       pathMult:1.15, shopRate:0.30, startingHp:8,  overParDmg:1, spikeDmg:1,
         oobGrace:1.5, coinMult:1.10, styleMult:1.05, bogeyDmgExtra:0, rerollCostMult:1.0,
         cardRemoveCostMult:1.0, lateHoleExtraPath:0, healReduction:0, forcedHardShopCards:false,
-        winReq:'noHpLoss' },
+        priceBaseMult:1.50, winReq:'noHpLoss' },
   5:  { name:'Nightmare',  pathMult:1.30, shopRate:0.30, startingHp:7,  overParDmg:2, spikeDmg:1,
         oobGrace:1.5, coinMult:1.20, styleMult:1.10, bogeyDmgExtra:0, rerollCostMult:1.0,
         cardRemoveCostMult:1.0, lateHoleExtraPath:0, healReduction:0, forcedHardShopCards:false,
-        winReq:'noHpLoss' },
+        priceBaseMult:1.50, winReq:'noHpLoss' },
   6:  { name:'Cursed',     pathMult:1.40, shopRate:0.35, startingHp:7,  overParDmg:2, spikeDmg:1,
         oobGrace:1.5, coinMult:1.30, styleMult:1.15, bogeyDmgExtra:0, rerollCostMult:1.0,
         cardRemoveCostMult:1.0, lateHoleExtraPath:0.20, healReduction:0, forcedHardShopCards:false,
-        winReq:'noHpLoss' },
+        priceBaseMult:1.50, winReq:'noHpLoss' },
   7:  { name:'Punishing',  pathMult:1.40, shopRate:0.35, startingHp:7,  overParDmg:2, spikeDmg:2,
         oobGrace:1.5, coinMult:1.40, styleMult:1.20, bogeyDmgExtra:0, rerollCostMult:1.0,
         cardRemoveCostMult:2.0, lateHoleExtraPath:0.20, healReduction:0, forcedHardShopCards:false,
-        winReq:'underPar' },
+        priceBaseMult:1.50, winReq:'underPar' },
   8:  { name:'Brutal',     pathMult:1.40, shopRate:0.35, startingHp:7,  overParDmg:2, spikeDmg:2,
         oobGrace:1.0, coinMult:1.50, styleMult:1.25, bogeyDmgExtra:0, rerollCostMult:1.0,
         cardRemoveCostMult:2.0, lateHoleExtraPath:0.20, healReduction:0, forcedHardShopCards:true,
-        winReq:'underPar' },
+        priceBaseMult:1.50, winReq:'underPar' },
   9:  { name:'Masochist',  pathMult:1.40, shopRate:0.35, startingHp:5,  overParDmg:2, spikeDmg:2,
         oobGrace:1.0, coinMult:1.60, styleMult:1.30, bogeyDmgExtra:0, rerollCostMult:1.0,
         cardRemoveCostMult:2.0, lateHoleExtraPath:0.20, healReduction:1, forcedHardShopCards:true,
-        winReq:'underPar' },
+        priceBaseMult:1.50, winReq:'underPar' },
   10: { name:'Impossible', pathMult:1.40, shopRate:0.35, startingHp:5,  overParDmg:2, spikeDmg:2,
         oobGrace:1.0, coinMult:1.75, styleMult:1.40, bogeyDmgExtra:1, rerollCostMult:2.0,
         cardRemoveCostMult:2.0, lateHoleExtraPath:0.20, healReduction:1, forcedHardShopCards:true,
-        winReq:'underPar' },
+        priceBaseMult:1.50, winReq:'underPar' },
 };
 function getDifficultyMods(star) {
   const s = Math.max(1, Math.min(10, star|0));
@@ -5789,6 +5790,43 @@ function buildCourse(data) {
         fg2.position.set(cx, cY+FLOOR_H/2, cz);
         group.add(fg2);
 
+        // v0.20a2: THROUGH-WALL HOLE VISIBILITY — duplicate the pole + flag at
+        // a slightly larger scale with depthTest:false so the player can ALWAYS
+        // see where the hole is, even with bumpers/rocks/spike rings/etc.
+        // blocking the line of sight. High renderOrder ensures these draw last.
+        // Mobile-cheap: 3 unlit meshes total. Cheaper than alpha-cutting obstacles.
+        const seeThruMat = new THREE.MeshBasicMaterial({
+          color: 0xff6020, transparent: true, opacity: 0.55,
+          depthTest: false, depthWrite: false, side: THREE.DoubleSide,
+        });
+        const seeThruFlagMat = new THREE.MeshBasicMaterial({
+          color: 0xffaa30, transparent: true, opacity: 0.85,
+          depthTest: false, depthWrite: false, side: THREE.DoubleSide,
+        });
+        // Pole silhouette — slightly thicker so it reads through chaos.
+        const stPoleG = new THREE.CylinderGeometry(0.06, 0.06, 2.4, 6);
+        const stPole = new THREE.Mesh(stPoleG, seeThruMat);
+        stPole.position.y = 1.2;
+        stPole.renderOrder = 9000;
+        stPole.userData.noOutline = true;
+        fg2.add(stPole);
+        // Flag silhouette — slightly larger, brighter
+        const stFlagG = new THREE.PlaneGeometry(1.05, 0.75);
+        const stFlag = new THREE.Mesh(stFlagG, seeThruFlagMat);
+        stFlag.position.set(0.5, 2.15, 0);
+        stFlag.renderOrder = 9001;
+        stFlag.userData.noOutline = true;
+        fg2.add(stFlag);
+        // Cup silhouette — a thin glowing ring on the ground that's also visible through obstacles
+        const stCupG = new THREE.RingGeometry(cupR * 0.85, cupR * 1.15, 24);
+        const stCup = new THREE.Mesh(stCupG, seeThruMat);
+        stCup.position.set(cx, cY + 0.06, cz);
+        stCup.rotation.x = -Math.PI / 2;
+        stCup.renderOrder = 9000;
+        stCup.userData.noOutline = true;
+        group.add(stCup);
+        G._holeSeeThruCup = stCup; // moving-hole defense will translate this
+
         // Tall thin beacon column — a vertical emissive cylinder visible from any distance.
         // Skip outline so it glows naturally without an awkward silhouette line.
         const beaconColG = new THREE.CylinderGeometry(0.04, 0.04, 5.0, 8);
@@ -7028,6 +7066,10 @@ function buildCourse(data) {
         // sink animation completes at the ball's contact point rather than
         // having the flag/cup drift away mid-drop.
         if(state.frozen) return;
+        // v0.20a2: Freeze Frame card freezes ALL moving things — moving holes
+        // included. Without this, the cup kept drifting under a frozen ball,
+        // which made the card useless on moving-hole levels.
+        if(G._freezeFrameActive) return;
         const phase = totalT * (0.9 * hd.speedFactor) + hd.phase;
         let ox = 0, oz = 0;
         if(hd.pattern === 'line') {
@@ -7060,6 +7102,8 @@ function buildCourse(data) {
         // Translate the cup + flag + beacon to follow.
         if(G._cupMesh) G._cupMesh.position.set(cx + ox, G._cupBaseY || (baseY + 0.03), cz + oz);
         if(G.flagGroup) G.flagGroup.position.set(cx + ox, baseY, cz + oz);
+        // v0.20a2: see-thru cup ring follows the moving hole too
+        if(G._holeSeeThruCup) G._holeSeeThruCup.position.set(cx + ox, (G._cupBaseY || (baseY + 0.03)) + 0.03, cz + oz);
         if(G.holeBeacon) {
           G.holeBeacon.cx = cx + ox;
           G.holeBeacon.cz = cz + oz;
@@ -7096,6 +7140,7 @@ function buildCourse(data) {
       state.cx = cx; state.cz = cz; state.baseY = baseY;
       state.ringContainer = ringContainer;
       state.update = (dt) => {
+        if(G._freezeFrameActive) return; // v0.20a2: freeze frame stops slat ring rotation
         if(hd.rotSpeed) {
           state.ringAngle += hd.rotSpeed * dt;
           ringContainer.rotation.y = state.ringAngle;
@@ -7149,8 +7194,12 @@ function buildCourse(data) {
       state.isRed = isRed;
       state.cooldown = 0; // global hit cooldown so ball can't double-damage
       state.update = (dt) => {
-        state.ringAngle += hd.rotSpeed * dt;
-        ringContainer.rotation.y = state.ringAngle;
+        // v0.20a2: freeze frame stops the spike ring rotation. Cooldown still
+        // ticks so post-thaw the ball isn't immediately re-hit by a stale ring.
+        if(!G._freezeFrameActive) {
+          state.ringAngle += hd.rotSpeed * dt;
+          ringContainer.rotation.y = state.ringAngle;
+        }
         if(state.cooldown > 0) state.cooldown -= dt;
       };
     } else if(hd.kind === 'magnet_field') {
@@ -7224,7 +7273,9 @@ function buildCourse(data) {
       state.closed = true;
       state.phase = hd.phase || 0;
       state.update = (dt, totalT) => {
-        state.phase += dt;
+        // v0.20a2: freeze frame pauses the force-field on/off cycle, locking
+        // it in whatever state it's currently in for the duration.
+        if(!G._freezeFrameActive) state.phase += dt;
         const cycle = hd.closedSecs + hd.openSecs;
         const c = state.phase % cycle;
         state.closed = c < hd.closedSecs;
@@ -8534,30 +8585,32 @@ function createBall() {
         if(traits.glasses) {
           // Thick-rimmed rectangular frames. Two dark tori for lenses, a
           // bridge connecting them, and small temple tips extending back.
+          // v0.20a2: lowered y from 0.02 → -0.06 so glasses sit lower on the
+          // head (was previously above the equator, now sit at face-level).
           const frameMat = new THREE.MeshStandardMaterial({color:0x111418, roughness:0.3, metalness:0.3});
           // Use flat rectangular rings instead of tori — readable from
           // the typical orbit camera angle.
           const lensGeo = new THREE.TorusGeometry(0.075, 0.018, 8, 20);
           const lensL = new THREE.Mesh(lensGeo, frameMat);
-          lensL.position.set(-0.085, 0.02, 0.2);
+          lensL.position.set(-0.085, -0.06, 0.2);
           grp.add(lensL);
           const lensR = new THREE.Mesh(lensGeo, frameMat);
-          lensR.position.set(0.085, 0.02, 0.2);
+          lensR.position.set(0.085, -0.06, 0.2);
           grp.add(lensR);
           // Bridge
           const bridgeGeo = new THREE.BoxGeometry(0.04, 0.02, 0.02);
           const bridge = new THREE.Mesh(bridgeGeo, frameMat);
-          bridge.position.set(0, 0.025, 0.2);
+          bridge.position.set(0, -0.055, 0.2);
           grp.add(bridge);
           // Subtle lens tint (a very dark semi-transparent disc behind each frame)
           const lensTintMat = new THREE.MeshStandardMaterial({color:0x2a3344, transparent:true, opacity:0.5, roughness:0.1});
           const lensTintGeo = new THREE.CircleGeometry(0.07, 16);
           const tintL = new THREE.Mesh(lensTintGeo, lensTintMat);
-          tintL.position.set(-0.085, 0.02, 0.195);
+          tintL.position.set(-0.085, -0.06, 0.195);
           tintL.rotation.y = Math.PI;
           grp.add(tintL);
           const tintR = new THREE.Mesh(lensTintGeo, lensTintMat);
-          tintR.position.set(0.085, 0.02, 0.195);
+          tintR.position.set(0.085, -0.06, 0.195);
           tintR.rotation.y = Math.PI;
           grp.add(tintR);
         }
@@ -9386,10 +9439,11 @@ function updatePhysics(dt) {
         // was sending the ball on a huge second arc that frequently landed OOB.
         // Dropping hard to 0.2 tames the trajectory — still a visible hop with
         // BOING SFX, but the ball stays in-bounds and on-path.
+        // v0.20a2: removed the "🪤 BOING!" toast — the SFX + shake do the work,
+        // the toast was visual clutter on landing.
         G.ballVel.y = -G.ballVel.y * 0.2;
         G._catapultGroundBounce = false;
         triggerShake(0.3);
-        showToast('🪤 BOING!', 700);
         if(AC) {
           const ac = getAC(), t = ac.currentTime;
           const o = ac.createOscillator(); o.type='sine';
@@ -11496,6 +11550,10 @@ const STYLE_PTS = {
   // display so it reads as a headline moment, not a dim glitchy text tag.
   parkour_vault: 800,
   obstacle_dodge: 250,
+  // v0.20a2: Reverse card is a flagship purple combo — instant direction flip
+  // is high-skill / high-chaos, and rewards big when chained or used to
+  // salvage a runaway shot into the cup.
+  reverse_card: 1200,
 };
 
 // Named tricks: [condition_fn(events, shotCtx), name, bonusPts]
@@ -11521,6 +11579,8 @@ const TRICK_DEFS = [
   { id:'shortcut_artist',name:'SHORTCUT ARTIST',   pts:6000, test:(e)=> e.some(x=>x.type==='ghost_oob') },
   { id:'oob_daredevil',  name:'OOB DAREDEVIL',     pts:7200, test:(e,c)=> c.holed && e.some(x=>x.type==='jump_oob') },
   { id:'flying_ace',     name:'FLYING ACE',        pts:4800, test:(e)=> e.some(x=>x.type==='jump_oob') },
+  // v0.20a2: REVERSAL — reverse-card to-the-hole is a signature highlight moment.
+  { id:'reversal',       name:'REVERSAL',          pts:2500, test:(e,c)=> c.holed && e.some(x=>x.type==='reverse_card') },
 ];
 
 // Hole completion bonus points
@@ -11588,12 +11648,15 @@ const STYLE_NAMES = {
   ghost_oob:'GHOST SHORTCUT', jump_oob:'OOB JUMP',
   // v0.19z5: parkour vault is a flagship purple combo (see FLAGSHIP_EVENTS)
   parkour_vault:'🤸 PARKOUR VAULT', obstacle_dodge:'DODGE',
+  // v0.20a2: Reverse card — flagship purple combo
+  reverse_card:'⏪ REVERSE',
 };
 
 // v0.19z5: events that render with flagship styling — big purple glow,
 // larger text — instead of plain white. These are "you pulled off something
 // special" moments (currently just parkour_vault; easy to extend).
-const FLAGSHIP_EVENTS = new Set(['parkour_vault']);
+// v0.20a2: reverse_card joins parkour_vault as a flagship purple combo.
+const FLAGSHIP_EVENTS = new Set(['parkour_vault', 'reverse_card']);
 
 // Compute the current shot's live score (single source of truth)
 function computeLiveShotScore() {
@@ -11949,6 +12012,7 @@ function finalizeShot(holed) {
   // Reset for next shot
   G._shotEvents = [];
   G._shotEventTypes = new Set();
+  G._reverseUsedThisShot = false; // v0.20a2
 
   return { base, mult, total, tricks };
 }
@@ -12920,7 +12984,7 @@ function showHoleSummary(earnings, bustedBudget, _epoch) {
   const d = G.strokes - G.par;
   const scoreWord =
     G.strokes === 1 ? '🏆 Hole in One!' :
-    d <= -5 ? '🐧 Penguin!!' :
+    d <= -5 ? '🐧 Penguin' :
     d <= -4 ? '🦃 Turkey!' :
     d <= -3 ? '🦅 Condor!' :
     d <= -2 ? '🦅 Eagle' :
@@ -13265,10 +13329,11 @@ function weightedCardPicks(count) {
 }
 
 function getScaledCardPrice(card) {
-  // v0.18a: shop rate from difficulty mods (0.10 at ★1-2 → 0.30 at ★6+)
+  // v0.18a: shop rate from difficulty mods (0.10 at ★1 → 0.30 at ★6+)
+  // v0.20a2: priceBaseMult from difficulty (1.20 at ★1, 1.35 at ★2, 1.50 at ★3+)
   const rate = (G._diffMods && G._diffMods.shopRate) || 0.15;
-  // v0.19o1: base inflation 1.4 → 1.5 per tuning sheet
-  return Math.max(1, Math.round(card.price * 1.5 * (1 + G.hole * rate) * PRICE_MULTIPLIER));
+  const baseMult = (G._diffMods && G._diffMods.priceBaseMult) || 1.5;
+  return Math.max(1, Math.round(card.price * baseMult * (1 + G.hole * rate) * PRICE_MULTIPLIER));
 }
 
 function closeShop() {
@@ -13359,10 +13424,11 @@ function weightedShopPicks(pool, count) {
 
 function getScaledPrice(perk) {
   // Base prices inflated, then scale per hole, then global PRICE_MULTIPLIER
-  // v0.19o1: base inflation 1.4 → 1.5 per tuning sheet
   // v0.18a: shop rate from difficulty mods
+  // v0.20a2: priceBaseMult from difficulty (1.20 at ★1, 1.35 at ★2, 1.50 at ★3+)
   const rate = (G._diffMods && G._diffMods.shopRate) || 0.15;
-  const base = Math.max(1, Math.round(perk.price * 1.5 * (1 + G.hole * rate) * PRICE_MULTIPLIER));
+  const baseMult = (G._diffMods && G._diffMods.priceBaseMult) || 1.5;
+  const base = Math.max(1, Math.round(perk.price * baseMult * (1 + G.hole * rate) * PRICE_MULTIPLIER));
   // Multiplayer: 50% off — coins are split across players
   return isMultiplayer() ? Math.max(1, Math.round(base * 0.5)) : base;
 }
@@ -14325,7 +14391,7 @@ const CARD_DEFS = {
   airstrike:    { id:'airstrike',    emoji:'🎯', name:'Airstrike',       desc:'Tap a spot. After 2s, massive explosion rains down.',             rarity:'epic',      price:28,  context:'pre',    holdable:false },
   cannonball:   { id:'cannonball',   emoji:'💣', name:'Cannonball',      desc:'This swing: blast through walls. Great for off-roading through the rough.',     rarity:'epic',      price:25,  context:'pre',    holdable:false },
   wrecking_ball:{ id:'wrecking_ball',emoji:'⛓️', name:'Wrecking Ball',   desc:'Ball swings on a chain arc, destroying everything in the sweep.', rarity:'epic',      price:24,  context:'during', holdable:false },
-  reverse:      { id:'reverse',      emoji:'⏪', name:'Reverse',         desc:'Instantly reverse the ball\'s direction. Full speed.',             rarity:'common',    price:10,  context:'during', holdable:false },
+  reverse:      { id:'reverse',      emoji:'⏪', name:'Reverse',         desc:'Instantly reverse the ball\'s direction. Full speed. BIG combo points — huge bonus if it leads to a hole.', rarity:'common',    price:10,  context:'during', holdable:false },
   portal_pair:  { id:'portal_pair',  emoji:'🕳️', name:'Portal Pair',     desc:'Place two portals. Ball enters one, exits the other.',            rarity:'legendary', price:30,  context:'pre',    holdable:false },
   freeze_frame: { id:'freeze_frame', emoji:'🧊', name:'Freeze Frame',    desc:'All moving obstacles freeze for 10 seconds.',                    rarity:'rare',      price:11,  context:'any',    holdable:false, weight:3 },
   coin_shower:  { id:'coin_shower',  emoji:'🌧️', name:'Coin Shower',     desc:'Drop 20 coins in a line ahead of your ball. Clean line = bonus 5× coin!', rarity:'rare',      price:18,  context:'pre',    holdable:false },
@@ -14339,7 +14405,7 @@ const CARD_DEFS = {
   mighty_egg:   { id:'mighty_egg',   emoji:'🥚', name:'Mighty Egg',        desc:'Encase your ball in a protective egg. Absorbs one 1-HP hit from spikes or other damage obstacles. Cracks on impact.', rarity:'common', price:10, context:'any', holdable:false, weight:2 },
   sticky:       { id:'sticky',       emoji:'🟢', name:'Sticky',           desc:'This swing: ball sticks to the first wall it hits with a big juicy squish.', rarity:'common', price:15, context:'pre', holdable:false, weight:4 },
   parkour:      { id:'parkour',      emoji:'🤸', name:'Parkour',          desc:'This swing: automatically vault the first obstacle in your path with a slow-mo cartwheel.', rarity:'rare', price:20, context:'pre', holdable:false, weight:3 },
-  vacuum:       { id:'vacuum',       emoji:'🌪️', name:'Vacuum',            desc:'Suck up all coins and obstacles in a V-shaped cone in front of you.', rarity:'rare', price:30, context:'pre', holdable:false, weight:2 },
+  vacuum:       { id:'vacuum',       emoji:'🌪️', name:'Vacuum',            desc:'Suck up all coins and obstacles in a V-shaped cone in front of you. Play anytime — mid-roll briefly slows time.', rarity:'rare', price:30, context:'any', holdable:false, weight:2 },
   goal_oriented:{ id:'goal_oriented',emoji:'🎯', name:'Goal Oriented',    desc:'Instantly redirect your ball toward the hole mid-swing.', rarity:'epic', price:25, context:'during', holdable:false, weight:3 },
 };
 
@@ -14420,14 +14486,14 @@ const CHARACTERS = {
       '🔥 Flaming trail at high speed',
     ],
     curses: [
-      '🚫 No destruction cards (Missile, Grenade, Boulder, Dodgeball, Explosivo, Iron Ball, Cannonball, Floomba)',
+      '🚫 No destruction cards (Missile, Sniper, Grenade, Boulder, Dodgeball, Explosivo, Iron Ball, Cannonball, Floomba)',
       '🚫 No Bounce & Boom perk',
     ],
     starter: {
       deck: ['power_shot','power_shot','jumper','parkour'],
       perks: ['strengthen_swing','strengthen_swing'],
     },
-    bannedCards: ['shooter','grenade','boulder','dodgeball','explosivo','iron_ball','airstrike','cannonball','wrecking_ball','floomba'],
+    bannedCards: ['shooter','sniper','grenade','boulder','dodgeball','explosivo','iron_ball','airstrike','cannonball','wrecking_ball','floomba'],
     bannedPerks: ['bounce_boom'],
     traits: { speedballTimer: true, flameTrail: true },
   },
@@ -15685,22 +15751,45 @@ function clearParkourState() {
   }
 }
 
-// ── Vacuum (v0.19x) ───────────────────────────────────
+// ── Vacuum (v0.19x; v0.20a2: any-context) ─────────────
 // V-shaped cone in front of the ball. All coins inside the cone fly to the
-// ball; all destructible obstacles inside the cone get destroyed. Preview
-// arc is shown before fire (aim phase) — here we just apply instantly on
-// activation since this is `context:'pre'`.
+// ball; all destructible obstacles inside the cone get destroyed.
+// Pre-swing: cone direction = aim arrow (shotDir).
+// Mid-roll: cone direction = current ball velocity. A brief slow-mo "punch"
+// lets the player savor the suction; the ball keeps its momentum (slow-mo
+// scales dt, doesn't zero velocity).
 function activateVacuum() {
   if(!G.ballPos) return;
-  // Direction: use current shotDir (what the aim arrow faces)
+  // Direction: prefer ball velocity if rolling fast enough, otherwise shotDir.
   let dirX, dirZ;
-  if(G.shotDir && G.shotDir.length() > 0.01) {
+  const rollingSpd = G.ballVel ? Math.hypot(G.ballVel.x, G.ballVel.z) : 0;
+  if(G.rolling && rollingSpd > 0.4) {
+    dirX = G.ballVel.x; dirZ = G.ballVel.z;
+  } else if(G.shotDir && G.shotDir.length() > 0.01) {
     dirX = G.shotDir.x; dirZ = G.shotDir.z;
   } else {
     dirX = -Math.sin(G.camTheta || 0); dirZ = -Math.cos(G.camTheta || 0);
   }
   const dirLen = Math.hypot(dirX, dirZ) || 1;
   dirX /= dirLen; dirZ /= dirLen;
+
+  // v0.20a2: mid-roll vacuum applies a slow-mo punch. Slow-mo scales dt in
+  // updatePhysics, so the ball still moves forward — just slowly. The full
+  // suction takes ~2.5s of real time; we ramp slow-mo for the first ~0.8s to
+  // give that "drop into bullet-time, snap out" feel without molasses-locking
+  // the run for too long.
+  let _vacuumPriorSlowMo = null;
+  if(G.rolling) {
+    _vacuumPriorSlowMo = G._slowMoScale || 1.0;
+    G._slowMoScale = 0.30;
+    setTimeout(() => {
+      // Only restore if no other system has overridden it in the meantime.
+      // (Slow Mo perk would set a different scale; if it took over, leave it.)
+      if(G._slowMoScale === 0.30 || Math.abs((G._slowMoScale||1) - 0.30) < 1e-3) {
+        G._slowMoScale = _vacuumPriorSlowMo != null ? _vacuumPriorSlowMo : 1.0;
+      }
+    }, 800);
+  }
 
   // Cone: v0.19z: +30% coverage — length 8.0 → 10.4m, half-angle 60° → 69°.
   const CONE_HALF_ANGLE = Math.PI / 180 * 69;
@@ -15992,10 +16081,14 @@ function activateReverse() {
   if(!G.rolling) return;
   G.ballVel.x *= -1;
   G.ballVel.z *= -1;
-  showToast('⏪ Reverse!', 600);
-  triggerShake(0.15);
+  showToast('⏪ REVERSE!', 800);
+  triggerShake('med');
   spawnHitParticles(G.ballPos);
   if(AC) sfxBounce(6);
+  // v0.20a2: Reverse is a flagship purple combo event (1200 pts). Track that
+  // it was used this shot so a sink-after-reverse triggers the REVERSAL trick.
+  G._reverseUsedThisShot = true;
+  if(typeof recordStyleEvent === 'function') recordStyleEvent('reverse_card');
 }
 
 // ── Goal Oriented (v0.19y) ────────────────────────────
@@ -20741,6 +20834,14 @@ function escMainMenu() {
       <input class="seed-input" id="seed-input" placeholder="Seed (optional)" maxlength="12" spellcheck="false" autocomplete="off"/>
       <button class="seed-btn" id="btn-random-seed">🎲 Random</button>
     </div>
+    <!-- v0.20a2: character picker row was missing from the post-mid-run rebuild;
+         restored to match the bootstrap HTML. -->
+    <div class="settings-row" style="margin-top:-4px">
+      <div class="setting-group" style="width:100%">
+        <div class="setting-label">Character</div>
+        <div id="character-row" style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;padding:6px 0"></div>
+      </div>
+    </div>
     <div class="settings-row">
       <div class="setting-group">
         <div class="setting-label">Holes</div>
@@ -20788,6 +20889,9 @@ function escMainMenu() {
   // v0.18a: the overlay HTML was just rebuilt — repopulate the star row
   // buttons now that the two container divs exist in DOM.
   if(typeof renderStarRow === 'function') renderStarRow();
+  // v0.20a2: also repopulate the character picker row — the overlay rebuild
+  // wipes the inner DOM of #character-row, so the portraits need re-rendering.
+  if(typeof renderCharacterRow === 'function') renderCharacterRow();
   // v0.19p: flush any unlock toasts queued during showGameOver. Only fires
   // when returning home from a completed/lost run — abandoned runs never
   // queue toasts in the first place.
