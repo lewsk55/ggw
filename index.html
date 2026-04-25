@@ -896,6 +896,15 @@ transition:transform 0.12s, border-color 0.15s, background 0.15s;
 }
 .char-portrait:hover, .char-portrait:active { transform:translateY(-2px); background:rgba(0,0,0,0.35); }
 .char-portrait.active { border-color:#fff; background:rgba(255,255,255,0.12); box-shadow:0 0 14px rgba(255,255,255,0.35); }
+/* v0.20a4: locked character — dimmed, lock badge overlay */
+.char-portrait.locked { opacity:0.42; cursor:not-allowed; border-color:rgba(255,255,255,0.1); }
+.char-portrait.locked:hover, .char-portrait.locked:active { transform:none; background:rgba(0,0,0,0.22); }
+.char-portrait.locked .char-emoji { filter:grayscale(1) brightness(0.7); }
+.char-lock {
+position:absolute; bottom:18px; left:50%; transform:translateX(-50%);
+font-size:1.05rem; pointer-events:none;
+text-shadow:0 1px 2px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.7);
+}
 .char-portrait .char-emoji {
 font-size:1.7rem; line-height:1; margin-bottom:3px;
 filter:drop-shadow(0 2px 3px rgba(0,0,0,0.45));
@@ -947,6 +956,26 @@ font-size:1.6rem; font-weight:700; margin-bottom:2px;
 #char-details-panel .char-details-tag {
 text-align:center; font-size:0.72rem; color:rgba(255,255,255,0.7);
 letter-spacing:1px; text-transform:uppercase; margin-bottom:14px;
+}
+/* v0.20a4: locked-character requirement block in details popup */
+#char-details-panel .char-details-locked {
+margin:6px 0 14px;
+padding:10px 14px;
+background:linear-gradient(140deg, rgba(140,40,40,0.45), rgba(80,30,30,0.55));
+border:1px solid rgba(255,140,140,0.35);
+border-radius:10px;
+text-align:center;
+}
+#char-details-panel .char-details-locked-title {
+font-family:'Playfair Display',serif;
+font-size:0.95rem; font-weight:700; color:#ffb0b0;
+letter-spacing:2px; margin-bottom:4px;
+}
+#char-details-panel .char-details-locked-body {
+font-size:0.78rem; line-height:1.35; color:rgba(255,255,255,0.85);
+}
+#char-details-panel .char-details-locked-body strong {
+color:#fff; font-weight:700;
 }
 #char-details-panel .char-details-section {
 margin:10px 0;
@@ -2589,7 +2618,7 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
   <button class="play-btn" onclick="openAchievements()" style="margin-top:6px;background:rgba(245,200,66,0.18);border:1px solid rgba(245,200,66,0.5);color:#f5c842;font-size:0.85rem;padding:10px 28px">🏆 Achievements</button>
   <button class="play-btn" id="btn-import-save" style="margin-top:6px;background:rgba(120,120,120,0.6);font-size:0.7rem;padding:8px 20px" onclick="importSaveFile()">📂 Import Save</button>
   <input type="file" id="import-save-input" accept=".ggwsave,application/json" style="display:none">
-  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.20a2</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Vacuum mid-roll, easier 1-2★, REVERSE = big purple combo, see-thru hole, freeze frame stops spike rings, char picker fix, "Penguin!"</div></div>
+  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.20b</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Per-character difficulty unlocks + character progression chain (★3 with each unlocks the next)</div></div>
 
   <!-- v0.19j: Inline profile picker — skip the separate slot-picks screen -->
   <div class="section-label" style="margin-top:14px">Save Slot</div>
@@ -3130,8 +3159,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.20a2';
-const CHANGE_NOTE = 'Vacuum playable mid-roll w/ slow-mo, lower glasses, easier 1-2★, REVERSE = big purple combo, see-thru hole/flag, freeze frame stops spike rings + moving holes, char picker fixed on menu return, sniper banned from speedball, smaller speedball timer, "Penguin!"';
+const GAME_VERSION = '0.20b';
+const CHANGE_NOTE = 'Per-character difficulty unlocks + character progression chain. Beat ★3+ on 9 or 18 holes with each character to unlock the next: Classic→Smashy→Speedball→Precision. Each character has its own independent star ladder.';
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
@@ -3154,6 +3183,9 @@ const G = {
   lives: 3,
   budgetBase: 27,
   scorecard: [], modifiers: [],
+  // v0.20a3: telemetry — shop-visit log per run (offerings, purchases, rerolls).
+  _currentRunShopVisits: [],
+  _currentShopVisit: null,
   // ── Economy ─────────────────────────────────────────
   coins: 0,               // current wallet
   hotStreak: 0,           // consecutive par-or-better holes
@@ -3583,9 +3615,22 @@ const META_SCHEMA_DEFAULT = {
     // granted — the first hat (Top Hat) is an XP unlock at 100 XP so players
     // earn their first cosmetic milestone a few holes into their first run.
     cosmetics: ['default_white'],
-    // Difficulties unlocked per run length. Clean slate = 1,2,3 for both.
-    // Populated by unlockNextDifficulty() when a run meets winReq.
-    difficulties: { d9:[1,2,3], d18:[1,2,3] },
+    // v0.20a4: Difficulties unlocked PER CHARACTER per run length. Each
+    // character has its own independent progression — beating ★3 with Smashy
+    // unlocks ★4 for Smashy only, not for Speedball. Pre-v0.20a4 profiles
+    // had a flat { d9, d18 } structure; the migration in getMeta() stamps that
+    // onto `classic` (since they could only have played classic at the time)
+    // and seeds the other characters at [1,2,3].
+    difficulties: {
+      classic:   { d9:[1,2,3], d18:[1,2,3] },
+      smashy:    { d9:[1,2,3], d18:[1,2,3] },
+      speedball: { d9:[1,2,3], d18:[1,2,3] },
+      precision: { d9:[1,2,3], d18:[1,2,3] },
+    },
+    // v0.20a4: Characters unlocked by the player. Classic is always unlocked.
+    // Smashy unlocks by completing ★3 with Classic (9 or 18). Speedball by
+    // completing ★3 with Smashy. Precision by completing ★3 with Speedball.
+    characters: ['classic'],
   },
   currencies: { gems: 0 },
   talents: {},
@@ -3615,9 +3660,36 @@ function getMeta() {
   Object.assign(merged, raw);
   merged.unlocks = Object.assign({}, defUnlocks, raw.unlocks || {});
   // Ensure difficulties object has both d9 and d18 keys, default to [1,2,3]
-  if(!merged.unlocks.difficulties) merged.unlocks.difficulties = { d9:[1,2,3], d18:[1,2,3] };
-  if(!Array.isArray(merged.unlocks.difficulties.d9))  merged.unlocks.difficulties.d9  = [1,2,3];
-  if(!Array.isArray(merged.unlocks.difficulties.d18)) merged.unlocks.difficulties.d18 = [1,2,3];
+  // v0.20a4: difficulties is now per-character. Migrate old flat
+  // { d9:[...], d18:[...] } shape to { classic:{d9,d18}, smashy:{d9,d18}, ... }.
+  // The flat shape is stamped onto `classic` (only character that existed before).
+  if(!merged.unlocks.difficulties) merged.unlocks.difficulties = {};
+  const _diffs = merged.unlocks.difficulties;
+  const _isOldFlatShape = Array.isArray(_diffs.d9) || Array.isArray(_diffs.d18);
+  if(_isOldFlatShape) {
+    const _oldD9  = Array.isArray(_diffs.d9)  ? _diffs.d9.slice()  : [1,2,3];
+    const _oldD18 = Array.isArray(_diffs.d18) ? _diffs.d18.slice() : [1,2,3];
+    merged.unlocks.difficulties = {
+      classic:   { d9: _oldD9, d18: _oldD18 },
+      smashy:    { d9: [1,2,3], d18: [1,2,3] },
+      speedball: { d9: [1,2,3], d18: [1,2,3] },
+      precision: { d9: [1,2,3], d18: [1,2,3] },
+    };
+  } else {
+    // Ensure all four character buckets exist + each has d9/d18 arrays.
+    for(const _cid of ['classic','smashy','speedball','precision']) {
+      if(!_diffs[_cid] || typeof _diffs[_cid] !== 'object') _diffs[_cid] = { d9:[1,2,3], d18:[1,2,3] };
+      if(!Array.isArray(_diffs[_cid].d9))  _diffs[_cid].d9  = [1,2,3];
+      if(!Array.isArray(_diffs[_cid].d18)) _diffs[_cid].d18 = [1,2,3];
+    }
+  }
+  // v0.20a4: character unlocks. Default to ['classic']. Forward-compat: if the
+  // field is missing/malformed, seed with classic only (existing players need
+  // to actually beat ★3 to earn the others, like a fresh profile).
+  if(!Array.isArray(merged.unlocks.characters) || merged.unlocks.characters.length === 0) {
+    merged.unlocks.characters = ['classic'];
+  }
+  if(!merged.unlocks.characters.includes('classic')) merged.unlocks.characters.unshift('classic');
   // ── v0.19b cosmetic migration shims ──
   // v0.18 saves had an empty cosmetics: [] — seed the starter skin so every
   // profile begins with something on their ball.
@@ -3649,27 +3721,34 @@ function setMeta(meta) {
 window.getMeta = getMeta;
 window.setMeta = setMeta;
 
-// ── Difficulty unlock helpers (v0.18a) ────────────────
-// Per-profile, per-length tracking. Each run length (9 vs 18) has its own
-// independent unlock progression. Starting state is [1,2,3] for both.
-function isDifficultyUnlocked(length, star) {
+// ── Difficulty unlock helpers (v0.18a; v0.20a4: per-character) ────────
+// Per-profile, per-character, per-length tracking. Each (character × length)
+// has its own independent unlock progression. Starting state is [1,2,3] for
+// every (char, length) combo.
+function isDifficultyUnlocked(length, star, characterId) {
   const meta = getMeta();
+  const cid = characterId || (G && G.currentCharacter) || 'classic';
   const key = (length <= 9) ? 'd9' : 'd18';
-  const list = (meta.unlocks && meta.unlocks.difficulties && meta.unlocks.difficulties[key]) || [1,2,3];
+  const diffs = (meta.unlocks && meta.unlocks.difficulties) || {};
+  const charDiffs = diffs[cid] || {};
+  const list = Array.isArray(charDiffs[key]) ? charDiffs[key] : [1,2,3];
   return list.indexOf(star) !== -1;
 }
 window.isDifficultyUnlocked = isDifficultyUnlocked;
 
 // Returns the newly unlocked star (or null if nothing was unlocked).
 // Caller is responsible for showing toast + SFX.
-function unlockNextDifficulty(length, currentStar) {
+function unlockNextDifficulty(length, currentStar, characterId) {
   if(currentStar >= 10) return null;
   const meta = getMeta();
+  const cid = characterId || (G && G.currentCharacter) || 'classic';
   if(!meta.unlocks) meta.unlocks = {};
-  if(!meta.unlocks.difficulties) meta.unlocks.difficulties = { d9:[1,2,3], d18:[1,2,3] };
+  if(!meta.unlocks.difficulties) meta.unlocks.difficulties = {};
+  if(!meta.unlocks.difficulties[cid]) meta.unlocks.difficulties[cid] = { d9:[1,2,3], d18:[1,2,3] };
+  const charDiffs = meta.unlocks.difficulties[cid];
   const key = (length <= 9) ? 'd9' : 'd18';
-  if(!Array.isArray(meta.unlocks.difficulties[key])) meta.unlocks.difficulties[key] = [1,2,3];
-  const list = meta.unlocks.difficulties[key];
+  if(!Array.isArray(charDiffs[key])) charDiffs[key] = [1,2,3];
+  const list = charDiffs[key];
   const next = currentStar + 1;
   if(list.indexOf(next) === -1) {
     list.push(next);
@@ -3683,7 +3762,8 @@ window.unlockNextDifficulty = unlockNextDifficulty;
 
 // Given a completed run's stats + difficulty, evaluate whether it meets winReq
 // and unlock the next star. Returns the newly unlocked star or null.
-function evaluateDifficultyUnlock(length, currentStar, runStats) {
+// v0.20a4: also takes characterId so the unlock applies to that character.
+function evaluateDifficultyUnlock(length, currentStar, runStats, characterId) {
   const mods = getDifficultyMods(currentStar);
   const { holesPlayed, totalHoles, hpRemaining, diff } = runStats;
   if(holesPlayed < totalHoles) return null; // must actually finish
@@ -3692,9 +3772,55 @@ function evaluateDifficultyUnlock(length, currentStar, runStats) {
   else if(mods.winReq === 'noHpLoss') met = (hpRemaining > 0);
   else if(mods.winReq === 'underPar') met = (hpRemaining > 0 && diff < 0);
   if(!met) return null;
-  return unlockNextDifficulty(length, currentStar);
+  return unlockNextDifficulty(length, currentStar, characterId);
 }
 window.evaluateDifficultyUnlock = evaluateDifficultyUnlock;
+
+// ── Character unlock chain (v0.20a4) ───────────────────
+// Linear unlock chain: completing ★3 (winReq='finish') with N unlocks N+1.
+// Classic ★3 → Smashy → Speedball → Precision.
+// The chain is a strict order; you can't skip ahead. Beating ★3 with the
+// FIRST locked character in the chain unlocks the NEXT one.
+const CHARACTER_UNLOCK_CHAIN = ['classic', 'smashy', 'speedball', 'precision'];
+
+function isCharacterUnlocked(id) {
+  const meta = getMeta();
+  const list = (meta.unlocks && Array.isArray(meta.unlocks.characters)) ? meta.unlocks.characters : ['classic'];
+  return list.includes(id);
+}
+window.isCharacterUnlocked = isCharacterUnlocked;
+
+// Returns the newly unlocked character id (or null) when a run finishes and
+// meets the chain criteria. Conditions:
+//   - Run was completed (holesPlayed === totalHoles, didn't bust)
+//   - Difficulty was ★3 or higher (so a ★3 finish or any harder finish counts)
+//   - The character used IS the next-required character in the chain
+//   - The next character isn't already unlocked
+// The "★3 or higher" part is a generous read of the user's spec — you said
+// "beat at difficulty 3"; if a player beats it on ★5, that should obviously
+// also count. If you'd rather it be exactly ★3, change `currentStar >= 3` to
+// `currentStar === 3`.
+function evaluateCharacterUnlock(characterUsed, currentStar, runStats) {
+  const { holesPlayed, totalHoles, bustedBudget } = runStats;
+  if(bustedBudget) return null;
+  if(holesPlayed < totalHoles) return null;
+  if(currentStar < 3) return null;
+  const idx = CHARACTER_UNLOCK_CHAIN.indexOf(characterUsed);
+  if(idx < 0) return null;
+  const nextId = CHARACTER_UNLOCK_CHAIN[idx + 1];
+  if(!nextId) return null; // already at end of chain
+  if(isCharacterUnlocked(nextId)) return null;
+  // Persist
+  const meta = getMeta();
+  if(!meta.unlocks) meta.unlocks = {};
+  if(!Array.isArray(meta.unlocks.characters)) meta.unlocks.characters = ['classic'];
+  if(!meta.unlocks.characters.includes(nextId)) {
+    meta.unlocks.characters.push(nextId);
+    setMeta(meta);
+  }
+  return nextId;
+}
+window.evaluateCharacterUnlock = evaluateCharacterUnlock;
 
 // Expose profile API for debug / console use
 window.GGW_Profiles = { loadProfilesIndex, getActiveProfile, setActiveProfile,
@@ -3983,6 +4109,12 @@ window.setCameraMode = function(mode) {
 // Sets the active character id and refreshes the portrait row.
 window.setCharacter = function(id) {
   if(typeof CHARACTERS === 'undefined' || !CHARACTERS[id]) return;
+  // v0.20a4: prevent selecting locked characters. Show details popup instead
+  // (which displays the unlock requirement).
+  if(typeof isCharacterUnlocked === 'function' && !isCharacterUnlocked(id)) {
+    if(typeof showCharacterDetails === 'function') showCharacterDetails(id);
+    return;
+  }
   G.currentCharacter = id;
   // Persist on meta so the pick survives reloads
   try {
@@ -3991,12 +4123,18 @@ window.setCharacter = function(id) {
     setMeta(meta);
   } catch(e){}
   if(typeof renderCharacterRow === 'function') renderCharacterRow();
+  // v0.20a4: per-character difficulty unlocks — refresh the star row so its
+  // locks reflect the newly-selected character's progression. If the previous
+  // ★ choice is locked for this character, renderStarRow() falls back to the
+  // highest unlocked star.
+  if(typeof renderStarRow === 'function') renderStarRow();
 };
 
 // Render the horizontal portrait row at the top of the main menu.
 // Each portrait is a compact card with an emoji, the character name, and a
 // small ⓘ button that opens the details popup. The active character gets a
-// bright outline. No-op if the markup isn't mounted yet.
+// bright outline. Locked characters are dimmed with a 🔒 overlay (v0.20a4).
+// No-op if the markup isn't mounted yet.
 function renderCharacterRow() {
   const row = document.getElementById('character-row');
   if(!row || typeof CHARACTERS === 'undefined') return;
@@ -4006,15 +4144,18 @@ function renderCharacterRow() {
   for(const id of order) {
     const ch = CHARACTERS[id];
     if(!ch) continue;
+    const unlocked = (typeof isCharacterUnlocked === 'function') ? isCharacterUnlocked(id) : true;
     const el = document.createElement('div');
-    el.className = 'char-portrait' + (id === cur ? ' active' : '');
+    el.className = 'char-portrait' + (id === cur ? ' active' : '') + (unlocked ? '' : ' locked');
     el.onclick = (e) => {
       // Clicking anywhere in the portrait (except the ⓘ) selects the character
       if(e.target && e.target.classList && e.target.classList.contains('char-info-btn')) return;
       window.setCharacter(id);
     };
+    const lockOverlay = unlocked ? '' : '<div class="char-lock">🔒</div>';
     el.innerHTML = `
       <button class="char-info-btn" onclick="event.stopPropagation(); showCharacterDetails('${id}')" aria-label="Details">ⓘ</button>
+      ${lockOverlay}
       <div class="char-emoji">${ch.emoji}</div>
       <div class="char-name">${ch.name}</div>
     `;
@@ -4032,6 +4173,22 @@ function showCharacterDetails(id) {
   const ov = document.getElementById('char-details-overlay');
   const panel = document.getElementById('char-details-panel');
   if(!ov || !panel) return;
+
+  // v0.20a4: locked-state messaging. Compute the prerequisite character (the
+  // one whose ★3 finish unlocks this character).
+  const _isUnlocked = (typeof isCharacterUnlocked === 'function') ? isCharacterUnlocked(id) : true;
+  let _lockedHtml = '';
+  if(!_isUnlocked && typeof CHARACTER_UNLOCK_CHAIN !== 'undefined') {
+    const idx = CHARACTER_UNLOCK_CHAIN.indexOf(id);
+    const prereqId = idx > 0 ? CHARACTER_UNLOCK_CHAIN[idx - 1] : null;
+    const prereqCh = prereqId && (typeof CHARACTERS !== 'undefined') ? CHARACTERS[prereqId] : null;
+    const prereqName = prereqCh ? `${prereqCh.emoji} ${prereqCh.name}` : 'previous character';
+    _lockedHtml = `
+      <div class="char-details-locked">
+        <div class="char-details-locked-title">🔒 LOCKED</div>
+        <div class="char-details-locked-body">Complete a 9- or 18-hole run on ★3 (Standard) or higher with <strong>${prereqName}</strong> to unlock.</div>
+      </div>`;
+  }
 
   // Build chip list for starter deck — pull emoji from CARD_DEFS when available
   const deckChips = (ch.starter && ch.starter.deck ? ch.starter.deck : []).map(cid => {
@@ -4067,6 +4224,7 @@ function showCharacterDetails(id) {
     <div class="char-details-emoji">${ch.emoji}</div>
     <div class="char-details-name">${ch.name}</div>
     <div class="char-details-tag">${ch.tagline || ''}</div>
+    ${_lockedHtml}
     <div class="char-details-section">
       <div class="char-details-section-label">Blessings</div>
       <div class="char-details-list blessings">${blessHtml}</div>
@@ -4154,12 +4312,17 @@ function renderStarRow() {
   // Refresh label
   const lbl = document.getElementById('star-diff-label');
   if(lbl) lbl.textContent = getDifficultyMods(G.difficulty).name;
-  // If current selection got locked (e.g. switched from 9h to 18h), fall back
-  // to the highest unlocked star for this length.
+  // If current selection got locked (e.g. switched from 9h to 18h, OR switched
+  // character to one with a lower progression), fall back to the highest
+  // unlocked star for this (character × length) combo.
+  // v0.20a4: per-character schema means difficulties live at
+  // meta.unlocks.difficulties[characterId][key].
   if(!isDifficultyUnlocked(len, G.difficulty)) {
     const meta = getMeta();
+    const cid = G.currentCharacter || 'classic';
     const key = len <= 9 ? 'd9' : 'd18';
-    const list = (meta.unlocks.difficulties[key] || [1,2,3]);
+    const charDiffs = (meta.unlocks.difficulties && meta.unlocks.difficulties[cid]) || {};
+    const list = Array.isArray(charDiffs[key]) ? charDiffs[key] : [1,2,3];
     const highest = Math.max.apply(null, list);
     G.difficulty = highest;
     G._diffMods = getDifficultyMods(highest);
@@ -8204,6 +8367,7 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
   //   { kind:'xp',         amount:N }
   //   { kind:'difficulty', star:N, name:'Hard' }
   //   { kind:'cosmetic',   id:'top_hat', category:'hat' }
+  //   { kind:'character',  id:'smashy', name:'Smashy', emoji:'🦏' }   (v0.20a4)
   function flushPendingUnlockToasts() {
     if(typeof showToast !== 'function') return;
     const meta = (typeof getMeta === 'function') ? getMeta() : null;
@@ -8227,6 +8391,16 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
                       : item.category === 'skin' ? 'Ball'
                       : 'Cosmetic';
             showToast(`🎨 New ${cat}: ${cosmeticDisplayName(item.id)}!`, 3200);
+          } else if(item.kind === 'character') {
+            // v0.20a4: character unlock — full sentence so the milestone reads
+            // big. Refresh the picker after firing so the new portrait appears
+            // unlocked immediately on the menu.
+            const em = item.emoji || '🆕';
+            const nm = item.name || item.id;
+            showToast(`${em} CHARACTER UNLOCKED: ${nm.toUpperCase()}!`, 3600);
+            if(typeof renderCharacterRow === 'function') {
+              setTimeout(() => { try { renderCharacterRow(); } catch(_){} }, 100);
+            }
           }
         } catch(e){}
       }, 650 + i * 900);
@@ -13263,6 +13437,51 @@ function maybeForceHardShopPerk() {
   G._shopCurrentPicks[minIdx] = forced;
 }
 
+// v0.20a3: Telemetry — capture the full set of offerings (perks + cards) the
+// shop is currently showing the player, with their scaled prices. Returns a
+// fresh array of plain objects keyed by id+type, with `purchased:false` and
+// `purchaseOrder:null` placeholders. Mutated by buyPerk/buyCard when bought.
+function _snapshotShopOfferings() {
+  const out = [];
+  const perks = G._shopCurrentPicks || [];
+  for(const p of perks) {
+    out.push({
+      id: p.id,
+      type: 'perk',
+      name: p.name || p.id,
+      price: getScaledPrice(p),
+      rarity: p.rarity || 'common',
+      purchased: false,
+      purchaseOrder: null,
+    });
+  }
+  const cards = G._shopCardPicks || [];
+  for(const c of cards) {
+    out.push({
+      id: c.id,
+      type: 'card',
+      name: c.name || c.id,
+      price: getScaledCardPrice(c),
+      rarity: c.rarity || 'common',
+      purchased: false,
+      purchaseOrder: null,
+    });
+  }
+  return out;
+}
+
+// Mark a purchased item in the current visit's offerings array. Called from
+// buyPerk/buyCard. type is 'perk' or 'card'.
+function _markShopPurchase(id, type) {
+  const visit = G._currentShopVisit;
+  if(!visit || !Array.isArray(visit.offerings)) return;
+  const offering = visit.offerings.find(o => o.id === id && o.type === type && !o.purchased);
+  if(!offering) return;
+  visit._purchaseCount = (visit._purchaseCount || 0) + 1;
+  offering.purchased = true;
+  offering.purchaseOrder = visit._purchaseCount;
+}
+
 function openShop() {
   // Belt-and-suspenders: ensure Sharpshooter scope is fully cleared before showing shop.
   if(G._sharpshooterActive) exitSharpshooter();
@@ -13298,6 +13517,19 @@ function openShop() {
     sub.textContent = `Hole ${G.hole+1} of ${G.totalHoles} complete — spend wisely${tierLine}`;
   }
   document.getElementById('shop-overlay').classList.add('visible');
+  // v0.20a3: telemetry — start a new shop-visit log entry. Snapshot is taken
+  // here (after maybeForceHardShopPerk) so forced perks are recorded as offered.
+  if(!G._currentRunShopVisits) G._currentRunShopVisits = [];
+  G._currentShopVisit = {
+    afterHole: G.hole, // 0-indexed; matches scorecard.hole semantics
+    playerId: isMultiplayer() ? (G.currentPlayer != null ? G.currentPlayer : null) : null,
+    coinsBefore: G.coins | 0,
+    coinsAfter: null,
+    offerings: _snapshotShopOfferings(),
+    rerollsUsed: 0,
+    totalRerollSpend: 0,
+    _purchaseCount: 0, // internal — stripped before export
+  };
 }
 
 // Pick N random cards from CARD_DEFS, weighted by rarity
@@ -13339,6 +13571,15 @@ function getScaledCardPrice(card) {
 function closeShop() {
   if(shopGraceActive()) return;
   if(G.state !== 'playing') return; // guard against stale callbacks after game over/restart
+  // v0.20a3: telemetry — finalize the current shop visit BEFORE clearing the
+  // shop state. Strip the internal _purchaseCount marker before pushing.
+  if(G._currentShopVisit) {
+    G._currentShopVisit.coinsAfter = G.coins | 0;
+    delete G._currentShopVisit._purchaseCount;
+    if(!G._currentRunShopVisits) G._currentRunShopVisits = [];
+    G._currentRunShopVisits.push(G._currentShopVisit);
+    G._currentShopVisit = null;
+  }
   G._shopCurrentPicks = null;
   document.getElementById('shop-overlay').classList.remove('visible');
   if(G.hp <= 0 && !isMultiplayer()) { showGameOver(true); return; }
@@ -13392,6 +13633,19 @@ function rerollShop() {
   // v0.18a: re-apply forced hard perk after reroll so ★8+ players can't just
   // reroll their way out of the difficulty modifier.
   maybeForceHardShopPerk();
+  // v0.20a3: telemetry — log this reroll on the current shop visit. Per spec,
+  // we keep only the FINAL offer set (so we replace `offerings`); the prior
+  // pre-reroll offerings are not preserved. Reroll cost (post-doubling) was
+  // already deducted above; we reflect it here even when free (cost === 0).
+  if(G._currentShopVisit) {
+    G._currentShopVisit.rerollsUsed = (G._currentShopVisit.rerollsUsed || 0) + 1;
+    G._currentShopVisit.totalRerollSpend = (G._currentShopVisit.totalRerollSpend || 0) + (cost | 0);
+    G._currentShopVisit.offerings = _snapshotShopOfferings();
+    // Reset the within-visit purchase counter so post-reroll buys start at 1.
+    // Pre-reroll purchases were tracked but their offerings are now overwritten,
+    // which is fine — we explicitly opted to keep only the final offer set.
+    G._currentShopVisit._purchaseCount = 0;
+  }
   renderShop();
   if(AC) { for(let k=0;k<2;k++) setTimeout(()=>sfxCoinPickup(),k*80); }
 }
@@ -13546,6 +13800,8 @@ window.buyCard = function(id) {
   G.coins -= scaledPrice;
   trackStat('coinsSpent', scaledPrice);
   G.deck.push(id);
+  // v0.20a3: telemetry — mark purchase on current visit's offerings.
+  if(typeof _markShopPurchase === 'function') _markShopPurchase(id, 'card');
   updateCoinHUD();
   if(AC) { for(let k=0;k<3;k++) setTimeout(()=>sfxCoinPickup(), k*100); }
   // Remove from card picks and re-render (don't close shop)
@@ -13574,6 +13830,8 @@ window.buyPerk = function(id) {
   G.coins -= scaledPrice;
   trackStat('coinsSpent', scaledPrice);
   G.modifiers.push({ ...perk });
+  // v0.20a3: telemetry — mark purchase on current visit's offerings.
+  if(typeof _markShopPurchase === 'function') _markShopPurchase(id, 'perk');
   // v0.19f: track perks-bought for pineapple-hat achievement
   G._perksBoughtThisRun = (G._perksBoughtThisRun || 0) + 1;
   applyPerkEffect(perk.id);
@@ -19529,14 +19787,16 @@ function showGameOver(bustedBudget=false){
   // v0.18a: evaluate difficulty unlock. Run must have reached the final hole
   // without busting HP; winReq for that star is checked inside the helper.
   let _newStarThisRun = null;
+  let _newCharThisRun = null; // v0.20a4
   try {
     if(!bustedBudget && holesPlayed >= (G.totalHoles || 9)) {
+      const _charForUnlock = G.currentCharacter || 'classic';
       const newStar = evaluateDifficultyUnlock(G.totalHoles || 9, G.difficulty || 3, {
         holesPlayed,
         totalHoles: G.totalHoles || 9,
         hpRemaining: G.hp,
         diff, // totalStrokes - totalPar, <0 = under par
-      });
+      }, _charForUnlock);
       if(newStar != null) {
         _newStarThisRun = newStar;
         // v0.19p: star toast moved to home-screen arrival (queued later with
@@ -19560,8 +19820,39 @@ function showGameOver(bustedBudget=false){
           } catch(e){}
         }
       }
+      // v0.20a4: character chain — completing ★3+ with the chain's current
+      // tail unlocks the next character. Independent from star unlocks; both
+      // can fire on the same run.
+      if(typeof evaluateCharacterUnlock === 'function') {
+        const newChar = evaluateCharacterUnlock(_charForUnlock, G.difficulty || 3, {
+          holesPlayed,
+          totalHoles: G.totalHoles || 9,
+          bustedBudget,
+        });
+        if(newChar) {
+          _newCharThisRun = newChar;
+          // Bigger arpeggio for character unlocks — they're rarer and louder.
+          if(typeof AC !== 'undefined' && AC) {
+            try {
+              const ac = getAC ? getAC() : AC;
+              const t0 = ac.currentTime;
+              const notes = [392, 523, 659, 784, 1047, 1319]; // G C E G C E
+              notes.forEach((f, i) => {
+                const o = ac.createOscillator(); o.type = 'triangle';
+                o.frequency.value = f;
+                const g = ac.createGain();
+                g.gain.setValueAtTime(0, t0 + i*0.07);
+                g.gain.linearRampToValueAtTime(0.22, t0 + i*0.07 + 0.02);
+                g.gain.exponentialRampToValueAtTime(0.001, t0 + i*0.07 + 0.4);
+                o.connect(g); g.connect(getACDest ? getACDest() : ac.destination);
+                o.start(t0 + i*0.07); o.stop(t0 + i*0.07 + 0.45);
+              });
+            } catch(e){}
+          }
+        }
+      }
     }
-  } catch(e) { console.warn('difficulty unlock eval failed', e); }
+  } catch(e) { console.warn('difficulty/character unlock eval failed', e); }
 
   // ── XP deposit + unlock check (v0.19e) ──
   // Final XP bumps: run outcome + new-star bonus. Deposited into meta.xp,
@@ -19612,6 +19903,16 @@ function showGameOver(bustedBudget=false){
     if(_newStarThisRun != null) {
       const mods = getDifficultyMods(_newStarThisRun);
       pending.push({ kind:'difficulty', star:_newStarThisRun, name: mods.name });
+    }
+    // v0.20a4: character unlock toast
+    if(_newCharThisRun) {
+      const _newCh = (typeof CHARACTERS !== 'undefined') ? CHARACTERS[_newCharThisRun] : null;
+      pending.push({
+        kind: 'character',
+        id: _newCharThisRun,
+        name: _newCh ? _newCh.name : _newCharThisRun,
+        emoji: _newCh ? _newCh.emoji : '🆕',
+      });
     }
     // Drain any backlog from previous runs FIRST (oldest wins).
     const backlog = Array.isArray(meta._pendingCosmeticBacklog) ? meta._pendingCosmeticBacklog : [];
@@ -19691,6 +19992,9 @@ function saveRunData(outcome) {
         id: m.id, name: m.name, rarity: m.rarity,
       })),
       finalDeck: (G.deck || []).slice(),
+      // v0.20a3: telemetry — full per-shop log for economy tuning. One entry per
+      // openShop() invocation. Multiplayer fans this out per player per shop visit.
+      shopVisits: (G._currentRunShopVisits || []).slice(),
       scorecard: (G.scorecard || []).slice(),
       seed: G._currentSeed || G.seed || '',
       runDuration: G._runStartTime ? Math.max(0, Math.round(performance.now() - G._runStartTime)) : 0,
@@ -21523,6 +21827,10 @@ function startGame(){
   G.difficultyBudgetMult = Math.max(0.5, 1.3 - (G.difficulty - 1) * 0.08);
 
   G.hole=0; G.totalStrokes=0; G.scorecard=[]; G.modifiers=[]; G.state='playing';
+  // v0.20a3: telemetry — fresh shop-visit log per run. Captures every shop opening's
+  // offerings + purchases + rerolls; included in saveRunData() for post-run analysis.
+  G._currentRunShopVisits = [];
+  G._currentShopVisit = null;
   // v0.20a: apply character starter perks. Each id in starter.perks pushes one
   // stack of that perk into G.modifiers. For stackable perks (scorched_earth,
   // strengthen_swing) this means repeating ids will stack naturally.
