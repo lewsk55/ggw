@@ -3160,8 +3160,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.20e';
-const CHANGE_NOTE = 'Heart Surgeon retuned (+4 HP heal, +2 max HP, no full restore). New perks: Explosive Speed, Regeneration. Invisible-wall bug fix on hole transitions. Hole win VFX follows moving holes.';
+const GAME_VERSION = '0.20f';
+const CHANGE_NOTE = 'Starting coins by difficulty (★3=30). Sniper → epic. Spikes fling dramatically when hit by projectiles. Hearts more generous to pick up. 18-hole +2 max HP. 9-hole difficulty curve now scales to run length (final hole = 18-hole final, not midpoint).';
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
@@ -3313,43 +3313,43 @@ const G = {
 // Reward scaling is modest (coins/style) — prestige is the real reward.
 // ═══════════════════════════════════════════════════════
 const DIFFICULTY_TABLE = {
-  1:  { name:'Casual',     pathMult:0.70, shopRate:0.10, startingHp:14, overParDmg:1, spikeDmg:1,
+  1:  { name:'Casual',     pathMult:0.70, shopRate:0.10, startingHp:14, startingCoins:35, overParDmg:1, spikeDmg:1,
         oobGrace:3.0, coinMult:1.40, styleMult:1.00, bogeyDmgExtra:0, rerollCostMult:1.0,
         cardRemoveCostMult:1.0, lateHoleExtraPath:0, healReduction:0, forcedHardShopCards:false,
         priceBaseMult:1.20, winReq:'finish' },
-  2:  { name:'Easy',       pathMult:0.85, shopRate:0.15, startingHp:12, overParDmg:1, spikeDmg:1,
+  2:  { name:'Easy',       pathMult:0.85, shopRate:0.15, startingHp:12, startingCoins:35, overParDmg:1, spikeDmg:1,
         oobGrace:3.0, coinMult:1.20, styleMult:1.00, bogeyDmgExtra:0, rerollCostMult:1.0,
         cardRemoveCostMult:1.0, lateHoleExtraPath:0, healReduction:0, forcedHardShopCards:false,
         priceBaseMult:1.35, winReq:'finish' },
-  3:  { name:'Standard',   pathMult:1.00, shopRate:0.25, startingHp:10, overParDmg:1, spikeDmg:1,
+  3:  { name:'Standard',   pathMult:1.00, shopRate:0.25, startingHp:10, startingCoins:30, overParDmg:1, spikeDmg:1,
         oobGrace:3.0, coinMult:1.00, styleMult:1.00, bogeyDmgExtra:0, rerollCostMult:1.0,
         cardRemoveCostMult:1.0, lateHoleExtraPath:0, healReduction:0, forcedHardShopCards:false,
         priceBaseMult:1.50, winReq:'finish' },
-  4:  { name:'Hard',       pathMult:1.15, shopRate:0.30, startingHp:8,  overParDmg:1, spikeDmg:1,
+  4:  { name:'Hard',       pathMult:1.15, shopRate:0.30, startingHp:8,  startingCoins:25, overParDmg:1, spikeDmg:1,
         oobGrace:3.0, coinMult:1.10, styleMult:1.05, bogeyDmgExtra:0, rerollCostMult:1.0,
         cardRemoveCostMult:1.0, lateHoleExtraPath:0, healReduction:0, forcedHardShopCards:false,
         priceBaseMult:1.50, winReq:'noHpLoss' },
-  5:  { name:'Nightmare',  pathMult:1.30, shopRate:0.30, startingHp:7,  overParDmg:2, spikeDmg:1,
+  5:  { name:'Nightmare',  pathMult:1.30, shopRate:0.30, startingHp:7,  startingCoins:20, overParDmg:2, spikeDmg:1,
         oobGrace:3.0, coinMult:1.20, styleMult:1.10, bogeyDmgExtra:0, rerollCostMult:1.0,
         cardRemoveCostMult:1.0, lateHoleExtraPath:0, healReduction:0, forcedHardShopCards:false,
         priceBaseMult:1.50, winReq:'noHpLoss' },
-  6:  { name:'Cursed',     pathMult:1.40, shopRate:0.35, startingHp:7,  overParDmg:2, spikeDmg:1,
+  6:  { name:'Cursed',     pathMult:1.40, shopRate:0.35, startingHp:7,  startingCoins:15, overParDmg:2, spikeDmg:1,
         oobGrace:3.0, coinMult:1.30, styleMult:1.15, bogeyDmgExtra:0, rerollCostMult:1.0,
         cardRemoveCostMult:1.0, lateHoleExtraPath:0.20, healReduction:0, forcedHardShopCards:false,
         priceBaseMult:1.50, winReq:'noHpLoss' },
-  7:  { name:'Punishing',  pathMult:1.40, shopRate:0.35, startingHp:7,  overParDmg:2, spikeDmg:2,
+  7:  { name:'Punishing',  pathMult:1.40, shopRate:0.35, startingHp:7,  startingCoins:15, overParDmg:2, spikeDmg:2,
         oobGrace:3.0, coinMult:1.40, styleMult:1.20, bogeyDmgExtra:0, rerollCostMult:1.0,
         cardRemoveCostMult:2.0, lateHoleExtraPath:0.20, healReduction:0, forcedHardShopCards:false,
         priceBaseMult:1.50, winReq:'underPar' },
-  8:  { name:'Brutal',     pathMult:1.40, shopRate:0.35, startingHp:7,  overParDmg:2, spikeDmg:2,
+  8:  { name:'Brutal',     pathMult:1.40, shopRate:0.35, startingHp:7,  startingCoins:15, overParDmg:2, spikeDmg:2,
         oobGrace:2.0, coinMult:1.50, styleMult:1.25, bogeyDmgExtra:0, rerollCostMult:1.0,
         cardRemoveCostMult:2.0, lateHoleExtraPath:0.20, healReduction:0, forcedHardShopCards:true,
         priceBaseMult:1.50, winReq:'underPar' },
-  9:  { name:'Masochist',  pathMult:1.40, shopRate:0.35, startingHp:5,  overParDmg:2, spikeDmg:2,
+  9:  { name:'Masochist',  pathMult:1.40, shopRate:0.35, startingHp:5,  startingCoins:15, overParDmg:2, spikeDmg:2,
         oobGrace:2.0, coinMult:1.60, styleMult:1.30, bogeyDmgExtra:0, rerollCostMult:1.0,
         cardRemoveCostMult:2.0, lateHoleExtraPath:0.20, healReduction:1, forcedHardShopCards:true,
         priceBaseMult:1.50, winReq:'underPar' },
-  10: { name:'Impossible', pathMult:1.40, shopRate:0.35, startingHp:5,  overParDmg:2, spikeDmg:2,
+  10: { name:'Impossible', pathMult:1.40, shopRate:0.35, startingHp:5,  startingCoins:15, overParDmg:2, spikeDmg:2,
         oobGrace:2.0, coinMult:1.75, styleMult:1.40, bogeyDmgExtra:1, rerollCostMult:2.0,
         cardRemoveCostMult:2.0, lateHoleExtraPath:0.20, healReduction:1, forcedHardShopCards:true,
         priceBaseMult:1.50, winReq:'underPar' },
@@ -4481,11 +4481,23 @@ function generatePuttPuttCourse(holeNum) {
   // is provided by rule modifiers above that point rather than geometry.
   const mods = G._diffMods || getDifficultyMods(diff);
   const diffMult = mods.pathMult;
+  // v0.20f: difficulty curves ramp by RUN PROGRESS, not absolute hole index.
+  // Old behaviour: a 9-hole run's final hole had the same path/hazard load as
+  // an 18-hole run's hole 9 (i.e. the midpoint), so 9-hole runs never reached
+  // peak difficulty. Fix: compute `holeRamp` — the equivalent 0..17 index for
+  // this hole's progress through the current run — and use it everywhere a
+  // ramp formula previously used `holeNum`. Threshold checks (e.g. "no slides
+  // before hole 3") also key off holeRamp so the SAME progress fraction in
+  // any run length triggers the same hazard introduction.
+  // 9h → mapping 0,2.125,4.25,6.375,8.5,10.625,12.75,14.875,17
+  // 18h → mapping 0,1,2,...,17 (unchanged)
+  const totalHoles = G.totalHoles || 9;
+  const _runFrac = (totalHoles <= 1) ? 0 : holeNum / (totalHoles - 1);
+  const holeRamp = _runFrac * 17;
   // Later holes get progressively longer — kicks in from hole 2.
   // v0.18a: at 6★+, holes past the midpoint of a run get an additional +20%
   // path bonus per mods.lateHoleExtraPath. For 9h: holes 6-8. For 18h: holes 12-17.
-  let holeMult = 1.0 + Math.min(holeNum, 17) * 0.08 + (diff >= 3 ? 0.15 : 0);
-  const totalHoles = G.totalHoles || 9;
+  let holeMult = 1.0 + Math.min(holeRamp, 17) * 0.08 + (diff >= 3 ? 0.15 : 0);
   const lateThreshold = Math.floor(totalHoles * 0.66); // 6 for 9h, 12 for 18h
   if(mods.lateHoleExtraPath > 0 && holeNum >= lateThreshold) {
     holeMult *= (1 + mods.lateHoleExtraPath);
@@ -4536,10 +4548,11 @@ function generatePuttPuttCourse(holeNum) {
 
   // Hole 0: simple single-turn L shapes only. Hole 1-2: moderate variety. 3+: full pool.
   // Higher difficulty and later holes weight toward longer, more complex layouts.
+  // v0.20f: progress-based thresholds via holeRamp (0..17 equivalent).
   let pool;
-  if(holeNum < 1) {
+  if(holeRamp < 1) {
     pool = [allLayouts[0],allLayouts[1],allLayouts[2],allLayouts[3]];
-  } else if(holeNum < 3) {
+  } else if(holeRamp < 5) {
     pool = [allLayouts[0],allLayouts[1],allLayouts[2],allLayouts[3],
        allLayouts[6],allLayouts[7],allLayouts[8],allLayouts[9],
        allLayouts[14],allLayouts[15]]; // add long straights
@@ -4549,10 +4562,10 @@ function generatePuttPuttCourse(holeNum) {
     const complexLayouts = [allLayouts[4],allLayouts[5],allLayouts[10],allLayouts[11],
       allLayouts[12],allLayouts[13],allLayouts[16],allLayouts[17]];
     // Add extra copies of complex layouts based on hole + difficulty
-    const extraWeight = Math.floor(holeNum / 3) + (diff >= 3 ? 2 : 0) + (diff >= 4 ? 2 : 0);
+    const extraWeight = Math.floor(holeRamp / 3) + (diff >= 3 ? 2 : 0) + (diff >= 4 ? 2 : 0);
     for(let ew = 0; ew < extraWeight; ew++) pool.push(...complexLayouts);
-    // Very long layouts from hole 3+ (not just 4+)
-    if(holeNum >= 3) { pool.push(allLayouts[16], allLayouts[17]); }
+    // Very long layouts from ~mid-early run onward
+    if(holeRamp >= 5) { pool.push(allLayouts[16], allLayouts[17]); }
   }
   const segments = pool[Math.floor(rng() * pool.length)];
 
@@ -4707,8 +4720,9 @@ function generatePuttPuttCourse(holeNum) {
   // v0.19r: `power` variant — atomic-orange, 1.6× larger, chaotic reflection,
   // much stronger bounce. Rare spawn chance scales with hole + difficulty.
   const bumperData = [];
-  const bumperN = Math.floor((1 + Math.floor(rng()*2) + Math.floor(diff*0.7) + Math.floor(holeNum*0.25) + (diff>=4?2:0)) * areaScale);
-  const powerBumperP = Math.min(0.25, Math.max(0, (holeNum - 2) * 0.03 + (diff - 2) * 0.04));
+  // v0.20f: count + power-variant probability now scale by holeRamp (run progress)
+  const bumperN = Math.floor((1 + Math.floor(rng()*2) + Math.floor(diff*0.7) + Math.floor(holeRamp*0.25) + (diff>=4?2:0)) * areaScale);
+  const powerBumperP = Math.min(0.25, Math.max(0, (holeRamp - 2) * 0.03 + (diff - 2) * 0.04));
   const trsh = [...fair].sort(()=>rng()-0.5);
   for(let p=0,i=0; i<trsh.length&&p<Math.min(bumperN, Math.floor((4+diff+Math.floor(diff/4)*2) * areaScale)); i++) {
     const c=trsh[i];
@@ -4732,14 +4746,18 @@ function generatePuttPuttCourse(holeNum) {
   // later into a run ('spikesRed', 2 HP). Use totalHoles as the ramp length
   // so short 9-hole runs and long 18-hole runs both scale the same curve.
   const spinBarData = [];
-  const spinN = holeNum<1?0:Math.floor((Math.floor(rng()*2)+Math.floor(diff*0.3)+(diff>=4?1:0)) * areaScale);
-  const _totalHolesForRamp = (typeof G !== 'undefined' && G.totalHoles) || 9;
-  const midHole = Math.floor(_totalHolesForRamp * 0.50);
-  const lateHole = Math.floor(_totalHolesForRamp * 0.75);
-  // Variant probabilities: before midHole only plain; mid→late a chance of
+  // v0.20f: count threshold by holeRamp; spike-bar variants already used
+  // _totalHolesForRamp midHole/lateHole, which was correct.
+  const spinN = holeRamp<1?0:Math.floor((Math.floor(rng()*2)+Math.floor(diff*0.3)+(diff>=4?1:0)) * areaScale);
+  // Variant probabilities: before mid only plain; mid→late a chance of
   // spiked; late+ a chance of red-spiked (with spiked still possible).
-  const spikedBarP    = holeNum >= midHole  ? Math.min(0.50, 0.15 + (holeNum - midHole)  * 0.08 + (diff - 2) * 0.05) : 0;
-  const redSpikedBarP = holeNum >= lateHole ? Math.min(0.35, 0.10 + (holeNum - lateHole) * 0.08 + (diff - 2) * 0.04) : 0;
+  // v0.20f: keyed off holeRamp so 9-hole and 18-hole runs hit the SAME peak
+  // probability at their respective final holes (previously 18-hole peaks
+  // were ~2× higher because the linear ramp had more holes to grow over).
+  // 18-hole equivalent: midpoint = ramp 9, late = ramp 13.
+  const _rampMid = 9, _rampLate = 13;
+  const spikedBarP    = holeRamp >= _rampMid  ? Math.min(0.50, 0.15 + (holeRamp - _rampMid)  * 0.08 + (diff - 2) * 0.05) : 0;
+  const redSpikedBarP = holeRamp >= _rampLate ? Math.min(0.35, 0.10 + (holeRamp - _rampLate) * 0.08 + (diff - 2) * 0.04) : 0;
   const sbsh = [...fair].sort(()=>rng()-0.5);
   for(let p=0,i=0; i<sbsh.length&&p<Math.min(spinN, Math.floor((2+Math.floor(diff/2)+(diff>=4?1:0)) * areaScale)); i++) {
     const c=sbsh[i];
@@ -4763,7 +4781,7 @@ function generatePuttPuttCourse(holeNum) {
   // ── 9. Slide block data ───────────────────────────────
   // Variable face length: full, three-quarter, or half of lane width.
   const slideBlockData = [];
-  const slideN = holeNum<3?0:Math.floor((Math.floor(rng()*2)+Math.floor(diff*0.25)+(diff>=4?1:0)) * areaScale);
+  const slideN = holeRamp<6?0:Math.floor((Math.floor(rng()*2)+Math.floor(diff*0.25)+(diff>=4?1:0)) * areaScale);
   const slsh = [...fair].sort(()=>rng()-0.5);
   for(let p=0,i=0; i<slsh.length&&p<Math.min(slideN, Math.floor((1+Math.floor(diff/3)+(diff>=4?1:0)) * areaScale)); i++) {
     const c=slsh[i];
@@ -4794,7 +4812,7 @@ function generatePuttPuttCourse(holeNum) {
 
   // ── 9b. Bumper clusters ───────────────────────────────
   const clusterData=[];
-  const clusterN=holeNum<2?0:1+Math.floor(rng()*Math.ceil(diff/2));
+  const clusterN=holeRamp<4?0:1+Math.floor(rng()*Math.ceil(diff/2));
   const clsh=[...fair].sort(()=>rng()-0.5);
   for(let p=0,i=0;i<clsh.length&&p<Math.min(clusterN,2);i++){
     const c=clsh[i];
@@ -4892,7 +4910,7 @@ function generatePuttPuttCourse(holeNum) {
   // Only push forward (toward hole) or backward along the segment axis.
   // At least 8 cells long with variation. Stronger force than before.
   const conveyorData=[];
-  const convN=holeNum<1?0:1+Math.floor(rng()*diff*0.6);
+  const convN=holeRamp<1?0:1+Math.floor(rng()*diff*0.6);
   // Sort segments by length (longest first) to prefer long straights
   const convSegOrder = [...segInfo].sort((a,b)=>b.len-a.len);
   for(let si_i=0;si_i<convSegOrder.length&&conveyorData.length<Math.min(convN,3);si_i++){
@@ -4958,7 +4976,7 @@ function generatePuttPuttCourse(holeNum) {
 
   // ── 9f. Pop-up wall data ──────────────────────────────
   const popupData=[];
-  const popupN=holeNum<1?0:1+Math.floor(rng()*2)+Math.floor(diff*0.4)+(diff>=4?1:0);
+  const popupN=holeRamp<1?0:1+Math.floor(rng()*2)+Math.floor(diff*0.4)+(diff>=4?1:0);
   for(let wi=0;wi<segInfo.length&&popupData.length<Math.min(popupN,2+(diff>=4?1:0));wi++){
     const si=segInfo[wi];
     if(si.len<6) continue;
@@ -5019,12 +5037,14 @@ function generatePuttPuttCourse(holeNum) {
   // Now: rng*3 + diff*0.4 + (diff>=4?1) — removed the late-hole flat +1 which
   // pushed standard-diff holes 5+ from "fair" into "spiky". Red variants still
   // ramp up by hole for late-run tension.
-  const spikeN = (holeNum < 2 || diff < 2) ? 0
+  // v0.20f: introductions and ramps now use holeRamp (run-progress equivalent).
+  // Old <2 of 9 → ~22% in (was hole 2). Equivalent in 18-hole scale ≈ holeRamp >= 4.
+  const spikeN = (holeRamp < 4 || diff < 2) ? 0
     : Math.floor((Math.floor(rng() * 3) + Math.floor(diff * 0.4) + (diff>=4?1:0)) * areaScale);
-  const spikeMax = Math.floor((3 + Math.floor(diff / 2) + (holeNum>=7?1:0)) * areaScale);
-  // Red-spike probability: 0 at hole<4, ramping to ~40% by hole 10 at diff 4+.
+  const spikeMax = Math.floor((3 + Math.floor(diff / 2) + (holeRamp>=14?1:0)) * areaScale);
+  // Red-spike probability: 0 at early holes, ramping to ~40% in the late game at diff 4+.
   // Clamp to 50% so white is always the majority look.
-  const redSpikeP = Math.min(0.50, Math.max(0, (holeNum - 3) * 0.06 + (diff - 2) * 0.05));
+  const redSpikeP = Math.min(0.50, Math.max(0, (holeRamp - 3) * 0.06 + (diff - 2) * 0.05));
   const spikeSh = [...fair].sort(() => rng() - 0.5);
   for(let sp = 0, si2 = 0; si2 < spikeSh.length && sp < Math.min(spikeN, spikeMax); si2++) {
     const c = spikeSh[si2];
@@ -5046,8 +5066,10 @@ function generatePuttPuttCourse(holeNum) {
   // (2 HP) variants can appear. Endpoints are clamped to fairway so the ball
   // never escapes the course. Appears from hole 3+ at diff 2+, rarer than
   // static spikes and never overlapping them.
-  const slidingSpikeN = (holeNum < 3 || diff < 2) ? 0
-    : Math.floor((Math.floor(rng() * 2) + Math.floor(diff * 0.3) + (holeNum>=6?1:0)) * areaScale);
+  // v0.20f: introduction and count via holeRamp. Old "<3 of 9" = ~33% → ramp 6.
+  // Old "holeNum>=6 of 9" = ~67% → ramp 12.
+  const slidingSpikeN = (holeRamp < 6 || diff < 2) ? 0
+    : Math.floor((Math.floor(rng() * 2) + Math.floor(diff * 0.3) + (holeRamp>=12?1:0)) * areaScale);
   const slidingSpikeMax = Math.floor((2 + Math.floor(diff / 2)) * areaScale);
   const slSpikeSh = [...fair].sort(() => rng() - 0.5);
   for(let sp = 0, si3 = 0; si3 < slSpikeSh.length && sp < Math.min(slidingSpikeN, slidingSpikeMax); si3++) {
@@ -5283,15 +5305,16 @@ function generatePuttPuttCourse(holeNum) {
   // v0.17y5: par cap now scales with hole number — early holes stay tight,
   // late holes can be par 7-8, with rare par 9-10 on long runs. This keeps
   // the 1-HP-per-over-par rule honest while allowing epic marathon holes.
-  // holeNum is 0-indexed. Cap scaling:
-  //   holes 1-4:   max 6
-  //   holes 5-9:   max 7  (occasional par 7)
-  //   holes 10-14: max 8  (occasional par 7-8)
-  //   holes 15-17: max 8, with 15% chance to lift to 9-10 (rare marathon)
+  // v0.20f: thresholds via holeRamp so 9-hole runs can still surface late-run
+  // par caps (previously only 18-hole runs reached holeNum>=14).
+  //   ramp 0-4:    max 6
+  //   ramp 4-9:    max 7
+  //   ramp 9-14:   max 8
+  //   ramp 14-17:  max 8, with 15% chance to lift to 9-10 (rare marathon)
   let parCap = 6;
-  if(holeNum >= 4)  parCap = 7;
-  if(holeNum >= 9)  parCap = 8;
-  if(holeNum >= 14 && rng() < 0.15) parCap = 10; // rare par 9-10 surprise
+  if(holeRamp >= 4)  parCap = 7;
+  if(holeRamp >= 9)  parCap = 8;
+  if(holeRamp >= 14 && rng() < 0.15) parCap = 10; // rare par 9-10 surprise
   let par = Math.max(3, Math.min(parCap, basePar - parPenalty - 1));
 
   // v0.20a: character par offset (Precision: -1, floor 2). Applied AFTER the
@@ -10790,8 +10813,10 @@ function updatePhysics(dt) {
   // Roll over a heart → +2 HP (capped at hpMax). Spawns sparkle particles
   // and plays a warm chime SFX. Hearts don't magnetize — they're landmarks,
   // not collectibles you scoop up on the way past.
+  // v0.20f: pickup radius bumped 0.55 → 0.85 — heart visual + glow disc reads
+  // bigger than the old hitbox; this makes the collider match the silhouette.
   if(G.heartMeshes && G.heartMeshes.length && G.rolling && !ghostActive) {
-    const HEART_R = 0.55;
+    const HEART_R = 0.85;
     for(const h of G.heartMeshes) {
       if(h.collected) continue;
       const dx = G.ballPos.x - h.wx;
@@ -14345,16 +14370,23 @@ function destroyObstacles(hits, epicentreX, epicentreY, epicentreZ) {
       const dx = worldPos.x - epicentreX || (Math.random()-0.5);
       const dz = worldPos.z - epicentreZ || (Math.random()-0.5);
       const dist = Math.hypot(dx, dz) || 0.1;
-      const speed = 4 + Math.random() * 5;
+      // v0.20f: spikes get a beefier launch — they're spiky and dangerous,
+      // they should LOOK like they got blasted to kingdom come, not gently
+      // pushed. ~1.7× speed and ~1.5× lift, plus extra spin for chaos.
+      const isSpike = hit.type === 'spike';
+      const speedMult = isSpike ? 1.7 : 1.0;
+      const liftMult  = isSpike ? 1.5 : 1.0;
+      const spinMult  = isSpike ? 2.2 : 1.0;
+      const speed = (4 + Math.random() * 5) * speedMult;
       const vel = new THREE.Vector3(
         (dx/dist)*speed + (Math.random()-0.5)*2,
-        3 + Math.random()*4,
+        (3 + Math.random()*4) * liftMult,
         (dz/dist)*speed + (Math.random()-0.5)*2
       );
       const spin = new THREE.Vector3(
-        (Math.random()-0.5)*8,
-        (Math.random()-0.5)*8,
-        (Math.random()-0.5)*8
+        (Math.random()-0.5)*8 * spinMult,
+        (Math.random()-0.5)*8 * spinMult,
+        (Math.random()-0.5)*8 * spinMult
       );
       G.particles.push({ mesh, vel, spin, life:3.5, maxLife:3.5, isDebris:true });
     }
@@ -14865,7 +14897,7 @@ const CARD_DEFS = {
   lil_scootch:  { id:'lil_scootch',  emoji:'🧤', name:"Lil' Scootch",    desc:'Cartoon glove gives the ball a nudge.',                        rarity:'common',    price:10,   context:'any',    holdable:false },
   power_shot:   { id:'power_shot',   emoji:'💪', name:'Power Shot',      desc:'This swing: 2× max power.',                                    rarity:'common',    price:20,   context:'pre',    holdable:false, weight:6 },
   shooter:      { id:'shooter',      emoji:'🚀', name:'Missile Command', desc:'Fire a missile that destroys obstacles in its path.',            rarity:'common',    price:20,  context:'pre',    holdable:false },
-  sniper:       { id:'sniper',       emoji:'🎯', name:'Sniper',          desc:'Zoom a scope and fire a precision missile at a distant obstacle.', rarity:'common',    price:20,  context:'pre',    holdable:false, weight:5 },
+  sniper:       { id:'sniper',       emoji:'🎯', name:'Sniper',          desc:'Zoom a scope and fire a precision missile at a distant obstacle.', rarity:'epic',      price:24,  context:'pre',    holdable:false, weight:3 },
   sharpshooter: { id:'sharpshooter', emoji:'🏌️‍♂️', name:'Sharpshooter',    desc:'Zoom a scope and launch YOUR BALL precisely down the barrel.',       rarity:'epic',      price:30,  context:'pre',    holdable:false, weight:2 },
   grenade:      { id:'grenade',      emoji:'🧨', name:'Grenade',         desc:'Arms grenade aim mode. Pull back to set throw distance & direction (green arc); release to lob. Bounces 3×, then BOOM.', rarity:'common',    price:15,  context:'pre',    holdable:false },
   boulder:      { id:'boulder',      emoji:'🪨', name:'Boulder',         desc:'Summon an unstoppable boulder that smashes everything.',          rarity:'rare',      price:22,  context:'pre',    holdable:false },
@@ -22425,13 +22457,20 @@ function startGame(){
   G._runSaved = false;
   G.strokeBudget = 0;
   // v0.18a: starting HP scales with difficulty (10 at ★1-3, 8 at ★4, 7 at ★5-8, 5 at ★9-10).
-  G.hp = G._diffMods.startingHp;
-  G.hpMax = G._diffMods.startingHp;
+  // v0.20f: 18-hole runs get +2 max HP — twice the bogey opportunities means
+  // double the cumulative damage potential, so the HP buffer scales with run
+  // length. 9-hole HP unchanged. (Adam's tuning request 0.20f.)
+  const _hpBonus18 = (G.totalHoles === 18) ? 2 : 0;
+  G.hp = G._diffMods.startingHp + _hpBonus18;
+  G.hpMax = G._diffMods.startingHp + _hpBonus18;
   G.lives = 3; // legacy shim — kept in sync by applyDamage/applyHeal
   G.hasUndoPower = false;
   G.budgetBusted = false;
   // Economy reset
-  G.coins = 0;
+  // v0.20f: per-difficulty starting coins (Casual/Easy 35, Standard 30, Hard 25,
+  // Nightmare 20, Cursed-Impossible 15) — gives early-shop runway without
+  // breaking the scarcity ramp on harder runs.
+  G.coins = (G._diffMods && typeof G._diffMods.startingCoins === 'number') ? G._diffMods.startingCoins : 30;
   G.hotStreak = 0;
   G.piggyBankStacks = 0;
   // Style score run state
