@@ -3160,8 +3160,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.20f';
-const CHANGE_NOTE = 'Starting coins by difficulty (★3=30). Sniper → epic. Spikes fling dramatically when hit by projectiles. Hearts more generous to pick up. 18-hole +2 max HP. 9-hole difficulty curve now scales to run length (final hole = 18-hole final, not midpoint).';
+const GAME_VERSION = '0.20f2';
+const CHANGE_NOTE = 'Catapult/Arc Shot preview now mirrors every shot-strength multiplier. Iron Ball (×0.85) and Power Shot stacks (×2 each) were missing from preview math; now folded in along with the v0.20f1 catapult-solo damp. Strengthen Swing was already correct.';
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
@@ -9001,8 +9001,18 @@ function updateAimArrow() {
   const power  = G.shotPower;
   const hasArc = G._arcShotActive;
   const hasCatapult = G._catapultActive;
-  const boost  = G.swingMult || 1.0;
-  const spd    = power * 32 * boost;
+  // v0.20f2: preview now mirrors EVERY multiplier in fireShot's speed eq, so
+  // the arc lands where the ball actually lands regardless of which cards or
+  // perks are active. Equation in fireShot:
+  //   speed = shotPower * 32 * boost * ironWeight * powerMult * catapultSoloDamp
+  // Previously the preview only included `boost` (swingMult), so the arc
+  // overshot or undershot whenever Iron Ball, Power Shot, or solo Catapult
+  // were active. Now all five factors mirror exactly.
+  const boost      = G.swingMult || 1.0;                                         // Strengthen Swing stacks
+  const ironWeight = G._ironBallActive ? 0.85 : 1.0;                              // Iron Ball drag
+  const powerMult  = (G._powerShotStacks || 0) > 0 ? Math.pow(2.0, G._powerShotStacks) : 1.0; // Power Shot 2× per stack
+  const catapultSoloDamp = (hasCatapult && (G._powerShotStacks || 0) === 0) ? 0.7 : 1.0;        // Solo catapult damp
+  const spd    = power * 32 * boost * ironWeight * powerMult * catapultSoloDamp;
   const c      = new THREE.Color();
   c.setHSL(0.33 - power * 0.33, 0.9, 0.52);
   // Catapult: bold magenta arc for max readability, overriding the power-color ramp
