@@ -1375,6 +1375,45 @@ display:flex; gap:8px;
 z-index:15;
 pointer-events:none;
 }
+/* v0.20f4: armed-effect chips strip — sits just above the card hand and
+   shows pill-shaped indicators for any pre-swing arming (Power Shot stacks,
+   Iron Ball, Catapult, Cannonball, etc.) so the player can always see what
+   their next swing will do. Played cards are discarded so we can't keep the
+   armed slot pulled-up; this is the next best thing. */
+#armed-chips {
+position:fixed;
+bottom:96px; left:50%;
+transform:translateX(-50%);
+display:flex; gap:6px;
+z-index:14;
+pointer-events:none;
+flex-wrap:wrap; max-width:90vw; justify-content:center;
+}
+.armed-chip {
+display:inline-flex; align-items:center; gap:4px;
+background:rgba(80,200,255,0.22);
+border:1.5px solid rgba(120,220,255,0.65);
+backdrop-filter:blur(6px);
+color:#fff;
+font-family:'Lato',sans-serif;
+font-size:0.72rem; font-weight:700;
+letter-spacing:0.5px;
+padding:4px 9px;
+border-radius:14px;
+box-shadow:0 2px 10px rgba(80,200,255,0.35);
+animation:armed-chip-pulse 1.4s ease-in-out infinite;
+}
+.armed-chip .chip-emoji { font-size:0.95rem; line-height:1; }
+.armed-chip .chip-stack {
+font-size:0.62rem; font-weight:800;
+background:rgba(255,255,255,0.18);
+padding:1px 5px; border-radius:6px;
+margin-left:1px;
+}
+@keyframes armed-chip-pulse {
+0%,100% { box-shadow:0 2px 10px rgba(80,200,255,0.30); }
+50%     { box-shadow:0 4px 16px rgba(80,200,255,0.65); }
+}
 .card-slot {
 position:relative;
 width:60px; height:72px;
@@ -1405,6 +1444,23 @@ border-color:rgba(255,200,0,0.8);
 box-shadow:0 2px 18px rgba(255,180,0,0.5);
 pointer-events:all;
 animation: card-pulse 1s ease-in-out infinite;
+}
+/* v0.20f4: armed-pre-swing indicator. Card is filled (not active = not
+   currently being held) but a flag is set that means it'll fire on the next
+   swing (Power Shot, Iron Ball, Catapult, Cannonball, etc.). Visually:
+   pulled up ~10px, soft cyan glow, and a tiny "armed" pulse. Distinct from
+   .card-active (yellow + heavy pulse) so the player can read both states. */
+.card-slot.card-armed {
+background:rgba(255,255,255,0.95);
+border-color:rgba(120,220,255,0.85);
+box-shadow:0 6px 22px rgba(80,200,255,0.55), 0 0 0 2px rgba(120,220,255,0.25) inset;
+transform:translateY(-10px);
+animation: card-armed-pulse 1.4s ease-in-out infinite;
+}
+.card-slot.card-armed:active { transform:translateY(-10px) scale(0.92); }
+@keyframes card-armed-pulse {
+0%,100% { box-shadow:0 6px 22px rgba(80,200,255,0.45), 0 0 0 2px rgba(120,220,255,0.25) inset; }
+50% { box-shadow:0 8px 28px rgba(80,200,255,0.75), 0 0 0 2px rgba(160,235,255,0.4) inset; }
 }
 .card-slot.card-disabled {
 background:rgba(255,255,255,0.45);
@@ -2179,6 +2235,10 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
 }
 </style>
 
+<!-- v0.20f4: eruda mobile dev console (lazy-loaded on demand from debug menu).
+     Loaded only when the user taps "Console" in the debug menu so iOS users
+     have devtools access without paying boot cost on every session. -->
+
 </head>
 <body>
 
@@ -2376,6 +2436,8 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
   </div>
 </div>
 <!-- Card Hand: 4 active slots centered at bottom (5th appears with Full House perk) -->
+<!-- v0.20f4: armed-effect HUD chips, sit above the card hand -->
+<div id="armed-chips"></div>
 <div id="card-hand">
   <div class="card-slot" id="card-slot-S0"></div>
   <div class="card-slot" id="card-slot-S1"></div>
@@ -2524,6 +2586,7 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
   <button class="dbg-btn" id="dbg-budget">❤️ Add a life</button>
   <button class="dbg-btn" id="dbg-coins">🪙 +50 coins</button>
   <button class="dbg-btn" id="dbg-unlock-all">🔓 Unlock everything</button>
+  <button class="dbg-btn" id="dbg-console">🛠 Open mobile console</button>
   <div style="height:1px;background:rgba(255,255,255,0.15);margin:6px 0"></div>
   <div style="display:flex;gap:12px;max-height:50vh;overflow-y:auto">
     <div style="flex:1;min-width:0">
@@ -3160,8 +3223,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.20f2';
-const CHANGE_NOTE = 'Catapult/Arc Shot preview now mirrors every shot-strength multiplier. Iron Ball (×0.85) and Power Shot stacks (×2 each) were missing from preview math; now folded in along with the v0.20f1 catapult-solo damp. Strengthen Swing was already correct.';
+const GAME_VERSION = '0.20f4';
+const CHANGE_NOTE = 'Win-save fix (synchronous on hole-out, survives iOS tab kill) + mobile dev console (eruda, debug menu) + OOB grace 2s uniform + Boulder rarer/pricier/shorter + hat tilts against travel + magnet field stronger + glass dome → phasing holes + armed-effect HUD chips + Snowball nerf (epic, +25%/3 bounces, speed cap) + Coin Shower ReferenceError fixed.';
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
@@ -3314,31 +3377,31 @@ const G = {
 // ═══════════════════════════════════════════════════════
 const DIFFICULTY_TABLE = {
   1:  { name:'Casual',     pathMult:0.70, shopRate:0.10, startingHp:14, startingCoins:35, overParDmg:1, spikeDmg:1,
-        oobGrace:3.0, coinMult:1.40, styleMult:1.00, bogeyDmgExtra:0, rerollCostMult:1.0,
+        oobGrace:2.0, coinMult:1.40, styleMult:1.00, bogeyDmgExtra:0, rerollCostMult:1.0,
         cardRemoveCostMult:1.0, lateHoleExtraPath:0, healReduction:0, forcedHardShopCards:false,
         priceBaseMult:1.20, winReq:'finish' },
   2:  { name:'Easy',       pathMult:0.85, shopRate:0.15, startingHp:12, startingCoins:35, overParDmg:1, spikeDmg:1,
-        oobGrace:3.0, coinMult:1.20, styleMult:1.00, bogeyDmgExtra:0, rerollCostMult:1.0,
+        oobGrace:2.0, coinMult:1.20, styleMult:1.00, bogeyDmgExtra:0, rerollCostMult:1.0,
         cardRemoveCostMult:1.0, lateHoleExtraPath:0, healReduction:0, forcedHardShopCards:false,
         priceBaseMult:1.35, winReq:'finish' },
   3:  { name:'Standard',   pathMult:1.00, shopRate:0.25, startingHp:10, startingCoins:30, overParDmg:1, spikeDmg:1,
-        oobGrace:3.0, coinMult:1.00, styleMult:1.00, bogeyDmgExtra:0, rerollCostMult:1.0,
+        oobGrace:2.0, coinMult:1.00, styleMult:1.00, bogeyDmgExtra:0, rerollCostMult:1.0,
         cardRemoveCostMult:1.0, lateHoleExtraPath:0, healReduction:0, forcedHardShopCards:false,
         priceBaseMult:1.50, winReq:'finish' },
   4:  { name:'Hard',       pathMult:1.15, shopRate:0.30, startingHp:8,  startingCoins:25, overParDmg:1, spikeDmg:1,
-        oobGrace:3.0, coinMult:1.10, styleMult:1.05, bogeyDmgExtra:0, rerollCostMult:1.0,
+        oobGrace:2.0, coinMult:1.10, styleMult:1.05, bogeyDmgExtra:0, rerollCostMult:1.0,
         cardRemoveCostMult:1.0, lateHoleExtraPath:0, healReduction:0, forcedHardShopCards:false,
         priceBaseMult:1.50, winReq:'noHpLoss' },
   5:  { name:'Nightmare',  pathMult:1.30, shopRate:0.30, startingHp:7,  startingCoins:20, overParDmg:2, spikeDmg:1,
-        oobGrace:3.0, coinMult:1.20, styleMult:1.10, bogeyDmgExtra:0, rerollCostMult:1.0,
+        oobGrace:2.0, coinMult:1.20, styleMult:1.10, bogeyDmgExtra:0, rerollCostMult:1.0,
         cardRemoveCostMult:1.0, lateHoleExtraPath:0, healReduction:0, forcedHardShopCards:false,
         priceBaseMult:1.50, winReq:'noHpLoss' },
   6:  { name:'Cursed',     pathMult:1.40, shopRate:0.35, startingHp:7,  startingCoins:15, overParDmg:2, spikeDmg:1,
-        oobGrace:3.0, coinMult:1.30, styleMult:1.15, bogeyDmgExtra:0, rerollCostMult:1.0,
+        oobGrace:2.0, coinMult:1.30, styleMult:1.15, bogeyDmgExtra:0, rerollCostMult:1.0,
         cardRemoveCostMult:1.0, lateHoleExtraPath:0.20, healReduction:0, forcedHardShopCards:false,
         priceBaseMult:1.50, winReq:'noHpLoss' },
   7:  { name:'Punishing',  pathMult:1.40, shopRate:0.35, startingHp:7,  startingCoins:15, overParDmg:2, spikeDmg:2,
-        oobGrace:3.0, coinMult:1.40, styleMult:1.20, bogeyDmgExtra:0, rerollCostMult:1.0,
+        oobGrace:2.0, coinMult:1.40, styleMult:1.20, bogeyDmgExtra:0, rerollCostMult:1.0,
         cardRemoveCostMult:2.0, lateHoleExtraPath:0.20, healReduction:0, forcedHardShopCards:false,
         priceBaseMult:1.50, winReq:'underPar' },
   8:  { name:'Brutal',     pathMult:1.40, shopRate:0.35, startingHp:7,  startingCoins:15, overParDmg:2, spikeDmg:2,
@@ -5130,14 +5193,16 @@ function generatePuttPuttCourse(holeNum) {
   // the early holes still feel like warm-ups.
   //
   // Difficulty tiers for each defense kind:
-  //   EASY    (front + back): moving_hole line, slat_ring_4 static, glass_dome,
+  //   EASY    (front + back): moving_hole line, slat_ring_4 static,
   //                          magnet_field (weak), force_field (default)
   //   MEDIUM  (back, sometimes front at high diff): slat_ring_6 static,
   //                          slat_ring_4 rotating, moving_hole circle,
-  //                          magnet_field strong, force_field (faster cycle)
+  //                          magnet_field strong, force_field (faster cycle),
+  //                          phasing_holes (slow cycle, v0.20f4)
   //   HARD    (back only, later): spike_ring (4 black + rotating), slat_ring_6
   //                          rotating, moving_hole diamond/figure8,
-  //                          force_field flickering, spike_ring_red (final)
+  //                          force_field flickering, spike_ring_red (final),
+  //                          phasing_holes (fast cycle, v0.20f4)
   let holeDefense = null;
   {
     const totalHolesRun = (G.totalHoles || 9);
@@ -5174,7 +5239,11 @@ function generatePuttPuttCourse(holeNum) {
         // EASY
         { kind:'moving_hole',   params:{pattern:'line'},    tier:'E', weight: 8 },
         { kind:'slat_ring_4',   params:{rotates:false},     tier:'E', weight: 8 },
-        { kind:'glass_dome',    params:{},                  tier:'E', weight: 7 },
+        // v0.20f4: glass_dome removed. Replaced with phasing_holes (medium tier)
+        // — two cup positions, only one is "live" at a time, alternating every
+        // ~1.4s. Player must time the swing so the ball arrives when the
+        // target cup is active. More skill-expressive than glass dome's
+        // one-and-done shatter.
         { kind:'magnet_field',  params:{strengthTier:'low'},tier:'E', weight: 6 },
         { kind:'force_field',   params:{flicker:false},     tier:'E', weight: 6 },
         // MEDIUM
@@ -5182,6 +5251,7 @@ function generatePuttPuttCourse(holeNum) {
         { kind:'slat_ring_6',   params:{rotates:false},     tier:'M', weight: 6 },
         { kind:'slat_ring_4',   params:{rotates:true},      tier:'M', weight: 5 },
         { kind:'magnet_field',  params:{strengthTier:'high'},tier:'M',weight: 5 },
+        { kind:'phasing_holes', params:{cycle:'slow'},      tier:'M', weight: 6 },
         // HARD
         { kind:'spike_ring',    params:{variant:'black'},   tier:'H', weight: 6 },
         { kind:'spike_ring',    params:{variant:'red'},     tier:'H', weight: 4, redOnly:true },
@@ -5189,6 +5259,7 @@ function generatePuttPuttCourse(holeNum) {
         { kind:'moving_hole',   params:{pattern:'diamond'}, tier:'H', weight: 5 },
         { kind:'moving_hole',   params:{pattern:'figure8'}, tier:'H', weight: 4 },
         { kind:'force_field',   params:{flicker:true},      tier:'H', weight: 4 },
+        { kind:'phasing_holes', params:{cycle:'fast'},      tier:'H', weight: 4 },
       ];
 
       // Build the allowed tier set based on half + progress.
@@ -5262,8 +5333,12 @@ function generatePuttPuttCourse(holeNum) {
         hd.startAngle = rng() * Math.PI * 2;
       } else if(chosen.kind === 'magnet_field') {
         const tier = chosen.params.strengthTier;
-        const base = tier === 'low' ? 6 : 10;
-        hd.strength = base + runProgress * 8 + Math.max(0, diff - 2) * 3;
+        // v0.20f4: stronger across the board — base 6→9 (low), 10→15 (high),
+        // run-progress scaling 8→12, diff scaling 3→4. Felt too weak: a
+        // moderate-power shot just punched through. Now requires either a
+        // careful slow approach or a deliberate trick to overcome.
+        const base = tier === 'low' ? 9 : 15;
+        hd.strength = base + runProgress * 12 + Math.max(0, diff - 2) * 4;
         hd.radius = 2.0;
       } else if(chosen.kind === 'force_field') {
         hd.bubbleR = 1.8;
@@ -5275,8 +5350,51 @@ function generatePuttPuttCourse(holeNum) {
         hd.openSecs   = (1.8 + rng() * 0.4) * cycleScale;
         hd.phase = rng() * (hd.closedSecs + hd.openSecs);
         hd.flicker = !!chosen.params.flicker;
-      } else if(chosen.kind === 'glass_dome') {
-        hd.radius = 1.7;
+      } else if(chosen.kind === 'phasing_holes') {
+        // v0.20f4: PHASING HOLES — cup teleports between two positions.
+        // We pick a second offset that's still on fairway, biased toward the
+        // direction of approach so the player can plausibly aim for either.
+        // Slow cycle = 1.6s per side, Fast = 0.95s per side.
+        hd.cycleSecs = chosen.params.cycle === 'fast' ? 0.95 : 1.6;
+        // Sample candidate offsets: 8 directions × 2 distances. Pick the
+        // farthest-from-origin that still passes a fairway check.
+        const T = TILE_SIZE;
+        const checkFair = (offx, offz) => {
+          const wx = cx + offx, wz = cz + offz;
+          const gx = Math.round(wx / T), gz = Math.round(wz / T);
+          if(gx < 0 || gz < 0 || gx >= data.W || gz >= data.H) return false;
+          return data.grid[gz][gx] === CELL.FAIR;
+        };
+        const checkBuffered = (offx, offz) => {
+          const buf = 0.7;
+          if(!checkFair(offx, offz)) return false;
+          if(!checkFair(offx + buf, offz)) return false;
+          if(!checkFair(offx - buf, offz)) return false;
+          if(!checkFair(offx, offz + buf)) return false;
+          if(!checkFair(offx, offz - buf)) return false;
+          return true;
+        };
+        let bestOff = null, bestDist = 0;
+        const tryDistances = [3.0, 2.5, 2.0, 1.6];
+        for(const r of tryDistances) {
+          for(let k = 0; k < 8; k++) {
+            const ang = (k / 8) * Math.PI * 2 + rng() * 0.4;
+            const ox = Math.cos(ang) * r;
+            const oz = Math.sin(ang) * r;
+            if(checkBuffered(ox, oz) && r > bestDist) {
+              bestOff = { x: ox, z: oz };
+              bestDist = r;
+            }
+          }
+          if(bestOff) break; // found at this radius — take it
+        }
+        // Fallback: if absolutely nothing works (shouldn't happen on a
+        // reasonable hole), use a 1.4u offset on whichever axis has more room
+        if(!bestOff) bestOff = { x: 1.4, z: 0 };
+        hd.offsetA = { x: 0, z: 0 };
+        hd.offsetB = bestOff;
+        // Random starting phase so adjacent holes don't all sync up
+        hd.startSide = rng() < 0.5 ? 0 : 1;
       }
       holeDefense = hd;
     }
@@ -7493,38 +7611,99 @@ function buildCourse(data) {
         core.scale.setScalar(breathe);
         halo.scale.setScalar(breathe * 1.05);
       };
-    } else if(hd.kind === 'glass_dome') {
-      // GLASS DOME — geodesic ish dome built from an icosahedron, breaks on
-      // first contact. Covers the flag. Uses panel meshes that can be
-      // scattered on break for the dramatic shatter.
-      const icosGeo = new THREE.IcosahedronGeometry(hd.radius, 1);
-      const glassMat = new THREE.MeshStandardMaterial({
-        color: 0xccffff, transparent: true, opacity: 0.32,
-        emissive: 0xaaccee, emissiveIntensity: 0.4, roughness: 0.15, metalness: 0.3,
-        side: THREE.DoubleSide, depthWrite: false,
+    } else if(hd.kind === 'phasing_holes') {
+      // v0.20f4: PHASING HOLES — two cup positions, only one is "live" at a
+      // time. We use the existing G._holeWorldOffset machinery to relocate
+      // the real cup, and place a "ghost cup" rendering at the OTHER
+      // position so the player can see where the alt is when it's about to
+      // appear. Per Adam: the inactive hole disappears (no marker) — but
+      // we need to telegraph WHERE the alt will appear, otherwise it's a
+      // memorization puzzle. Compromise: a faint pulsing ground ring at the
+      // currently-inactive site, fading as the swap approaches.
+      const altRingMat = new THREE.MeshStandardMaterial({
+        color: 0xff88ee, emissive: 0xff44cc, emissiveIntensity: 1.0,
+        transparent: true, opacity: 0.0, depthWrite: false,
       });
-      // Dome center raised so the top of the sphere clears the 2.45m flag.
-      // Radius 1.7 + center-Y 0.9 = top at 2.6m → just clears the pole ornament.
-      const domeCenterY = baseY + 0.9;
-      const dome = new THREE.Mesh(icosGeo, glassMat);
-      dome.position.set(cx, domeCenterY, cz);
-      dome.userData.noOutline = true;
-      defGroup.add(dome);
-      // Wireframe over it to emphasize geodesic lines
-      const wireMat = new THREE.MeshBasicMaterial({ color: 0xddeeff, wireframe: true, transparent: true, opacity: 0.55 });
-      const wire = new THREE.Mesh(icosGeo, wireMat);
-      wire.position.set(cx, domeCenterY, cz);
-      wire.userData.noOutline = true;
-      defGroup.add(wire);
-      state.dome = dome; state.wire = wire;
-      state.cx = cx; state.cz = cz; state.baseY = baseY; state.domeCenterY = domeCenterY;
-      state.broken = false;
+      // Two ground rings — one at offsetA (origin), one at offsetB. The ring
+      // OPPOSITE the current live cup pulses to telegraph the next swap.
+      const ringGeoA = new THREE.TorusGeometry(0.55, 0.07, 6, 28);
+      const ringGeoB = new THREE.TorusGeometry(0.55, 0.07, 6, 28);
+      const ringA = new THREE.Mesh(ringGeoA, altRingMat.clone());
+      const ringB = new THREE.Mesh(ringGeoB, altRingMat.clone());
+      ringA.rotation.x = Math.PI / 2;
+      ringB.rotation.x = Math.PI / 2;
+      ringA.position.set(cx + hd.offsetA.x, baseY + 0.04, cz + hd.offsetA.z);
+      ringB.position.set(cx + hd.offsetB.x, baseY + 0.04, cz + hd.offsetB.z);
+      ringA.userData.noOutline = true;
+      ringB.userData.noOutline = true;
+      defGroup.add(ringA);
+      defGroup.add(ringB);
+      // Connecting line between the two so the player reads them as paired.
+      const lineLen = Math.hypot(hd.offsetB.x - hd.offsetA.x, hd.offsetB.z - hd.offsetA.z);
+      const lineGeo = new THREE.BoxGeometry(lineLen, 0.02, 0.05);
+      const line = new THREE.Mesh(lineGeo, altRingMat.clone());
+      const midX = cx + (hd.offsetA.x + hd.offsetB.x) / 2;
+      const midZ = cz + (hd.offsetA.z + hd.offsetB.z) / 2;
+      line.position.set(midX, baseY + 0.025, midZ);
+      line.rotation.y = -Math.atan2(hd.offsetB.z - hd.offsetA.z, hd.offsetB.x - hd.offsetA.x);
+      line.material.opacity = 0.25;
+      line.userData.noOutline = true;
+      defGroup.add(line);
+
+      state.cx = cx; state.cz = cz; state.baseY = baseY;
+      state.ringA = ringA; state.ringB = ringB;
+      state.currentSide = hd.startSide; // 0 = at offsetA, 1 = at offsetB
+      state.swapTimer = 0;
+      // Apply initial offset immediately so the cup spawns at the correct side.
+      const initOff = state.currentSide === 0 ? hd.offsetA : hd.offsetB;
+      G._holeWorldOffset.x = initOff.x;
+      G._holeWorldOffset.z = initOff.z;
       state.update = (dt, totalT) => {
-        if(!state.broken) {
-          // Subtle shimmer
-          const s = 1.0 + Math.sin(totalT * 2.5) * 0.01;
-          dome.scale.setScalar(s);
-          wire.scale.setScalar(s);
+        if(state.frozen) return;
+        if(G._freezeFrameActive) return;
+        state.swapTimer += dt;
+        if(state.swapTimer >= hd.cycleSecs) {
+          state.swapTimer = 0;
+          state.currentSide = 1 - state.currentSide;
+          // Snap the cup + flag + beacon to the new offset INSTANTLY (the
+          // teleport is the mechanic).
+          const off = state.currentSide === 0 ? hd.offsetA : hd.offsetB;
+          G._holeWorldOffset.x = off.x;
+          G._holeWorldOffset.z = off.z;
+          if(G._cupMesh) G._cupMesh.position.set(cx + off.x, G._cupBaseY || (baseY + 0.03), cz + off.z);
+          if(G.flagGroup) G.flagGroup.position.set(cx + off.x, baseY, cz + off.z);
+          if(G._holeSeeThruCup) G._holeSeeThruCup.position.set(cx + off.x, (G._cupBaseY || (baseY + 0.03)) + 0.03, cz + off.z);
+          if(G.holeBeacon) {
+            G.holeBeacon.cx = cx + off.x;
+            G.holeBeacon.cz = cz + off.z;
+            if(G.holeBeacon.beaconCol) G.holeBeacon.beaconCol.position.set(cx + off.x, baseY + 2.5, cz + off.z);
+          }
+          // Pop SFX + tiny shake on swap so the player FEELS it.
+          if(AC) {
+            try {
+              const ac = getAC(), tn = ac.currentTime;
+              const o = ac.createOscillator(); o.type = 'square';
+              o.frequency.setValueAtTime(880, tn);
+              o.frequency.exponentialRampToValueAtTime(220, tn + 0.08);
+              const g = ac.createGain();
+              g.gain.setValueAtTime(0.18, tn);
+              g.gain.exponentialRampToValueAtTime(0.001, tn + 0.1);
+              o.connect(g); g.connect(getACDest());
+              o.start(tn); o.stop(tn + 0.12);
+            } catch(e){}
+          }
+        }
+        // Telegraph: the ring on the CURRENTLY INACTIVE side pulses (alpha
+        // ramps up as swap nears). Active side ring stays subtle.
+        const t01 = state.swapTimer / hd.cycleSecs; // 0 → 1 over cycle
+        const inactiveAlpha = 0.15 + 0.55 * t01 * t01; // ease in: faint→bright
+        const activeAlpha = 0.10;
+        if(state.currentSide === 0) {
+          ringA.material.opacity = activeAlpha;
+          ringB.material.opacity = inactiveAlpha;
+        } else {
+          ringA.material.opacity = inactiveAlpha;
+          ringB.material.opacity = activeAlpha;
         }
       };
     }
@@ -9606,7 +9785,9 @@ function updatePhysics(dt) {
     // During grace: show countdown UI and flash ball red at increasing frequency.
     if(!G._oobGraceTimer) G._oobGraceTimer = 0;
     G._oobGraceTimer += dt;
-    // v0.20c: baseline OOB grace from difficulty mods (3.0s at ★1-7, 2.0s at ★8+).
+    // v0.20f4: OOB grace now 2.0s across all difficulties (was 3.0s at ★1-7,
+    // 2.0s at ★8+). 3s felt sluggish on a routine wall-clip; 2s respects
+    // player time without becoming a rug-pull.
     // Off-Roading perk still overrides everything to 10s regardless of difficulty.
     const baseGrace = (G._diffMods && G._diffMods.oobGrace) || 3.0;
     const OOB_GRACE = G.modifiers.some(m=>m.id==='off_roading') ? 10.0 : baseGrace;
@@ -9899,10 +10080,23 @@ function updatePhysics(dt) {
             } else {
               G.ballVel.x -= (1+wb)*dot*nx;
               G.ballVel.z -= (1+wb)*dot*nz;
-              if(G.snowballStacks > 0 && G.snowballCount < G.snowballStacks * 5) {
-                const boost = 1.0 + 0.50;  // +50% per bounce
-                G.ballVel.x *= boost;
-                G.ballVel.z *= boost;
+              // v0.20f4: Snowball nerf — was +50% per bounce up to 5 bounces
+              // per stack, which compounded to 437× speed at 3-stack max
+              // (1.5^15) and broke physics. Now +25% per bounce, capped at
+              // 3 bounces per stack. Also: a hard speed-multiplier ceiling
+              // of 3.5× on the original wall-entry speed prevents extreme
+              // angles from sneaking past the bounce-count cap via combos.
+              if(G.snowballStacks > 0 && G.snowballCount < G.snowballStacks * 3) {
+                const boost = 1.25;  // +25% per bounce (was +50%)
+                // Track entry speed on first snowball trigger of this shot.
+                if(G._snowballOrigSpeed == null) {
+                  G._snowballOrigSpeed = Math.hypot(G.ballVel.x, G.ballVel.z) / boost;
+                }
+                const projSpeed = Math.hypot(G.ballVel.x, G.ballVel.z) * boost;
+                const maxAllowed = G._snowballOrigSpeed * 3.5;
+                const allowedScale = Math.min(boost, maxAllowed / Math.max(0.01, Math.hypot(G.ballVel.x, G.ballVel.z)));
+                G.ballVel.x *= allowedScale;
+                G.ballVel.z *= allowedScale;
                 G.snowballCount++;
               }
               // Money Bounce perk: 2 coins per wall bounce, capped at 3 bounces per stack.
@@ -11269,87 +11463,8 @@ function updatePhysics(dt) {
       }
     }
 
-    // --- (d) GLASS DOME — first hit shatters, then free access. -----
-    if(hd.kind === 'glass_dome' && !hds.broken) {
-      // 3D sphere containment test — dome center raised to domeCenterY (~baseY+0.9)
-      // so the top covers the 2.45m flag.
-      const cxD = hds.cx, czD = hds.cz, cyD = hds.domeCenterY || (hds.baseY + 0.9);
-      const dxD = G.ballPos.x - cxD, dzD = G.ballPos.z - czD, dyD = G.ballPos.y - cyD;
-      const d3 = Math.hypot(dxD, dzD, dyD);
-      const minD = hd.radius + BALL_R;
-      // If ball is outside-trying-to-enter OR already touching the shell, break.
-      // Trigger on first penetration (ball within minD + small buffer).
-      if(d3 < minD + 0.08) {
-        hds.broken = true;
-        // Hide the dome + wire, spawn fragment shards for drama.
-        if(hds.dome) hds.dome.visible = false;
-        if(hds.wire) hds.wire.visible = false;
-        // Spawn 18 glassy shards flying outward with gravity + fade.
-        if(!G._debrisParticles) G._debrisParticles = [];
-        const shardMat = new THREE.MeshStandardMaterial({
-          color: 0xddeeff, roughness: 0.12, metalness: 0.35,
-          transparent: true, opacity: 0.9,
-          emissive: 0xaaccee, emissiveIntensity: 0.6,
-          side: THREE.DoubleSide,
-        });
-        for(let s = 0; s < 18; s++) {
-          const th = (s / 18) * Math.PI * 2 + Math.random() * 0.3;
-          const phi = Math.random() * Math.PI * 0.5;
-          const g = new THREE.ConeGeometry(0.12 + Math.random() * 0.08, 0.32 + Math.random() * 0.12, 3);
-          const m = new THREE.Mesh(g, shardMat.clone());
-          const rx = Math.cos(th) * Math.sin(phi);
-          const ry = Math.cos(phi);
-          const rz = Math.sin(th) * Math.sin(phi);
-          m.position.set(cxD + rx * hd.radius, cyD + ry * hd.radius, czD + rz * hd.radius);
-          m.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
-          m.userData.noOutline = true;
-          if(G.courseGroup) G.courseGroup.add(m);
-          G._debrisParticles.push({
-            mesh: m,
-            vx: rx * (4 + Math.random() * 3),
-            vy: ry * 3 + 2 + Math.random() * 2,
-            vz: rz * (4 + Math.random() * 3),
-            spinX: (Math.random() - 0.5) * 10,
-            spinY: (Math.random() - 0.5) * 10,
-            spinZ: (Math.random() - 0.5) * 10,
-            life: 1.6, maxLife: 1.6, gravity: 16,
-          });
-        }
-        triggerShake('heavy');
-        showToast('💥 Glass shattered!', 1200);
-        // Layered shatter SFX — high crystalline tinkle + midrange crunch
-        if(AC) {
-          try {
-            const ac = getAC(), t0 = ac.currentTime;
-            // Crystalline — short noise through highpass
-            const sr = ac.sampleRate;
-            const bufSec = 0.5;
-            const buf = ac.createBuffer(1, Math.floor(sr * bufSec), sr);
-            const dd = buf.getChannelData(0);
-            for(let i = 0; i < dd.length; i++) {
-              const tt = i / dd.length;
-              dd[i] = (Math.random() * 2 - 1) * Math.exp(-tt * 2.5);
-            }
-            const src = ac.createBufferSource(); src.buffer = buf;
-            const hp = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 3200;
-            const gn = ac.createGain(); gn.gain.setValueAtTime(0.7, t0); gn.gain.exponentialRampToValueAtTime(0.001, t0 + 0.5);
-            src.connect(hp); hp.connect(gn); gn.connect(getACDest()); src.start(t0);
-            // A quick bright chime
-            const notes = [1320, 1760, 2637];
-            notes.forEach((f, i) => {
-              const o = ac.createOscillator(); o.type = 'sine';
-              o.frequency.value = f;
-              const g = ac.createGain();
-              g.gain.setValueAtTime(0, t0 + i * 0.03);
-              g.gain.linearRampToValueAtTime(0.12, t0 + i * 0.03 + 0.01);
-              g.gain.exponentialRampToValueAtTime(0.001, t0 + i * 0.03 + 0.35);
-              o.connect(g); g.connect(getACDest()); o.start(t0 + i * 0.03); o.stop(t0 + i * 0.03 + 0.4);
-            });
-          } catch(e){}
-        }
-        // Don't reflect the ball — let it sail right through the break point.
-      }
-    }
+    // --- (d) GLASS DOME removed in v0.20f4 (replaced by phasing_holes,
+    //         which uses G._holeWorldOffset and needs no physics block here).
   }
 
   // ── Lot of Heart pickup ──────────────────────────────
@@ -13325,6 +13440,20 @@ function onHoled() {
   const isLast = G.hole >= G.totalHoles - 1;
   const outOfLives = G.hp <= 0;
 
+  // v0.20f4: persist run data SYNCHRONOUSLY when the final hole is decided,
+  // before any celebration setTimeout. iOS Safari aggressively kills pending
+  // timers when the tab loses focus / phone locks / app backgrounds — and
+  // 18-hole celebration windows (1.6s+) are exactly long enough for a glance
+  // away to lose the save. saveRunData has its own _runSaved guard so calling
+  // it here AND in showGameOver is safe (the second call is a no-op).
+  // Inferred outcome: out-of-lives → lost; reached final hole → won.
+  if(isLast || outOfLives) {
+    try {
+      const _outcome = outOfLives ? 'lost' : 'won';
+      saveRunData(_outcome);
+    } catch(e) { console.warn('[runHistory] onHoled early-save failed', e); }
+  }
+
   if(lifeWasLost && lostLife) {
     // Life not yet shown (par exceeded exactly on hole-out) — show effect then proceed
     triggerLifeLost(() => {
@@ -14910,7 +15039,7 @@ const CARD_DEFS = {
   sniper:       { id:'sniper',       emoji:'🎯', name:'Sniper',          desc:'Zoom a scope and fire a precision missile at a distant obstacle.', rarity:'epic',      price:24,  context:'pre',    holdable:false, weight:3 },
   sharpshooter: { id:'sharpshooter', emoji:'🏌️‍♂️', name:'Sharpshooter',    desc:'Zoom a scope and launch YOUR BALL precisely down the barrel.',       rarity:'epic',      price:30,  context:'pre',    holdable:false, weight:2 },
   grenade:      { id:'grenade',      emoji:'🧨', name:'Grenade',         desc:'Arms grenade aim mode. Pull back to set throw distance & direction (green arc); release to lob. Bounces 3×, then BOOM.', rarity:'common',    price:15,  context:'pre',    holdable:false },
-  boulder:      { id:'boulder',      emoji:'🪨', name:'Boulder',         desc:'Summon an unstoppable boulder that smashes everything.',          rarity:'rare',      price:22,  context:'pre',    holdable:false },
+  boulder:      { id:'boulder',      emoji:'🪨', name:'Boulder',         desc:'Summon an unstoppable boulder that smashes everything.',          rarity:'epic',      price:32,  context:'pre',    holdable:false, weight:2 },
   dodgeball:    { id:'dodgeball',    emoji:'🔴', name:'Dodgeball',       desc:'Fire a super-bouncy red ball that ricochets off everything.',     rarity:'rare',      price:35,  context:'pre',    holdable:false },
   explosivo:    { id:'explosivo',    emoji:'💥', name:'Explosivo',       desc:'Detonate a huge explosion at the ball\'s position.',              rarity:'epic',      price:21,  context:'any',    holdable:false },
   ghost_ball:   { id:'ghost_ball',   emoji:'👻', name:'Ghost Ball',      desc:'Hold to pass through walls, rocks and obstacles. 4s.',            rarity:'epic',      price:21,  context:'any',    holdable:true },
@@ -15288,7 +15417,15 @@ function playCard(instanceId) {
 
   // Execute the card ability. Abilities like Mulligan may replace G.hand
   // wholesale (restoring from undoState) — so the cached `idx` is now stale.
-  executeCardAbility(card.id);
+  // v0.20f4: try/catch so a buggy card effect (e.g. the Coin Shower
+  // ReferenceError) can never abort the discard/slot-clear below — that was
+  // what stranded Coin Shower in hand and let the player re-fire it ad
+  // infinitum.
+  try {
+    executeCardAbility(card.id);
+  } catch(e) {
+    console.warn('[card] executeCardAbility threw — proceeding with discard so card does not strand:', card.id, e);
+  }
 
   // Move to discard: re-resolve index by instanceId in the (possibly new) hand.
   // For Mulligan, the restored hand still contains the Mulligan card (it was
@@ -15413,7 +15550,60 @@ function executeCardAbility(id) {
 
 // ── Card Hand UI ──────────────────────────────────────
 
+// v0.20f4: returns true when a card has been played AND its effect is
+// queued/armed for the next swing — so the player can see at a glance which
+// cards will fire when they release. Distinct from cards that are mid-effect
+// (those use card-active). Most "pre"-context cards push a state flag in
+// executeCardAbility; this maps those flags back to the card id.
+function isCardArmedPreSwing(cardId) {
+  if(G.state !== 'playing' || G.rolling) return false;
+  switch(cardId) {
+    case 'power_shot':   return (G._powerShotStacks || 0) > 0;
+    case 'iron_ball':    return !!G._ironBallActive;
+    case 'cannonball':   return !!G._cannonballActive;
+    case 'arc_shot':     return !!G._arcShotActive;
+    case 'catapult':     return !!G._catapultActive;
+    case 'wall_magnet':  return !!G._wallMagnetActive;
+    case 'angler':       return !!G._anglerCardActive;
+    case 'jumper':       return !!G._jumpPreloaded || !!G._jumpPending;
+    case 'freeze_frame': return !!G._freezeFrameActive;
+    case 'slow_mo':      return !!G._slowMoPerkActive;
+    case 'perpetual_motion': return !!G._perpetualMotionActive;
+  }
+  return false;
+}
+
+// v0.20f4: armed-effect HUD chips. Single source of truth for "what will my
+// next swing do?" — rendered every updateHandUI call (which happens often
+// enough that flag changes show up promptly). Played pre-context cards are
+// discarded so we can't keep their slot lifted; chips fill that role.
+function renderArmedChips() {
+  const wrap = document.getElementById('armed-chips');
+  if(!wrap) return;
+  if(G.state !== 'playing' || G.rolling) { wrap.innerHTML = ''; return; }
+  const chips = [];
+  const ps = G._powerShotStacks || 0;
+  if(ps > 0) chips.push({ emoji:'💪', label:'Power Shot', stack: ps > 1 ? '×'+ps : '' });
+  if(G._ironBallActive)      chips.push({ emoji:'🔩', label:'Iron Ball' });
+  if(G._cannonballActive)    chips.push({ emoji:'💣', label:'Cannonball' });
+  if(G._arcShotActive)       chips.push({ emoji:'🌈', label:'Arc Shot' });
+  if(G._catapultActive)      chips.push({ emoji:'🪤', label:'Catapult' });
+  if(G._wallMagnetActive)    chips.push({ emoji:'🧲', label:'Wall Magnet' });
+  if(G._anglerCardActive)    chips.push({ emoji:'📐', label:'Angler' });
+  if(G._jumpPreloaded)       chips.push({ emoji:'🦘', label:'Jumper' });
+  if(G._freezeFrameActive)   chips.push({ emoji:'🧊', label:'Freeze' });
+  if(G._slowMoPerkActive)    chips.push({ emoji:'🐌', label:'Slow Mo' });
+  if(G._perpetualMotionActive) chips.push({ emoji:'♾️', label:'Perpetual' });
+  if(chips.length === 0) { wrap.innerHTML = ''; return; }
+  wrap.innerHTML = chips.map(c =>
+    `<div class="armed-chip"><span class="chip-emoji">${c.emoji}</span><span>${c.label}</span>${c.stack?`<span class="chip-stack">${c.stack}</span>`:''}</div>`
+  ).join('');
+}
+
 function updateHandUI() {
+  // v0.20f4: refresh armed-effect chips alongside slot rendering. Cheap
+  // (string concat + innerHTML on a small element) so safe to do every call.
+  renderArmedChips();
   if(G.state !== 'playing') {
     // Hide all card UI
     for(const k of CARD_SLOT_KEYS) {
@@ -15422,6 +15612,9 @@ function updateHandUI() {
     }
     const tray = document.getElementById('card-tray');
     if(tray) tray.innerHTML = '';
+    // Also clear armed chips strip when not playing
+    const ac = document.getElementById('armed-chips');
+    if(ac) ac.innerHTML = '';
     return;
   }
 
@@ -15444,10 +15637,15 @@ function updateHandUI() {
     if(!def) continue;
     const usable = canPlayCard(card.id);
     const isGhostActive = card.id === 'ghost_ball' && G.ghostBallActive;
+    // v0.20f4: armed-pre-swing — card was played and is queued to fire on
+    // the next stroke. Visual lift + glow so the player can scan their hand
+    // and know exactly what will happen when they swing.
+    const isArmed = isCardArmedPreSwing(card.id);
 
     let cls = 'card-slot card-filled';
     if(isGhostActive) cls = 'card-slot card-active';
-    else if(!usable) cls = 'card-slot card-filled card-disabled';
+    else if(isArmed)  cls = 'card-slot card-filled card-armed';
+    else if(!usable)  cls = 'card-slot card-filled card-disabled';
     // Deal animation for newly drawn cards
     const isNew = G._newlyDrawnCards && G._newlyDrawnCards.includes(card.instanceId);
     if(isNew) cls += ' card-dealing';
@@ -17273,11 +17471,18 @@ function activateCoinShower() {
   // Toast + SFX feedback — tie messaging to actual coins placed.
   // v0.19p: with scatter fallback the shower always drops ~20 coins; messaging
   // reflects whether the line was clean (bonus unlocked) or fell back to scatter.
+  // v0.20f4: fixed undeclared `scattered` reference that was throwing a
+  // ReferenceError after coin spawn (the "bug message" Adam reported). The
+  // throw escaped to playCard's caller, aborting the discard/slot-clear at
+  // lines 15426-15440 and leaving the Coin Shower card stranded in hand —
+  // which is the "infinite shower" symptom (re-tapping refired it). Fix:
+  // use `shortfall` (defined above at line ~17393) which is the canonical
+  // signal for "did we have to fall back to scatter".
   const regularCount = placements.filter(p => !p.isSpecial).length;
   if(wantBonus && placements.length > LINE_COUNT) {
     showToast(`🌧️ COIN SHOWER! +${regularCount} + 5× bonus!`, 1800);
     triggerShake('med');
-  } else if(scattered.length === 0) {
+  } else if(shortfall === 0) {
     showToast(`🌧️ Coin Shower! +${regularCount} coins`, 1500);
     triggerShake('light');
   } else {
@@ -17794,7 +17999,9 @@ function activateBoulder() {
   }
 
   let travelled = 0;
-  const maxDist = 80;
+  // v0.20f4: shortened 80 → 64 (~20% reduction). Boulder was over-rewarding —
+  // can still clear most paths, but late-hole/hazard-dense holes can survive.
+  const maxDist = 64;
   const hitSet = new Set(); // track what we've already hit
 
   G._missileAnim = (dt2) => {
@@ -19191,6 +19398,9 @@ function fireShot() {
   G._shotFinalized = false;
   G._moneyBounceCount = 0;
   G._challengeShotWallBounces = 0;
+  // v0.20f4: reset snowball entry-speed tracker so the per-shot speed cap
+  // recomputes from this shot's wall-entry speed.
+  G._snowballOrigSpeed = null;
   // Reset per-shot style tracking
   G._shotEvents = [];
   G._shotEventTypes = new Set();
@@ -19496,6 +19706,37 @@ function debugAddCoins() {
   showToast('🪙 +50 coins', 1000);
 }
 
+// v0.20f4: lazy-load eruda mobile console on demand. Once loaded, the floating
+// 🛠 button persists at the corner of the screen — tap to open/close console.
+// We append a tiny script tag and let it self-init via window.eruda.init().
+function debugOpenConsole() {
+  document.getElementById('debug-menu').classList.remove('open');
+  if(window.eruda && typeof window.eruda.show === 'function') {
+    window.eruda.show();
+    showToast('🛠 Console open', 1000);
+    return;
+  }
+  showToast('🛠 Loading console…', 1500);
+  const s = document.createElement('script');
+  s.src = 'https://cdn.jsdelivr.net/npm/eruda';
+  s.onload = () => {
+    try {
+      window.eruda.init();
+      window.eruda.show();
+      // Surface useful run-history state immediately so it's the first thing visible.
+      console.log('[runHistory] eruda loaded — try inspectRunHistory() to see saved runs');
+      if(typeof window.inspectRunHistory === 'function') window.inspectRunHistory();
+    } catch(e) {
+      console.warn('eruda init failed', e);
+      showToast('⚠️ Console init failed', 1500);
+    }
+  };
+  s.onerror = () => {
+    showToast('⚠️ Console load failed (offline?)', 1800);
+  };
+  document.head.appendChild(s);
+}
+
 // v0.20c: unlock everything for the active profile — all characters, all
 // 9-hole and 18-hole difficulty stars (1-10) per character, and all XP-gated
 // cosmetics. Useful for testing late-game tuning without grinding ★ ladders.
@@ -19604,6 +19845,7 @@ document.getElementById('dbg-skip').addEventListener('click', debugSkipHole);
 document.getElementById('dbg-budget').addEventListener('click', debugAddBudget);
 document.getElementById('dbg-coins').addEventListener('click', debugAddCoins);
 { const _u = document.getElementById('dbg-unlock-all'); if(_u) _u.addEventListener('click', debugUnlockAll); }
+{ const _c = document.getElementById('dbg-console'); if(_c) _c.addEventListener('click', debugOpenConsole); }
 document.getElementById('dbg-close').addEventListener('click', () => {
   document.getElementById('debug-menu').classList.remove('open');
 });
@@ -20161,8 +20403,8 @@ const ALL_PERKS = [
   // RARE — base weight 4
   { id:'speed_hoops',      name:'Speed Hoops',         emoji:'⭕', rarity:'rare',      price:12,  stackable:false, weight:4,
     desc:'Glowing hoops appear on each course. Roll through one for a burst of speed.' },
-  { id:'snowball',         name:'Snowball',            emoji:'❄️', rarity:'rare',      price:10,  stackable:true,  weight:5,
-    desc:'+50% speed on wall bounces, up to 5 bounces per stack. Stacks extend the count!' },
+  { id:'snowball',         name:'Snowball',            emoji:'❄️', rarity:'epic',      price:18,  stackable:true,  weight:2,
+    desc:'+25% speed on wall bounces, up to 3 bounces per stack. Stacks extend the count!' },
   // { id:'thin_ice', ... } — hidden for now, will revisit
   { id:'free_reroll',     name:'Free Rerolls',         emoji:'🆓', rarity:'rare',      price:12,  stackable:false, weight:1,
     desc:'Your first shop reroll each hole is free.' },
@@ -20270,6 +20512,19 @@ function computeSoloAwards() {
 }
 
 function showGameOver(bustedBudget=false){
+  // v0.20f3: persist run data FIRST, before any UI rendering that might throw.
+  // Previously this lived after the overlay HTML build, meaning any exception
+  // in computeSoloAwards / template literals / DOM lookups would silently
+  // prevent the won run from being saved. Adam reported 18-hole wins not
+  // appearing in run history exports despite losses/abandons saving fine.
+  // Saving early is bulletproof: even if everything below throws, the run
+  // is already in localStorage.
+  try {
+    saveRunData(bustedBudget ? 'lost' : 'won');
+  } catch(e) {
+    console.warn('[runHistory] showGameOver early-save failed', e);
+  }
+
   clearAutoSave();
   try { localStorage.setItem(profKey('ggw_played'), '1'); } catch(e){}
   // In multiplayer, use the dedicated results screen
@@ -20356,8 +20611,7 @@ function showGameOver(bustedBudget=false){
   ov.classList.remove('hidden');
   G.state='gameover';
 
-  // ── Analytics: persist completed run ──
-  try { saveRunData(bustedBudget ? 'lost' : 'won'); } catch(e) { console.warn('saveRunData failed', e); }
+  // ── Analytics: run was already persisted at top of showGameOver (v0.20f3 fix) ──
 
   // v0.18a: evaluate difficulty unlock. Run must have reached the final hole
   // without busting HP; winReq for that star is checked inside the helper.
@@ -20553,7 +20807,12 @@ function showGameOver(bustedBudget=false){
 const MAX_RUN_HISTORY = 30;
 function saveRunData(outcome) {
   // Guard: no run in progress, or already saved this run
-  if(!G._runId || G._runSaved) return;
+  if(!G._runId || G._runSaved) {
+    // v0.20f3: log skipped saves so we can diagnose missing run data
+    console.log('[runHistory] saveRunData SKIPPED', { outcome, runId: G._runId, alreadySaved: G._runSaved });
+    return;
+  }
+  console.log('[runHistory] saveRunData called', { outcome, runId: G._runId, holes: (G.scorecard||[]).length });
   G._runSaved = true;
   let run;
   try {
@@ -20594,6 +20853,7 @@ function saveRunData(outcome) {
     // Cap history — drop oldest to keep well under localStorage quota (~5MB typical)
     if(history.length > MAX_RUN_HISTORY) history = history.slice(history.length - MAX_RUN_HISTORY);
     localStorage.setItem(profKey('ggw_run_history'), JSON.stringify(history));
+    console.log('[runHistory] saveRunData WROTE', { outcome: run.outcome, total: history.length, runId: run.runId });
   } catch(err) {
     // Quota exceeded or storage unavailable — try once more with a trimmed history.
     // v0.19z8: was `trimmed=[run]` which nuked ALL prior run history. Now we
@@ -20681,6 +20941,21 @@ async function downloadRunHistory() {
   }
 }
 window.downloadRunHistory = downloadRunHistory;
+// v0.20f3: expose saveRunData + a helper to inspect current run-history state
+// from the dev console. Useful for diagnosing the won-run-not-saving bug.
+window.saveRunData = saveRunData;
+window.inspectRunHistory = function() {
+  const raw = localStorage.getItem(profKey('ggw_run_history'));
+  const parsed = raw ? JSON.parse(raw) : [];
+  const summary = parsed.map(r => ({
+    version: r.version, outcome: r.outcome,
+    holes: `${r.holesCompleted}/${r.totalHoles}`,
+    timestamp: r.timestamp,
+  }));
+  console.table(summary);
+  console.log('[runHistory] G._runId:', G._runId, 'G._runSaved:', G._runSaved, 'G.state:', G.state);
+  return parsed;
+};
 
 // v0.19z8: Explicitly delete the local run-history log. Guarded by a two-step
 // confirm and a suggestion to download first. Never called automatically —
@@ -21694,6 +21969,14 @@ function escMainMenu() {
   // ── Analytics: save abandoned run if one is in progress ──
   if(G._runId && G.scorecard && G.scorecard.length > 0 && G.state === 'playing') {
     try { saveRunData('abandoned'); } catch(e) { console.warn('saveRunData abandoned failed', e); }
+  }
+  // v0.20f3: belt-and-suspenders — if we're leaving via main menu but the run
+  // ID is still set (e.g. showGameOver completed but the won-save was somehow
+  // skipped/blocked), persist now as 'completed_unknown'. Won't double-save:
+  // saveRunData has its own _runSaved guard.
+  if(G._runId && !G._runSaved && G.scorecard && G.scorecard.length > 0) {
+    const inferredOutcome = (G.hp <= 0) ? 'lost' : 'completed_unknown';
+    try { saveRunData(inferredOutcome); } catch(e) { console.warn('saveRunData fallback failed', e); }
   }
   G.state = 'gameover'; // stop physics
   clearTimeout(G._stylePopupTimer);
@@ -24016,9 +24299,12 @@ function animate(now) {
   // as the ball rotates for visual roll. Position tracks G.ballPos — the
   // authoritative physics position — so this works no matter which code
   // path last moved the ball.
-  // v0.19v: Hat tilts backward proportional to ball speed — sells the wind
+  // v0.19v: Hat tilts opposite to travel direction — sells the wind
   // rushing past and is just funny. Tilt axis is perpendicular to travel
   // direction; magnitude ramps from 0 at rest to ~0.9 rad at fast speeds.
+  // v0.20f4: tilt sign flipped so the hat now leans BACKWARD (away from
+  // travel) — as if the wind is about to blow it off. Previously was
+  // leaning into travel direction which read as "diving" not "blowing off".
   if(G.hat && G.ball) {
     G.hat.position.set(G.ballPos.x, G.ballPos.y + BALL_R, G.ballPos.z);
     G.hat.visible = G.ball.visible;
@@ -24033,9 +24319,9 @@ function animate(now) {
       const travelAng = Math.atan2(vx, vz); // yaw direction of travel
       G.hat.rotation.set(0, 0, 0);
       G.hat.rotation.y = travelAng;
-      // Tilt backward around the local X axis. Positive X rotation leans
-      // the hat's top AWAY from the travel direction — backward.
-      G.hat.rotation.x = G._hatTilt;
+      // v0.20f4: NEGATIVE X rotation now — hat top tilts BACKWARD
+      // (opposite to travel direction). Reads as "wind blowing it off".
+      G.hat.rotation.x = -G._hatTilt;
     } else {
       // At rest, smoothly return to upright.
       G.hat.rotation.x += (0 - G.hat.rotation.x) * Math.min(1, dt * 6);
