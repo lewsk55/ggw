@@ -1380,39 +1380,11 @@ pointer-events:none;
    Iron Ball, Catapult, Cannonball, etc.) so the player can always see what
    their next swing will do. Played cards are discarded so we can't keep the
    armed slot pulled-up; this is the next best thing. */
+/* v0.20g: armed-chips strip retired — armed cards now lift in-place in
+   their slot with a bright cyan glow (see .card-armed). Strip kept hidden
+   for backward compat in case any code path still calls renderArmedChips. */
 #armed-chips {
-position:fixed;
-bottom:96px; left:50%;
-transform:translateX(-50%);
-display:flex; gap:6px;
-z-index:14;
-pointer-events:none;
-flex-wrap:wrap; max-width:90vw; justify-content:center;
-}
-.armed-chip {
-display:inline-flex; align-items:center; gap:4px;
-background:rgba(80,200,255,0.22);
-border:1.5px solid rgba(120,220,255,0.65);
-backdrop-filter:blur(6px);
-color:#fff;
-font-family:'Lato',sans-serif;
-font-size:0.72rem; font-weight:700;
-letter-spacing:0.5px;
-padding:4px 9px;
-border-radius:14px;
-box-shadow:0 2px 10px rgba(80,200,255,0.35);
-animation:armed-chip-pulse 1.4s ease-in-out infinite;
-}
-.armed-chip .chip-emoji { font-size:0.95rem; line-height:1; }
-.armed-chip .chip-stack {
-font-size:0.62rem; font-weight:800;
-background:rgba(255,255,255,0.18);
-padding:1px 5px; border-radius:6px;
-margin-left:1px;
-}
-@keyframes armed-chip-pulse {
-0%,100% { box-shadow:0 2px 10px rgba(80,200,255,0.30); }
-50%     { box-shadow:0 4px 16px rgba(80,200,255,0.65); }
+display:none !important;
 }
 .card-slot {
 position:relative;
@@ -1445,22 +1417,38 @@ box-shadow:0 2px 18px rgba(255,180,0,0.5);
 pointer-events:all;
 animation: card-pulse 1s ease-in-out infinite;
 }
-/* v0.20f4: armed-pre-swing indicator. Card is filled (not active = not
-   currently being held) but a flag is set that means it'll fire on the next
-   swing (Power Shot, Iron Ball, Catapult, Cannonball, etc.). Visually:
-   pulled up ~10px, soft cyan glow, and a tiny "armed" pulse. Distinct from
-   .card-active (yellow + heavy pulse) so the player can read both states. */
+/* v0.20g: armed-pre-swing indicator. Card was tapped and its effect is
+   queued for the next swing (Power Shot, Iron Ball, Catapult, etc.).
+   Replaces the previous bottom-strip "armed chips" UI — armed cards now
+   stay visible in their slot, lifted 25% (18px on a 72px card) with a
+   bright cyan glow so the hand reads as the single source of truth for
+   "what will my next swing do?". Distinct from .card-active (yellow +
+   heavy pulse — used for Ghost Ball hold) so both states stay legible. */
 .card-slot.card-armed {
-background:rgba(255,255,255,0.95);
-border-color:rgba(120,220,255,0.85);
-box-shadow:0 6px 22px rgba(80,200,255,0.55), 0 0 0 2px rgba(120,220,255,0.25) inset;
-transform:translateY(-10px);
-animation: card-armed-pulse 1.4s ease-in-out infinite;
+background:rgba(255,255,255,0.98);
+border-color:rgba(120,220,255,1);
+box-shadow:
+  0 10px 32px rgba(80,200,255,0.85),
+  0 0 18px 4px rgba(120,220,255,0.7),
+  0 0 0 2px rgba(160,235,255,0.55) inset;
+transform:translateY(-18px);
+z-index:5;
+animation: card-armed-pulse 1.2s ease-in-out infinite;
 }
-.card-slot.card-armed:active { transform:translateY(-10px) scale(0.92); }
+.card-slot.card-armed:active { transform:translateY(-18px) scale(0.92); }
 @keyframes card-armed-pulse {
-0%,100% { box-shadow:0 6px 22px rgba(80,200,255,0.45), 0 0 0 2px rgba(120,220,255,0.25) inset; }
-50% { box-shadow:0 8px 28px rgba(80,200,255,0.75), 0 0 0 2px rgba(160,235,255,0.4) inset; }
+0%,100% {
+  box-shadow:
+    0 10px 32px rgba(80,200,255,0.7),
+    0 0 18px 4px rgba(120,220,255,0.55),
+    0 0 0 2px rgba(160,235,255,0.45) inset;
+}
+50% {
+  box-shadow:
+    0 14px 40px rgba(80,220,255,1),
+    0 0 26px 6px rgba(160,235,255,0.9),
+    0 0 0 2px rgba(200,245,255,0.7) inset;
+}
 }
 .card-slot.card-disabled {
 background:rgba(255,255,255,0.45);
@@ -2682,7 +2670,7 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
   <button class="play-btn" onclick="openAchievements()" style="margin-top:6px;background:rgba(245,200,66,0.18);border:1px solid rgba(245,200,66,0.5);color:#f5c842;font-size:0.85rem;padding:10px 28px">🏆 Achievements</button>
   <button class="play-btn" id="btn-import-save" style="margin-top:6px;background:rgba(120,120,120,0.6);font-size:0.7rem;padding:8px 20px" onclick="importSaveFile()">📂 Import Save</button>
   <input type="file" id="import-save-input" accept=".ggwsave,application/json" style="display:none">
-  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.20b</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Per-character difficulty unlocks + character progression chain (★3 with each unlocks the next)</div></div>
+  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.20g</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Trick decay + armed cards lift in slot + Angler perk + 18-hole gated behind 9-hole completion</div></div>
 
   <!-- v0.19j: Inline profile picker — skip the separate slot-picks screen -->
   <div class="section-label" style="margin-top:14px">Save Slot</div>
@@ -3223,8 +3211,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.20f4';
-const CHANGE_NOTE = 'Win-save fix (synchronous on hole-out, survives iOS tab kill) + mobile dev console (eruda, debug menu) + OOB grace 2s uniform + Boulder rarer/pricier/shorter + hat tilts against travel + magnet field stronger + glass dome → phasing holes + armed-effect HUD chips + Snowball nerf (epic, +25%/3 bounces, speed cap) + Coin Shower ReferenceError fixed.';
+const GAME_VERSION = '0.20g';
+const CHANGE_NOTE = 'Trick decay (THPS-style per-hole repeat falloff) + armed cards now lift in slot 25% with bright cyan glow (replaces bottom chip strip) + Smashy starts with 1× Scorched Earth (was 2×) + Freeze Frame halts conveyors + OOB respawn tracks last-safe-pos + ring 6→12 tiles + 18-hole runs unlock by completing 9 + Angler is now a perk + 10 HP for Standard at all run lengths + big coins count by value for Coin Hoarder + unlimited card removal in shop (limited by coins) + 3 Balls and Bowling Ball deactivated.';
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
@@ -3695,6 +3683,10 @@ const META_SCHEMA_DEFAULT = {
     // Smashy unlocks by completing ★3 with Classic (9 or 18). Speedball by
     // completing ★3 with Smashy. Precision by completing ★3 with Speedball.
     characters: ['classic'],
+    // v0.20g: 18-hole runs are now unlocked by completing any 9-hole run
+    // (any difficulty, any character). Fresh profiles only see 9-hole until
+    // they finish their first 9. Defaults to [9].
+    runLengths: [9],
   },
   currencies: { gems: 0 },
   talents: {},
@@ -3754,6 +3746,30 @@ function getMeta() {
     merged.unlocks.characters = ['classic'];
   }
   if(!merged.unlocks.characters.includes('classic')) merged.unlocks.characters.unshift('classic');
+  // v0.20g: runLengths unlock — fresh profiles start with [9] only; 18 unlocks
+  // when the player completes any 9-hole run (any difficulty, any character).
+  // Migration: existing profiles that have ANY star unlocked beyond the
+  // defaults [1,2,3] in d9 or d18 OR that have totalRuns > 0 get 18 unlocked
+  // immediately — they've clearly played enough that locking 18 would feel
+  // like a regression.
+  if(!Array.isArray(merged.unlocks.runLengths) || merged.unlocks.runLengths.length === 0) {
+    merged.unlocks.runLengths = [9];
+    // Heuristic: any prior progress at all → grant 18
+    let _hadProgress = (typeof merged.totalRuns === 'number' && merged.totalRuns > 0);
+    if(!_hadProgress && merged.unlocks && merged.unlocks.difficulties) {
+      for(const _cid in merged.unlocks.difficulties) {
+        const _d = merged.unlocks.difficulties[_cid];
+        if(_d && ((Array.isArray(_d.d9) && _d.d9.length > 3) ||
+                  (Array.isArray(_d.d18) && _d.d18.length > 3))) {
+          _hadProgress = true; break;
+        }
+      }
+    }
+    if(_hadProgress && !merged.unlocks.runLengths.includes(18)) {
+      merged.unlocks.runLengths.push(18);
+    }
+  }
+  if(!merged.unlocks.runLengths.includes(9)) merged.unlocks.runLengths.unshift(9);
   // ── v0.19b cosmetic migration shims ──
   // v0.18 saves had an empty cosmetics: [] — seed the starter skin so every
   // profile begins with something on their ball.
@@ -3839,6 +3855,31 @@ function evaluateDifficultyUnlock(length, currentStar, runStats, characterId) {
   return unlockNextDifficulty(length, currentStar, characterId);
 }
 window.evaluateDifficultyUnlock = evaluateDifficultyUnlock;
+
+// ── Run-length unlock helpers (v0.20g) ─────────────────────────
+// 18-hole runs are gated behind completing any 9-hole run on this profile.
+// "Completed" = holesPlayed === totalHoles, regardless of difficulty/character.
+// Lifts on first 9-hole completion and persists forever.
+function isRunLengthUnlocked(length) {
+  if(length <= 9) return true; // 9 always unlocked
+  const meta = getMeta();
+  const list = (meta.unlocks && Array.isArray(meta.unlocks.runLengths)) ? meta.unlocks.runLengths : [9];
+  return list.indexOf(length) !== -1;
+}
+window.isRunLengthUnlocked = isRunLengthUnlocked;
+
+// Grant 18-hole unlock (called when any 9-hole run is completed).
+// Returns true if newly unlocked, false if already unlocked.
+function unlockRunLength18() {
+  const meta = getMeta();
+  if(!meta.unlocks) meta.unlocks = {};
+  if(!Array.isArray(meta.unlocks.runLengths)) meta.unlocks.runLengths = [9];
+  if(meta.unlocks.runLengths.indexOf(18) !== -1) return false;
+  meta.unlocks.runLengths.push(18);
+  setMeta(meta);
+  return true;
+}
+window.unlockRunLength18 = unlockRunLength18;
 
 // ── Character unlock chain (v0.20a4) ───────────────────
 // Linear unlock chain: completing ★3 (winReq='finish') with N unlocks N+1.
@@ -4138,11 +4179,17 @@ setTimeout(() => {
   // also calls this, but this catches the fallback + protects against
   // ordering edge cases where the overlay is revealed synchronously.
   if(typeof renderStarRow === 'function') renderStarRow();
+  if(typeof refreshHoleButtons === 'function') refreshHoleButtons();
   if(typeof renderCharacterRow === 'function') renderCharacterRow();
 }, 0);
 
 // ── Settings UI ───────────────────────────────────────
 window.setHoles = function(n) {
+  // v0.20g: 18-hole runs require completing a 9-hole run first
+  if(n === 18 && typeof isRunLengthUnlocked === 'function' && !isRunLengthUnlocked(18)) {
+    if(typeof showToast === 'function') showToast('🔒 Complete a 9-hole run to unlock 18 holes', 2200);
+    return;
+  }
   G.totalHoles = n;
   document.getElementById('holes-9').classList.toggle('active', n===9);
   document.getElementById('holes-18').classList.toggle('active', n===18);
@@ -4398,6 +4445,29 @@ function renderStarRow() {
   }
 }
 window.renderStarRow = renderStarRow;
+
+// v0.20g: refresh the 9/18 hole buttons to show locked state on 18 when
+// the player hasn't completed a 9-hole run yet. Called from the same
+// hooks that renderStarRow() is called from. Adds a lock emoji to the
+// label and disables the visual active state — the click handler in
+// setHoles() shows a toast explaining why.
+function refreshHoleButtons() {
+  const btn18 = document.getElementById('holes-18');
+  if(!btn18) return;
+  const unlocked = (typeof isRunLengthUnlocked === 'function') ? isRunLengthUnlocked(18) : true;
+  btn18.classList.toggle('locked', !unlocked);
+  btn18.textContent = unlocked ? '18' : '🔒 18';
+  btn18.style.opacity = unlocked ? '' : '0.55';
+  btn18.title = unlocked ? '' : 'Complete a 9-hole run to unlock 18 holes';
+  // If somehow currently set to 18 while locked (e.g. weird state), snap to 9.
+  if(!unlocked && G.totalHoles === 18) {
+    G.totalHoles = 9;
+    const btn9 = document.getElementById('holes-9');
+    if(btn9) btn9.classList.add('active');
+    btn18.classList.remove('active');
+  }
+}
+window.refreshHoleButtons = refreshHoleButtons;
 
 // ── Multiplayer player colors & setup ─────────────────
 const PLAYER_COLORS_DEFAULT = [
@@ -8610,6 +8680,13 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
             if(typeof renderCharacterRow === 'function') {
               setTimeout(() => { try { renderCharacterRow(); } catch(_){} }, 100);
             }
+          } else if(item.kind === 'runLength') {
+            // v0.20g: 18-hole runs unlocked — refresh the holes buttons so
+            // the lock flips off immediately on the menu.
+            showToast(`⛳ 18-HOLE RUNS UNLOCKED!`, 3600);
+            if(typeof refreshHoleButtons === 'function') {
+              setTimeout(() => { try { refreshHoleButtons(); } catch(_){} }, 100);
+            }
           }
         } catch(e){}
       }, 650 + i * 900);
@@ -9260,9 +9337,14 @@ function updateAimArrow() {
   }
 
   // ── Angler: show multi-bounce wall-reflection line ─────
+  // v0.20g: now driven by the Angler PERK (passive, always-on while owned)
+  // instead of the per-swing card flag. _anglerCardActive flag still gets
+  // set/cleared by legacy code paths but is no longer the gate — the perk
+  // ownership check is the single source of truth.
+  const _anglerOn = (G.modifiers && G.modifiers.some(m=>m.id==='angler')) || G._anglerCardActive;
   if(G._anglerLine) { scene.remove(G._anglerLine); G._anglerLine = null; }
   if(G._anglerDots) { scene.remove(G._anglerDots); G._anglerDots = null; }
-  if(G._anglerCardActive && power > 0.01 && G.wallPolylines && G.wallPolylines.length) {
+  if(_anglerOn && power > 0.01 && G.wallPolylines && G.wallPolylines.length) {
     const RAY_LEN = spd * 1.0;
     const bounceResult = traceMultiBounce(G.ballPos.x, G.ballPos.z, G.shotDir.x, G.shotDir.z, RAY_LEN, 4);
 
@@ -9855,6 +9937,21 @@ function updatePhysics(dt) {
       }
     }
     G._oobGraceTimer = 0;
+    // v0.20g: track last known safe position during the shot. Used as a
+    // fallback target by resetToLastShot when the lastShotPos cell got
+    // destroyed mid-shot. Sampled lazily (every ~0.1s) since the ball
+    // can travel a long way per frame and we don't need every position.
+    if(!G._lastSafePosSampleT) G._lastSafePosSampleT = 0;
+    G._lastSafePosSampleT += dt;
+    if(G._lastSafePosSampleT >= 0.1) {
+      G._lastSafePosSampleT = 0;
+      const _cellHere = (typeof getCell === 'function') ? getCell(G.ballPos.x, G.ballPos.z) : null;
+      if(_cellHere === CELL.FAIR || _cellHere === CELL.GREEN ||
+         _cellHere === CELL.TEE  || _cellHere === CELL.SAND) {
+        if(!G._lastSafePos) G._lastSafePos = new THREE.Vector3();
+        G._lastSafePos.copy(G.ballPos);
+      }
+    }
   }
 
   // ── Floor collision — always snap if below terrain ─────
@@ -10830,7 +10927,9 @@ function updatePhysics(dt) {
   // ── Conveyor force ───────────────────────────────────
   // v0.17y5: conveyors only push grounded balls. An airborne catapult
   // ball sailing over a conveyor shouldn't get sideways force.
-  if(G.conveyors && G.conveyors.length) {
+  // v0.20g: freeze frame now also halts conveyor force — players expect
+  // "all moving obstacles freeze" to include the belts.
+  if(G.conveyors && G.conveyors.length && !G._freezeFrameActive) {
     const _cvTerrainY = G.heightMap.length ? getTerrainHeight(G.ballPos.x, G.ballPos.z) : 0;
     const _cvGrounded = (G.ballPos.y - _cvTerrainY) < 1.2;
     if(_cvGrounded) {
@@ -11746,6 +11845,11 @@ function resetToLastShot() {
   // when it fires on hole 18), search outward in concentric rings from the
   // last-shot position for the nearest safe cell. Tee fallback only if NO
   // safe cell is reachable within ~6 tiles.
+  // v0.20g: ring radius bumped 6→12 tiles (covers larger destruction zones
+  // near the hole on long par holes). Also fall back to G._lastSafePos
+  // (last in-bounds position sampled mid-shot) before jumping to tee — when
+  // ball goes OOB near the hole, this respawns "near the hole" instead of
+  // warping all the way back to the tee.
   let wx, wz;
   const tp = G.teePos;
   const teeWX = tp.x * TILE_SIZE, teeWZ = tp.y * TILE_SIZE;
@@ -11758,10 +11862,10 @@ function resetToLastShot() {
                        cell === CELL.TEE  || cell === CELL.SAND);
     if(!safeCells) {
       // v0.20c: ring-search outward in TILE_SIZE steps for the nearest safe cell.
-      // Up to 6 tiles out (covers most destruction radii without warping far).
+      // v0.20g: extended from 6 to 12 tiles. Long par holes can have
+      // destruction zones bigger than 6 tiles around the lastShotPos.
       let found = false;
-      for(let ring = 1; ring <= 6 && !found; ring++) {
-        const step = TILE_SIZE * 0.5; // half-tile granularity
+      for(let ring = 1; ring <= 12 && !found; ring++) {
         const radius = ring * TILE_SIZE;
         // Sample 8 directions per ring (more on larger rings for finer coverage)
         const samples = 8 * ring;
@@ -11779,7 +11883,22 @@ function resetToLastShot() {
         }
       }
       if(!found) {
-        // True last resort: nothing safe nearby, use tee
+        // v0.20g: before falling back to the tee, try the last sampled
+        // safe position from this shot. The ball was demonstrably in-bounds
+        // at that point, so it's a much better respawn than tee — players
+        // hate being warped back across the entire course on high-par holes.
+        if(G._lastSafePos) {
+          const sx = G._lastSafePos.x, sz = G._lastSafePos.z;
+          const sCell = getCell(sx, sz);
+          if(sCell === CELL.FAIR || sCell === CELL.GREEN ||
+             sCell === CELL.TEE  || sCell === CELL.SAND) {
+            wx = sx; wz = sz;
+            found = true;
+          }
+        }
+      }
+      if(!found) {
+        // True last resort: nothing safe nearby AND no last-safe-pos available
         wx = teeWX; wz = teeWZ;
       }
     }
@@ -12062,6 +12181,21 @@ const TRICK_DEFS = [
 // Hole completion bonus points
 const HOLE_STYLE_BONUS = { ace: 2000, eagle: 1000, birdie: 500, par: 100 };
 
+// v0.20g: THPS-style diminishing returns on repeated tricks within a single
+// hole. Telemetry showed destruction-heavy builds firing the same trick (e.g.
+// ABSOLUTE MADNESS, CHAOS THEORY) 4-6× per hole and accumulating runaway
+// style scores. Repeats now decay sharply but never floor to zero — the
+// popup, sound, and particles still fire every time (Juice is a Feature).
+// Aligns with pillar #3: rewards variety over spam.
+//
+// Returns the multiplier to apply to a trick's base value given how many
+// times that trick has already fired this hole (0 = first instance).
+const TRICK_REPEAT_CURVE = [1.00, 0.50, 0.25, 0.10, 0.05]; // 1st, 2nd, 3rd, 4th, 5th+
+function trickRepeatMultiplier(repeatCount) {
+  const idx = Math.min(repeatCount, TRICK_REPEAT_CURVE.length - 1);
+  return TRICK_REPEAT_CURVE[Math.max(0, idx)];
+}
+
 // Record a style event during the current shot
 function recordStyleEvent(type) {
   if(!G._shotEvents) G._shotEvents = [];
@@ -12153,11 +12287,15 @@ function computeLiveShotScore() {
       base += basePts;
     }
   }
-  // Add trick bonus points
+  // Add trick bonus points (post-decay awarded values, set when trick fired)
+  // v0.20g: previously used td.pts (base value) — caused trick spam to
+  // accumulate full base points per repeat. Now reads the awarded value
+  // captured at fire-time so the live HUD matches what's recorded.
+  const trickAwards = G._trickAwardsThisShot || {};
   const shownTricks = G._tricksShownThisShot || new Set();
   for(const td of TRICK_DEFS) {
     if(shownTricks.has(td.id)) {
-      base += td.pts;
+      base += (typeof trickAwards[td.id] === 'number') ? trickAwards[td.id] : td.pts;
     }
   }
   let mult = Math.max(1, (G._shotEventTypes || new Set()).size);
@@ -12263,17 +12401,30 @@ function checkLiveTricks() {
     explosivoWhileRolling: events.some(e => e.type === 'explosivo_rolling'),
   };
   if(!G._tricksShownThisShot) G._tricksShownThisShot = new Set();
+  if(!G._trickAwardsThisShot) G._trickAwardsThisShot = {};
+  if(!G._holeTrickCounts) G._holeTrickCounts = {};
   for(const td of TRICK_DEFS) {
     if(G._tricksShownThisShot.has(td.id)) continue;
     if(td.test(events, ctx)) {
       G._tricksShownThisShot.add(td.id);
-      showLiveTrickName(td.name, td.pts);
+      // v0.20g: per-hole repeat decay. First instance of a trick this hole
+      // pays full base pts; repeats decay (1.0, 0.5, 0.25, 0.10, 0.05).
+      // Floor never zero — popup, sound, particles always fire.
+      const repeatCount = G._holeTrickCounts[td.id] || 0;
+      const mult = trickRepeatMultiplier(repeatCount);
+      const awardedPts = Math.max(1, Math.round(td.pts * mult));
+      G._trickAwardsThisShot[td.id] = awardedPts;
+      G._holeTrickCounts[td.id] = repeatCount + 1;
+      showLiveTrickName(td.name, awardedPts, repeatCount);
     }
   }
 }
 
 // Big slam trick name — adds to the chain as a highlighted item
-function showLiveTrickName(name, pts) {
+// v0.20g: optional repeatCount param shows "×N" suffix on the slam text
+// when a trick is repeating within the same hole, so players see why it
+// pays less. First instance (repeatCount=0) is unchanged.
+function showLiveTrickName(name, pts, repeatCount) {
   if(!G._comboChainItems) G._comboChainItems = [];
   G._comboChainItems.push({ name, pts, isTrick: true });
 
@@ -12289,7 +12440,14 @@ function showLiveTrickName(name, pts) {
   if(container) {
     const el = document.createElement('div');
     el.className = 'style-trick-name';
-    el.textContent = name;
+    // Show "×N" suffix on repeats so the diminishing read is legible.
+    // Repeat 0 = no suffix; Repeat 1 = ×2 (the second instance), etc.
+    const _rc = (typeof repeatCount === 'number') ? repeatCount : 0;
+    el.textContent = _rc > 0 ? `${name} ×${_rc + 1}` : name;
+    if(_rc > 0) {
+      // Slight desaturation cue on repeats (keeps the juice but signals decay)
+      el.style.opacity = String(Math.max(0.55, 1 - _rc * 0.15));
+    }
     container.insertBefore(el, container.firstChild);
     // Remove slam text after animation
     setTimeout(() => { if(el.parentNode) el.parentNode.removeChild(el); }, 1500);
@@ -12335,16 +12493,37 @@ function finalizeShot(holed) {
   const tricks = [];
   const shownAlready = G._tricksShownThisShot || new Set();
   if(!G._tricksShownThisShot) G._tricksShownThisShot = new Set();
+  if(!G._trickAwardsThisShot) G._trickAwardsThisShot = {};
+  if(!G._holeTrickCounts) G._holeTrickCounts = {};
   for(const td of TRICK_DEFS) {
     if(td.test(events, ctx)) {
-      // pts kept for legacy HUD readers; points + timestamp added for analytics export
+      // v0.20g: apply per-hole repeat decay before logging. For tricks that
+      // already fired live this shot, reuse the awarded value captured then.
+      // For newly-discovered (holed-only) tricks, decay against the current
+      // per-hole counter and increment it here.
+      let awardedPts;
+      let repeatCount;
+      if(shownAlready.has(td.id) && typeof G._trickAwardsThisShot[td.id] === 'number') {
+        awardedPts = G._trickAwardsThisShot[td.id];
+        // The counter was incremented when the trick first fired live —
+        // recover the pre-fire repeat count for accurate logging.
+        repeatCount = Math.max(0, (G._holeTrickCounts[td.id] || 1) - 1);
+      } else {
+        repeatCount = G._holeTrickCounts[td.id] || 0;
+        const m = trickRepeatMultiplier(repeatCount);
+        awardedPts = Math.max(1, Math.round(td.pts * m));
+        G._trickAwardsThisShot[td.id] = awardedPts;
+        G._holeTrickCounts[td.id] = repeatCount + 1;
+      }
+      // pts kept for legacy HUD readers (now post-decay so HUD math matches);
+      // basePts preserved for analytics; repeatCount logged for balance review.
       const ts = Math.max(0, Math.round(performance.now() - (G._holeStartTime || performance.now())));
-      tricks.push({ id: td.id, name: td.name, pts: td.pts, points: td.pts, timestamp: ts });
+      tricks.push({ id: td.id, name: td.name, pts: awardedPts, points: awardedPts, basePts: td.pts, repeatCount, timestamp: ts });
       // Register newly discovered holed-only tricks
       if(!shownAlready.has(td.id)) {
         G._tricksShownThisShot.add(td.id);
         if(!G._comboChainItems) G._comboChainItems = [];
-        G._comboChainItems.push({ name: td.name, pts: td.pts, isTrick: true });
+        G._comboChainItems.push({ name: td.name, pts: awardedPts, isTrick: true });
       }
     }
   }
@@ -12569,7 +12748,10 @@ const CHALLENGE_POOL = [
   { id:'speed_demon',   label:'⏱️ Speed Demon',    desc:'Hole out in under 10s',          reward:20,
     guard:()=>true, checkMid:()=>false, checkEnd:()=>G._challengeRollingTime < 10 },
   { id:'coin_hoarder',  label:'🪙 Coin Hoarder',   desc:'Collect 10+ coins this hole',    reward:10,
-    guard:()=>true, checkMid:()=>(G.coinMeshes?G.coinMeshes.filter(c=>c.collected).length:0)>=10, checkEnd:()=>(G.coinMeshes?G.coinMeshes.filter(c=>c.collected).length:0)>=10 },
+    // v0.20g: count coins by value (big 5x coins → 5), not by mesh count.
+    guard:()=>true,
+    checkMid:()=>(G.coinMeshes?G.coinMeshes.filter(c=>c.collected).reduce((s,c)=>s+(c.value||1),0):0)>=10,
+    checkEnd:()=>(G.coinMeshes?G.coinMeshes.filter(c=>c.collected).reduce((s,c)=>s+(c.value||1),0):0)>=10 },
   { id:'sky_walker',    label:'🦘 Sky Walker',      desc:'Jump over an obstacle',          reward:10,
     guard:()=>G.deck.includes('jumper'), checkMid:()=>G._challengeJumpOvers>0, checkEnd:()=>G._challengeJumpOvers>0 },
   { id:'combo_king',    label:'🔥 Combo King',      desc:'10,000+ style score',            reward:12,
@@ -14114,8 +14296,12 @@ function renderShop() {
     grid.innerHTML = '<div style="color:rgba(255,255,255,0.4);text-align:center;padding:20px;font-size:0.8rem;">Nothing available right now.</div>';
   }
 
-  // ── Remove Card option (every 3 holes, starting hole 2) ──
-  if((G.hole + 1) % 3 === 0 && G.deck.length > 3 && !G._cardRemoveUsedThisHole) {
+  // ── Remove Card option — always available, limited only by money ──
+  // v0.20g: previously gated to every 3 holes + once per hole. Adam's
+  // feedback: let players cut as many cards as they want, money is the
+  // only limit. Single deck-size guard remains so the deck can't go below
+  // a minimum (3 cards = unplayable hand cycle).
+  if(G.deck.length > 3) {
     const removePrice = getCardRemovePrice();
     const canAffordRemove = G.coins >= removePrice;
     grid.innerHTML += `<div class="shop-section-label">✂️ Deck Surgery</div>`;
@@ -14255,7 +14441,8 @@ window.removeCardFromDeck = function(cardId, el) {
   if(G.coins < price) return;
   G.coins -= price;
   updateCoinHUD();
-  G._cardRemoveUsedThisHole = true;
+  // v0.20g: no longer set _cardRemoveUsedThisHole — players can cut as
+  // many cards as they want per shop visit, limited only by coins.
   // Remove ONE copy from deck
   const idx = G.deck.indexOf(cardId);
   if(idx >= 0) G.deck.splice(idx, 1);
@@ -15029,7 +15216,9 @@ function triggerCheckeredFlag() {
 
 // ── Active filtering (synced from tuning sheet) ──────────────
 // Perks/cards marked 'no' in the Active column are filtered out at load time
-const INACTIVE_PERKS = new Set(['double_or_nothing', 'thin_ice', 'coin_bouncer']);
+// v0.20g: three_balls, bowling_ball deactivated (bowling_ball was already
+// hidden via weight=0; now formally inactive via the same path).
+const INACTIVE_PERKS = new Set(['double_or_nothing', 'thin_ice', 'coin_bouncer', 'three_balls', 'bowling_ball']);
 const INACTIVE_CARDS = new Set(['airstrike', 'wrecking_ball', 'portal_pair', 'wall_magnet', 'arc_shot', 'golden_path', 'slow_mo']);
 
 const CARD_DEFS = {
@@ -15060,7 +15249,9 @@ const CARD_DEFS = {
   coin_shower:  { id:'coin_shower',  emoji:'🌧️', name:'Coin Shower',     desc:'Drop 20 coins in a line ahead of your ball. Clean line = bonus 5× coin!', rarity:'rare',      price:18,  context:'pre',    holdable:false },
   // golden_path hidden — may revisit later
   // golden_path:  { id:'golden_path',  emoji:'🔦', name:'Golden Path',     desc:'Reveals the optimal line to the hole. Fades after one swing.',    rarity:'common',    price:10,  context:'pre',    holdable:false },
-  angler:       { id:'angler',       emoji:'📐', name:'Angler',          desc:'This swing: shows predicted bounce lines off walls.',              rarity:'rare',      price:14,  context:'pre',    holdable:false },
+  // v0.20g: angler moved from CARD_DEFS to ALL_PERKS. Was a single-use card;
+  // is now a passive perk that shows the bounce predictor on every aim.
+  // angler:       { id:'angler',       emoji:'📐', name:'Angler',          desc:'This swing: shows predicted bounce lines off walls.',              rarity:'rare',      price:14,  context:'pre',    holdable:false },
   floomba:      { id:'floomba',      emoji:'🤖', name:'Floomba',         desc:'Deploy a disc robot that roams the course destroying obstacles.',  rarity:'epic',      price:28,  context:'pre',    holdable:false },
   perpetual_motion: { id:'perpetual_motion', emoji:'♾️', name:'Perpetual Motion', desc:'Zero friction and perfect wall bounces. Pure chaos.', rarity:'rare', price:20, context:'any', holdable:false },
   wall_magnet:  { id:'wall_magnet',  emoji:'🧲', name:'Wall Magnet',     desc:'This swing: ball curves toward the nearest wall. Bounce synergy!', rarity:'rare',      price:15,  context:'pre',    holdable:false },
@@ -15123,7 +15314,7 @@ const CHARACTERS = {
     color: 0x6b7680, // slate gray
     tagline: 'Nothing stays standing.',
     blessings: [
-      '💥 Starts with 2× Scorched Earth (stacks)',
+      '💥 Starts with Scorched Earth',
       '🎯 +50% style score on obstacle destruction',
     ],
     curses: [
@@ -15131,7 +15322,7 @@ const CHARACTERS = {
     ],
     starter: {
       deck: ['iron_ball','iron_ball','explosivo','power_shot'],
-      perks: ['scorched_earth','scorched_earth'],
+      perks: ['scorched_earth'],
     },
     bannedCards: ['jumper','catapult','arc_shot','sharpshooter'],
     bannedPerks: [],
@@ -15361,6 +15552,12 @@ function playCard(instanceId) {
   const def = CARD_DEFS[card.id];
   if (!def) return false;
   if (!canPlayCard(card.id)) return false;
+  // v0.20g: tapping a card that's already in the armed queue is a no-op —
+  // the effect is already queued, re-tapping shouldn't re-execute the
+  // ability (e.g. shouldn't double-stack Power Shot from one slot tap).
+  if(Array.isArray(G._armedCards) && G._armedCards.some(a => a.instanceId === instanceId)) {
+    return false;
+  }
   // v0.20d: if grenade aim is on and the player plays a different card,
   // cancel the grenade aim (refunds the grenade card). Prevents a stuck
   // aim state and silent loss of the grenade card.
@@ -15376,31 +15573,6 @@ function playCard(instanceId) {
       break;
     }
   }
-
-  // Slide-out animation on the slot element
-  if (playedSlotIdx >= 0) {
-    const el = document.getElementById('card-slot-' + CARD_SLOT_KEYS[playedSlotIdx]);
-    if (el) {
-      // Clone for animation so the real slot can be reused
-      const ghost = el.cloneNode(true);
-      ghost.style.position = 'fixed';
-      const rect = el.getBoundingClientRect();
-      ghost.style.left = rect.left + 'px';
-      ghost.style.top = rect.top + 'px';
-      ghost.style.width = rect.width + 'px';
-      ghost.style.height = rect.height + 'px';
-      ghost.style.zIndex = '50';
-      ghost.style.pointerEvents = 'none';
-      ghost.style.transition = 'transform 0.3s ease-in, opacity 0.25s ease-in';
-      document.body.appendChild(ghost);
-      requestAnimationFrame(() => {
-        ghost.style.transform = 'translateY(60px) scale(0.5) rotate(8deg)';
-        ghost.style.opacity = '0';
-        setTimeout(() => ghost.remove(), 350);
-      });
-    }
-  }
-  sfxCardDiscard();
 
   // v0.19x: track cancellable card plays. Sniper + Sharpshooter open a scope
   // overlay with a cancel button. If the player cancels, we need to push the
@@ -15426,6 +15598,62 @@ function playCard(instanceId) {
   } catch(e) {
     console.warn('[card] executeCardAbility threw — proceeding with discard so card does not strand:', card.id, e);
   }
+
+  // v0.20g: if the card is now armed pre-swing (its effect is queued for the
+  // next swing rather than fired immediately), KEEP it in the slot lifted +
+  // glowing instead of discarding now. The fireShot path (or cancel path)
+  // drains queued armed cards. This replaces the "card disappears + bottom
+  // chip strip" UI with in-place feedback.
+  // Cancellable cards (sniper/sharpshooter/grenade) intentionally keep their
+  // own re-add-on-cancel flow and don't take this path — playing them lifts
+  // their slot too, but cancel restores them via the existing refund logic.
+  const armedNow = (typeof isCardArmedPreSwing === 'function') && isCardArmedPreSwing(card.id);
+  const cancellable = (card.id === 'sniper' || card.id === 'sharpshooter' || card.id === 'grenade');
+  if(armedNow && !cancellable) {
+    if(!Array.isArray(G._armedCards)) G._armedCards = [];
+    // Avoid duplicate queue entries (e.g. tapping the same power_shot twice
+    // increments _powerShotStacks, but only one queue entry should retire
+    // the slot card on swing). Power Shot is the unusual case: it stacks,
+    // so re-playing the SAME instance shouldn't happen — slot click is
+    // per-instance. But just in case, dedupe by instanceId.
+    if(!G._armedCards.some(a => a.instanceId === instanceId)) {
+      G._armedCards.push({ instanceId, cardId: card.id });
+    }
+    sfxCardDiscard();
+    G._challengeCardsPlayed = (G._challengeCardsPlayed||0) + 1;
+    if(G._holeCardsPlayed) G._holeCardsPlayed.push(card.id);
+    // No discard, no slot clear — card stays where it is. updateHandUI()
+    // re-applies the .card-armed class which lifts + glows.
+    updateHandUI();
+    return true;
+  }
+
+  // ── Card fired immediately (or is cancellable) — old path: slide-out + discard ──
+
+  // Slide-out animation on the slot element
+  if (playedSlotIdx >= 0) {
+    const el = document.getElementById('card-slot-' + CARD_SLOT_KEYS[playedSlotIdx]);
+    if (el) {
+      // Clone for animation so the real slot can be reused
+      const ghost = el.cloneNode(true);
+      ghost.style.position = 'fixed';
+      const rect = el.getBoundingClientRect();
+      ghost.style.left = rect.left + 'px';
+      ghost.style.top = rect.top + 'px';
+      ghost.style.width = rect.width + 'px';
+      ghost.style.height = rect.height + 'px';
+      ghost.style.zIndex = '50';
+      ghost.style.pointerEvents = 'none';
+      ghost.style.transition = 'transform 0.3s ease-in, opacity 0.25s ease-in';
+      document.body.appendChild(ghost);
+      requestAnimationFrame(() => {
+        ghost.style.transform = 'translateY(60px) scale(0.5) rotate(8deg)';
+        ghost.style.opacity = '0';
+        setTimeout(() => ghost.remove(), 350);
+      });
+    }
+  }
+  sfxCardDiscard();
 
   // Move to discard: re-resolve index by instanceId in the (possibly new) hand.
   // For Mulligan, the restored hand still contains the Mulligan card (it was
@@ -15531,7 +15759,10 @@ function executeCardAbility(id) {
     case 'freeze_frame': activateFreezeFrame(); break;
     case 'coin_shower':  activateCoinShower(); break;
     case 'golden_path':  activateGoldenPath(); break;
-    case 'angler':       G._anglerCardActive = true; showToast('📐 Angler armed!', 800); break;
+    // v0.20g: angler is now a passive perk, not a card. Activation no-ops if
+    // an old save somehow still has it in the deck — perk presence drives the
+    // visualization directly.
+    case 'angler':       break;
     // Placeholder for future cards:
     case 'airstrike':    showToast('🎯 Airstrike coming soon!', 1000); break;
     case 'cannonball':   G._cannonballActive = true; showToast('💣 Cannonball armed — smash through walls!', 1000); break;
@@ -15564,7 +15795,7 @@ function isCardArmedPreSwing(cardId) {
     case 'arc_shot':     return !!G._arcShotActive;
     case 'catapult':     return !!G._catapultActive;
     case 'wall_magnet':  return !!G._wallMagnetActive;
-    case 'angler':       return !!G._anglerCardActive;
+    // v0.20g: angler removed — it's a passive perk now, not a card
     case 'jumper':       return !!G._jumpPreloaded || !!G._jumpPending;
     case 'freeze_frame': return !!G._freezeFrameActive;
     case 'slow_mo':      return !!G._slowMoPerkActive;
@@ -15573,31 +15804,13 @@ function isCardArmedPreSwing(cardId) {
   return false;
 }
 
-// v0.20f4: armed-effect HUD chips. Single source of truth for "what will my
-// next swing do?" — rendered every updateHandUI call (which happens often
-// enough that flag changes show up promptly). Played pre-context cards are
-// discarded so we can't keep their slot lifted; chips fill that role.
+// v0.20g: armed-effect HUD chips REPLACED by lifted-card-in-slot UI.
+// Function still exists as a no-op for any leftover call sites; the
+// armed state is now read directly off the card slot via .card-armed
+// class in updateHandUI(). Kept callable for safety.
 function renderArmedChips() {
   const wrap = document.getElementById('armed-chips');
-  if(!wrap) return;
-  if(G.state !== 'playing' || G.rolling) { wrap.innerHTML = ''; return; }
-  const chips = [];
-  const ps = G._powerShotStacks || 0;
-  if(ps > 0) chips.push({ emoji:'💪', label:'Power Shot', stack: ps > 1 ? '×'+ps : '' });
-  if(G._ironBallActive)      chips.push({ emoji:'🔩', label:'Iron Ball' });
-  if(G._cannonballActive)    chips.push({ emoji:'💣', label:'Cannonball' });
-  if(G._arcShotActive)       chips.push({ emoji:'🌈', label:'Arc Shot' });
-  if(G._catapultActive)      chips.push({ emoji:'🪤', label:'Catapult' });
-  if(G._wallMagnetActive)    chips.push({ emoji:'🧲', label:'Wall Magnet' });
-  if(G._anglerCardActive)    chips.push({ emoji:'📐', label:'Angler' });
-  if(G._jumpPreloaded)       chips.push({ emoji:'🦘', label:'Jumper' });
-  if(G._freezeFrameActive)   chips.push({ emoji:'🧊', label:'Freeze' });
-  if(G._slowMoPerkActive)    chips.push({ emoji:'🐌', label:'Slow Mo' });
-  if(G._perpetualMotionActive) chips.push({ emoji:'♾️', label:'Perpetual' });
-  if(chips.length === 0) { wrap.innerHTML = ''; return; }
-  wrap.innerHTML = chips.map(c =>
-    `<div class="armed-chip"><span class="chip-emoji">${c.emoji}</span><span>${c.label}</span>${c.stack?`<span class="chip-stack">${c.stack}</span>`:''}</div>`
-  ).join('');
+  if(wrap) wrap.innerHTML = '';
 }
 
 function updateHandUI() {
@@ -17159,6 +17372,7 @@ function fireSharpshooterBall() {
   G._shotEvents = [];
   G._shotEventTypes = new Set();
   G._tricksShownThisShot = new Set();
+  G._trickAwardsThisShot = {};   // v0.20g: per-shot post-decay trick awards
   G._comboChainItems = [];
   G._liveShotTotal = 0;
   G._wasOOB = false; G._oobWasGhost = false; G._oobWasJump = false;
@@ -19368,6 +19582,28 @@ function onPointerUp() {
 
 function fireShot() {
   if(!G.aimMode || G.rolling || G.inHole) return;
+  // v0.20g: drain queued armed cards. Cards that "arm pre-swing" (Power Shot,
+  // Iron Ball, Catapult, etc.) stayed in their slots lifted + glowing while
+  // the player aimed; now that the swing is firing, retire them to discard
+  // so the slots free up for the next shot.
+  if(Array.isArray(G._armedCards) && G._armedCards.length) {
+    for(const a of G._armedCards) {
+      // Remove from hand by instanceId; push card id to discard
+      const hi = G.hand.findIndex(c => c.instanceId === a.instanceId);
+      if(hi !== -1) {
+        const _c = G.hand[hi];
+        G.hand.splice(hi, 1);
+        G.discard.push(_c.id);
+      }
+      // Clear from slots if present
+      for(let i = 0; i < G.cardSlots.length; i++) {
+        if(G.cardSlots[i] && G.cardSlots[i].instanceId === a.instanceId) {
+          G.cardSlots[i] = null;
+        }
+      }
+    }
+    G._armedCards = [];
+  }
   // v0.20a: Speedball timer starts on FIRST swing of a hole. From then on it
   // runs through planning/aiming/OOB — no pausing. Reset to 60s in initHole.
   {
@@ -19405,6 +19641,7 @@ function fireShot() {
   G._shotEvents = [];
   G._shotEventTypes = new Set();
   G._tricksShownThisShot = new Set();
+  G._trickAwardsThisShot = {};   // v0.20g: per-shot post-decay trick awards
   G._comboChainItems = [];
   G._liveShotTotal = 0;
   G._wasOOB = false;
@@ -20440,6 +20677,11 @@ const ALL_PERKS = [
     desc:'Out-of-bounds grace period extended from 1.5s to 10s. Live dangerously.' },
   { id:'slow_mo',         name:'Slow Mo',               emoji:'🐌', rarity:'rare',     price:20, stackable:false, weight:3,
     desc:'Once per hole, tap to slow time for up to 6s. Armed before or during your swing.' },
+  // v0.20g: angler converted from card to passive perk. Always-on bounce
+  // predictor visualization while aiming — high information value, no
+  // physics changes, so it slots cleanly as a rare passive.
+  { id:'angler',          name:'Angler',                emoji:'📐', rarity:'rare',     price:14, stackable:false, weight:3,
+    desc:'Shows predicted multi-bounce lines off walls every time you aim.' },
   // EPIC — base weight 2
   { id:'big_hole',         name:'Big Hole',            emoji:'🕳️', rarity:'epic',      price:14, stackable:false, weight:2,
     desc:'The hole radius doubles — much more forgiving on close approaches.' },
@@ -20617,9 +20859,18 @@ function showGameOver(bustedBudget=false){
   // without busting HP; winReq for that star is checked inside the helper.
   let _newStarThisRun = null;
   let _newCharThisRun = null; // v0.20a4
+  let _newRunLengthThisRun = null; // v0.20g
   try {
     if(!bustedBudget && holesPlayed >= (G.totalHoles || 9)) {
       const _charForUnlock = G.currentCharacter || 'classic';
+      // v0.20g: completing any 9-hole run unlocks 18-hole runs on this profile.
+      // Fires once per profile — unlockRunLength18 returns false if already
+      // unlocked, so re-runs don't spam the toast.
+      if((G.totalHoles || 9) === 9 && typeof unlockRunLength18 === 'function') {
+        if(unlockRunLength18()) {
+          _newRunLengthThisRun = 18;
+        }
+      }
       const newStar = evaluateDifficultyUnlock(G.totalHoles || 9, G.difficulty || 3, {
         holesPlayed,
         totalHoles: G.totalHoles || 9,
@@ -20743,6 +20994,10 @@ function showGameOver(bustedBudget=false){
         name: _newCh ? _newCh.name : _newCharThisRun,
         emoji: _newCh ? _newCh.emoji : '🆕',
       });
+    }
+    // v0.20g: 18-hole run length unlock toast
+    if(_newRunLengthThisRun === 18) {
+      pending.push({ kind: 'runLength', length: 18 });
     }
     // Drain any backlog from previous runs FIRST (oldest wins).
     const backlog = Array.isArray(meta._pendingCosmeticBacklog) ? meta._pendingCosmeticBacklog : [];
@@ -21261,6 +21516,10 @@ function initHole() {
   G._shotEventTypes = new Set(); // unique event types this shot (for multiplier)
   G._holeStyleScore = 0;     // total style points this hole
   G._holeTricks = [];        // named tricks landed this hole
+  G._holeTrickCounts = {};   // v0.20g: per-trick fire counts for repeat decay
+  G._lastSafePos = null;     // v0.20g: tracked during shot for OOB respawn fallback
+  G._lastSafePosSampleT = 0;
+  G._armedCards = [];        // v0.20g: armed pre-swing cards waiting to fire
   G._bestTrickThisHole = null;
   // v0.17y7: clear any stale post-finalize debounce from previous hole
   if(G._postFinalizeTimer) { clearTimeout(G._postFinalizeTimer); G._postFinalizeTimer = null; }
@@ -22080,6 +22339,8 @@ function escMainMenu() {
   // v0.18a: the overlay HTML was just rebuilt — repopulate the star row
   // buttons now that the two container divs exist in DOM.
   if(typeof renderStarRow === 'function') renderStarRow();
+  // v0.20g: also re-apply lock state to the 9/18 toggle buttons
+  if(typeof refreshHoleButtons === 'function') refreshHoleButtons();
   // v0.20a2: also repopulate the character picker row — the overlay rebuild
   // wipes the inner DOM of #character-row, so the portraits need re-rendering.
   if(typeof renderCharacterRow === 'function') renderCharacterRow();
@@ -22408,6 +22669,7 @@ function switchToNextPlayer() {
   G._shotEventTypes = new Set();
   G._holeStyleScore = 0;
   G._holeTricks = [];
+  G._holeTrickCounts = {};   // v0.20g: per-trick fire counts for repeat decay
   G._lifeDeductedThisHole = false;
   G._damageTakenThisHole = 0;
   G._lastDamagedAtStroke = -1;
@@ -22750,12 +23012,11 @@ function startGame(){
   G._runSaved = false;
   G.strokeBudget = 0;
   // v0.18a: starting HP scales with difficulty (10 at ★1-3, 8 at ★4, 7 at ★5-8, 5 at ★9-10).
-  // v0.20f: 18-hole runs get +2 max HP — twice the bogey opportunities means
-  // double the cumulative damage potential, so the HP buffer scales with run
-  // length. 9-hole HP unchanged. (Adam's tuning request 0.20f.)
-  const _hpBonus18 = (G.totalHoles === 18) ? 2 : 0;
-  G.hp = G._diffMods.startingHp + _hpBonus18;
-  G.hpMax = G._diffMods.startingHp + _hpBonus18;
+  // v0.20g: removed the 18-hole +2 HP bonus per Adam — feedback that
+  // "10 HP on regular at all run lengths" reads cleaner. Difficulty curve
+  // is the single dimension that governs HP now.
+  G.hp = G._diffMods.startingHp;
+  G.hpMax = G._diffMods.startingHp;
   G.lives = 3; // legacy shim — kept in sync by applyDamage/applyHeal
   G.hasUndoPower = false;
   G.budgetBusted = false;
@@ -23152,6 +23413,9 @@ function pickProfile(slotId) {
   checkAutoSave();
   // v0.18a: difficulty unlocks are per-profile. Refresh star row state.
   if(typeof renderStarRow === 'function') renderStarRow();
+  // v0.20g: refresh 9/18 lock state per-profile (different profiles may
+  // have different unlock state).
+  if(typeof refreshHoleButtons === 'function') refreshHoleButtons();
 }
 
 function switchProfile() {
@@ -23222,8 +23486,8 @@ function _revealMainMenu() {
   checkAutoSave();
   renderLeaderboard();
   if(typeof renderStarRow === 'function') renderStarRow();
-  // v0.20a: also refresh character picker row (restores last-selected char
-  // from meta.lastCharacter if present).
+  // v0.20g: refresh 9/18 lock state on profile switch
+  if(typeof refreshHoleButtons === 'function') refreshHoleButtons();
   if(typeof renderCharacterRow === 'function') {
     try {
       const _m = getMeta();
@@ -23318,6 +23582,21 @@ function resumeGame() {
     G.hasUndoPower = G.modifiers.some(m => m.id === 'undo_shot');
     // Restore deck
     G.deck = save.deck || [...STARTER_DECKS.classic.cards];
+    // v0.20g: angler was converted from card to perk. Strip any angler cards
+    // from older saves' decks. Players who had an angler card in-run get a
+    // small refund-equivalent: they're given the perk for free if they don't
+    // already own it. Otherwise the cards just vanish silently.
+    const _anglerInDeck = G.deck.filter(c => c === 'angler').length;
+    if(_anglerInDeck > 0) {
+      G.deck = G.deck.filter(c => c !== 'angler');
+      const _hasAnglerPerk = G.modifiers.some(m => m && m.id === 'angler');
+      if(!_hasAnglerPerk) {
+        G.modifiers.push({ id:'angler', name:'Angler', emoji:'📐', rarity:'rare', price:14, stackable:false });
+        setTimeout(() => { try { showToast(`📐 Angler card retired — perk granted!`, 2400); } catch(e){} }, 700);
+      } else {
+        setTimeout(() => { try { showToast(`📐 ${_anglerInDeck} Angler card${_anglerInDeck>1?'s':''} retired (perk version active)`, 2400); } catch(e){} }, 700);
+      }
+    }
     // v0.20a: restore character id (defaults to classic for pre-0.20 saves).
     // Also validate the id still exists in CHARACTERS so stale/renamed chars
     // don't break resume; fall through to classic if invalid.
@@ -23356,6 +23635,7 @@ function resumeGame() {
     G._shotFinalized = false;
     G._holeStyleScore = 0;
     G._holeTricks = [];
+    G._holeTrickCounts = {};   // v0.20g: per-trick fire counts for repeat decay
     G.players = []; G.currentPlayer = 0; G.playerCount = 1;
     for(const ib of G.idleBalls) { if(ib.mesh) scene.remove(ib.mesh); if(ib.shadow) scene.remove(ib.shadow); }
     G.idleBalls = [];
@@ -24831,7 +25111,8 @@ function animate(now) {
         }
 
         // Conveyor force
-        if(G.conveyors) for(const cv of G.conveyors){
+        // v0.20g: freeze frame halts conveyor force on three-balls too
+        if(G.conveyors && !G._freezeFrameActive) for(const cv of G.conveyors){
           if(tb.pos.x>=cv.minX&&tb.pos.x<=cv.maxX&&tb.pos.z>=cv.minZ&&tb.pos.z<=cv.maxZ){
             tb.vel.x+=cv.dvx*cv.strength*dt;tb.vel.z+=cv.dvz*cv.strength*dt;
           }
@@ -25347,6 +25628,9 @@ function animate(now) {
 
     // ── Conveyor treadmill animation ─────────────────────
     if(G.conveyors) {
+      // v0.20g: freeze frame halts visual scroll too — silent + still belt
+      // reads as "all motion frozen" (matches physics halt above).
+      const _convFreezeMult = G._freezeFrameActive ? 0 : 1;
       for(const cv of G.conveyors) {
         if(!cv.arrowGroup) continue;
         // v0.20c: the wrap test now keys off the push axis (dvx vs dvz) instead
@@ -25357,7 +25641,7 @@ function animate(now) {
         const pushAlongX = Math.abs(cv.dvx) > Math.abs(cv.dvz);
         // Scroll arrows along push direction — loop when they reach the end.
         // v0.19v: scroll speed 0.25× → 0.6× for clearer directional read.
-        const scrollSpeed = cv.strength * 0.6;
+        const scrollSpeed = cv.strength * 0.6 * _convFreezeMult;
         const children = cv.arrowGroup.children;
         for(const arrow of children) {
           if(pushAlongX) {
