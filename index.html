@@ -1456,6 +1456,37 @@ border-color:rgba(255,255,255,0.25);
 pointer-events:none;
 opacity:0.55;
 }
+/* v0.20h: Clone perk — a card spawned by Clone gets a subtle rainbow shimmer
+   sparkle so it visually reads as "this is the duplicate." Also used for
+   Dealer's Choice cards in the opening hand (.card-tutored). */
+.card-slot.card-cloned, .card-slot.card-tutored {
+background:rgba(255,255,255,0.98);
+border-color:rgba(220,180,255,0.9);
+box-shadow:
+  0 6px 22px rgba(200,140,255,0.55),
+  0 0 14px 3px rgba(255,200,240,0.55);
+animation: card-sparkle-pulse 1.8s ease-in-out infinite;
+}
+@keyframes card-sparkle-pulse {
+0%,100% {
+  box-shadow:
+    0 6px 22px rgba(200,140,255,0.55),
+    0 0 14px 3px rgba(255,200,240,0.55);
+  border-color:rgba(220,180,255,0.9);
+}
+33% {
+  box-shadow:
+    0 6px 22px rgba(140,200,255,0.55),
+    0 0 14px 3px rgba(180,220,255,0.55);
+  border-color:rgba(180,220,255,0.9);
+}
+66% {
+  box-shadow:
+    0 6px 22px rgba(255,220,140,0.55),
+    0 0 14px 3px rgba(255,235,180,0.55);
+  border-color:rgba(255,220,140,0.9);
+}
+}
 .card-slot .card-emoji {
 font-size:1.4rem;
 line-height:1;
@@ -1843,6 +1874,40 @@ margin-top:12px; padding:10px 30px; border-radius:50px;
 background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.2);
 color:rgba(255,255,255,0.6); font-size:0.8rem; cursor:pointer;
 }
+/* v0.20h: Dealer's Choice picker — same layout as card-remove but with
+   sparkle/purple theme so the player reads "I'm choosing, not destroying." */
+#dealers-choice-overlay {
+position:fixed; inset:0;
+background:rgba(0,0,0,0.85);
+backdrop-filter:blur(8px);
+display:none; flex-direction:column;
+align-items:center; justify-content:safe center;
+gap:12px; z-index:200;
+padding:24px; overflow-y:auto;
+}
+#dealers-choice-overlay.open { display:flex; }
+.dealers-choice-title {
+font-family:'Playfair Display',serif; font-size:1.4rem; color:#fff; font-weight:700;
+text-shadow: 0 0 12px rgba(220,180,255,0.7);
+}
+.dealers-choice-subtitle { font-size:0.65rem; color:rgba(255,255,255,0.5); margin-bottom:8px; max-width:340px; text-align:center; line-height:1.4; }
+.dealers-choice-grid {
+display:flex; flex-wrap:wrap; gap:8px; justify-content:center; max-width:380px;
+}
+.dealers-choice-item {
+width:72px; padding:8px 4px; border-radius:10px;
+background:rgba(255,255,255,0.08); border:2px solid rgba(255,255,255,0.2);
+text-align:center; cursor:pointer; transition:all 0.15s;
+}
+.dealers-choice-item:hover {
+background:rgba(220,180,255,0.18);
+border-color:#d4b3ff;
+transform:scale(1.08);
+box-shadow:0 0 14px rgba(220,180,255,0.55);
+}
+.dealers-choice-item:active { transform:scale(0.92); }
+.dealers-choice-item .dc-emoji { font-size:1.5rem; }
+.dealers-choice-item .dc-name { font-size:0.5rem; color:rgba(255,255,255,0.7); margin-top:2px; }
 @keyframes cardDriveOff {
 0%   { transform:translate(0,0) rotate(0deg) scale(1); opacity:1; }
 30%  { transform:translate(40px,-60px) rotate(180deg) scale(1.3); opacity:1; }
@@ -2565,6 +2630,13 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
   <button class="card-remove-cancel" onclick="closeCardRemoval()">Never mind</button>
 </div>
 
+<!-- v0.20h: Dealer's Choice picker — opens at perk purchase time -->
+<div id="dealers-choice-overlay">
+  <div class="dealers-choice-title">🃏 Dealer's Choice</div>
+  <div class="dealers-choice-subtitle">Pick a card from your deck. Every hole, it sparkles into your opening hand. Permanent for the run.</div>
+  <div class="dealers-choice-grid" id="dealers-choice-grid"></div>
+</div>
+
 <div id="debug-tap-zone" style="position:fixed;bottom:0;right:0;width:60px;height:60px;z-index:199;pointer-events:all;"></div>
 
 <!-- Debug menu (~ key) -->
@@ -3211,8 +3283,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.20g2';
-const CHANGE_NOTE = 'Crash fix: phasing_holes hole defense was referencing undefined cx/cz at generate time, crashing mid-hole when it rolled. Now works in grid space directly.';
+const GAME_VERSION = '0.20h1';
+const CHANGE_NOTE = 'Pinball: ground friction now zeroed (matches Perpetual Motion) — ball keeps its energy on the floor, not just off walls. True chaos mode.';
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
@@ -9730,6 +9802,9 @@ function updatePhysics(dt) {
   const hasBouncyWalls = G.modifiers.find(m=>m.id==='bouncy_walls');
   const hasRicochet    = G.modifiers.find(m=>m.id==='ricochet');
   const bouncyWallsCount = G.modifiers.filter(m=>m.id==='bouncy_walls').length;
+  // v0.20h: Pinball card forces perfect restitution. Override is applied at
+  // the wbBase site below (mirrors how Perpetual Motion does it) so we don't
+  // need to multiply this here.
   const BOUNCE_MULT    = (bouncyWallsCount > 0 ? 1.0 + bouncyWallsCount * 0.4 : 1.0) * (hasRicochet ? 2.2 : 1.0);
   const BALL_R_EFF     = G.modifiers.find(m=>m.id==='shrink_ray') ? BALL_R * 0.5 : BALL_R;
   // v0.17v: Use BALL_R_EFF for floor resting height too — previously floorY used BALL_R,
@@ -10005,8 +10080,10 @@ function updatePhysics(dt) {
     }
     G._holeLastCellWasSand = nowInSand;
     const fr = (cell===CELL.SAND && !hasNoSand) ? FRICTION_SAND : FRICTION;
-    // Perpetual Motion: zero friction
-    if(G._perpetualMotionActive) {
+    // Perpetual Motion + Pinball: zero friction (v0.20h: Pinball joins PM here
+    // so the ball ricochets indefinitely while invuln — no loss of energy on
+    // the ground, no loss of energy off walls. Pure chaos.)
+    if(G._perpetualMotionActive || G._pinballActive) {
       // No friction at all — ball keeps rolling forever
     } else {
     const slipperyStacks = G.modifiers.filter(m=>m.id==='slippery_ball').length;
@@ -10030,7 +10107,7 @@ function updatePhysics(dt) {
   // ── Wall collision — polyline SDF ─────────────────────
   // Skip entirely when ball is above wall height or ghost ball active.
   {
-    const wbBase = G._perpetualMotionActive ? 1.0 : BOUNCE * BOUNCE_MULT;
+    const wbBase = (G._perpetualMotionActive || G._pinballActive) ? 1.0 : BOUNCE * BOUNCE_MULT;
     // Catapult: boost restitution on the first 3 bounces after launch (counter consumed below)
     const wb = (G._catapultBounceBoost > 0) ? Math.min(1.05, wbBase * 1.5) : wbBase;
     const WALL_THICK = 0.25 + BALL_R_EFF;
@@ -10317,8 +10394,10 @@ function updatePhysics(dt) {
         G.ballPos.z += nz * pen;
         const dot = G.ballVel.x*nx + G.ballVel.z*nz;
         if(dot < 0) {
-          G.ballVel.x -= (1+BOUNCE*2.0) * dot * nx;
-          G.ballVel.z -= (1+BOUNCE*2.0) * dot * nz;
+          // v0.20h: Pinball forces full energy preservation on triangle deflects
+          const awBounce = G._pinballActive ? 1.0 : BOUNCE*2.0;
+          G.ballVel.x -= (1+awBounce) * dot * nx;
+          G.ballVel.z -= (1+awBounce) * dot * nz;
           if(G.ballVel.y < 0.5) G.ballVel.y += 0.8;
         }
         aw.squashT = 0.18;
@@ -10364,8 +10443,10 @@ function updatePhysics(dt) {
         G.ballPos.z += bestNz * bestPen;
         const dot = G.ballVel.x*bestNx + G.ballVel.z*bestNz;
         if(dot < 0) {
-          G.ballVel.x -= (1+BOUNCE*2.0) * dot * bestNx;
-          G.ballVel.z -= (1+BOUNCE*2.0) * dot * bestNz;
+          // v0.20h: Pinball forces full energy preservation on edge deflects
+          const awBounce = G._pinballActive ? 1.0 : BOUNCE*2.0;
+          G.ballVel.x -= (1+awBounce) * dot * bestNx;
+          G.ballVel.z -= (1+awBounce) * dot * bestNz;
           if(G.ballVel.y < 0.5) G.ballVel.y += 0.8;
         }
         aw.squashT = 0.18;
@@ -11307,6 +11388,17 @@ function updatePhysics(dt) {
     }
   }
 
+  // ── Pinball timer (v0.20h) ──────────────────────────
+  // updatePinball ticks the timer, animates the rainbow ball + spark trail,
+  // and deactivates when the timer expires. End-of-hole also forces shutdown.
+  if(G._pinballActive) {
+    if(G.inHole) {
+      deactivatePinball('hole_end');
+    } else {
+      updatePinball(dt);
+    }
+  }
+
   // ── Wall Magnet: curve toward nearest wall ──────────
   if(G._wallMagnetActive && G.rolling && G.wallPolylines && G.wallPolylines.length) {
     let nearestDist = Infinity, nearNx = 0, nearNz = 0;
@@ -11719,7 +11811,15 @@ function updatePhysics(dt) {
             G.ballMesh.material = new THREE.MeshStandardMaterial({color:pColor, roughness:0.15, metalness:0.05});
           }
         }
-        G._ironBallActive = false;
+        // v0.20h: if Clone gave us a free extra shot, consume it and stay armed.
+        if(G._ironBallActive && G._ironBallExtraShot) {
+          G._ironBallExtraShot = false;
+          // Re-apply visual so the ball still looks iron on the next aim.
+          if(typeof applyIronBallVisual === 'function') applyIronBallVisual();
+          showToast('🔩 Iron Ball: one more swing! (Clone)', 1100);
+        } else {
+          G._ironBallActive = false;
+        }
         G._powerShotStacks = 0;
         G._powerShotTensionActive = false;
         G._cannonballActive = false;
@@ -12763,7 +12863,7 @@ const CHALLENGE_POOL = [
   { id:'combo_king',    label:'🔥 Combo King',      desc:'10,000+ style score',            reward:12,
     guard:()=>true, checkMid:()=>(G._holeStyleScore||0)>=10000, checkEnd:()=>(G._holeStyleScore||0)>=10000 },
   { id:'demolition',    label:'💥 Demolition',      desc:'Destroy 5+ obstacles',           reward:15,
-    guard:()=>G.deck.some(c=>['shooter','grenade','boulder','cannonball','explosivo','iron_ball'].includes(c))||G.modifiers.some(m=>m.id==='bounce_boom'),
+    guard:()=>G.deck.some(c=>['shooter','grenade','holy_hand_grenade','boulder','cannonball','explosivo','iron_ball'].includes(c))||G.modifiers.some(m=>m.id==='bounce_boom'),
     checkMid:()=>G._challengeObstaclesDestroyed>=5, checkEnd:()=>G._challengeObstaclesDestroyed>=5 },
   { id:'wall_rider',    label:'🏓 Wall Rider',      desc:'5+ wall bounces in one shot',    reward:15,
     guard:()=>true, checkMid:()=>G._challengeShotWallBounces>=5, checkEnd:()=>false },
@@ -13088,6 +13188,14 @@ function calcHoleEarnings(strokes, par, coinsPickedUp, wallCoins = 0) {
 // ═══════════════════════════════════════════════════════
 function applyDamage(amount, reason) {
   if(!amount || amount <= 0) return 0;
+  // v0.20h: Pinball legendary card — full damage immunity for 12s
+  if(G._pinballActive) {
+    // Suppress the damage entirely, give a tiny visual hint that it whiffed
+    if(typeof spawnHitParticles === 'function' && G.ballPos) {
+      spawnHitParticles(G.ballPos);
+    }
+    return 0;
+  }
   const before = G.hp;
   G.hp = Math.max(0, G.hp - amount);
   const actual = before - G.hp;
@@ -14393,6 +14501,12 @@ window.buyPerk = function(id) {
   if(AC) {
     for(let k=0;k<3;k++) setTimeout(()=>sfxCoinPickup(), k*100);
   }
+  // v0.20h: Dealer's Choice — open picker immediately so player picks a
+  // card from their deck. Slight delay so the coin SFX/coin HUD update
+  // get to play first.
+  if(perk.id === 'dealers_choice') {
+    setTimeout(() => openDealersChoicePicker(), 350);
+  }
   // Remove from perk picks and re-render (don't close shop — multi-buy!)
   if(G._shopCurrentPicks) {
     G._shopCurrentPicks = G._shopCurrentPicks.filter(p => p.id !== id);
@@ -14440,6 +14554,66 @@ function closeCardRemoval() {
   if(overlay) overlay.classList.remove('open');
 }
 window.closeCardRemoval = closeCardRemoval;
+
+// ── Dealer's Choice picker (legendary perk, v0.20h) ─────
+// Opens at the moment the player buys the perk. They must pick one card
+// from their current deck — that card is then guaranteed in the leftmost
+// slot of the opening hand every hole for the rest of the run.
+function openDealersChoicePicker() {
+  const overlay = document.getElementById('dealers-choice-overlay');
+  const grid = document.getElementById('dealers-choice-grid');
+  if(!overlay || !grid) return;
+  // Build a deduped list of cards in the player's deck — same pattern as
+  // openCardRemoval — so duplicates show as one entry with a count badge.
+  const counts = {};
+  for(const id of G.deck) counts[id] = (counts[id]||0) + 1;
+  grid.innerHTML = '';
+  const seen = new Set();
+  for(const cardId of G.deck) {
+    if(seen.has(cardId)) continue;
+    seen.add(cardId);
+    const def = CARD_DEFS[cardId];
+    if(!def) continue;
+    const ct = counts[cardId] || 1;
+    const countBadge = ct > 1 ? ` <span style="font-size:0.45rem;color:rgba(255,255,255,0.4)">×${ct}</span>` : '';
+    grid.innerHTML += `
+      <div class="dealers-choice-item" id="dc-${cardId}" onclick="commitDealersChoice('${cardId}')">
+        <div class="dc-emoji">${def.emoji}</div>
+        <div class="dc-name">${def.name}${countBadge}</div>
+      </div>`;
+  }
+  overlay.classList.add('open');
+}
+window.openDealersChoicePicker = openDealersChoicePicker;
+
+function closeDealersChoicePicker() {
+  const overlay = document.getElementById('dealers-choice-overlay');
+  if(overlay) overlay.classList.remove('open');
+}
+window.closeDealersChoicePicker = closeDealersChoicePicker;
+
+// Commit the player's pick. Stores the card id in G state and confirms
+// with a sparkle toast.
+window.commitDealersChoice = function(cardId) {
+  const def = CARD_DEFS[cardId];
+  if(!def) return;
+  G._dealersChoiceCardId = cardId;
+  closeDealersChoicePicker();
+  showToast(`🃏 Dealer's Choice: ${def.emoji} ${def.name} — every opening hand!`, 1800);
+  if(AC) {
+    const ac = getAC(), t = ac.currentTime;
+    [659, 880, 1318].forEach((freq, i) => {
+      const o = ac.createOscillator(); o.type = 'sine';
+      o.frequency.setValueAtTime(freq, t + i*0.06);
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.001, t + i*0.06);
+      g.gain.linearRampToValueAtTime(0.1, t + i*0.06 + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.001, t + i*0.06 + 0.4);
+      o.connect(g); g.connect(getACDest());
+      o.start(t + i*0.06); o.stop(t + i*0.06 + 0.42);
+    });
+  }
+};
 
 window.removeCardFromDeck = function(cardId, el) {
   if(shopGraceActive()) return;
@@ -15251,6 +15425,8 @@ const CARD_DEFS = {
   wrecking_ball:{ id:'wrecking_ball',emoji:'⛓️', name:'Wrecking Ball',   desc:'Ball swings on a chain arc, destroying everything in the sweep.', rarity:'epic',      price:24,  context:'during', holdable:false },
   reverse:      { id:'reverse',      emoji:'⏪', name:'Reverse',         desc:'Instantly reverse the ball\'s direction. Full speed. BIG combo points — huge bonus if it leads to a hole.', rarity:'common',    price:10,  context:'during', holdable:false },
   portal_pair:  { id:'portal_pair',  emoji:'🕳️', name:'Portal Pair',     desc:'Place two portals. Ball enters one, exits the other.',            rarity:'legendary', price:30,  context:'pre',    holdable:false },
+  holy_hand_grenade: { id:'holy_hand_grenade', emoji:'⛪', name:'Holy Hand Grenade', desc:'And the Lord did grin. Lob a sanctified grenade — 2× blast radius. Spares corner walls (the Lord is merciful).', rarity:'legendary', price:25, context:'pre', holdable:false, weight:1 },
+  pinball:      { id:'pinball',      emoji:'🎰', name:'Pinball',         desc:'12 seconds of invulnerable, frictionless, perfectly bouncy ball. The walls cannot hurt you. The walls cannot hold you.', rarity:'legendary', price:32, context:'pre', holdable:false, weight:1 },
   freeze_frame: { id:'freeze_frame', emoji:'🧊', name:'Freeze Frame',    desc:'All moving obstacles freeze for 10 seconds.',                    rarity:'rare',      price:11,  context:'any',    holdable:false, weight:3 },
   coin_shower:  { id:'coin_shower',  emoji:'🌧️', name:'Coin Shower',     desc:'Drop 20 coins in a line ahead of your ball. Clean line = bonus 5× coin!', rarity:'rare',      price:18,  context:'pre',    holdable:false },
   // golden_path hidden — may revisit later
@@ -15353,7 +15529,7 @@ const CHARACTERS = {
       deck: ['power_shot','power_shot','jumper','parkour'],
       perks: ['strengthen_swing','strengthen_swing'],
     },
-    bannedCards: ['shooter','sniper','grenade','boulder','dodgeball','explosivo','iron_ball','airstrike','cannonball','wrecking_ball','floomba'],
+    bannedCards: ['shooter','sniper','grenade','boulder','dodgeball','explosivo','iron_ball','airstrike','cannonball','wrecking_ball','floomba','holy_hand_grenade'],
     bannedPerks: ['bounce_boom'],
     traits: { speedballTimer: true, flameTrail: true },
   },
@@ -15551,6 +15727,172 @@ function canPlayCard(cardId) {
   return true;
 }
 
+// ── Clone perk (legendary, v0.20h) helpers ──────────────
+// Cards whose effect is best doubled by extending duration rather than
+// firing a duplicate. For these, Clone instead doubles their active timer.
+const CLONE_DURATION_CARDS = new Set([
+  'ghost_ball','iron_ball','slow_mo','walkies','freeze_frame','perpetual_motion'
+]);
+
+// Returns true when the player owns the clone perk and hasn't used it yet
+// this hole. _cloneUsedThisHole is the primary guard (flipped synchronously
+// inside tryTriggerClone so re-entry can't double-fire). The hand-played-
+// length check is intentionally omitted here — _cloneUsedThisHole already
+// represents "this hole's first play has happened or is happening now."
+function isCloneAvailable() {
+  if(G._cloneUsedThisHole) return false;
+  if(!G.modifiers || !G.modifiers.some(m => m.id === 'clone')) return false;
+  return true;
+}
+
+// Big sparkle burst over a card slot. Fires when Clone triggers — visually
+// communicates "this card just got duplicated."
+function spawnCloneSparkleAtSlot(slotIdx) {
+  if(slotIdx < 0 || slotIdx >= CARD_SLOT_KEYS.length) return;
+  const el = document.getElementById('card-slot-' + CARD_SLOT_KEYS[slotIdx]);
+  if(!el) return;
+  const rect = el.getBoundingClientRect();
+  const cx = rect.left + rect.width/2, cy = rect.top + rect.height/2;
+  // Spawn ~14 sparkle dots that radiate outward + fade
+  for(let i=0;i<14;i++) {
+    const dot = document.createElement('div');
+    const ang = (i/14) * Math.PI * 2 + (Math.random()-0.5)*0.4;
+    const dist = 60 + Math.random()*80;
+    const sz = 8 + Math.random()*10;
+    const hue = Math.floor(Math.random()*360);
+    dot.style.cssText = `
+      position:fixed; left:${cx}px; top:${cy}px;
+      width:${sz}px; height:${sz}px; margin-left:${-sz/2}px; margin-top:${-sz/2}px;
+      background: radial-gradient(circle, hsl(${hue},100%,75%), hsl(${hue},90%,55%) 40%, transparent 70%);
+      border-radius:50%;
+      box-shadow: 0 0 14px hsl(${hue},100%,70%);
+      z-index:75; pointer-events:none;
+      transition: transform 0.65s cubic-bezier(0.2,0.8,0.4,1), opacity 0.6s ease-out;
+      opacity:1;
+    `;
+    document.body.appendChild(dot);
+    requestAnimationFrame(() => {
+      dot.style.transform = `translate(${Math.cos(ang)*dist}px, ${Math.sin(ang)*dist}px) scale(0.3)`;
+      dot.style.opacity = '0';
+    });
+    setTimeout(() => dot.remove(), 700);
+  }
+  // Big central flash
+  const flash = document.createElement('div');
+  flash.style.cssText = `
+    position:fixed; left:${cx}px; top:${cy}px;
+    width:80px; height:80px; margin-left:-40px; margin-top:-40px;
+    background: radial-gradient(circle, rgba(255,255,255,0.95), rgba(180,220,255,0.5) 40%, transparent 70%);
+    border-radius:50%; z-index:74; pointer-events:none; opacity:1;
+    transition: transform 0.4s ease-out, opacity 0.4s ease-out;
+  `;
+  document.body.appendChild(flash);
+  requestAnimationFrame(() => {
+    flash.style.transform = 'scale(2.4)';
+    flash.style.opacity = '0';
+  });
+  setTimeout(() => flash.remove(), 420);
+  // SFX — chime + sparkle
+  if(AC) {
+    const ac = getAC(), t = ac.currentTime;
+    [880, 1318, 1760].forEach((freq, i) => {
+      const o = ac.createOscillator(); o.type = 'sine';
+      o.frequency.setValueAtTime(freq, t + i*0.04);
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.001, t + i*0.04);
+      g.gain.linearRampToValueAtTime(0.1, t + i*0.04 + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.001, t + i*0.04 + 0.5);
+      o.connect(g); g.connect(getACDest());
+      o.start(t + i*0.04); o.stop(t + i*0.04 + 0.55);
+    });
+  }
+}
+
+// Add a clone-duplicate card to the hand. Bypasses MAX_HAND, places the new
+// card visually next to (or near) the original slot. The duplicate carries
+// userData so we can sparkle its slot when rendered.
+function spawnCloneDuplicateCard(originalCardId, originalSlotIdx) {
+  const dupInstance = {
+    id: originalCardId,
+    instanceId: G._cardInstanceCounter++,
+    _cloneDuplicate: true, // marker: this came from Clone perk, vanishes at hole-end if unplayed
+  };
+  // Add to hand. assignCardsToSlots() will place it in any empty slot; if all
+  // are full we leave it in the tray (overflow). The .card-cloned CSS class
+  // (set in updateHandUI based on _cloneDuplicate) gives it a visual sparkle.
+  G.hand.push(dupInstance);
+  assignCardsToSlots();
+  updateHandUI();
+  // Animate the duplicate's slot sliding in from above the original slot
+  // position so it visually feels like it "split off."
+  let dupSlotIdx = -1;
+  for(let i=0;i<G.cardSlots.length;i++) {
+    if(G.cardSlots[i] && G.cardSlots[i].instanceId === dupInstance.instanceId) { dupSlotIdx = i; break; }
+  }
+  if(dupSlotIdx !== -1) {
+    const el = document.getElementById('card-slot-' + CARD_SLOT_KEYS[dupSlotIdx]);
+    if(el) {
+      // Start from the original slot's offset (if known) for the "fly across" feel
+      let originX = 0, originY = -50;
+      if(originalSlotIdx >= 0 && originalSlotIdx < CARD_SLOT_KEYS.length) {
+        const origEl = document.getElementById('card-slot-' + CARD_SLOT_KEYS[originalSlotIdx]);
+        if(origEl) {
+          const r1 = origEl.getBoundingClientRect();
+          const r2 = el.getBoundingClientRect();
+          originX = r1.left - r2.left;
+          originY = r1.top - r2.top - 30;
+        }
+      }
+      el.style.transition = 'none';
+      el.style.transform = `translate(${originX}px, ${originY}px) scale(0.6) rotate(-8deg)`;
+      el.style.opacity = '0.4';
+      requestAnimationFrame(() => {
+        el.style.transition = 'transform 0.5s cubic-bezier(0.34,1.56,0.64,1), opacity 0.3s ease-out';
+        el.style.transform = 'translate(0,0) scale(1) rotate(0)';
+        el.style.opacity = '1';
+        setTimeout(() => { el.style.transition = ''; el.style.transform = ''; el.style.opacity = ''; }, 520);
+      });
+    }
+  } else {
+    // Overflowed into tray — flash a "+1" toast so the player notices
+    showToast('✨ +1 ' + (CARD_DEFS[originalCardId]?.name || 'card') + ' (Clone)', 1200);
+  }
+  return dupInstance;
+}
+
+// Detects Clone-eligible play; if so, fires sparkle FX + spawns duplicate or
+// flags duration-doubling. Returns nothing; mutates state.
+function tryTriggerClone(card, slotIdx) {
+  if(!isCloneAvailable()) return;
+  G._cloneUsedThisHole = true;
+  // Sparkle on the original slot (visual cue for "this is the cloned card")
+  spawnCloneSparkleAtSlot(slotIdx);
+  if(CLONE_DURATION_CARDS.has(card.id)) {
+    // Duration cards: signal the activate function to use 2× duration
+    G._cloneDoubleDurationFor = card.id;
+    showToast('✨ Clone: ' + (CARD_DEFS[card.id]?.name || 'card') + ' duration ×2!', 1200);
+  } else {
+    // Spawn the duplicate after a brief delay so the sparkle reads first
+    setTimeout(() => {
+      // Re-check that we're still in playable state (player may have died,
+      // hole may have ended in the gap). Belt-and-suspenders.
+      if(G.state !== 'playing' || G.inHole) return;
+      spawnCloneDuplicateCard(card.id, slotIdx);
+    }, 240);
+  }
+}
+
+// Returns 2.0 if the most recent Clone proc targeted this card id (and
+// consumes the flag), otherwise 1.0. Activate functions multiply their
+// duration by this when starting their timer.
+function consumeCloneDurationMult(cardId) {
+  if(G._cloneDoubleDurationFor === cardId) {
+    G._cloneDoubleDurationFor = null;
+    return 2.0;
+  }
+  return 1.0;
+}
+
 function playCard(instanceId) {
   const idx = G.hand.findIndex(c => c.instanceId === instanceId);
   if (idx === -1) return false;
@@ -15567,7 +15909,8 @@ function playCard(instanceId) {
   // v0.20d: if grenade aim is on and the player plays a different card,
   // cancel the grenade aim (refunds the grenade card). Prevents a stuck
   // aim state and silent loss of the grenade card.
-  if(G._grenadeAiming && card.id !== 'grenade') {
+  // v0.20h: also cancel for holy_hand_grenade — both share aim mode.
+  if(G._grenadeAiming && card.id !== 'grenade' && card.id !== 'holy_hand_grenade') {
     cancelGrenadeAim();
   }
 
@@ -15587,7 +15930,8 @@ function playCard(instanceId) {
   // re-adds the card to hand. Normal play (fire) will null this out.
   // v0.20d: grenade joins the cancellable list — tapping it arms aim mode,
   // and the player can cancel by re-tapping the card before throwing.
-  if(card.id === 'sniper' || card.id === 'sharpshooter' || card.id === 'grenade') {
+  // v0.20h: holy_hand_grenade also cancellable (uses same aim flow).
+  if(card.id === 'sniper' || card.id === 'sharpshooter' || card.id === 'grenade' || card.id === 'holy_hand_grenade') {
     G._pendingCancellableCard = { id: card.id, instanceId, slotIdx: playedSlotIdx };
   } else {
     G._pendingCancellableCard = null;
@@ -15599,6 +15943,12 @@ function playCard(instanceId) {
   // ReferenceError) can never abort the discard/slot-clear below — that was
   // what stranded Coin Shower in hand and let the player re-fire it ad
   // infinitum.
+  // v0.20h: Clone perk fires here — IF this is the first card played this
+  // hole AND the player owns Clone AND hasn't used it yet. Triggers BEFORE
+  // executeCardAbility so the sparkle visuals overlap with the play, and so
+  // duration-doubling cards can read G._cloneDoubleDurationFor in their
+  // activate function.
+  tryTriggerClone(card, playedSlotIdx);
   try {
     executeCardAbility(card.id);
   } catch(e) {
@@ -15734,6 +16084,9 @@ function sfxCardDiscard() {
 
 function discardHand() {
   for (const card of G.hand) {
+    // v0.20h: Clone perk duplicates do NOT recycle to discard — they vanish.
+    // Otherwise they'd build up over the run as permanent extra copies.
+    if(card._cloneDuplicate) continue;
     G.discard.push(card.id);
   }
   G.hand = [];
@@ -15750,6 +16103,7 @@ function executeCardAbility(id) {
     case 'sharpshooter': activateSharpshooterBall(); break;
     case 'catapult':     activateCatapult(); break;
     case 'grenade':      activateGrenade(); break;
+    case 'holy_hand_grenade': activateHolyHandGrenade(); break;
     case 'boulder':      activateBoulder(); break;
     case 'ghost_ball':   activateGhostBall(); break;
     case 'backspin':     activateBackspin(); break;
@@ -15758,7 +16112,14 @@ function executeCardAbility(id) {
     case 'slow_mo':      activateSlowMoPerk(); break;
     case 'walkies':      activateWalkiesCard(); break;
     case 'arc_shot':     G._arcShotActive = true; showToast('🌈 Arc Shot armed!', 800); break;
-    case 'iron_ball':    G._ironBallActive = true; applyIronBallVisual(); showToast('🔩 Iron Ball armed!', 800); break;
+    case 'iron_ball':
+      G._ironBallActive = true;
+      // v0.20h: Clone perk — schedule iron ball to persist through a 2nd shot
+      // by setting an "extra shot pending" flag the per-shot teardown checks.
+      if(consumeCloneDurationMult('iron_ball') > 1) G._ironBallExtraShot = true;
+      applyIronBallVisual();
+      showToast('🔩 Iron Ball armed!', 800);
+      break;
     case 'power_shot':   G._powerShotStacks = (G._powerShotStacks||0) + 1; G._powerShotTensionActive = true; showToast('💪 Power Shot' + (G._powerShotStacks > 1 ? ' ×'+G._powerShotStacks+'!' : ' armed!'), 800); break;
     case 'mulligan':     activateMulligan(); break;
     case 'reverse':      activateReverse(); break;
@@ -15782,6 +16143,7 @@ function executeCardAbility(id) {
     case 'parkour':      activateParkour(); break;
     case 'vacuum':       activateVacuum(); break;
     case 'goal_oriented':activateGoalOriented(); break;
+    case 'pinball':      activatePinball(); break;
   }
 }
 
@@ -15806,6 +16168,7 @@ function isCardArmedPreSwing(cardId) {
     case 'freeze_frame': return !!G._freezeFrameActive;
     case 'slow_mo':      return !!G._slowMoPerkActive;
     case 'perpetual_motion': return !!G._perpetualMotionActive;
+    case 'pinball':      return !!G._pinballArmed;
   }
   return false;
 }
@@ -15871,6 +16234,12 @@ function updateHandUI() {
     if(isGhostActive) cls = 'card-slot card-active';
     else if(isArmed)  cls = 'card-slot card-filled card-armed';
     else if(!usable)  cls = 'card-slot card-filled card-disabled';
+    // v0.20h: Clone duplicates and Dealer's Choice opening cards get a
+    // sparkle border so they visually call out their special origin.
+    // Stack onto the base class — they're cosmetic and don't conflict with
+    // armed/disabled/active states.
+    if(card._cloneDuplicate)  cls += ' card-cloned';
+    if(card._dealersChoice)   cls += ' card-tutored';
     // Deal animation for newly drawn cards
     const isNew = G._newlyDrawnCards && G._newlyDrawnCards.includes(card.instanceId);
     if(isNew) cls += ' card-dealing';
@@ -16123,7 +16492,8 @@ function activateSlowMoPerk() {
   G._slowMoPerkActive = true;
   G._slowMoUsedThisHole = true;
   G._slowMoScale = 0.25;
-  G._slowMoPerkTimer = 6.0;
+  // v0.20h: Clone perk — if this is a clone-doubled play, 6s -> 12s
+  G._slowMoPerkTimer = 6.0 * consumeCloneDurationMult('slow_mo');
   G._slowMoWaitingForSwing = !G.rolling; // if not rolling yet, wait for swing to start timer
   if(_musicGainNode && AC) {
     _musicGainNode.gain.setTargetAtTime(0.4, AC.currentTime, 0.3);
@@ -16156,8 +16526,10 @@ window.updateSlowMoButton = updateSlowMoButton;
 // ── Perpetual Motion — zero friction + perfect bounces for 10s ──
 function activatePerpetualMotion() {
   G._perpetualMotionActive = true;
-  G._perpetualMotionTimer = 10.0;
-  showToast('♾️ Perpetual Motion! 10s', 1200);
+  // v0.20h: Clone perk — 10s -> 20s on cloned plays
+  G._perpetualMotionTimer = 10.0 * consumeCloneDurationMult('perpetual_motion');
+  const dur = Math.round(G._perpetualMotionTimer);
+  showToast('♾️ Perpetual Motion! ' + dur + 's', 1200);
   triggerShake('light');
   if(AC) {
     const ac = getAC(), t = ac.currentTime;
@@ -16168,6 +16540,164 @@ function activatePerpetualMotion() {
   }
 }
 window.activatePerpetualMotion = activatePerpetualMotion;
+
+// ── Pinball (legendary, v0.20h) — 12s of invuln + perfect restitution ──
+// Pre-swing armed: setting _pinballArmed glows the slot and sets a flag
+// fireShot reads to flip into _pinballActive on the next swing. The active
+// state runs for 12s and:
+//   - applyDamage returns 0 (invuln)
+//   - bounce restitution forced to 1.0 in physics
+//   - ball gets a rainbow chrome shimmer + electric trail
+function activatePinball() {
+  if(G.inHole || G.state !== 'playing' || G.rolling) return;
+  if(G._pinballArmed) return;
+  G._pinballArmed = true;
+  showToast('🎰 Pinball armed — fire to start the chaos', 1400);
+  triggerShake('light');
+  if(AC) {
+    const ac = getAC(), t = ac.currentTime;
+    // Coin-drop + chime arpeggio (pinball-machine attract sound)
+    const notes = [523.25, 659.25, 783.99, 1046.5];
+    notes.forEach((freq, i) => {
+      const o = ac.createOscillator();
+      o.type = 'square';
+      o.frequency.setValueAtTime(freq, t + i * 0.05);
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.08, t + i * 0.05);
+      g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.05 + 0.18);
+      o.connect(g); g.connect(getACDest());
+      o.start(t + i * 0.05); o.stop(t + i * 0.05 + 0.2);
+    });
+  }
+}
+window.activatePinball = activatePinball;
+
+// Called from fireShot when a Pinball-armed shot is fired.
+function startPinballActive() {
+  G._pinballArmed = false;
+  G._pinballActive = true;
+  G._pinballTimer = 12.0;
+  G._pinballHueT = 0;
+  // Cache original ball material to restore on deactivate
+  if(G.ballMesh && !G._pinballOrigMat) {
+    G._pinballOrigMat = G.ballMesh.material;
+  }
+  if(G.ballMesh) {
+    G.ballMesh.material = new THREE.MeshStandardMaterial({
+      color: 0xffffff, roughness: 0.05, metalness: 0.95,
+      emissive: 0xff66cc, emissiveIntensity: 0.6
+    });
+  }
+  showToast('🎰 PINBALL — 12s of bouncy mayhem!', 1500);
+  triggerShake('med');
+  if(AC) {
+    const ac = getAC(), t = ac.currentTime;
+    // Big "GAME ON" pinball chime + low rumble
+    const notes = [659.25, 880, 1046.5, 1318.5];
+    notes.forEach((freq, i) => {
+      const o = ac.createOscillator();
+      o.type = 'square';
+      o.frequency.value = freq;
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.001, t + i * 0.08);
+      g.gain.linearRampToValueAtTime(0.12, t + i * 0.08 + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.08 + 0.4);
+      o.connect(g); g.connect(getACDest());
+      o.start(t + i * 0.08); o.stop(t + i * 0.08 + 0.42);
+    });
+    // Sub rumble
+    const sub = ac.createOscillator(); sub.type = 'sawtooth';
+    sub.frequency.setValueAtTime(60, t);
+    const sg = ac.createGain();
+    sg.gain.setValueAtTime(0.18, t);
+    sg.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+    sub.connect(sg); sg.connect(getACDest());
+    sub.start(t); sub.stop(t + 0.42);
+  }
+}
+
+function deactivatePinball(reason) {
+  if(!G._pinballActive) return;
+  G._pinballActive = false;
+  G._pinballTimer = 0;
+  // Restore original ball material
+  if(G.ballMesh && G._pinballOrigMat) {
+    G.ballMesh.material = G._pinballOrigMat;
+    G._pinballOrigMat = null;
+  } else if(G.ballMesh) {
+    // Fallback if cache missing (e.g. ball was rebuilt mid-effect)
+    G.ballMesh.material = new THREE.MeshStandardMaterial({
+      color: G.currentCharacter && CHARACTERS[G.currentCharacter] ? CHARACTERS[G.currentCharacter].color : 0xffffff,
+      roughness: 0.4, metalness: 0.1
+    });
+  }
+  // End-of-pinball chime
+  if(AC && reason !== 'hole_end') {
+    const ac = getAC(), t = ac.currentTime;
+    const o = ac.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(880, t);
+    o.frequency.exponentialRampToValueAtTime(220, t + 0.4);
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0.12, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
+    o.connect(g); g.connect(getACDest());
+    o.start(t); o.stop(t + 0.5);
+  }
+  if(reason === 'expired') showToast('🎰 Pinball ended', 900);
+}
+
+// Per-frame Pinball update — called from updatePhysics. Ticks timer, animates
+// the rainbow shimmer hue, spawns trail sparks behind the moving ball.
+function updatePinball(dt) {
+  if(!G._pinballActive) return;
+  G._pinballTimer -= dt;
+  G._pinballHueT = (G._pinballHueT || 0) + dt;
+  // Cycle ball emissive through rainbow
+  if(G.ballMesh && G.ballMesh.material && G.ballMesh.material.emissive) {
+    const hue = (G._pinballHueT * 0.8) % 1;
+    const c = new THREE.Color().setHSL(hue, 1.0, 0.55);
+    G.ballMesh.material.emissive.copy(c);
+    G.ballMesh.material.emissiveIntensity = 0.5 + Math.sin(G._pinballHueT * 12) * 0.2;
+    // Pulse base color slightly toward chrome white
+    G.ballMesh.material.color.setHex(0xffffff);
+  }
+  // Spawn electric trail sparks if the ball is moving
+  const speed = Math.hypot(G.ballVel.x, G.ballVel.z);
+  if(speed > 1.5 && Math.random() < 0.6) {
+    spawnPinballSpark();
+  }
+  if(G._pinballTimer <= 0) {
+    deactivatePinball('expired');
+  }
+}
+
+// Tiny, short-lived electric spark behind the ball. Fades out fast so trail
+// stays readable without overwhelming the rendering.
+function spawnPinballSpark() {
+  if(!G.ballMesh) return;
+  const hue = (G._pinballHueT * 0.8) % 1;
+  const c = new THREE.Color().setHSL(hue, 1.0, 0.7);
+  const sparkGeo = new THREE.SphereGeometry(0.07 + Math.random()*0.04, 5, 4);
+  const sparkMat = new THREE.MeshBasicMaterial({color: c.getHex(), transparent: true, opacity: 0.9});
+  const spark = new THREE.Mesh(sparkGeo, sparkMat);
+  spark.position.copy(G.ballPos);
+  spark.position.x += (Math.random()-0.5) * 0.18;
+  spark.position.z += (Math.random()-0.5) * 0.18;
+  spark.position.y += (Math.random()-0.2) * 0.12;
+  spark.userData.noOutline = true;
+  scene.add(spark);
+  const startT = performance.now();
+  const life = 280 + Math.random() * 220;
+  function animSpark() {
+    const elapsed = performance.now() - startT;
+    if(elapsed >= life) { scene.remove(spark); sparkGeo.dispose(); sparkMat.dispose(); return; }
+    const k = elapsed / life;
+    sparkMat.opacity = 0.9 * (1 - k);
+    spark.scale.setScalar(1 - k * 0.4);
+    requestAnimationFrame(animSpark);
+  }
+  animSpark();
+}
 
 // ── Dodgeball — super-bouncy red projectile ───────────
 function activateDodgeball() {
@@ -16335,9 +16865,11 @@ function updateWalkiesBtn() { /* removed — walkies is now a card */ }
 function activateWalkiesCard() {
   if(G.walkiesActive || G.inHole) return;
   G.walkiesActive = true;
-  G.walkiesTimer = 10.0;
+  // v0.20h: Clone perk — 10s -> 20s on cloned plays
+  G.walkiesTimer = 10.0 * consumeCloneDurationMult('walkies');
   trackStat('walkiesUsed', 1);
-  showToast('🦵 Walkies! 10s — tap anywhere or use WASD', 1200);
+  const dur = Math.round(G.walkiesTimer);
+  showToast('🦵 Walkies! ' + dur + 's — tap anywhere or use WASD', 1200);
   if(G.ball) {
     G.ballMesh.material = new THREE.MeshStandardMaterial({color:0xffcc44, roughness:0.3, metalness:0.1});
   }
@@ -17511,8 +18043,10 @@ function activateCatapult() {
 
 function activateFreezeFrame() {
   G._freezeFrameActive = true;
-  G._freezeFrameTimer = 10.0;
-  showToast('🧊 Freeze Frame! 10s', 1200);
+  // v0.20h: Clone perk — 10s -> 20s on cloned plays
+  G._freezeFrameTimer = 10.0 * consumeCloneDurationMult('freeze_frame');
+  const dur = Math.round(G._freezeFrameTimer);
+  showToast('🧊 Freeze Frame! ' + dur + 's', 1200);
   triggerShake('light');
   if(AC) {
     const ac = getAC(), t = ac.currentTime;
@@ -17877,13 +18411,15 @@ function activateGrenade() {
 
 // v0.20d: cancel grenade aim mode without throwing. Refunds the card by
 // pulling it back from discard (mirrors the sniper/sharpshooter cancel path).
+// v0.20h: also handles holy_hand_grenade refund.
 function cancelGrenadeAim() {
   teardownGrenadePreview();
   G._grenadeAiming = false;
   G._grenadePower = 0;
+  G._holyHandGrenadeArmed = false;
   // Refund the card if a pending cancellable grenade is on file
   const pending = G._pendingCancellableCard;
-  if(pending && pending.id === 'grenade') {
+  if(pending && (pending.id === 'grenade' || pending.id === 'holy_hand_grenade')) {
     const discardIdx = G.discard.lastIndexOf(pending.id);
     if(discardIdx !== -1) G.discard.splice(discardIdx, 1);
     const refundedCard = { id: pending.id, instanceId: 'c_' + Math.random().toString(36).slice(2, 10) };
@@ -17900,7 +18436,8 @@ function cancelGrenadeAim() {
     G.hand.push(refundedCard);
     G._pendingCancellableCard = null;
     if(typeof updateHandUI === 'function') updateHandUI();
-    showToast('↩️ Grenade refunded', 800);
+    const refundLabel = pending.id === 'holy_hand_grenade' ? '↩️ Holy Hand Grenade refunded' : '↩️ Grenade refunded';
+    showToast(refundLabel, 800);
   } else {
     showToast('🧨 Grenade cancelled', 700);
   }
@@ -17993,15 +18530,18 @@ window.rebuildGrenadePreview = rebuildGrenadePreview;
 // v0.20d: actually launch the grenade. Extracted from the old activateGrenade
 // body so the new aim flow can call it on release. Distance is driven by the
 // player-set G._grenadePower (0.1-1.0 → 4-20m lob).
-function throwGrenadeAt(power, dir) {
+function throwGrenadeAt(power, dir, opts) {
   // Clear the cancellable flag — card is consumed at this point, no refund.
   G._pendingCancellableCard = null;
+  const isHoly = !!(opts && opts.holy);
   const _power = Math.max(0.1, Math.min(1.0, power || 0.5));
   const _dir = (dir || G.shotDir).clone();
   _dir.y = 0;
   if(_dir.length() < 0.01) _dir.set(-Math.sin(G.camTheta), 0, -Math.cos(G.camTheta));
   _dir.normalize();
-  const BLAST_R = BALL_R * 8 * 2 * getBoomScale(); // 8 ball lengths
+  // Holy Hand Grenade: 2× blast radius. Note: getBoomScale() (Big Boom perk)
+  // still multiplies on top — a holy grenade with Big Boom is genuinely huge.
+  const BLAST_R = BALL_R * 8 * 2 * getBoomScale() * (isHoly ? 2.0 : 1.0); // 8 ball lengths, 2× for HHG
   const lobDist = 4 + _power * 16; // v0.20d: 4-20m driven by player power (was random 12-18)
   const lobTime = 0.8;
   const startPos = G.ballPos.clone();
@@ -18013,21 +18553,36 @@ function throwGrenadeAt(power, dir) {
   // Build grenade mesh
   const grenadeGroup = new THREE.Group();
   const bodyGeo = new THREE.SphereGeometry(0.16, 8, 6);
-  const bodyMat = new THREE.MeshStandardMaterial({color:0x446633, roughness:0.4, metalness:0.3});
+  const bodyMat = isHoly
+    ? new THREE.MeshStandardMaterial({color:0xffeebb, roughness:0.2, metalness:0.85, emissive:0xffaa33, emissiveIntensity:0.6})
+    : new THREE.MeshStandardMaterial({color:0x446633, roughness:0.4, metalness:0.3});
   const bodyMesh = new THREE.Mesh(bodyGeo, bodyMat);
   grenadeGroup.add(bodyMesh);
   // Pin/top
   const pinGeo = new THREE.CylinderGeometry(0.03, 0.03, 0.12, 6);
-  const pinMesh = new THREE.Mesh(pinGeo, new THREE.MeshStandardMaterial({color:0xccccaa, metalness:0.6, roughness:0.3}));
+  const pinMesh = new THREE.Mesh(pinGeo, new THREE.MeshStandardMaterial({color: isHoly ? 0xffe066 : 0xccccaa, metalness:0.6, roughness:0.3}));
   pinMesh.position.y = 0.14;
   grenadeGroup.add(pinMesh);
+  // Holy: add a tiny golden halo torus floating above
+  if(isHoly) {
+    const haloGeo = new THREE.TorusGeometry(0.16, 0.025, 4, 16);
+    const haloMat = new THREE.MeshStandardMaterial({color:0xffe066, emissive:0xffcc33, emissiveIntensity:1.5, metalness:0.9, roughness:0.1});
+    const haloMesh = new THREE.Mesh(haloGeo, haloMat);
+    haloMesh.position.y = 0.28;
+    haloMesh.rotation.x = Math.PI / 2;
+    haloMesh.userData.noOutline = true;
+    grenadeGroup.add(haloMesh);
+    grenadeGroup.userData.haloMesh = haloMesh;
+  }
   grenadeGroup.position.copy(startPos);
   grenadeGroup.userData.noOutline = true;
   scene.add(grenadeGroup);
 
   // Landing target indicator
   const targetGeo = new THREE.TorusGeometry(BLAST_R, 0.06, 6, 24);
-  const targetMat = new THREE.MeshStandardMaterial({color:0xff4444, emissive:0xff2222, emissiveIntensity:1.0, transparent:true, opacity:0.4, side:THREE.DoubleSide});
+  const targetMat = isHoly
+    ? new THREE.MeshStandardMaterial({color:0xffd966, emissive:0xffcc00, emissiveIntensity:1.4, transparent:true, opacity:0.45, side:THREE.DoubleSide})
+    : new THREE.MeshStandardMaterial({color:0xff4444, emissive:0xff2222, emissiveIntensity:1.0, transparent:true, opacity:0.4, side:THREE.DoubleSide});
   const targetMesh = new THREE.Mesh(targetGeo, targetMat);
   targetMesh.rotation.x = Math.PI / 2;
   targetMesh.position.set(landX, landTerrY + FLOOR_H/2 + 0.03, landZ);
@@ -18035,10 +18590,14 @@ function throwGrenadeAt(power, dir) {
   scene.add(targetMesh);
 
   triggerShake('light');
-  if(AC) sfxJump(); // lob sound
+  if(AC) {
+    sfxJump(); // lob sound
+    if(isHoly) playHolyChoirSwell();
+  }
 
   const lobStart = performance.now();
-  const fuseTime = 1.5; // seconds after final landing before boom
+  // HHG gets a longer fuse to fit the "3 shall be the number" countdown
+  const fuseTime = isHoly ? 3.6 : 1.5; // seconds after final landing before boom
   let landed = false, landTime = 0;
   let bounceCount = 0;
   const MAX_BOUNCES = 3;
@@ -18124,12 +18683,38 @@ function throwGrenadeAt(power, dir) {
         }
       }
       grenadeGroup.position.set(gx, gy, gz);
+      if(grenadeGroup.userData.haloMesh) {
+        grenadeGroup.userData.haloMesh.rotation.z = elapsed * 4;
+      }
     } else {
       // Fuse countdown — grenade sits on ground, blinks faster
       const sinceL = (performance.now() - landTime) / 1000;
-      const blinkRate = 4 + sinceL * 12; // accelerating blink
-      bodyMat.emissive.setHex(Math.sin(sinceL * blinkRate) > 0 ? 0xff4400 : 0x000000);
-      bodyMat.emissiveIntensity = 1.5;
+      if(isHoly) {
+        // 3-2-1 countdown: show big number toasts at fuse-2.6, fuse-1.6, fuse-0.6
+        const remaining = fuseTime - sinceL;
+        if(!grenadeGroup.userData._countdownStage) grenadeGroup.userData._countdownStage = 0;
+        const stage = grenadeGroup.userData._countdownStage;
+        if(stage < 1 && remaining <= 2.7) {
+          showHolyCountdown('THREE');
+          if(AC) sfxHolyTick(440);
+          grenadeGroup.userData._countdownStage = 1;
+        } else if(stage < 2 && remaining <= 1.7) {
+          showHolyCountdown('TWO');
+          if(AC) sfxHolyTick(523);
+          grenadeGroup.userData._countdownStage = 2;
+        } else if(stage < 3 && remaining <= 0.7) {
+          showHolyCountdown('ONE');
+          if(AC) sfxHolyTick(659);
+          grenadeGroup.userData._countdownStage = 3;
+        }
+        // Holy glow pulse on the body
+        bodyMat.emissive.setHex(0xffcc33);
+        bodyMat.emissiveIntensity = 0.6 + Math.sin(sinceL * 14) * 0.5;
+      } else {
+        const blinkRate = 4 + sinceL * 12; // accelerating blink
+        bodyMat.emissive.setHex(Math.sin(sinceL * blinkRate) > 0 ? 0xff4400 : 0x000000);
+        bodyMat.emissiveIntensity = 1.5;
+      }
       if(sinceL >= fuseTime) {
         // BOOM
         scene.remove(grenadeGroup);
@@ -18137,14 +18722,27 @@ function throwGrenadeAt(power, dir) {
         const px = gx, pz = gz;
         const groundAtBoom = G.heightMap.length ? getTerrainHeight(px, pz) : 0;
         const py = groundAtBoom + FLOOR_H/2;
-        spawnExplosion(px, py, pz);
-        setTimeout(() => spawnExplosion(px+(Math.random()-0.5)*0.8, py+0.3, pz+(Math.random()-0.5)*0.8), 100);
-        setTimeout(() => spawnExplosion(px+(Math.random()-0.5)*1.0, py+0.1, pz+(Math.random()-0.5)*1.0), 220);
-        triggerShake('heavy');
+        spawnExplosion(px, py, pz, isHoly ? 1.6 : undefined);
+        setTimeout(() => spawnExplosion(px+(Math.random()-0.5)*0.8, py+0.3, pz+(Math.random()-0.5)*0.8, isHoly ? 1.4 : undefined), 100);
+        setTimeout(() => spawnExplosion(px+(Math.random()-0.5)*1.0, py+0.1, pz+(Math.random()-0.5)*1.0, isHoly ? 1.4 : undefined), 220);
+        if(isHoly) {
+          // Extra ring of explosions for holy AOE feel
+          for(let k=0;k<6;k++) {
+            const ang = (k/6) * Math.PI * 2;
+            const r = BLAST_R * 0.55;
+            setTimeout(() => spawnExplosion(px + Math.cos(ang)*r, py + 0.2, pz + Math.sin(ang)*r, 1.0), 150 + k*60);
+          }
+          flashScreenWhite();
+        }
+        triggerShake(isHoly ? 'heavy' : 'heavy');
         // Blast ring
         const blastRing = new THREE.Mesh(
           new THREE.TorusGeometry(0.3, 0.08, 8, 32),
-          new THREE.MeshStandardMaterial({color:0xff6600, emissive:0xff4400, emissiveIntensity:2, transparent:true, opacity:0.9, side:THREE.DoubleSide})
+          new THREE.MeshStandardMaterial({
+            color: isHoly ? 0xffeebb : 0xff6600,
+            emissive: isHoly ? 0xffcc33 : 0xff4400,
+            emissiveIntensity:2, transparent:true, opacity:0.9, side:THREE.DoubleSide
+          })
         );
         blastRing.rotation.x = Math.PI/2;
         blastRing.position.set(px, py+0.05, pz);
@@ -18159,19 +18757,24 @@ function throwGrenadeAt(power, dir) {
           if(bt<1) requestAnimationFrame(animBR); else scene.remove(blastRing);
         }
         animBR();
-        // Destroy obstacles
-        const hits = collectObstaclesInRadius(px, pz, BLAST_R);
+        // Destroy obstacles. Holy: spare angled walls (the Lord is merciful).
+        let hits = collectObstaclesInRadius(px, pz, BLAST_R);
+        if(isHoly) hits = hits.filter(h => h.type !== 'angledWall');
         const coinsEarned = destroyObstacles(hits, px, py, pz);
         destroyWallChunksInRadius(px, pz, BLAST_R);
         blastIdleBalls(px, pz, BLAST_R, 22);
         for(let k=0; k<coinsEarned; k++) { G.coins++; updateCoinHUD(); }
-        if(hits.length>0) showToast(`💣 ${hits.length} destroyed! +${coinsEarned} 🪙`, 1600);
+        if(hits.length>0) {
+          const emoji = isHoly ? '⛪' : '💣';
+          showToast(`${emoji} ${hits.length} destroyed! +${coinsEarned} 🪙`, 1600);
+        }
         if(AC) {
           const ac=getAC(),t2=ac.currentTime;
           const sub=ac.createOscillator();sub.type='sine';
           sub.frequency.setValueAtTime(80,t2);sub.frequency.exponentialRampToValueAtTime(20,t2+0.5);
-          const sg=ac.createGain();sg.gain.setValueAtTime(0.9,t2);sg.gain.exponentialRampToValueAtTime(0.001,t2+0.55);
+          const sg=ac.createGain();sg.gain.setValueAtTime(isHoly?1.1:0.9,t2);sg.gain.exponentialRampToValueAtTime(0.001,t2+0.55);
           sub.connect(sg);sg.connect(getACDest());sub.start(t2);sub.stop(t2+0.6);
+          if(isHoly) sfxHolyHallelujah();
         }
         G._missileAnim = null;
       }
@@ -18179,6 +18782,132 @@ function throwGrenadeAt(power, dir) {
   };
 }
 window.activateGrenade = activateGrenade;
+
+// ── Holy Hand Grenade — sanctified version of Grenade ─
+// Reuses the existing grenade aim mode; G._holyHandGrenadeArmed flag tells
+// fireShot/aim-release to throw a holy variant when the player releases.
+function activateHolyHandGrenade() {
+  if(G.inHole || G.state !== 'playing' || G.rolling) return;
+  if(!G.shotDir || G.shotDir.length() < 0.01) {
+    G.shotDir.set(-Math.sin(G.camTheta), 0, -Math.cos(G.camTheta)).normalize();
+    G.shotAngle = G.camTheta + Math.PI;
+  }
+  if(G._grenadeAiming) {
+    cancelGrenadeAim();
+    return;
+  }
+  G._grenadeAiming = true;
+  G._grenadePower = 0.5;
+  G._holyHandGrenadeArmed = true; // consumed when the throw fires
+  showToast('⛪ Holy Hand Grenade armed — pull back to aim & throw', 1500);
+  rebuildGrenadePreview();
+}
+window.activateHolyHandGrenade = activateHolyHandGrenade;
+
+// Show big toast-style countdown number at center of screen (HHG only).
+function showHolyCountdown(text) {
+  const el = document.createElement('div');
+  el.textContent = text;
+  el.style.cssText = `
+    position:fixed; left:50%; top:38%;
+    transform:translate(-50%,-50%) scale(0.4);
+    font-family:'Cinzel','Trajan Pro','Times New Roman',serif;
+    font-size:8rem; font-weight:900;
+    color:#fff8d6; text-shadow:0 0 20px #ffaa00, 0 0 40px #ff8800, 0 4px 8px rgba(0,0,0,0.6);
+    z-index:80; pointer-events:none; opacity:0;
+    transition:transform 0.18s cubic-bezier(0.34,1.56,0.64,1), opacity 0.15s ease-out;
+    letter-spacing:0.15em;
+  `;
+  document.body.appendChild(el);
+  requestAnimationFrame(() => {
+    el.style.transform = 'translate(-50%,-50%) scale(1.0)';
+    el.style.opacity = '1';
+  });
+  setTimeout(() => {
+    el.style.transition = 'transform 0.4s ease-in, opacity 0.4s ease-in';
+    el.style.transform = 'translate(-50%,-50%) scale(2.5)';
+    el.style.opacity = '0';
+    setTimeout(() => el.remove(), 420);
+  }, 600);
+}
+
+// Brief white screen flash on HHG detonation.
+function flashScreenWhite() {
+  const el = document.createElement('div');
+  el.style.cssText = `
+    position:fixed; inset:0; background:#fff;
+    z-index:90; pointer-events:none; opacity:1;
+    transition:opacity 0.45s ease-out;
+  `;
+  document.body.appendChild(el);
+  requestAnimationFrame(() => { el.style.opacity = '0'; });
+  setTimeout(() => el.remove(), 500);
+}
+
+// "HALLELUUUUJAH" choir swell on lob start.
+function playHolyChoirSwell() {
+  if(!AC) return;
+  const ac = getAC(), t = ac.currentTime;
+  // Layered sine choir: I-iii-V (C-E-G) chord with slow attack
+  const notes = [261.63, 329.63, 392.00, 523.25]; // C4 E4 G4 C5
+  notes.forEach((freq, i) => {
+    const o = ac.createOscillator();
+    o.type = 'sine';
+    o.frequency.value = freq;
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0.001, t);
+    g.gain.linearRampToValueAtTime(0.06, t + 0.4); // slow swell
+    g.gain.linearRampToValueAtTime(0.04, t + 1.2);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 2.5);
+    // Tiny detune per voice for chorus warmth
+    o.detune.value = (i - 1.5) * 6;
+    o.connect(g); g.connect(getACDest());
+    o.start(t); o.stop(t + 2.6);
+  });
+}
+
+// Single bell-like tick during 3-2-1 countdown.
+function sfxHolyTick(freq) {
+  if(!AC) return;
+  const ac = getAC(), t = ac.currentTime;
+  const o = ac.createOscillator();
+  o.type = 'triangle';
+  o.frequency.setValueAtTime(freq, t);
+  const g = ac.createGain();
+  g.gain.setValueAtTime(0.18, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+  o.connect(g); g.connect(getACDest());
+  o.start(t); o.stop(t + 0.42);
+  // Octave-up bell sparkle
+  const o2 = ac.createOscillator();
+  o2.type = 'sine';
+  o2.frequency.setValueAtTime(freq * 2, t);
+  const g2 = ac.createGain();
+  g2.gain.setValueAtTime(0.08, t);
+  g2.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+  o2.connect(g2); g2.connect(getACDest());
+  o2.start(t); o2.stop(t + 0.32);
+}
+
+// HALLELUJAH! sting at the moment of HHG boom.
+function sfxHolyHallelujah() {
+  if(!AC) return;
+  const ac = getAC(), t = ac.currentTime;
+  // Triumphant major chord with quick attack
+  const notes = [261.63, 329.63, 392.00, 523.25, 659.25, 783.99];
+  notes.forEach((freq, i) => {
+    const o = ac.createOscillator();
+    o.type = i < 2 ? 'sawtooth' : 'sine';
+    o.frequency.value = freq;
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0.001, t);
+    g.gain.linearRampToValueAtTime(0.08, t + 0.04);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 1.5);
+    o.detune.value = (Math.random() - 0.5) * 8;
+    o.connect(g); g.connect(getACDest());
+    o.start(t); o.stop(t + 1.55);
+  });
+}
 
 // ── Boulder — unstoppable rolling boulder from behind camera ──
 function activateBoulder() {
@@ -18425,14 +19154,16 @@ function activateGhostBall() {
   if(G.inHole || G.state !== 'playing') return;
   if(G.ghostBallActive) return;
   G.ghostBallActive = true;
-  G._ghostTimer = 4.0; // 4 seconds of ghost mode
+  // v0.20h: Clone perk — 4s -> 8s on cloned plays
+  G._ghostTimer = 4.0 * consumeCloneDurationMult('ghost_ball');
   if(G.ball) {
     G.ballMesh.material = new THREE.MeshToonMaterial({
       color:0xaaddff, transparent:true, opacity:0.35,
       emissive:0x4488ff, emissiveIntensity:0.4
     });
   }
-  showToast('👻 Ghost Mode! 4s', 1200);
+  const dur = Math.round(G._ghostTimer);
+  showToast('👻 Ghost Mode! ' + dur + 's', 1200);
   triggerShake(0.15);
   updateHandUI();
 }
@@ -19451,7 +20182,13 @@ function onPointerDown(x, y, id) {
         G.ballMesh.material = new THREE.MeshStandardMaterial({color:pColor, roughness:0.15, metalness:0.05});
       }
     }
-    G._ironBallActive = false;
+    // v0.20h: Clone perk — give iron ball one extra shot before deactivating
+    if(G._ironBallActive && G._ironBallExtraShot) {
+      G._ironBallExtraShot = false;
+      if(typeof applyIronBallVisual === 'function') applyIronBallVisual();
+    } else {
+      G._ironBallActive = false;
+    }
     G._powerShotActive = false;
     G._cannonballActive = false;
     const hasEmptySlot2 = G.cardSlots.some(s => s === null);
@@ -19552,7 +20289,9 @@ function onPointerUp() {
       teardownGrenadePreview();
       G._grenadeAiming = false;
       G._grenadePower = 0;
-      throwGrenadeAt(_power, G.shotDir);
+      const _holy = !!G._holyHandGrenadeArmed;
+      G._holyHandGrenadeArmed = false;
+      throwGrenadeAt(_power, G.shotDir, _holy ? {holy:true} : null);
       G.shotPower = 0;
       updateAimArrow();
     } else {
@@ -19756,6 +20495,10 @@ function fireShot() {
   // apply anymore.
   aimManualOverride = false;
   G._shotJustFired = performance.now();
+  // v0.20h: Pinball armed -> active. The 12s timer starts now (on swing).
+  if(G._pinballArmed) {
+    startPinballActive();
+  }
   // Launch-grace flags: enable 200ms wall pass-through only for Catapult / pre-loaded Jumper.
   // These trigger airborne launches where colliding with a nearby wall at tee is annoying.
   G._catapultLaunchGrace = !!G._catapultActive;
@@ -20173,7 +20916,9 @@ window.addEventListener('keydown', e => {
         teardownGrenadePreview();
         G._grenadeAiming = false;
         G._grenadePower = 0;
-        throwGrenadeAt(_power, G.shotDir);
+        const _holy = !!G._holyHandGrenadeArmed;
+        G._holyHandGrenadeArmed = false;
+        throwGrenadeAt(_power, G.shotDir, _holy ? {holy:true} : null);
         G.shotPower = 0;
         updateAimArrow();
       } else {
@@ -20720,6 +21465,10 @@ const ALL_PERKS = [
   // LEGENDARY — base weight 1
   { id:'double_or_nothing',name:'Double or Nothing',   emoji:'🎰', rarity:'legendary', price:27, stackable:false, weight:1,
     desc:'Once per run, wager all your coins on birdie-or-better. Hit it: 2×. Miss: zero.' },
+  { id:'clone',            name:'Clone',                emoji:'✨', rarity:'legendary', price:30, stackable:false, weight:1,
+    desc:"The first card you play each hole sparkles a duplicate into your hand. Free. Compounding." },
+  { id:'dealers_choice',   name:"Dealer's Choice",      emoji:'🃏', rarity:'legendary', price:25, stackable:false, weight:1,
+    desc:"Pick a card from your deck. It always sparkles into your opening hand, leftmost slot." },
 ];
 
 // Filter ALL_PERKS to only include active entries
@@ -21401,6 +22150,8 @@ function initHole() {
         // Speedball timer state so mid-hole resume keeps remaining time
         _speedballTimerRemaining: G._speedballTimerRemaining,
         _speedballTimerActive: !!G._speedballTimerActive,
+        // v0.20h: Dealer's Choice picked card persists across saves
+        _dealersChoiceCardId: G._dealersChoiceCardId || null,
         timestamp: Date.now(),
       };
       const json = JSON.stringify(saveData);
@@ -21691,6 +22442,13 @@ function initHole() {
   G._freezeFrameTimer = 0;
   G._perpetualMotionActive = false;
   G._perpetualMotionTimer = 0;
+  G._pinballArmed = false;
+  G._pinballActive = false;
+  G._pinballTimer = 0;
+  G._pinballOrigMat = null;
+  G._cloneUsedThisHole = false;
+  G._cloneDoubleDurationFor = null;
+  G._ironBallExtraShot = false;
   G._wallMagnetActive = false;
   discardHand();
   shuffleDeck();
@@ -21700,7 +22458,56 @@ function initHole() {
   const hasFullHouse = G.modifiers && G.modifiers.some(m => m.id === 'full_house');
   const initialDrawCount = hasFullHouse ? 5 : 4;
   G._initialDraw = initialDrawCount; // keep in sync for any downstream readers
-  drawCards(initialDrawCount);
+  // v0.20h: Dealer's Choice — if perk owned + chosen card id picked + a copy
+  // is present in the just-shuffled drawPile, pull it out, draw the rest
+  // normally, then prepend the chosen card so it lands in slot 0 (leftmost).
+  // If the chosen card isn't in the deck (player removed/sold it), silently
+  // fall back to a normal draw — the perk just doesn't fire that hole.
+  const hasDealersChoice = G.modifiers && G.modifiers.some(m => m.id === 'dealers_choice');
+  let dcInjectedCard = null;
+  // Autosave edge case: player bought the perk but quit the app before
+  // picking. On resume, reopen the picker so they can commit.
+  if(hasDealersChoice && !G._dealersChoiceCardId) {
+    setTimeout(() => {
+      if(G.state === 'playing' && !G._dealersChoiceCardId) openDealersChoicePicker();
+    }, 600);
+  }
+  if(hasDealersChoice && G._dealersChoiceCardId) {
+    const dpIdx = G.drawPile.lastIndexOf(G._dealersChoiceCardId);
+    if(dpIdx !== -1 && CARD_DEFS[G._dealersChoiceCardId]) {
+      G.drawPile.splice(dpIdx, 1);
+      dcInjectedCard = {
+        id: G._dealersChoiceCardId,
+        instanceId: G._cardInstanceCounter++,
+        _dealersChoice: true,
+      };
+    } else {
+      // Picked card no longer in deck — flash a quiet warning and fall through.
+      // Common causes: player removed it via Deck Surgery, or save data corrupted.
+      const def = CARD_DEFS[G._dealersChoiceCardId];
+      if(def) {
+        setTimeout(() => showToast(`🃏 Dealer's Choice: ${def.name} not in deck`, 1400), 600);
+      }
+    }
+  }
+  // Draw the remaining cards (one fewer if Dealer's Choice is injecting).
+  const normalDrawCount = dcInjectedCard ? initialDrawCount - 1 : initialDrawCount;
+  drawCards(normalDrawCount);
+  // If Dealer's Choice fired, prepend the injected card to hand and force it
+  // into slot 0. assignCardsToSlots() does sequential placement, so we can
+  // just unshift onto hand and slot it explicitly.
+  if(dcInjectedCard) {
+    G.hand.unshift(dcInjectedCard);
+    // Shift existing slot contents right by 1 to make room in slot 0.
+    // If full_house gives 5 slots, we still have headroom.
+    for(let i = G.cardSlots.length - 1; i >= 1; i--) {
+      G.cardSlots[i] = G.cardSlots[i-1];
+    }
+    G.cardSlots[0] = dcInjectedCard;
+    updateHandUI();
+    // Animate the dealer's choice slot in with a sparkle
+    setTimeout(() => spawnCloneSparkleAtSlot(0), 200);
+  }
 
   // ── Multiplayer hole init ──────────────────────────
   if(isMultiplayer()) {
@@ -23018,6 +23825,8 @@ function startGame(){
   // v0.19f: Reset per-run achievement counters. Read at run end for unlocks.
   G._hpLostThisRun = false;
   G._perksBoughtThisRun = 0;
+  // v0.20h: clear any prior run's Dealer's Choice pick
+  G._dealersChoiceCardId = null;
   // ── Analytics: unique run id + start timestamp ─────────
   G._runId = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
   G._runStartTime = performance.now();
@@ -23629,6 +24438,8 @@ function resumeGame() {
       G._speedballTimerRemaining = 30;
       G._speedballTimerActive = false;
     }
+    // v0.20h: restore Dealer's Choice picked card id
+    G._dealersChoiceCardId = save._dealersChoiceCardId || null;
     G.hand = [];
     G.discard = [];
     G.drawPile = [];
