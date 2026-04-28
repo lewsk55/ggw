@@ -2670,7 +2670,7 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
   <button class="play-btn" onclick="openAchievements()" style="margin-top:6px;background:rgba(245,200,66,0.18);border:1px solid rgba(245,200,66,0.5);color:#f5c842;font-size:0.85rem;padding:10px 28px">🏆 Achievements</button>
   <button class="play-btn" id="btn-import-save" style="margin-top:6px;background:rgba(120,120,120,0.6);font-size:0.7rem;padding:8px 20px" onclick="importSaveFile()">📂 Import Save</button>
   <input type="file" id="import-save-input" accept=".ggwsave,application/json" style="display:none">
-  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.20g1</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Armed-card glow now per-instance (tapping one Iron Ball no longer lifts both)</div></div>
+  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.20g2</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Crash fix: phasing_holes ReferenceError on cz</div></div>
 
   <!-- v0.19j: Inline profile picker — skip the separate slot-picks screen -->
   <div class="section-label" style="margin-top:14px">Save Slot</div>
@@ -3211,8 +3211,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.20g1';
-const CHANGE_NOTE = 'Fix: armed-card visual lit up every copy of the same card in hand — now only the tapped instance lifts. Tapping one Iron Ball no longer makes both Iron Balls glow as armed.';
+const GAME_VERSION = '0.20g2';
+const CHANGE_NOTE = 'Crash fix: phasing_holes hole defense was referencing undefined cx/cz at generate time, crashing mid-hole when it rolled. Now works in grid space directly.';
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
@@ -5425,15 +5425,21 @@ function generatePuttPuttCourse(holeNum) {
         // We pick a second offset that's still on fairway, biased toward the
         // direction of approach so the player can plausibly aim for either.
         // Slow cycle = 1.6s per side, Fast = 0.95s per side.
+        // v0.20g2: bug fix — was referencing cx/cz which are NOT defined at
+        // generate time (only at build time, line 7313). Crashed mid-hole when
+        // phasing_holes rolled. Now works in grid space using holePos (which
+        // IS in scope) so no world↔grid conversion is needed at all.
         hd.cycleSecs = chosen.params.cycle === 'fast' ? 0.95 : 1.6;
         // Sample candidate offsets: 8 directions × 2 distances. Pick the
         // farthest-from-origin that still passes a fairway check.
         const T = TILE_SIZE;
+        // Convert a world-space offset to grid coords by dividing by tile
+        // size and adding to holePos. Then check the cell type directly.
         const checkFair = (offx, offz) => {
-          const wx = cx + offx, wz = cz + offz;
-          const gx = Math.round(wx / T), gz = Math.round(wz / T);
-          if(gx < 0 || gz < 0 || gx >= data.W || gz >= data.H) return false;
-          return data.grid[gz][gx] === CELL.FAIR;
+          const gx = Math.round(holePos.x + offx / T);
+          const gz = Math.round(holePos.y + offz / T);
+          if(gx < 0 || gz < 0 || gx >= W || gz >= H) return false;
+          return grid[gz][gx] === CELL.FAIR;
         };
         const checkBuffered = (offx, offz) => {
           const buf = 0.7;
