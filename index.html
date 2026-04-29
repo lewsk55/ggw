@@ -1892,18 +1892,24 @@ transition:all 0.15s;
 /* ── Elite Fork overlay (v0.20j) ──
    Two-card chooser: Safe (normal hole) vs Elite (high-risk archetype).
    Visual language: pearl/teal for safe, blood-red ember for elite.
-   Sits at z-index 130 (same as shop) since it replaces the next-hole transition. */
+   Sits at z-index 130 (same as shop) since it replaces the next-hole transition.
+   v0.20p1: Use display:none when hidden — iOS Safari has been observed to
+   intercept touches on fixed full-screen overlays even with pointer-events:none.
+   This was breaking gameplay on Barbed Wire / No Walls / Not-So-Mini holes:
+   the player committed → fork hid → but the overlay still ate every tap on
+   the canvas, making the ball unclickable. */
 #elite-fork-overlay {
   position:absolute; inset:0;
   background:radial-gradient(ellipse at center, rgba(40,10,20,0.97) 0%, rgba(15,8,18,0.99) 100%);
-  display:flex; flex-direction:column;
+  flex-direction:column;
   align-items:center; justify-content:flex-start;
   overflow-y:auto; z-index:130;
   padding:32px 18px 36px;
-  opacity:0; pointer-events:none;
+  display:none;
+  opacity:0;
   transition:opacity 0.35s;
 }
-#elite-fork-overlay.visible { opacity:1; pointer-events:all; }
+#elite-fork-overlay.visible { display:flex; opacity:1; }
 
 .elite-fork-banner {
   font-size:0.6rem; letter-spacing:5px; text-transform:uppercase;
@@ -2149,8 +2155,10 @@ transition:all 0.15s;
   box-shadow:0 12px 50px rgba(255,200,80,0.6);
   text-align:center; pointer-events:none;
   font-family:'Playfair Display', serif;
+  display:none;
 }
 .elite-reward-toast.visible {
+  display:block;
   opacity:1; transform:translate(-50%, -50%) scale(1);
 }
 .elite-reward-toast-emoji { font-size:2.6rem; line-height:1; margin-bottom:6px; }
@@ -2168,8 +2176,10 @@ transition:all 0.15s;
   box-shadow:0 12px 50px rgba(220,40,40,0.5);
   text-align:center; pointer-events:none;
   font-family:'Playfair Display', serif;
+  display:none;
 }
 .elite-fail-toast.visible {
+  display:block;
   opacity:1; transform:translate(-50%, -50%) scale(1);
 }
 .elite-fail-toast-emoji { font-size:2.6rem; line-height:1; margin-bottom:6px; }
@@ -3693,8 +3703,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.20p1';
-const CHANGE_NOTE = 'Elite Holes — Hunter (T3) + Chasm (T2) enabled. Restored Floomba spawner that prior session ate.';
+const GAME_VERSION = '0.20p3';
+const CHANGE_NOTE = 'Bugfix — elite holes restored: G.state was stuck on "choosing" after commit, breaking input + cards + menu.';
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
@@ -5252,7 +5262,7 @@ function buildChasmZone(args) {
     grid, W, H, segInfo, waypoints, offX, offY,
     teePos, holePos, conveyorData, spikeData, rockData,
     bumperData, slideBlockData, angledWallData,
-    pendulumData, popupData, fanData,
+    pendulumData, popupData,
     LANE_W,
   } = args;
 
@@ -5348,7 +5358,8 @@ function buildChasmZone(args) {
   removeIfInChasm(angledWallData, a => ({x: a.gx, y: a.gy}));
   removeIfInChasm(pendulumData, p => ({x: p.gx, y: p.gy}));
   removeIfInChasm(popupData,    p => ({x: p.gx, y: p.gy}));
-  removeIfInChasm(fanData,      f => ({x: f.gx, y: f.gy}));
+  // Fans aren't placed in puttputt biome (always empty array) so no
+  // sweep needed. If fans are ever added here, plumb fanData back through.
   // Also drop any conveyor whose cells overlap the chasm zone
   for(let i = conveyorData.length - 1; i >= 0; i--) {
     const cv = conveyorData[i];
@@ -6586,7 +6597,7 @@ function generatePuttPuttCourse(holeNum) {
       grid, W, H, segInfo, waypoints, offX, offY,
       teePos, holePos, conveyorData, spikeData, rockData,
       bumperData, slideBlockData, angledWallData,
-      pendulumData, popupData, fanData,
+      pendulumData, popupData,
       LANE_W,
     });
   }
@@ -26175,6 +26186,11 @@ function hideEliteFork() {
 }
 
 function onElitePickSafe() {
+  // v0.20p3: Restore play state — showEliteFork sets G.state='choosing' and
+  // we MUST reset it to 'playing' before initHole, otherwise the entire
+  // gameplay loop (input, updateHandUI, hunter, hand, menu button, etc.)
+  // refuses to run for the rest of the hole.
+  G.state = 'playing';
   if(!G._eliteOffer) { hideEliteFork(); initHole(); return; }
   // Log the skip so Run Awards can use it later (Coward award etc.)
   G._eliteHistory.push({
@@ -26231,6 +26247,9 @@ window.onEliteCommitCancel = onEliteCommitCancel;
 
 function onEliteCommitConfirm() {
   if(G._eliteCommitInterval) { clearInterval(G._eliteCommitInterval); G._eliteCommitInterval = null; }
+  // v0.20p3: Restore play state — see onElitePickSafe note. Without this,
+  // input + UI silently break for the entire elite hole.
+  G.state = 'playing';
   if(!G._eliteOffer) { hideEliteFork(); initHole(); return; }
   const { archetype, reward } = G._eliteOffer;
   // Wager handling — for double-or-nothing, snapshot wager up to cap.
