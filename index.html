@@ -230,12 +230,19 @@ display:none;
 }
 
 /* Toast */
+/* v0.20i: longer messages no longer overflow on mobile.
+   - white-space: normal so text can wrap on narrow screens.
+   - max-width caps the text box so wrapped lines stay readable.
+   - Backdrop banner via padding + bg + blur improves contrast for the dark
+     environments later in a run; keeps the bold serif headline look.
+   - Smaller font ramp (was 2-3.5rem at 8vw → now 1.1-2.4rem at 5vw) so
+     a two-line "🌪️ VACUUM! 12 coins, 5 obstacles" fits on iPhone width. */
 #toast {
 position:absolute;
 top:50%; left:50%;
 transform:translate(-50%,-50%);
 font-family:'Playfair Display', serif;
-font-size:clamp(2rem,8vw,3.5rem);
+font-size:clamp(1.1rem, 5vw, 2.4rem);
 font-weight:700;
 color:#fff;
 text-shadow:0 2px 20px rgba(0,0,0,0.3), 0 0 60px rgba(100,200,50,0.6);
@@ -244,9 +251,21 @@ z-index:300;  /* v0.19v: was 20, raised above #overlay (100) + profile picker so
 opacity:0;
 transition:opacity 0.4s;
 text-align:center;
-white-space:nowrap;
+white-space:normal;
+max-width:min(92vw, 720px);
+padding:10px 18px;
+border-radius:14px;
+background:rgba(0,0,0,0.30);
+backdrop-filter:blur(6px);
+-webkit-backdrop-filter:blur(6px);
+line-height:1.15;
+box-shadow:0 4px 24px rgba(0,0,0,0.25);
 }
 #toast.show { opacity:1; }
+@media (min-width:900px) {
+  /* On desktop allow a touch larger for emphasis. */
+  #toast { font-size:clamp(1.6rem, 3.5vw, 3rem); }
+}
 
 /* ── Cosmetic Unlock Progress Bar (v0.19v) ── */
 /* Lives on the main menu; fills as XP accrues toward the next cosmetic. */
@@ -1459,6 +1478,13 @@ opacity:0.55;
 /* v0.20h: Clone perk — a card spawned by Clone gets a subtle rainbow shimmer
    sparkle so it visually reads as "this is the duplicate." Also used for
    Dealer's Choice cards in the opening hand (.card-tutored). */
+/* v0.20i: Dealer's Choice card was rendering invisible (clickable but
+   blank) — root cause: the white .98 background washed out the emoji on
+   some devices, and there was no inner stacking context guaranteeing the
+   emoji rendered above the box-shadow's outer glow. Fix: explicit color
+   on inner spans, isolation:isolate so children get their own stacking
+   context, and a small inner border so the card has a visible edge even
+   if the box-shadow renders softly. */
 .card-slot.card-cloned, .card-slot.card-tutored {
 background:rgba(255,255,255,0.98);
 border-color:rgba(220,180,255,0.9);
@@ -1466,6 +1492,25 @@ box-shadow:
   0 6px 22px rgba(200,140,255,0.55),
   0 0 14px 3px rgba(255,200,240,0.55);
 animation: card-sparkle-pulse 1.8s ease-in-out infinite;
+isolation:isolate;
+pointer-events:all;
+}
+.card-slot.card-cloned .card-emoji,
+.card-slot.card-tutored .card-emoji {
+color:#000;
+position:relative;
+z-index:2;
+}
+.card-slot.card-cloned .card-label,
+.card-slot.card-tutored .card-label {
+color:rgba(0,0,0,0.85);
+position:relative;
+z-index:2;
+}
+.card-slot.card-cloned .slot-key,
+.card-slot.card-tutored .slot-key {
+position:absolute;
+z-index:3;
 }
 @keyframes card-sparkle-pulse {
 0%,100% {
@@ -1843,6 +1888,293 @@ border-radius:50px; cursor:pointer;
 transition:all 0.15s;
 }
 .shop-skip-btn:active { background:rgba(255,255,255,0.15); }
+
+/* ── Elite Fork overlay (v0.20j) ──
+   Two-card chooser: Safe (normal hole) vs Elite (high-risk archetype).
+   Visual language: pearl/teal for safe, blood-red ember for elite.
+   Sits at z-index 130 (same as shop) since it replaces the next-hole transition. */
+#elite-fork-overlay {
+  position:absolute; inset:0;
+  background:radial-gradient(ellipse at center, rgba(40,10,20,0.97) 0%, rgba(15,8,18,0.99) 100%);
+  display:flex; flex-direction:column;
+  align-items:center; justify-content:flex-start;
+  overflow-y:auto; z-index:130;
+  padding:32px 18px 36px;
+  opacity:0; pointer-events:none;
+  transition:opacity 0.35s;
+}
+#elite-fork-overlay.visible { opacity:1; pointer-events:all; }
+
+.elite-fork-banner {
+  font-size:0.6rem; letter-spacing:5px; text-transform:uppercase;
+  color:rgba(255,180,180,0.55); margin-bottom:6px;
+  animation:elite-pulse-text 2.4s ease-in-out infinite;
+}
+@keyframes elite-pulse-text {
+  0%,100% { opacity:0.55; }
+  50%     { opacity:1; }
+}
+.elite-fork-title {
+  font-family:'Playfair Display', serif;
+  font-size:clamp(2rem,8vw,3.2rem); font-weight:700;
+  color:#fff; line-height:1; letter-spacing:-0.5px;
+  text-align:center;
+  text-shadow:0 0 22px rgba(255,80,80,0.25);
+}
+.elite-fork-subtitle {
+  font-size:0.7rem; letter-spacing:2.5px; text-transform:uppercase;
+  color:rgba(255,255,255,0.55); margin:8px 0 22px;
+  text-align:center;
+}
+.elite-fork-grid {
+  display:flex; flex-direction:column; gap:14px;
+  width:100%; max-width:380px;
+}
+@media (min-width: 720px) {
+  .elite-fork-grid { flex-direction:row; max-width:780px; }
+}
+
+.elite-card {
+  position:relative;
+  border-radius:18px;
+  padding:18px 18px 20px;
+  cursor:pointer; transition:transform 0.18s, box-shadow 0.18s, background 0.18s;
+  display:flex; flex-direction:column; gap:10px;
+  flex:1; min-height:200px;
+  overflow:hidden;
+}
+.elite-card:active { transform:scale(0.985); }
+
+/* SAFE card — pearl/teal, calm */
+.elite-card.safe {
+  background:linear-gradient(165deg, rgba(60,200,135,0.13) 0%, rgba(40,140,200,0.10) 100%);
+  border:1.5px solid rgba(120,220,180,0.35);
+  box-shadow:0 4px 20px rgba(60,200,135,0.10), inset 0 1px 0 rgba(255,255,255,0.06);
+}
+.elite-card.safe:hover {
+  background:linear-gradient(165deg, rgba(60,200,135,0.20) 0%, rgba(40,140,200,0.16) 100%);
+  border-color:rgba(120,220,180,0.55);
+  box-shadow:0 8px 28px rgba(60,200,135,0.20);
+}
+
+/* ELITE card — blood-red ember, pulsing border */
+.elite-card.elite {
+  background:linear-gradient(165deg, rgba(255,40,60,0.16) 0%, rgba(120,10,20,0.20) 100%);
+  border:1.5px solid rgba(255,90,90,0.7);
+  box-shadow:
+    0 4px 26px rgba(220,40,40,0.28),
+    inset 0 1px 0 rgba(255,200,200,0.08);
+  animation:elite-card-pulse 2.2s ease-in-out infinite;
+}
+@keyframes elite-card-pulse {
+  0%,100% {
+    border-color:rgba(255,90,90,0.65);
+    box-shadow:0 4px 26px rgba(220,40,40,0.28), inset 0 1px 0 rgba(255,200,200,0.08);
+  }
+  50% {
+    border-color:rgba(255,140,140,1);
+    box-shadow:0 6px 36px rgba(255,80,80,0.55), inset 0 1px 0 rgba(255,200,200,0.12);
+  }
+}
+.elite-card.elite:hover {
+  background:linear-gradient(165deg, rgba(255,40,60,0.24) 0%, rgba(140,15,25,0.30) 100%);
+}
+
+/* Top row: emoji + label */
+.elite-card-top {
+  display:flex; align-items:center; gap:10px;
+}
+.elite-card-emoji { font-size:2.2rem; line-height:1; }
+.elite-card-label {
+  display:flex; flex-direction:column; gap:2px;
+}
+.elite-card-tag {
+  font-size:0.55rem; letter-spacing:2.5px; text-transform:uppercase;
+  font-weight:700;
+}
+.elite-card.safe .elite-card-tag { color:#7eddc1; }
+.elite-card.elite .elite-card-tag { color:#ff8e9e; }
+.elite-card-name {
+  font-family:'Playfair Display', serif;
+  font-size:1.4rem; font-weight:700; color:#fff;
+  line-height:1.05;
+}
+
+.elite-card-tagline {
+  font-size:0.78rem; font-style:italic;
+  color:rgba(255,255,255,0.78);
+  margin-top:2px;
+}
+.elite-card-desc {
+  font-size:0.72rem; color:rgba(255,255,255,0.6);
+  line-height:1.45;
+}
+
+/* Reward chip (elite card only) */
+.elite-reward {
+  margin-top:auto;
+  display:flex; align-items:center; gap:10px;
+  background:linear-gradient(135deg, rgba(255,210,80,0.18) 0%, rgba(255,160,40,0.14) 100%);
+  border:1px solid rgba(255,210,80,0.5);
+  border-radius:12px; padding:10px 12px;
+  box-shadow:0 0 18px rgba(255,200,80,0.18);
+}
+.elite-reward-emoji { font-size:1.5rem; }
+.elite-reward-text { display:flex; flex-direction:column; gap:1px; }
+.elite-reward-label {
+  font-size:0.85rem; font-weight:700; color:#ffd750;
+  letter-spacing:0.3px;
+  font-family:'Playfair Display', serif;
+}
+.elite-reward-desc {
+  font-size:0.62rem; color:rgba(255,255,255,0.6);
+  line-height:1.3;
+}
+
+/* Safe card "no reward" placeholder */
+.elite-safe-note {
+  margin-top:auto;
+  font-size:0.65rem; letter-spacing:1.5px; text-transform:uppercase;
+  color:rgba(255,255,255,0.4);
+  text-align:center;
+  padding:10px;
+  border-top:1px dashed rgba(255,255,255,0.15);
+}
+
+/* Tier badge — top-right corner of elite card */
+.elite-tier-badge {
+  position:absolute; top:10px; right:10px;
+  font-size:0.55rem; letter-spacing:1.8px; text-transform:uppercase;
+  background:rgba(0,0,0,0.5);
+  border:1px solid rgba(255,90,90,0.5);
+  border-radius:10px; padding:3px 8px;
+  font-weight:700; color:#ffd0d0;
+}
+
+/* Commit timer — appears under the elite card on hover/tap */
+.elite-commit-overlay {
+  position:fixed; inset:0;
+  background:rgba(10,5,12,0.86); backdrop-filter:blur(6px);
+  display:none; flex-direction:column;
+  align-items:center; justify-content:center;
+  gap:18px; z-index:135;
+  padding:30px;
+}
+.elite-commit-overlay.visible { display:flex; }
+.elite-commit-q {
+  font-family:'Playfair Display', serif;
+  font-size:clamp(1.5rem, 6vw, 2.4rem);
+  color:#fff; text-align:center; font-weight:700;
+  text-shadow:0 0 18px rgba(255,80,80,0.5);
+}
+.elite-commit-archetype {
+  font-size:0.72rem; letter-spacing:3px; text-transform:uppercase;
+  color:#ff8e9e;
+}
+.elite-commit-timer-ring {
+  width:120px; height:120px; position:relative;
+}
+.elite-commit-timer-ring svg { width:100%; height:100%; transform:rotate(-90deg); }
+.elite-commit-timer-ring circle {
+  fill:none; stroke-width:6;
+}
+.elite-commit-timer-ring .bg { stroke:rgba(255,255,255,0.1); }
+.elite-commit-timer-ring .fg {
+  stroke:#ff5060;
+  stroke-linecap:round;
+  filter:drop-shadow(0 0 8px rgba(255,80,80,0.7));
+  transition:stroke-dashoffset 0.05s linear;
+}
+.elite-commit-actions { display:flex; gap:14px; }
+.elite-commit-btn {
+  padding:12px 26px; border-radius:50px;
+  font-family:'Inter', sans-serif;
+  font-size:0.78rem; font-weight:700; letter-spacing:1.5px;
+  text-transform:uppercase;
+  cursor:pointer; transition:all 0.15s;
+  border:1.5px solid;
+}
+.elite-commit-btn.confirm {
+  background:linear-gradient(135deg, #ff4060, #c01030);
+  border-color:#ff8090;
+  color:#fff;
+  box-shadow:0 4px 22px rgba(220,40,60,0.5);
+}
+.elite-commit-btn.confirm:active { transform:scale(0.96); }
+.elite-commit-btn.cancel {
+  background:rgba(255,255,255,0.06);
+  border-color:rgba(255,255,255,0.25);
+  color:rgba(255,255,255,0.75);
+}
+
+/* In-hole "ELITE" HUD pip — visible during gameplay so player remembers stakes */
+.elite-stakes-pip {
+  position:fixed; top:60px; right:14px;
+  display:none;
+  background:linear-gradient(135deg, rgba(220,40,60,0.92), rgba(140,10,30,0.92));
+  border:1.5px solid rgba(255,140,140,0.85);
+  border-radius:14px; padding:6px 12px 7px;
+  font-family:'Inter', sans-serif;
+  z-index:90;
+  box-shadow:0 0 18px rgba(220,40,60,0.5);
+  animation:elite-pip-pulse 2s ease-in-out infinite;
+  pointer-events:none;
+}
+.elite-stakes-pip.visible { display:flex; flex-direction:column; align-items:center; gap:1px; }
+@keyframes elite-pip-pulse {
+  0%,100% { box-shadow:0 0 14px rgba(220,40,60,0.4); }
+  50%     { box-shadow:0 0 22px rgba(255,80,100,0.75); }
+}
+.elite-stakes-pip-tag {
+  font-size:0.5rem; letter-spacing:2px; font-weight:700;
+  color:#ffd0d0;
+}
+.elite-stakes-pip-name {
+  font-size:0.72rem; font-weight:700; color:#fff;
+  line-height:1; letter-spacing:0.2px;
+}
+.elite-stakes-pip-reward {
+  font-size:0.55rem; color:#ffd750; margin-top:1px;
+  letter-spacing:0.5px;
+}
+
+/* Reward delivery toast — bigger and gold-tinted */
+.elite-reward-toast {
+  position:fixed; left:50%; top:30%; transform:translate(-50%, -50%) scale(0.6);
+  background:linear-gradient(135deg, rgba(255,210,80,0.95), rgba(255,140,40,0.95));
+  border:2px solid #fff;
+  border-radius:20px; padding:18px 26px;
+  z-index:200; opacity:0;
+  transition:opacity 0.4s, transform 0.5s cubic-bezier(0.34,1.56,0.64,1);
+  box-shadow:0 12px 50px rgba(255,200,80,0.6);
+  text-align:center; pointer-events:none;
+  font-family:'Playfair Display', serif;
+}
+.elite-reward-toast.visible {
+  opacity:1; transform:translate(-50%, -50%) scale(1);
+}
+.elite-reward-toast-emoji { font-size:2.6rem; line-height:1; margin-bottom:6px; }
+.elite-reward-toast-label { font-size:1.4rem; font-weight:700; color:#3a1a00; letter-spacing:0.5px; }
+.elite-reward-toast-sub  { font-size:0.7rem; color:rgba(60,30,0,0.85); margin-top:4px; font-family:'Inter', sans-serif; letter-spacing:1px; text-transform:uppercase; }
+
+/* Failure toast — wager lost / par missed */
+.elite-fail-toast {
+  position:fixed; left:50%; top:30%; transform:translate(-50%, -50%) scale(0.6);
+  background:linear-gradient(135deg, rgba(180,40,40,0.95), rgba(80,10,20,0.95));
+  border:2px solid #ff8090;
+  border-radius:20px; padding:18px 26px;
+  z-index:200; opacity:0;
+  transition:opacity 0.4s, transform 0.5s cubic-bezier(0.34,1.56,0.64,1);
+  box-shadow:0 12px 50px rgba(220,40,40,0.5);
+  text-align:center; pointer-events:none;
+  font-family:'Playfair Display', serif;
+}
+.elite-fail-toast.visible {
+  opacity:1; transform:translate(-50%, -50%) scale(1);
+}
+.elite-fail-toast-emoji { font-size:2.6rem; line-height:1; margin-bottom:6px; }
+.elite-fail-toast-label { font-size:1.4rem; font-weight:700; color:#fff; letter-spacing:0.5px; }
+.elite-fail-toast-sub  { font-size:0.7rem; color:rgba(255,200,200,0.95); margin-top:4px; font-family:'Inter', sans-serif; letter-spacing:1px; text-transform:uppercase; }
 
 /* Card removal overlay */
 #card-remove-overlay {
@@ -2622,6 +2954,83 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
   <button class="shop-skip-btn" onclick="closeShop()">Next Hole →</button>
 </div>
 
+<!-- v0.20j: Elite Hole Fork — fires every 3rd hole (3,6,9,12...) -->
+<div id="elite-fork-overlay">
+  <div class="elite-fork-banner">⚠ FORK IN THE COURSE ⚠</div>
+  <div class="elite-fork-title" id="elite-fork-title">Choose Your Hole</div>
+  <div class="elite-fork-subtitle" id="elite-fork-subtitle">Hole — — Take the safe road, or risk it all</div>
+  <div class="elite-fork-grid">
+    <div class="elite-card safe" id="elite-safe-card" onclick="onElitePickSafe()">
+      <div class="elite-card-top">
+        <div class="elite-card-emoji">⛳</div>
+        <div class="elite-card-label">
+          <div class="elite-card-tag">SAFE PATH</div>
+          <div class="elite-card-name">Standard Hole</div>
+        </div>
+      </div>
+      <div class="elite-card-tagline">Just a normal day at the (mini)golf course.</div>
+      <div class="elite-card-desc">A regular procedurally-generated hole. No surprises beyond the usual chaos.</div>
+      <div class="elite-safe-note">No reward. No risk.</div>
+    </div>
+    <div class="elite-card elite" id="elite-risk-card" onclick="onElitePickElite()">
+      <div class="elite-tier-badge" id="elite-tier-badge">TIER —</div>
+      <div class="elite-card-top">
+        <div class="elite-card-emoji" id="elite-arch-emoji">⚠️</div>
+        <div class="elite-card-label">
+          <div class="elite-card-tag">ELITE HOLE</div>
+          <div class="elite-card-name" id="elite-arch-name">—</div>
+        </div>
+      </div>
+      <div class="elite-card-tagline" id="elite-arch-tagline">—</div>
+      <div class="elite-card-desc" id="elite-arch-desc">—</div>
+      <div class="elite-reward">
+        <div class="elite-reward-emoji" id="elite-reward-emoji">🎁</div>
+        <div class="elite-reward-text">
+          <div class="elite-reward-label" id="elite-reward-label">—</div>
+          <div class="elite-reward-desc" id="elite-reward-desc">Beat par to claim it.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- v0.20j: Elite commit confirm — 2s timer once player picks Elite -->
+<div class="elite-commit-overlay" id="elite-commit-overlay">
+  <div class="elite-commit-archetype" id="elite-commit-archetype">— ELITE HOLE —</div>
+  <div class="elite-commit-q">Take the risk?</div>
+  <div class="elite-commit-timer-ring">
+    <svg viewBox="0 0 120 120">
+      <circle class="bg" cx="60" cy="60" r="54" />
+      <circle class="fg" cx="60" cy="60" r="54"
+              stroke-dasharray="339.292" stroke-dashoffset="0"
+              id="elite-commit-ring-fg" />
+    </svg>
+  </div>
+  <div class="elite-commit-actions">
+    <button class="elite-commit-btn cancel" onclick="onEliteCommitCancel()">Back to safety</button>
+    <button class="elite-commit-btn confirm" onclick="onEliteCommitConfirm()">I'm in</button>
+  </div>
+</div>
+
+<!-- v0.20j: In-hole stakes pip — visible during elite gameplay -->
+<div class="elite-stakes-pip" id="elite-stakes-pip">
+  <div class="elite-stakes-pip-tag">⚠ ELITE</div>
+  <div class="elite-stakes-pip-name" id="elite-stakes-pip-name">—</div>
+  <div class="elite-stakes-pip-reward" id="elite-stakes-pip-reward">—</div>
+</div>
+
+<!-- v0.20j: Reward / fail toasts -->
+<div class="elite-reward-toast" id="elite-reward-toast">
+  <div class="elite-reward-toast-emoji" id="elite-reward-toast-emoji">🎁</div>
+  <div class="elite-reward-toast-label" id="elite-reward-toast-label">—</div>
+  <div class="elite-reward-toast-sub" id="elite-reward-toast-sub">Reward claimed</div>
+</div>
+<div class="elite-fail-toast" id="elite-fail-toast">
+  <div class="elite-fail-toast-emoji">💀</div>
+  <div class="elite-fail-toast-label" id="elite-fail-toast-label">No reward</div>
+  <div class="elite-fail-toast-sub" id="elite-fail-toast-sub">Couldn't beat par</div>
+</div>
+
 <!-- Debug corner tap zone (bottom-right, 4 taps) -->
 <div id="card-remove-overlay">
   <div class="card-remove-title">✂️ Remove a Card</div>
@@ -2645,6 +3054,7 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
   <button class="dbg-btn" id="dbg-skip">⏭ Skip hole (−1 par)</button>
   <button class="dbg-btn" id="dbg-budget">❤️ Add a life</button>
   <button class="dbg-btn" id="dbg-coins">🪙 +50 coins</button>
+  <button class="dbg-btn" id="dbg-elite">⚠️ Force elite next hole</button>
   <button class="dbg-btn" id="dbg-unlock-all">🔓 Unlock everything</button>
   <button class="dbg-btn" id="dbg-console">🛠 Open mobile console</button>
   <div style="height:1px;background:rgba(255,255,255,0.15);margin:6px 0"></div>
@@ -3283,12 +3693,161 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.20h1';
-const CHANGE_NOTE = 'Pinball: ground friction now zeroed (matches Perpetual Motion) — ball keeps its energy on the floor, not just off walls. True chaos mode.';
+const GAME_VERSION = '0.20p1';
+const CHANGE_NOTE = 'Elite Holes — Hunter (T3) + Chasm (T2) enabled. Restored Floomba spawner that prior session ate.';
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
 const PRICE_MULTIPLIER = 1.25;
+
+// ── Elite Holes (v0.20j) ──────────────────────────────
+// "Elite" holes appear every 3rd hole (player-facing 3, 6, 9, 12...).
+// Player picks Safe (normal hole) vs Elite (high-risk archetype, big reward).
+// Tier 1 = early holes (mild risk), Tier 3 = late holes (hellish).
+// Each archetype carries a `flag` consumed by buildCourse / generators / runtime.
+//
+// IMPLEMENTATION ORDER (per current roadmap):
+//   1. fork-screen + tier plumbing + No Walls   ← THIS SESSION
+//   2. Not-So-Mini (3× scale)
+//   3. Barbed Wire Walls
+//   4. Wandering Hole (Floomba-speed roving cup)
+//   5. Chasm (ramp + conveyor + spike pit)
+//   6. Hunter (Mr. X-style pursuer)
+//   7. Lap Mode
+//
+// `enabled: false` archetypes are scaffolded but never appear in the picker yet.
+const ELITE_ARCHETYPES = {
+  no_walls: {
+    id: 'no_walls', tier: 1, enabled: true,
+    name: 'No Walls', emoji: '🌪️',
+    tagline: 'No perimeter. Pure terror.',
+    description: 'The course has no walls. Hit it out, lose it forever.',
+    flag: 'eliteNoWalls',
+  },
+  not_so_mini: {
+    id: 'not_so_mini', tier: 1, enabled: true,
+    name: 'Not-So-Mini', emoji: '🦣',
+    tagline: 'You shrink. The course doesn\'t.',
+    description: 'You\'re tiny. The course is huge. Good luck judging distance.',
+    flag: 'eliteNotSoMini',
+  },
+  barbed_wire: {
+    id: 'barbed_wire', tier: 1, enabled: true,
+    name: 'Barbed Wire Walls', emoji: '🪤',
+    tagline: 'The walls bite back.',
+    description: 'Every wall is lined with spikes. Touching them costs −1 HP (once per stroke).',
+    flag: 'eliteBarbedWire',
+  },
+  wandering_hole: {
+    id: 'wandering_hole', tier: 2, enabled: true,
+    name: 'Wandering Hole', emoji: '🕳️',
+    tagline: 'The cup will not sit still.',
+    description: 'The hole roams the course like a Floomba. Lead your shot.',
+    flag: 'eliteWanderingHole',
+  },
+  chasm: {
+    id: 'chasm', tier: 2, enabled: true,
+    name: 'Chasm', emoji: '🌋',
+    tagline: 'Mind the gap. The big one.',
+    description: 'A spike pit splits the course. Conveyor ramps launch you over — if you have the speed.',
+    flag: 'eliteChasm',
+  },
+  hunter: {
+    id: 'hunter', tier: 3, enabled: true,
+    name: 'The Hunter', emoji: '👁️',
+    tagline: 'It sees you. It is coming.',
+    description: 'A spiky eyeball stalks you across strokes. Slow, relentless, hungry. Touch = −1 HP and a knock away from the hole.',
+    flag: 'eliteHunter',
+  },
+  lap_mode: {
+    id: 'lap_mode', tier: 3, enabled: false,
+    name: 'Lap Mode', emoji: '🏁',
+    tagline: 'Three laps. Beat the clock.',
+    description: 'No hole. No mercy. Race a rectangular track three times. Time = par.',
+    flag: 'eliteLapMode',
+  },
+};
+
+// Reward archetypes — what a player wins for getting under par on an elite.
+// Each tier has its own pool. Reward picked at the moment the fork is shown,
+// then locked in (so the player sees what they're playing for).
+//
+// Reward types:
+//   'coins'        — flat coin grant
+//   'free_card'    — pick a card of the listed rarity from a chooser
+//   'restore_hp'   — heal to full
+//   'double_or_nothing' — wager up to 200 coins (capped). Win = +wager, lose = -wager
+//   'copy_card'    — duplicate any card the player owns (no rarity restriction)
+const ELITE_REWARDS = {
+  // Tier 1 — spicy
+  coins_100:    { id:'coins_100',    type:'coins',         amount:100,        emoji:'🪙', label:'+100 Coins',       desc:'Pure profit if you can pull it off.' },
+  free_uncommon:{ id:'free_uncommon',type:'free_card',     rarity:'uncommon', emoji:'🃏', label:'Free Uncommon Card', desc:'Pick one. It\'s on the house.' },
+  // Tier 2 — dangerous
+  coins_200:    { id:'coins_200',    type:'coins',         amount:200,        emoji:'💰', label:'+200 Coins',       desc:'A real haul.' },
+  restore_hp:   { id:'restore_hp',   type:'restore_hp',                        emoji:'❤️', label:'Restore All HP',    desc:'Heal back to full. Worth more than gold.' },
+  free_rare:    { id:'free_rare',    type:'free_card',     rarity:'rare',     emoji:'🃏', label:'Free Rare Card',    desc:'Better deck, no purchase necessary.' },
+  // Tier 3 — hellish
+  free_epic:    { id:'free_epic',    type:'free_card',     rarity:'epic',     emoji:'🃏', label:'Free Epic Card',    desc:'Build-defining loot.' },
+  free_legendary:{id:'free_legendary',type:'free_card',    rarity:'legendary',emoji:'🌟', label:'Free Legendary Card', desc:'Run-defining loot.' },
+  double_or_nothing:{id:'double_or_nothing',type:'double_or_nothing', cap:200, emoji:'🎲', label:'Double or Nothing',  desc:'Wager up to 200 coins. Win the hole, double up. Bust = lose it all.' },
+  copy_card:    { id:'copy_card',    type:'copy_card',                         emoji:'🎴', label:'Copy Any Card',     desc:'Duplicate any card you own. No restrictions.' },
+};
+
+const ELITE_TIER_REWARD_POOLS = {
+  1: ['coins_100', 'free_uncommon'],
+  2: ['coins_200', 'restore_hp', 'free_rare'],
+  3: ['free_epic', 'free_legendary', 'double_or_nothing', 'copy_card'],
+};
+
+// Which tiers are eligible at which player-facing hole numbers.
+// Holes 3, 6 = tier 1 only.  9, 12 = tier 1 or 2.  15+ = tier 2 or 3.
+function eliteTiersForHole(playerFacingHoleNum) {
+  if(playerFacingHoleNum <= 6)  return [1];
+  if(playerFacingHoleNum <= 12) return [1, 2];
+  return [2, 3];
+}
+
+// Should an elite fork appear before this hole? Player-facing hole number.
+function shouldShowEliteFork(playerFacingHoleNum) {
+  if(playerFacingHoleNum < 3) return false;
+  return playerFacingHoleNum % 3 === 0;
+}
+
+// v0.20k: Returns true if the ball should be drawn/treated at "shrunk" scale,
+// either due to the shrink_ray perk or the Not-So-Mini elite hole.
+// Use this everywhere instead of checking shrink_ray directly so both systems
+// stay in lockstep.
+function isBallShrunk() {
+  if(typeof G === 'undefined') return false;
+  if(G._notSoMiniActive) return true;
+  return !!(G.modifiers && G.modifiers.some(m => m.id === 'shrink_ray'));
+}
+// Visual scale applied to the ball mesh and trail/aim helpers.
+// Not-So-Mini scales smaller (0.30) than shrink_ray (0.35) for stronger effect.
+function getBallVisualScale() {
+  if(typeof G === 'undefined') return 1.0;
+  if(G._notSoMiniActive) return 0.30;
+  if(G.modifiers && G.modifiers.some(m => m.id === 'shrink_ray')) return 0.35;
+  return 1.0;
+}
+
+// Roll an archetype + reward for the upcoming hole.
+function rollEliteOffer(playerFacingHoleNum) {
+  // v0.20m: debug override — if _eliteForceTier is set (1..3), restrict the
+  // candidate pool to that tier only. 0 = natural cadence-based selection.
+  const forceTier = (typeof G !== 'undefined' && G._eliteForceTier) ? G._eliteForceTier : 0;
+  const tiers = forceTier ? [forceTier] : eliteTiersForHole(playerFacingHoleNum);
+  // Filter to enabled archetypes whose tier is in `tiers`
+  const candidates = Object.values(ELITE_ARCHETYPES)
+    .filter(a => a.enabled && tiers.includes(a.tier));
+  if(candidates.length === 0) return null; // safety: nothing enabled
+  const archetype = candidates[Math.floor(Math.random() * candidates.length)];
+  const rewardPool = ELITE_TIER_REWARD_POOLS[archetype.tier] || [];
+  if(rewardPool.length === 0) return null;
+  const rewardId = rewardPool[Math.floor(Math.random() * rewardPool.length)];
+  const reward = ELITE_REWARDS[rewardId];
+  return { archetype, reward };
+}
 
 // ── Game state ────────────────────────────────────────
 const G = {
@@ -3310,6 +3869,13 @@ const G = {
   // v0.20a3: telemetry — shop-visit log per run (offerings, purchases, rerolls).
   _currentRunShopVisits: [],
   _currentShopVisit: null,
+  // ── Elite Holes (v0.20j) ────────────────────────────
+  // Set when the player commits to an elite at the fork screen.
+  // Cleared on hole completion (after reward delivery) and at run start.
+  _eliteOffer: null,        // {archetype, reward} as rolled, awaiting commit
+  _activeElite: null,       // {archetype, reward, wager?} for the in-progress hole
+  _eliteWager: 0,           // coins committed for double-or-nothing (0 if not chosen)
+  _eliteHistory: [],        // {hole, archetype, reward, taken, success} per accepted/skipped fork
   // ── Economy ─────────────────────────────────────────
   coins: 0,               // current wallet
   hotStreak: 0,           // consecutive par-or-better holes
@@ -4674,6 +5240,197 @@ function isReachable(grid, W, H, teePos, holePos) {
 // segments joined at 90-degree turns. Flat terrain, tighter lanes,
 // more mechanical obstacle variety.
 
+// v0.20n: Chasm elite — post-process a generated course into a chasm hole.
+// Picks the longest segment, carves a perpendicular spike-pit zone at its
+// midpoint, and plants forward-pushing conveyor "ramps" on either side.
+//
+// Returns a `chasmZone` descriptor consumed by buildCourse + the runtime
+// fall-in detector. Mutates the passed arrays (clears nearby hazards,
+// pushes new conveyors + spikes). Returns null if no usable segment found.
+function buildChasmZone(args) {
+  const {
+    grid, W, H, segInfo, waypoints, offX, offY,
+    teePos, holePos, conveyorData, spikeData, rockData,
+    bumperData, slideBlockData, angledWallData,
+    pendulumData, popupData, fanData,
+    LANE_W,
+  } = args;
+
+  // 1. Find longest segment >= 6 cells (need room for ramp+pit+ramp).
+  // We try a 12-cell layout first, then fall back to a compact 8-cell
+  // layout (3 ramp + 2 pit + 3 ramp) if no segment is long enough.
+  const _longCandidates = [...segInfo].filter(s => s.len >= 12).sort((a,b) => b.len - a.len);
+  const _shortCandidates = [...segInfo].filter(s => s.len >= 8).sort((a,b) => b.len - a.len);
+  let seg, RAMP_LEN, PIT_LEN;
+  if(_longCandidates.length > 0) {
+    seg = _longCandidates[0];
+    RAMP_LEN = 4; PIT_LEN = 4;
+  } else if(_shortCandidates.length > 0) {
+    seg = _shortCandidates[0];
+    RAMP_LEN = 3; PIT_LEN = 2;
+  } else {
+    return null; // no segment long enough for any chasm — abort
+  }
+
+  // 2. Compute midpoint (in offset grid coords) along the segment
+  const midGX = Math.round((seg.ax + seg.bx) / 2);
+  const midGY = Math.round((seg.ay + seg.by) / 2);
+
+  // 3. Determine "along" axis (segment direction) and "across" axis
+  // The pit + ramps run along the segment; the ramp's push direction
+  // points along the segment toward the hole.
+  const isH = seg.dir === 'H';
+  // Compute push direction: along-segment, biased toward the hole
+  let pushSign;
+  if(isH) {
+    pushSign = (holePos.x > teePos.x) === (seg.bx > seg.ax) ? 1 : -1;
+  } else {
+    pushSign = (holePos.y > teePos.y) === (seg.by > seg.ay) ? 1 : -1;
+  }
+
+  // 4. Lay out the chasm: the structure along travel is
+  //    [ ramp1 ][ pit ][ ramp2 ]
+  // where each segment length was decided in step 1.
+  const TOTAL_LEN = RAMP_LEN * 2 + PIT_LEN;
+  const HALF_TOTAL = TOTAL_LEN / 2;
+
+  // Step direction along segment in grid coords (signed)
+  const dAlong = isH ? pushSign : 0;
+  const _dAlongV = isH ? 0 : pushSign;
+  // Helper: get a cell at (along-offset, across-offset) from midpoint
+  const cellAt = (alongOff, acrossOff) => {
+    const gx = midGX + (isH ? alongOff : acrossOff);
+    const gy = midGY + (isH ? acrossOff : alongOff);
+    return { x: gx, y: gy };
+  };
+  // Validate that the full chasm length fits inside fair tiles
+  const halfAcross = Math.floor(LANE_W / 2);
+  const isFairCell = (x, y) =>
+    x >= 0 && y >= 0 && x < W && y < H &&
+    (grid[y][x] === 0 /* CELL.FAIR */ || grid[y][x] === 1 /* TEE */ || grid[y][x] === 2 /* GREEN */);
+  for(let along = -HALF_TOTAL; along < HALF_TOTAL; along++) {
+    for(let across = -halfAcross; across <= halfAcross; across++) {
+      const c = cellAt(along * pushSign, across);
+      if(!isFairCell(c.x, c.y)) return null; // chasm wouldn't fit cleanly
+    }
+  }
+
+  // 5. Bound boxes (in offset grid coords) for the three regions:
+  //    ramp1: along [-6..-2)  (4 cells)
+  //    pit:   along [-2..+2)  (4 cells)
+  //    ramp2: along [+2..+6)  (4 cells)
+  const cellsRamp1 = [];
+  const cellsPit   = [];
+  const cellsRamp2 = [];
+  for(let along = -HALF_TOTAL; along < HALF_TOTAL; along++) {
+    for(let across = -halfAcross; across <= halfAcross; across++) {
+      const c = cellAt(along * pushSign, across);
+      if(along < -PIT_LEN/2)      cellsRamp1.push(c);
+      else if(along < PIT_LEN/2)  cellsPit.push(c);
+      else                        cellsRamp2.push(c);
+    }
+  }
+
+  // 6. Sweep nearby hazards out of the chasm zone — keep gameplay clean.
+  // We use a generous radius: full chasm bounding box + small buffer.
+  const allChasmCells = [...cellsRamp1, ...cellsPit, ...cellsRamp2];
+  const inChasm = (gx, gy) => allChasmCells.some(c => c.x === gx && c.y === gy);
+  const removeIfInChasm = (arr, getXY) => {
+    for(let i = arr.length - 1; i >= 0; i--) {
+      const xy = getXY(arr[i]);
+      if(inChasm(xy.x, xy.y)) arr.splice(i, 1);
+    }
+  };
+  removeIfInChasm(spikeData,    s => ({x: s.gx, y: s.gy}));
+  removeIfInChasm(rockData,     r => ({x: r.gx, y: r.gy}));
+  removeIfInChasm(bumperData,   b => ({x: b.gx, y: b.gy}));
+  removeIfInChasm(slideBlockData, s => ({x: s.gx, y: s.gy}));
+  removeIfInChasm(angledWallData, a => ({x: a.gx, y: a.gy}));
+  removeIfInChasm(pendulumData, p => ({x: p.gx, y: p.gy}));
+  removeIfInChasm(popupData,    p => ({x: p.gx, y: p.gy}));
+  removeIfInChasm(fanData,      f => ({x: f.gx, y: f.gy}));
+  // Also drop any conveyor whose cells overlap the chasm zone
+  for(let i = conveyorData.length - 1; i >= 0; i--) {
+    const cv = conveyorData[i];
+    if(cv.cells.some(c => inChasm(c.x, c.y))) conveyorData.splice(i, 1);
+  }
+
+  // 7. Plant the two ramp conveyors. They push along the segment, toward
+  // the hole. High strength so the ball gets real launch speed.
+  const RAMP_STRENGTH = 26.0; // ~2× a normal conveyor — makes the launch real
+  // Conveyor data: pushDir 'H' means push along X, 'V' means along Z.
+  // Our segment direction: isH=true ⇒ along-axis is X ⇒ pushDir='H'.
+  const cvDir = isH ? 'H' : 'V';
+  const ramp1 = {
+    gx: cellsRamp1[0].x, gy: cellsRamp1[0].y,
+    cells: cellsRamp1,
+    pushDir: cvDir,
+    pushSign: pushSign,
+    strength: RAMP_STRENGTH,
+    segDir: seg.dir,
+    convLen: RAMP_LEN,
+    _eliteChasmRamp: true,
+  };
+  const ramp2 = {
+    gx: cellsRamp2[0].x, gy: cellsRamp2[0].y,
+    cells: cellsRamp2,
+    pushDir: cvDir,
+    pushSign: pushSign,
+    strength: RAMP_STRENGTH,
+    segDir: seg.dir,
+    convLen: RAMP_LEN,
+    _eliteChasmRamp: true,
+  };
+  conveyorData.push(ramp1, ramp2);
+
+  // 8. Plant DENSE red spikes across the pit area. White vs red is
+  // configurable: tier-1 chasm = white (-1 HP), red variant = -2 HP.
+  // v0.20o: Escalation — pit goes red at hole 15+ (player-facing), making
+  // late-run Chasm elites significantly more punishing. Earlier holes stay
+  // white so first-time encounters teach the mechanic without hammering HP.
+  // Stagger spikes so they don't perfectly tile — visual interest.
+  const PIT_RED_VARIANT = (typeof G !== 'undefined' && G.hole != null && (G.hole + 1) >= 15);
+  for(const c of cellsPit) {
+    const wx = c.x * 2.0; // TILE_SIZE = 2.0 hardcoded here (matches consts above)
+    const wz = c.y * 2.0;
+    spikeData.push({
+      gx: c.x, gy: c.y, wx, wz,
+      radius: 0.75, // bigger than normal so they're scary-looking
+      variant: PIT_RED_VARIANT ? 'red' : 'white',
+      _eliteChasmPit: true,
+    });
+  }
+
+  // 9. Build the world-space bounds of the pit so runtime can fall-detect.
+  // We store the rectangular AABB of the pit area in world coords.
+  const pitMinGX = Math.min(...cellsPit.map(c => c.x));
+  const pitMaxGX = Math.max(...cellsPit.map(c => c.x));
+  const pitMinGY = Math.min(...cellsPit.map(c => c.y));
+  const pitMaxGY = Math.max(...cellsPit.map(c => c.y));
+  const T = 2.0;
+  const T2 = T / 2;
+
+  return {
+    pitBoundsWS: {
+      minX: pitMinGX * T - T2,
+      maxX: pitMaxGX * T + T2,
+      minZ: pitMinGY * T - T2,
+      maxZ: pitMaxGY * T + T2,
+    },
+    pitCenterWS: {
+      x: (pitMinGX + pitMaxGX) * 0.5 * T,
+      z: (pitMinGY + pitMaxGY) * 0.5 * T,
+    },
+    rampDir: { x: isH ? pushSign : 0, z: isH ? 0 : pushSign },
+    redVariant: PIT_RED_VARIANT,
+    rampLen: RAMP_LEN,
+    pitLen: PIT_LEN,
+    isH,
+    pushSign,
+    segLen: seg.len,
+  };
+}
+
 function generatePuttPuttCourse(holeNum) {
   const diff = G.difficulty || 1;
   const LANE_W = 4;   // fairway width in cells
@@ -4772,7 +5529,29 @@ function generatePuttPuttCourse(holeNum) {
     // Very long layouts from ~mid-early run onward
     if(holeRamp >= 5) { pool.push(allLayouts[16], allLayouts[17]); }
   }
-  const segments = pool[Math.floor(rng() * pool.length)];
+  let segments = pool[Math.floor(rng() * pool.length)];
+
+  // v0.20i: Balance first-turn direction. The layout list above is biased
+  // toward H-first (11 H-first, 7 V-first; complex layouts skew further:
+  // 6 H-first, 2 V-first). H-first layouts turn LEFT first from the player's
+  // POV; V-first turn RIGHT. Adam observed almost all par-3s turning left.
+  // Cheapest balance fix: 50% chance to flip the FIRST segment's axis (H↔V),
+  // and another 50% chance to mirror sign on later H/V segments. This
+  // re-randomizes turn direction without changing layout shape.
+  // - Swap H↔V flips left↔right turn direction on the first turn.
+  // - Sign flips swap which side later segments go to (preserves shape).
+  if(rng() < 0.5) {
+    // Swap H↔V on every segment — preserves shape, mirrors turn handedness.
+    segments = segments.map(s => ({ dir: s.dir === 'H' ? 'V' : 'H', len: s.len }));
+  }
+  if(rng() < 0.5) {
+    // Mirror across X axis (negate H lengths).
+    segments = segments.map(s => s.dir === 'H' ? { dir: 'H', len: -s.len } : s);
+  }
+  if(rng() < 0.5) {
+    // Mirror across Z axis (negate V lengths).
+    segments = segments.map(s => s.dir === 'V' ? { dir: 'V', len: -s.len } : s);
+  }
 
   // ── 2. Walk segments to get waypoints ─────────────────
   const waypoints = [{x:0, y:0}];
@@ -5647,9 +6426,11 @@ function generatePuttPuttCourse(holeNum) {
   const coinData = [];
   // v0.19z8a2: money_pit now stackable. Each stack = +50% coins on the hole
   // (1×, 1.5×, 2.0×, 2.5×…). Was previously boolean 1.5×.
+  // v0.20i: doubled base coin target — fairways were sparse compared to the
+  // pacing of card/perk costs. Was (6 + par*2 + 0..2); now (12 + par*4 + 0..4).
   const moneyPitStacks = (G.modifiers || []).filter(m => m.id === 'money_pit').length;
   const ppCoinMult = 1 + moneyPitStacks * 0.5;
-  const ppCoinTarget = Math.round((6 + par * 2 + Math.floor(rng() * 3)) * ppCoinMult);
+  const ppCoinTarget = Math.round((12 + par * 4 + Math.floor(rng() * 5)) * ppCoinMult);
 
   // Build path from tee to hole through fairway cells for line placement
   const pathCells = [...ppFair]
@@ -5758,11 +6539,65 @@ function generatePuttPuttCourse(holeNum) {
   const teeDirLen = Math.hypot(teeDirX, teeDirZ) || 1;
   const teeDir = { x: teeDirX / teeDirLen, z: teeDirZ / teeDirLen };
 
+  // v0.20j: Elite-hole flags — read from G._activeElite (set when player
+  // commits at the fork screen). buildCourse + downstream systems consume
+  // these to alter generation/visuals (e.g. eliteNoWalls skips perimeters).
+  const elite = (typeof G !== 'undefined' && G._activeElite) ? G._activeElite : null;
+  const eliteFlags = {
+    eliteActive:        !!elite,
+    eliteArchetypeId:   elite ? elite.archetype.id : null,
+    eliteNoWalls:       !!(elite && elite.archetype.flag === 'eliteNoWalls'),
+    eliteBarbedWire:    !!(elite && elite.archetype.flag === 'eliteBarbedWire'),
+    eliteNotSoMini:     !!(elite && elite.archetype.flag === 'eliteNotSoMini'),
+    eliteWanderingHole: !!(elite && elite.archetype.flag === 'eliteWanderingHole'),
+    eliteChasm:         !!(elite && elite.archetype.flag === 'eliteChasm'),
+    eliteHunter:        !!(elite && elite.archetype.flag === 'eliteHunter'),
+    eliteLapMode:       !!(elite && elite.archetype.flag === 'eliteLapMode'),
+  };
+
+  // v0.20m: Wandering Hole elite — override any rolled holeDefense with our
+  // own moving_hole defense, set to a 'wander' pattern (Floomba-style bounce).
+  // Amplitude is generous; the existing path-validator will shrink it if it
+  // doesn't fit the fairway. Speed targets ~6 u/s = 1× Floomba baseline.
+  if(eliteFlags.eliteWanderingHole) {
+    holeDefense = {
+      kind: 'moving_hole',
+      pattern: 'wander',           // new pattern type — handled in buildCourse
+      amplitude: 6.0,              // travel envelope half-extent (auto-shrunk if needed)
+      speed: 6.0,                  // world units / sec, matches Floomba 1×
+      // Stub fields the existing moving_hole code expects but wander ignores:
+      speedFactor: 1.0,
+      phase: 0,
+      _eliteForced: true,          // flag so downstream knows this is the elite
+    };
+  }
+
+  // v0.20n: Chasm elite — carve a spike pit perpendicular to the longest
+  // fairway segment, with conveyor ramps on either side. Runs LATE so it can
+  // override hazards already placed. Pit cells stay marked CELL.FAIR (so ball
+  // can roll over them); they're decorated with red spikes + tagged in
+  // `chasmZone` for runtime fall-in detection.
+  // If no segment is long enough, buildChasmZone returns null; the hole
+  // plays as normal but the elite's reward still triggers on under-par.
+  // (Consider this a "got lucky, no pit" outcome — strictly upside.)
+  let chasmZone = null;
+  if(eliteFlags.eliteChasm) {
+    chasmZone = buildChasmZone({
+      grid, W, H, segInfo, waypoints, offX, offY,
+      teePos, holePos, conveyorData, spikeData, rockData,
+      bumperData, slideBlockData, angledWallData,
+      pendulumData, popupData, fanData,
+      LANE_W,
+    });
+  }
+
   return {grid,W,H,teePos,holePos,par,heightMap,vertHeights,vmW,vmH,
           rockData, fanData:[], bumperData, spinBarData, slideBlockData,
           angledWallData, conveyorData, pendulumData, popupData, spikeData,
           leftRail, rightRail, teeCapPts, holeCapPts, splineWS:ppSplineWS, coinData, heartData,
-          holeDefense, teeDir};
+          holeDefense, teeDir,
+          chasmZone,
+          ...eliteFlags};
 }
 
 
@@ -5775,6 +6610,8 @@ const FLOOR_H = 0.18;
 function buildCourse(data) {
   if(G.courseGroup){ scene.remove(G.courseGroup); }
   G._bgTrees = []; // reset background tree tracking
+  // v0.20l: clear stale elite mesh refs — fresh mesh built per hole if applicable
+  G._barbedWireMesh = null;
   const group = new THREE.Group();
   G.courseGroup = group;
   scene.add(group);
@@ -6345,7 +7182,55 @@ function buildCourse(data) {
   // Putt Putt biome: pixel-perfect grid-edge walls — every FAIR
   // cell edge that borders EMPTY/WALL gets an exact wall quad.
   // This guarantees walls sit flush with the green in all cases.
-  {
+  // v0.20j: Elite "No Walls" archetype skips this block entirely —
+  // no wall meshes built, no wallPolylines pushed. Pure terror.
+  // We DO draw a glowing red danger line where the walls would have been,
+  // so the player can still see the perimeter — just not bounce off it.
+  if(data.eliteNoWalls) {
+    // Draw thin emissive red danger lines along every fair-cell boundary edge.
+    // Geometry-only — no physics. Uses LineSegments for cheap rendering.
+    const isFairNW = (gx,gz) => {
+      if(gx<0||gz<0||gx>=W||gz>=H) return false;
+      const c=grid[gz][gx];
+      return c===CELL.FAIR||c===CELL.TEE||c===CELL.GREEN||c===CELL.SAND;
+    };
+    const T_NW = TILE_SIZE;
+    const T2_NW = T_NW / 2;
+    const dangerPts = [];
+    const dangerY = 0.06; // just above floor
+    for(let gz=0; gz<H; gz++) {
+      for(let gx=0; gx<W; gx++) {
+        if(!isFairNW(gx,gz)) continue;
+        const cx2 = gx*T_NW, cz2 = gz*T_NW;
+        const edges = [
+          { ndx:0,  ndz:-1, x0:cx2-T2_NW, z0:cz2-T2_NW, x1:cx2+T2_NW, z1:cz2-T2_NW },
+          { ndx:0,  ndz:+1, x0:cx2+T2_NW, z0:cz2+T2_NW, x1:cx2-T2_NW, z1:cz2+T2_NW },
+          { ndx:-1, ndz:0,  x0:cx2-T2_NW, z0:cz2+T2_NW, x1:cx2-T2_NW, z1:cz2-T2_NW },
+          { ndx:+1, ndz:0,  x0:cx2+T2_NW, z0:cz2-T2_NW, x1:cx2+T2_NW, z1:cz2+T2_NW },
+        ];
+        for(const e of edges) {
+          if(!isFairNW(gx+e.ndx, gz+e.ndz)) {
+            dangerPts.push(e.x0, dangerY, e.z0, e.x1, dangerY, e.z1);
+          }
+        }
+      }
+    }
+    if(dangerPts.length) {
+      const dangerGeo = new THREE.BufferGeometry();
+      dangerGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(dangerPts), 3));
+      const dangerMat = new THREE.LineBasicMaterial({
+        color: 0xff3344, transparent: true, opacity: 0.85,
+      });
+      const dangerLines = new THREE.LineSegments(dangerGeo, dangerMat);
+      dangerLines.userData.noOutline = true;
+      group.add(dangerLines);
+      // Save for animated pulsing in the main loop (optional — not wired yet)
+      G._eliteDangerLines = dangerLines;
+    }
+  } else {
+    G._eliteDangerLines = null;
+  }
+  if(!data.eliteNoWalls) {
     const CURB_H   = 0.65;
     const CURB_BOT = -0.5;
     const CURB_W   = 0.32;
@@ -6359,7 +7244,11 @@ function buildCourse(data) {
       // wall quad exactly along that edge.
       // Also collect those edges as physics polylines.
 
-      const PP_CURB_H   = 0.75;
+      // v0.20n: Chasm holes get 3× wall height to keep launched balls in
+      // the playfield post-jump — players need confidence the ramp won't
+      // hurl them out of bounds. Per Adam's design spec.
+      const _ppCurbScale = data.eliteChasm ? 3.0 : 1.0;
+      const PP_CURB_H   = 0.75 * _ppCurbScale;
       const PP_CURB_BOT = -0.5;   // reaches below world ground level
       const PP_CURB_W   = 0.25;  // top-cap inset (toward fairway)
       const T2 = T / 2;          // half tile = 1.0 wu
@@ -6402,6 +7291,69 @@ function buildCourse(data) {
             const dynBot = Math.min(PP_CURB_BOT, Math.min(yi0, yi1, ya0, ya1) - 0.1);
             rawEdges.push({ ...e, topY0, topY1, dynBot, gx, gz });
           }
+        }
+      }
+
+      // v0.20l: Barbed Wire elite — emit spike row geometry along the top of
+      // every wall edge. Single batched mesh for perf. Doesn't change physics
+      // (the wall polylines are already pushed below); purely visual + wired
+      // to the damage hook in the main physics loop.
+      if(data.eliteBarbedWire && rawEdges.length) {
+        const SPIKE_H = 0.32;        // height above wall top
+        const SPIKE_HALF_W = 0.07;   // base half-width (perpendicular to edge)
+        const SPACING = 0.32;        // distance between spike tips along edge
+        const positions = [];
+        const indices = [];
+        let vIdx = 0;
+        for(const e of rawEdges) {
+          const ex = e.ox1 - e.ox0;
+          const ez = e.oz1 - e.oz0;
+          const elen = Math.hypot(ex, ez) || 0.0001;
+          const tx = ex / elen, tz = ez / elen;     // edge tangent (along)
+          const px = -tz, pz = tx;                  // edge perpendicular (outward)
+          // We want spikes pointing UP from the wall top. Build small triangular
+          // pyramids: 4 base verts (slightly inset to give base plate) + 1 tip.
+          const numSpikes = Math.max(2, Math.floor(elen / SPACING));
+          for(let s = 0; s < numSpikes; s++) {
+            const f = (s + 0.5) / numSpikes; // 0..1 along edge
+            const cx2 = e.ox0 + ex * f;
+            const cz2 = e.oz0 + ez * f;
+            // Top y at this fraction
+            const cy  = e.topY0 + (e.topY1 - e.topY0) * f;
+            // Pyramid base: 4 verts forming a small diamond around (cx2,cy,cz2)
+            const baseY = cy + 0.005;
+            const tipY  = cy + SPIKE_H;
+            const halfL = 0.08; // base half-length along tangent
+            const halfW = SPIKE_HALF_W;
+            // Verts: 0=base front (along+), 1=base outward (perp+), 2=base back (along-), 3=base inward (perp-), 4=tip
+            const v0 = [cx2 + tx*halfL,            baseY, cz2 + tz*halfL];
+            const v1 = [cx2 + px*halfW,            baseY, cz2 + pz*halfW];
+            const v2 = [cx2 - tx*halfL,            baseY, cz2 - tz*halfL];
+            const v3 = [cx2 - px*halfW,            baseY, cz2 - pz*halfW];
+            const v4 = [cx2,                       tipY,  cz2                ];
+            positions.push(...v0, ...v1, ...v2, ...v3, ...v4);
+            // 4 triangular faces (base→base→tip)
+            const i0 = vIdx, i1 = vIdx+1, i2 = vIdx+2, i3 = vIdx+3, i4 = vIdx+4;
+            indices.push(i0, i1, i4);
+            indices.push(i1, i2, i4);
+            indices.push(i2, i3, i4);
+            indices.push(i3, i0, i4);
+            vIdx += 5;
+          }
+        }
+        if(indices.length) {
+          const sgeo = new THREE.BufferGeometry();
+          sgeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positions), 3));
+          sgeo.setIndex(indices);
+          sgeo.computeVertexNormals();
+          const smat = new THREE.MeshStandardMaterial({
+            color: 0x661111, roughness: 0.4, metalness: 0.5,
+            emissive: 0xff2030, emissiveIntensity: 0.35,
+          });
+          const sMesh = new THREE.Mesh(sgeo, smat);
+          sMesh.castShadow = true;
+          group.add(sMesh);
+          G._barbedWireMesh = sMesh; // for optional pulse animation later
         }
       }
 
@@ -6987,6 +7939,9 @@ function buildCourse(data) {
         beltCX, beltCZ,
         beltLen, isHoriz,
         arrowSpacing,
+        // v0.20o: Tag chasm-ramp conveyors so re-tint logic doesn't depend
+        // on data.conveyorData[i] / G.conveyors[i] index alignment.
+        _eliteChasmRamp: !!cv._eliteChasmRamp,
       });
     }
   }
@@ -7167,6 +8122,127 @@ function buildCourse(data) {
       }
       G.spikes.push(spikeRec);
     }
+  }
+
+  // v0.20n: Chasm elite — visual flair to make the pit "read" clearly:
+  //   - red glowing edge bars at the leading + trailing pit walls
+  //   - red-tinted upgrade to the ramp conveyor belts (override the default
+  //     dark-gray belt material with chasm-red so the launch ramps pop)
+  if(data.eliteChasm && data.chasmZone) {
+    const cz = data.chasmZone;
+    const pb = cz.pitBoundsWS;
+    // Edge bars: a tall thin bar on each "lip" of the pit (the two edges
+    // perpendicular to travel direction). Glowing red, slight pulse.
+    const edgeMat = new THREE.MeshStandardMaterial({
+      color: 0xff2030, emissive: 0xff1020, emissiveIntensity: 1.4,
+      roughness: 0.3, metalness: 0.6,
+    });
+    const edgeH = 0.04;     // sit just above ground
+    const edgeBarH = 0.18;  // bar height
+    const lipThick = 0.18;
+    if(cz.isH) {
+      // Travel along X — edges at minX and maxX
+      const edgeLen = pb.maxZ - pb.minZ;
+      for(const ex of [pb.minX, pb.maxX]) {
+        const bar = new THREE.Mesh(
+          new THREE.BoxGeometry(lipThick, edgeBarH, edgeLen),
+          edgeMat
+        );
+        bar.position.set(ex, edgeH + edgeBarH/2, (pb.minZ + pb.maxZ) / 2);
+        bar.userData.noOutline = true;
+        group.add(bar);
+      }
+    } else {
+      // Travel along Z — edges at minZ and maxZ
+      const edgeLen = pb.maxX - pb.minX;
+      for(const ez of [pb.minZ, pb.maxZ]) {
+        const bar = new THREE.Mesh(
+          new THREE.BoxGeometry(edgeLen, edgeBarH, lipThick),
+          edgeMat
+        );
+        bar.position.set((pb.minX + pb.maxX) / 2, edgeH + edgeBarH/2, ez);
+        bar.userData.noOutline = true;
+        group.add(bar);
+      }
+    }
+    // Stash the edge mat for optional pulsing animation in the main loop.
+    G._chasmEdgeMat = edgeMat;
+
+    // v0.20o: Visual ramp wedges — angled boxes under each ramp conveyor
+    // that rise toward the pit edge. Pure decoration (physics is still flat
+    // ground + conveyor push) but sells the "you're being launched up an
+    // incline" beat. The wedges sit just below the conveyor belt so the
+    // belt remains the surface the ball touches.
+    {
+      const rampMat = new THREE.MeshStandardMaterial({
+        color: 0x442020, emissive: 0x661010, emissiveIntensity: 0.4,
+        roughness: 0.6, metalness: 0.3,
+      });
+      // Read bounds straight off G.conveyors entries tagged as chasm ramps.
+      if(G.conveyors && G.conveyors.length) {
+        for(const cvR of G.conveyors) {
+          if(!cvR._eliteChasmRamp) continue;
+          const wMinX = cvR.minX, wMaxX = cvR.maxX;
+          const wMinZ = cvR.minZ, wMaxZ = cvR.maxZ;
+          const wCX = (wMinX + wMaxX) / 2;
+          const wCZ = (wMinZ + wMaxZ) / 2;
+          const wW = wMaxX - wMinX;
+          const wD = wMaxZ - wMinZ;
+
+          // Determine which end is closer to the pit (rises higher there)
+          const pitCX = cz.pitCenterWS.x;
+          const pitCZ = cz.pitCenterWS.z;
+          const isHorizPush = !!cvR.isHoriz;
+          // Wedge dimensions: along-axis = ramp length, across = ramp width.
+          // The wedge tilts up toward the pit by rotating around its
+          // across-axis. RAMP_RISE ~0.45 — taller than the conveyor lip.
+          const RAMP_RISE = 0.45;
+          const wedgeAlong = isHorizPush ? wW : wD;
+          const wedgeAcross = isHorizPush ? wD : wW;
+          const wedgeGeo = new THREE.BoxGeometry(
+            isHorizPush ? wedgeAlong : wedgeAcross,
+            RAMP_RISE,
+            isHorizPush ? wedgeAcross : wedgeAlong
+          );
+          const wedge = new THREE.Mesh(wedgeGeo, rampMat);
+          wedge.position.set(wCX, RAMP_RISE / 2 + 0.005, wCZ);
+          // Tilt up toward the pit. Sign of dirX/dirZ controls tilt direction.
+          const dirX = pitCX - wCX;
+          const dirZ = pitCZ - wCZ;
+          if(isHorizPush) {
+            // Push along X — tilt around Z. Positive dirX → high end at +X.
+            const tiltAngle = Math.atan2(RAMP_RISE * 0.7, wedgeAlong * 0.5);
+            wedge.rotation.z = -Math.sign(dirX) * tiltAngle;
+          } else {
+            const tiltAngle = Math.atan2(RAMP_RISE * 0.7, wedgeAlong * 0.5);
+            wedge.rotation.x = Math.sign(dirZ) * tiltAngle;
+          }
+          wedge.userData.noOutline = true;
+          group.add(wedge);
+        }
+      }
+    }
+    // Tint the chasm ramp belts. We walk G.conveyors and recolor any whose
+    // _eliteChasmRamp flag is set (tagged at push time). No index-alignment
+    // dependency.
+    if(G.conveyors && G.conveyors.length) {
+      for(const cv of G.conveyors) {
+        if(!cv._eliteChasmRamp) continue;
+        // Find arrow group + rebuild material to chasm red
+        if(cv.arrowGroup && cv.arrowGroup.children) {
+          for(const am of cv.arrowGroup.children) {
+            if(am.material) {
+              am.material = new THREE.MeshStandardMaterial({
+                color: 0xff5040, emissive: 0xff2010, emissiveIntensity: 1.0,
+                roughness: 0.4,
+              });
+            }
+          }
+        }
+      }
+    }
+  } else {
+    G._chasmEdgeMat = null;
   }
 
   // Trees must never overlap the fairway. We place them in
@@ -7456,6 +8532,17 @@ function buildCourse(data) {
             const denom = 1 + Math.sin(t) * Math.sin(t);
             pts.push([a * Math.cos(t) / denom, a * Math.sin(t) * Math.cos(t) / denom]);
           }
+        } else if(hd.pattern === 'wander') {
+          // v0.20m: Wandering Hole — Floomba-style bounce. We can't predict
+          // the actual path (depends on wall layout), so we sample a circle
+          // at the requested amplitude. This validates that there's a roughly
+          // circular envelope of fairway around the hole — enough room for
+          // the wander to actually wander before hitting walls. The runtime
+          // SDF + envelope checks keep it contained.
+          for(let i = 0; i <= N; i++) {
+            const t = (i / N) * Math.PI * 2;
+            pts.push([Math.cos(t) * a, Math.sin(t) * a]);
+          }
         }
         return pts;
       };
@@ -7517,6 +8604,28 @@ function buildCourse(data) {
           ring.userData.noOutline = true;
           defGroup.add(ring);
         }
+      } else if(hd.pattern === 'wander') {
+        // v0.20m: Wandering Hole — soft red dashed ring showing the envelope
+        // the cup stays inside. Uses TorusGeometry to suggest "this area is
+        // dangerous"; ring color is angry-red rather than safe-cyan.
+        const wEnvMat = new THREE.MeshStandardMaterial({
+          color: 0xff5555, emissive: 0xff2244, emissiveIntensity: 0.55,
+          transparent: true, opacity: 0.30, depthWrite: false,
+        });
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(state.amp, 0.07, 6, 48), wEnvMat);
+        ring.rotation.x = Math.PI / 2;
+        ring.position.set(cx, baseY + 0.02, cz);
+        ring.userData.noOutline = true;
+        defGroup.add(ring);
+        // Stash the envelope center so we can clamp the cup to it
+        state._wanderCenter = { x: cx, z: cz };
+        // Seed initial velocity at random angle, speed from hd.speed (default 6)
+        const wSpd = hd.speed || 6.0;
+        const wAng = Math.random() * Math.PI * 2;
+        state._wanderVel = { x: Math.cos(wAng) * wSpd, z: Math.sin(wAng) * wSpd };
+        state._wanderSpeed = wSpd;
+        // Seed offset at zero (start at original hole position)
+        state._wanderOff = { x: 0, z: 0 };
       }
       state.update = (dt, totalT) => {
         // v0.19v: Once the hole is hit, freeze the hole's position so the
@@ -7553,6 +8662,86 @@ function buildCourse(data) {
           const denom = 1 + Math.sin(phase) * Math.sin(phase);
           ox = state.amp * Math.cos(phase) / denom;
           oz = state.amp * Math.sin(phase) * Math.cos(phase) / denom;
+        } else if(hd.pattern === 'wander') {
+          // v0.20m: Wandering Hole — Floomba-style stateful motion.
+          // - Move by velocity × dt
+          // - Bounce off perimeter envelope (radius = state.amp from center)
+          // - Bounce off course wall polylines (so it doesn't clip through walls)
+          // - If we'd land on non-fair (sand/oob) — pick a new random direction
+          // Defensive: if state fields are missing (shouldn't happen, but
+          // belt-and-suspenders against ordering bugs in init), seed them.
+          if(!state._wanderCenter) state._wanderCenter = { x: cx, z: cz };
+          if(!state._wanderVel) {
+            const _wAng = Math.random() * Math.PI * 2;
+            const _wSpd = hd.speed || 6.0;
+            state._wanderVel = { x: Math.cos(_wAng) * _wSpd, z: Math.sin(_wAng) * _wSpd };
+          }
+          if(!state._wanderOff) state._wanderOff = { x: 0, z: 0 };
+          if(state._wanderSpeed == null) state._wanderSpeed = hd.speed || 6.0;
+          const wo = state._wanderOff;
+          const wv = state._wanderVel;
+          let nx2 = wo.x + wv.x * dt;
+          let nz2 = wo.z + wv.z * dt;
+          // 1. Envelope clamp — bounce off the inside of the amp circle
+          const envR = state.amp;
+          const distSq = nx2*nx2 + nz2*nz2;
+          if(distSq > envR*envR) {
+            const d = Math.sqrt(distSq) || 1;
+            const nrx = nx2/d, nrz = nz2/d;        // outward radial normal
+            const dotR = wv.x*nrx + wv.z*nrz;
+            if(dotR > 0) {
+              wv.x -= 2*dotR*nrx;
+              wv.z -= 2*dotR*nrz;
+            }
+            // Push back inside the envelope
+            nx2 = nrx * (envR - 0.01);
+            nz2 = nrz * (envR - 0.01);
+          }
+          // 2. Wall SDF bounce — same pattern as floomba, but cheaper:
+          // we only check polylines once and reflect velocity if hit. No
+          // multi-iteration solve; the cup doesn't need to be pixel-perfect.
+          if(G.wallPolylines && G.wallPolylines.length) {
+            const HOLE_R = 0.7; // cup radius for collision purposes
+            const wallThick = (G.biome === 'puttputt' ? 0.25 : 0.32) + HOLE_R;
+            const wxAbs = state._wanderCenter.x + nx2;
+            const wzAbs = state._wanderCenter.z + nz2;
+            for(const poly of G.wallPolylines) {
+              for(let pi = 0; pi < poly.length - 1; pi++) {
+                const ax = poly[pi].x, az = poly[pi].z;
+                const bx = poly[pi+1].x, bz = poly[pi+1].z;
+                const ex = bx - ax, ez = bz - az;
+                const lsq = ex*ex + ez*ez;
+                if(lsq < 0.0001) continue;
+                const tw = Math.max(0, Math.min(1, ((wxAbs - ax)*ex + (wzAbs - az)*ez) / lsq));
+                const wcx = ax + tw*ex, wcz = az + tw*ez;
+                const wdx = wxAbs - wcx, wdz = wzAbs - wcz;
+                const wdist = Math.hypot(wdx, wdz);
+                if(wdist < wallThick && wdist > 0.001) {
+                  const wnx = wdx/wdist, wnz = wdz/wdist;
+                  const dotW = wv.x*wnx + wv.z*wnz;
+                  if(dotW < 0) {
+                    wv.x -= 2*dotW*wnx;
+                    wv.z -= 2*dotW*wnz;
+                  }
+                  // Push out
+                  const overlap = wallThick - wdist + 0.01;
+                  nx2 += wnx * overlap;
+                  nz2 += wnz * overlap;
+                }
+              }
+            }
+          }
+          // 3. Re-normalize speed so bounces don't slowly bleed energy.
+          // Floomba-like: velocity magnitude stays constant.
+          const vmag = Math.hypot(wv.x, wv.z) || 0.0001;
+          const targetSpd = state._wanderSpeed || 6.0;
+          wv.x = wv.x / vmag * targetSpd;
+          wv.z = wv.z / vmag * targetSpd;
+          // 4. Commit and write outputs.
+          wo.x = nx2; wo.z = nz2;
+          state._wanderOff = wo;
+          state._wanderVel = wv;
+          ox = nx2; oz = nz2;
         }
         G._holeWorldOffset.x = ox;
         G._holeWorldOffset.z = oz;
@@ -7862,6 +9051,9 @@ function buildCourse(data) {
   }
 
   // ── Lot of Heart: spawn a healing heart on ~33% of holes (v0.19z8: was 12%) ──
+  // v0.20i: switched from TorusKnot ("pool noodle") to the same lobe+cone
+  // heart used by per-hole healing hearts (heartMeshes). Same emissive pink
+  // colour, same proportions, just spawned for the perk owner.
   if(G.modifiers.some(m=>m.id==='lot_of_heart') && Math.random() < 0.33) {
     // Place heart at a random fair cell along the path
     const fairCells = [];
@@ -7871,15 +9063,45 @@ function buildCourse(data) {
     if(fairCells.length > 2) {
       const hc = fairCells[Math.floor(Math.random()*fairCells.length)];
       const hwx = hc.x*T, hwz = hc.y*T;
-      const htY = ch(hc.x, hc.y) + FLOOR_H/2 + 0.5;
-      // Heart shape: scaled torus knot
-      const heartGeo = new THREE.TorusKnotGeometry(0.25, 0.08, 32, 8, 2, 3);
-      const heartMat = new THREE.MeshStandardMaterial({color:0xff4488, emissive:0xff2266, emissiveIntensity:0.5, roughness:0.3});
-      const heartMesh = new THREE.Mesh(heartGeo, heartMat);
-      heartMesh.position.set(hwx, htY, hwz);
-      heartMesh.userData.noOutline = true;
-      group.add(heartMesh);
-      G._heartPickup = {wx:hwx, wz:hwz, mesh:heartMesh, collected:false, baseY:htY};
+      const htY = ch(hc.x, hc.y) + FLOOR_H/2 + 0.32;
+      // Build a proper heart: two lobe spheres + downward cone, matching the
+      // heartMeshes pattern earlier in this function.
+      const heartMat = new THREE.MeshStandardMaterial({
+        color: 0xff4488, roughness: 0.12, metalness: 0.25,
+        emissive: 0xff2266, emissiveIntensity: 1.0,
+      });
+      const heartGlowMat = new THREE.MeshStandardMaterial({
+        color: 0xff88bb, transparent: true, opacity: 0.55,
+        emissive: 0xff4488, emissiveIntensity: 2.2, depthWrite: false,
+      });
+      const pivot = new THREE.Group();
+      pivot.position.set(hwx, htY, hwz);
+      pivot.userData.noOutline = true;
+      const lobeR = 0.14;
+      const lobeL = new THREE.Mesh(new THREE.SphereGeometry(lobeR, 10, 8), heartMat);
+      lobeL.position.set(-0.10, 0.06, 0);
+      lobeL.userData.noOutline = true;
+      pivot.add(lobeL);
+      const lobeRm = new THREE.Mesh(new THREE.SphereGeometry(lobeR, 10, 8), heartMat);
+      lobeRm.position.set( 0.10, 0.06, 0);
+      lobeRm.userData.noOutline = true;
+      pivot.add(lobeRm);
+      const point = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.28, 10), heartMat);
+      point.position.set(0, -0.14, 0);
+      point.rotation.x = Math.PI; // tip points down
+      point.userData.noOutline = true;
+      pivot.add(point);
+      group.add(pivot);
+
+      // Bloom glow disc — pink, sits flat on the ground beneath the heart.
+      const glowG = new THREE.CylinderGeometry(0.42, 0.42, 0.02, 16);
+      const glowM = new THREE.Mesh(glowG, heartGlowMat);
+      glowM.rotation.x = Math.PI / 2;
+      glowM.position.set(hwx, htY - 0.30, hwz);
+      glowM.userData.noOutline = true;
+      group.add(glowM);
+
+      G._heartPickup = {wx:hwx, wz:hwz, mesh:pivot, glowMesh:glowM, collected:false, baseY:htY};
     }
   }
 
@@ -9223,8 +10445,8 @@ function createAimArrow() {
     const SPREAD = 0.9;
     G._aimSideBalls = [];
     const ballGeo = new THREE.SphereGeometry(BALL_R, 12, 8);
-    const _aimShrunk = G.modifiers.some(m=>m.id==='shrink_ray');
-    const _aimBallScale = _aimShrunk ? 0.35 : 1.0;
+    const _aimShrunk = isBallShrunk();
+    const _aimBallScale = getBallVisualScale();
     for(let side = -1; side <= 1; side += 2) {
       // Side ball
       const ballMat = new THREE.MeshStandardMaterial({color:0xddddff, roughness:0.2, metalness:0.05, transparent:true, opacity:0.7});
@@ -9806,7 +11028,7 @@ function updatePhysics(dt) {
   // the wbBase site below (mirrors how Perpetual Motion does it) so we don't
   // need to multiply this here.
   const BOUNCE_MULT    = (bouncyWallsCount > 0 ? 1.0 + bouncyWallsCount * 0.4 : 1.0) * (hasRicochet ? 2.2 : 1.0);
-  const BALL_R_EFF     = G.modifiers.find(m=>m.id==='shrink_ray') ? BALL_R * 0.5 : BALL_R;
+  const BALL_R_EFF     = isBallShrunk() ? BALL_R * 0.5 : BALL_R;
   // v0.17v: Use BALL_R_EFF for floor resting height too — previously floorY used BALL_R,
   // so under Shrink Ray the ball visually floated since its collision radius is smaller.
   const BALL_FLOOR_R   = BALL_R_EFF;
@@ -10027,11 +11249,75 @@ function updatePhysics(dt) {
     if(G._lastSafePosSampleT >= 0.1) {
       G._lastSafePosSampleT = 0;
       const _cellHere = (typeof getCell === 'function') ? getCell(G.ballPos.x, G.ballPos.z) : null;
-      if(_cellHere === CELL.FAIR || _cellHere === CELL.GREEN ||
-         _cellHere === CELL.TEE  || _cellHere === CELL.SAND) {
+      // v0.20n: Skip safe-pos sampling inside a chasm pit — those cells are
+      // still CELL.FAIR for ball-rolling purposes, but you don't want to
+      // respawn back into them. _chasmZone.pitBoundsWS holds the AABB.
+      let _inChasmPit = false;
+      if(G._chasmActive && G._chasmZone && G._chasmZone.pitBoundsWS) {
+        const pb = G._chasmZone.pitBoundsWS;
+        if(G.ballPos.x >= pb.minX && G.ballPos.x <= pb.maxX &&
+           G.ballPos.z >= pb.minZ && G.ballPos.z <= pb.maxZ) {
+          _inChasmPit = true;
+        }
+      }
+      if(!_inChasmPit && (_cellHere === CELL.FAIR || _cellHere === CELL.GREEN ||
+         _cellHere === CELL.TEE  || _cellHere === CELL.SAND)) {
         if(!G._lastSafePos) G._lastSafePos = new THREE.Vector3();
         G._lastSafePos.copy(G.ballPos);
       }
+    }
+  }
+
+  // v0.20n: Chasm pit-fall detection. Edge-triggered: when the ball is
+  // grounded INSIDE the pit AABB and we haven't already triggered a respawn
+  // for this stroke, deduct HP (red variant = 2, white = 1) and teleport
+  // the ball back to G._lastSafePos. Pinball perk's immunity is honored
+  // automatically by applyDamage().
+  if(G._chasmActive && G._chasmZone && G._chasmZone.pitBoundsWS && !G._chasmRespawnPending) {
+    const pb = G._chasmZone.pitBoundsWS;
+    const inPitXZ = (G.ballPos.x >= pb.minX && G.ballPos.x <= pb.maxX &&
+                     G.ballPos.z >= pb.minZ && G.ballPos.z <= pb.maxZ);
+    if(inPitXZ) {
+      const _terrAtBall2 = G.heightMap.length ? getTerrainHeight(G.ballPos.x, G.ballPos.z) : 0;
+      const groundY = _terrAtBall2 + FLOOR_H/2 + BALL_R_EFF;
+      const grounded = G.ballPos.y < groundY + 0.45; // generous — covers low-flying
+      if(grounded) {
+        // Mark pending so we only fire once per fall
+        G._chasmRespawnPending = true;
+        const dmg = G._chasmZone.redVariant ? 2 : 1;
+        const dealt = applyDamage(dmg, 'chasm_pit');
+        if(dealt > 0) spawnHpDamagePopup(dealt);
+        showToast('🌋 INTO THE PIT!', 1200);
+        triggerShake('heavy');
+        // Spawn a hit-particle burst at the contact point
+        if(typeof spawnHitParticles === 'function') spawnHitParticles(G.ballPos);
+        // Respawn the ball — prefer last grounded position; fall back to tee
+        // if we never got a sample (extremely rare — would mean hole started
+        // inside the pit, which buildChasmZone explicitly avoids).
+        let rx = null, rz = null;
+        if(G._lastSafePos) {
+          rx = G._lastSafePos.x;
+          rz = G._lastSafePos.z;
+        } else if(G.teePos && G.heightMap) {
+          rx = G.teePos.x * TILE_SIZE;
+          rz = G.teePos.y * TILE_SIZE;
+        }
+        if(rx != null) {
+          const respY = (G.heightMap.length ? getTerrainHeight(rx, rz) : 0) + FLOOR_H/2 + BALL_R_EFF + 0.3;
+          G.ballPos.set(rx, respY, rz);
+          G.ballVel.set(0, 0, 0);
+          if(G.ball) G.ball.position.copy(G.ballPos);
+          if(G.ballShadow) G.ballShadow.position.set(rx, respY - BALL_R_EFF + 0.02, rz);
+          // Brief speed-bump-like settle: the ball rests, no aim cinematic.
+          G.rolling = false;
+          // Schedule the "pending" flag clear so a subsequent fall on a
+          // later stroke can fire again. Hook off G.strokes change check
+          // in the next safe-pos sample tick.
+        }
+      }
+    } else {
+      // Out of pit XZ — clear pending so next fall can fire
+      G._chasmRespawnPending = false;
     }
   }
 
@@ -10313,6 +11599,20 @@ function updatePhysics(dt) {
             trackStat('wallBounces', 1);
             trackStat('totalBounces', 1);
             G._holeWallBounces = (G._holeWallBounces||0) + 1;
+            // v0.20l: Barbed Wire elite — first wall hit per stroke costs 1 HP.
+            // Capped at one tick per stroke so tight courses don't shred you.
+            // Pinball perk's immunity is honored automatically by applyDamage().
+            if(G._barbedWireActive && G._lastBarbedDamageStroke !== G.strokes) {
+              G._lastBarbedDamageStroke = G.strokes;
+              const dealt = applyDamage(1, 'barbed_wire');
+              if(dealt > 0) {
+                spawnHpDamagePopup(dealt);
+                showToast('🪤 BARBED WIRE!', 900);
+                triggerShake('med');
+                // Spurt of red sparks at the contact point
+                spawnBarbedWireSparks(cx, G.ballPos.y, cz, nx, nz);
+              }
+            }
             if(G._allBounceTarget > 0) G._allBounceCount = (G._allBounceCount||0) + 1;
             const impactSpeed = Math.hypot(G.ballVel.x, G.ballVel.z);
             triggerShake(Math.min(0.6, impactSpeed / 32));
@@ -10339,7 +11639,9 @@ function updatePhysics(dt) {
 
   // ── Corner triangle collision ────────────────────────
   // Capsule test against the hypotenuse segment with BALL_R thickness.
-  if(G.angledWalls && G.angledWalls.length) {
+  // v0.20i: ghost ball passes through corner triangles too — was bouncing,
+  // breaking the "ghost passes through everything" contract.
+  if(G.angledWalls && G.angledWalls.length && !ghostActive) {
     for(const aw of G.angledWalls) {
       const bx = G.ballPos.x, bz = G.ballPos.z;
       const minDist = BALL_R_EFF + 0.08;
@@ -10490,6 +11792,9 @@ function updatePhysics(dt) {
     if(G.spikes)      G.spikes.forEach((o,i)      => { if(!o._destroyed && overlap(o.wx, o.wz, o.r||0.5))  fireGhostThrough('gs'+i); });
     if(G.slideBlocks) G.slideBlocks.forEach((o,i) => { if(!o._destroyed && overlap(o.wx, o.wz, (o.halfW||0.4))) fireGhostThrough('gsb'+i); });
     if(G.spinBars)    G.spinBars.forEach((o,i)    => { if(!o._destroyed && overlap(o.wx, o.wz, 0.6))           fireGhostThrough('gsp'+i); });
+    // v0.20i: also track popup walls + angled wall corners ghosted-through
+    if(G.popupWalls)  G.popupWalls.forEach((o,i)  => { if(!o._destroyed && overlap(o.wx, o.wz, 0.5))           fireGhostThrough('gpw'+i); });
+    if(G.angledWalls) G.angledWalls.forEach((o,i) => { if(!o._destroyed && overlap(o.wx, o.wz, 0.7))           fireGhostThrough('gaw'+i); });
   }
 
   // ── Rock obstacle collision ───────────────────────────
@@ -10673,7 +11978,8 @@ function updatePhysics(dt) {
   // ── Fan force ─────────────────────────────────────────
   // v0.17y5: fans only push grounded/low-altitude balls. Airborne catapult
   // and arc shots should sail over fans without getting deflected mid-flight.
-  if(G.fans && G.fans.length) {
+  // v0.20i: ghost ball ignores fans too — phasing balls shouldn't catch wind.
+  if(G.fans && G.fans.length && !ghostActive) {
     const _fanTerrainY = G.heightMap.length ? getTerrainHeight(G.ballPos.x, G.ballPos.z) : 0;
     const _fanHeightAboveGround = G.ballPos.y - _fanTerrainY;
     // Grounded ball floats at ~FLOOR_H/2 + BALL_R ≈ 0.35–0.5. Allow up to 1.2
@@ -10706,7 +12012,8 @@ function updatePhysics(dt) {
 
   // ── Bumper collision ─────────────────────────────────
   // Simple circle-vs-circle with restitution > 1 for lively bounce.
-  if(G.bumpers && G.bumpers.length) {
+  // v0.20i: ghost ball passes through bumpers (regular AND power).
+  if(G.bumpers && G.bumpers.length && !ghostActive) {
     for(const bmp of G.bumpers) {
       if(bmp._destroyed) continue;
       // v0.19z: parkour immunity — skip entirely during vault window
@@ -10809,6 +12116,10 @@ function updatePhysics(dt) {
       const prevAngle = bar.angle;
       bar.angle += bar.speed * subDt * (G._freezeFrameActive ? 0 : 1);
       const newAngle = bar.angle;
+      // v0.20i: ghost ball passes through spin bars — bars KEEP spinning
+      // (angle advance above runs regardless), but collision is skipped so
+      // the ball phases through. Mirrors rocks/sliders/bumpers behavior.
+      if(ghostActive) continue;
 
       // Y gate: ball must actually be at the height of the bar
       const ballTop = G.ballPos.y + BALL_R;
@@ -10916,6 +12227,13 @@ function updatePhysics(dt) {
               const label = bar.variant === 'spikesRed' ? '🟥 Spiked spinner!' : '🔺 Spiked spinner!';
               showToast(`${label} -${barDmg} HP`, 1200);
             }
+            // v0.20i: spiked spinner blows up on contact, mirroring spike balls.
+            // Routes through destroyObstacles so VFX/audio match (missile-style
+            // fling debris + fade). Cooldown line above already prevents this
+            // path from firing again — and `!o._destroyed` guards downstream.
+            const spinHits = [{wx:bar.wx, wz:bar.wz, type:'spinBar', physRef:bar, meshes:bar.barGroup?[bar.barGroup]:[]}];
+            destroyObstacles(spinHits, G.ballPos.x, G.ballPos.y, G.ballPos.z);
+            spawnExplosion(bar.wx, G.ballPos.y, bar.wz);
           }
         }
       }
@@ -11016,7 +12334,8 @@ function updatePhysics(dt) {
   // ball sailing over a conveyor shouldn't get sideways force.
   // v0.20g: freeze frame now also halts conveyor force — players expect
   // "all moving obstacles freeze" to include the belts.
-  if(G.conveyors && G.conveyors.length && !G._freezeFrameActive) {
+  // v0.20i: ghost ball ignores conveyor push too — phasing means phasing.
+  if(G.conveyors && G.conveyors.length && !G._freezeFrameActive && !ghostActive) {
     const _cvTerrainY = G.heightMap.length ? getTerrainHeight(G.ballPos.x, G.ballPos.z) : 0;
     const _cvGrounded = (G.ballPos.y - _cvTerrainY) < 1.2;
     if(_cvGrounded) {
@@ -11037,7 +12356,8 @@ function updatePhysics(dt) {
   }
 
   // ── Pop-up wall collision ─────────────────────────────
-  if(G.popupWalls && G.popupWalls.length) {
+  // v0.20i: ghost ball passes through pop-up walls (up-down walls).
+  if(G.popupWalls && G.popupWalls.length && !ghostActive) {
     for(const pw of G.popupWalls) {
       if(pw._destroyed) continue;
       // Only collide when the wall top is actually above the terrain surface
@@ -11676,6 +12996,9 @@ function updatePhysics(dt) {
     if(hDist < 0.6) {
       hpk.collected = true;
       if(hpk.mesh && G.courseGroup) G.courseGroup.remove(hpk.mesh);
+      // v0.20i: also remove the glow disc on pickup (now that Lot of Heart
+      // uses the proper lobe+cone heart with its own glow).
+      if(hpk.glowMesh && G.courseGroup) G.courseGroup.remove(hpk.glowMesh);
       // v0.18a: heals reduced by 1 at ★9+ (healReduction modifier).
       const heartHeal = Math.max(1, 2 - ((G._diffMods && G._diffMods.healReduction) || 0));
       applyHeal(heartHeal, 'lot_of_heart_pickup');
@@ -12255,6 +13578,10 @@ const STYLE_PTS = {
   // is high-skill / high-chaos, and rewards big when chained or used to
   // salvage a runaway shot into the cup.
   reverse_card: 1200,
+  // v0.20i: slow_approach — tasty patience-points combo for trickling the
+  // ball into the cup. Fires from onHoled when entrySpeed < 1.5 m/s. Pairs
+  // nicely with Backspin builds and gravity-pull approaches.
+  slow_approach: 800,
 };
 
 // Named tricks: [condition_fn(events, shotCtx), name, bonusPts]
@@ -12368,6 +13695,8 @@ const STYLE_NAMES = {
   parkour_vault:'🤸 PARKOUR VAULT', obstacle_dodge:'DODGE',
   // v0.20a2: Reverse card — flagship purple combo
   reverse_card:'⏪ REVERSE',
+  // v0.20i: slow approach combo — fires when the ball trickles into the cup.
+  slow_approach:'🐢 SLOW ROLL',
 };
 
 // v0.19z5: events that render with flagship styling — big purple glow,
@@ -13569,6 +14898,17 @@ function onHoled() {
     triggerCheckeredFlag();
   }
 
+  // ── v0.20i: Slow Approach combo ─────────────────────
+  // Mirror of High Speed Finish at the OPPOSITE end of the curve. When the
+  // ball trickles into the hole at a crawl (< 1.5 m/s), it reads as a
+  // deliberate, skillful sink — the kind that slips in like the ball was
+  // looking for the cup. Fires a style event + small toast. Free flavor —
+  // no perk gating; this is just earned-style for any patient putt.
+  if(entrySpeed < 1.5 && entrySpeed > 0.01) {
+    recordStyleEvent('slow_approach');
+    showToast('🐢 SLOW ROLL!', 1100);
+  }
+
   // ── Speed Ball scoring ──────────────────────────────
   if(G._speedBallActive) {
     const parTime = G.par * 5;
@@ -13613,7 +14953,7 @@ function onHoled() {
     const hy = G.heightMap.length ? G.heightMap[Math.min(G.holePos.y,G.gridH-1)][Math.min(G.holePos.x,G.gridW-1)] || 0 : 0;
     const startY = G.ball.position.y;
     const sinkTarget = hy - 0.3;
-    const startScale = G.modifiers.some(m=>m.id==='shrink_ray') ? 0.35 : 1.0;    const startT = performance.now();
+    const startScale = getBallVisualScale();    const startT = performance.now();
     const sinkDur = 380;
     const ball = G.ball;
     function animSink() {
@@ -13732,6 +15072,14 @@ function onHoled() {
   const earnings = calcHoleEarnings(G.strokes, G.par, coinsPickedUp, wallCoins);
   // Analytics: expanded scorecard entry (solo path)
   G.scorecard.push(buildScorecardEntry(earnings, coinsPickedUp, wallCoins));
+
+  // v0.20j: Elite Hole resolution — deliver reward (or punish wager) based on
+  // whether the player beat par on this hole. Must run AFTER coin earnings
+  // are credited so double-or-nothing wager math reads the right balance,
+  // and BEFORE the summary screen renders so the toast lands first.
+  if(G._activeElite) {
+    resolveEliteHoleResult(G.strokes, G.par);
+  }
 
   const isLast = G.hole >= G.totalHoles - 1;
   const outOfLives = G.hp <= 0;
@@ -14141,8 +15489,10 @@ function openShop() {
     ? ALL_PERKS.filter(p => !bannedPerks.includes(p.id))
     : ALL_PERKS;
   G._shopCurrentPicks = weightedShopPicks(perkPool, count);
-  // Generate card picks for the card row
-  G._shopCardPicks = weightedCardPicks(3);
+  // Generate card picks for the card row.
+  // v0.20i: Four! perk now also gives 4 cards (was hardcoded 3). Card row
+  // mirrors the perk row count so Four! lives up to its name.
+  G._shopCardPicks = weightedCardPicks(count);
   G._shopRerolledThisHole = false;
   // v0.20c: reset Free Reroll usage each hole so the perk fires at every shop, not once per run.
   G._freeRerollUsed = false;
@@ -14278,7 +15628,8 @@ function rerollShop() {
   const filteredPool = basePool.filter(p => !prevIds.includes(p.id));
   G._shopCurrentPicks = weightedShopPicks(filteredPool.length >= count ? filteredPool : basePool, count);
   // Also reroll card picks
-  G._shopCardPicks = weightedCardPicks(3);
+  // v0.20i: Four! also expands the rerolled card row.
+  G._shopCardPicks = weightedCardPicks(count);
   // v0.18a: re-apply forced hard perk after reroll so ★8+ players can't just
   // reroll their way out of the difficulty modifier.
   maybeForceHardShopPerk();
@@ -15404,15 +16755,15 @@ const INACTIVE_CARDS = new Set(['airstrike', 'wrecking_ball', 'portal_pair', 'wa
 const CARD_DEFS = {
   lil_scootch:  { id:'lil_scootch',  emoji:'🧤', name:"Lil' Scootch",    desc:'Cartoon glove gives the ball a nudge.',                        rarity:'common',    price:10,   context:'any',    holdable:false },
   power_shot:   { id:'power_shot',   emoji:'💪', name:'Power Shot',      desc:'This swing: 2× max power.',                                    rarity:'common',    price:20,   context:'pre',    holdable:false, weight:6 },
-  shooter:      { id:'shooter',      emoji:'🚀', name:'Missile Command', desc:'Fire a missile that destroys obstacles in its path.',            rarity:'common',    price:20,  context:'pre',    holdable:false },
+  shooter:      { id:'shooter',      emoji:'🚀', name:'Missile Command', desc:'Fire a missile that destroys obstacles in its path.',            rarity:'common',    price:20,  context:'pre',    holdable:false, weight:4 },
   sniper:       { id:'sniper',       emoji:'🎯', name:'Sniper',          desc:'Zoom a scope and fire a precision missile at a distant obstacle.', rarity:'epic',      price:24,  context:'pre',    holdable:false, weight:3 },
   sharpshooter: { id:'sharpshooter', emoji:'🏌️‍♂️', name:'Sharpshooter',    desc:'Zoom a scope and launch YOUR BALL precisely down the barrel.',       rarity:'epic',      price:30,  context:'pre',    holdable:false, weight:2 },
   grenade:      { id:'grenade',      emoji:'🧨', name:'Grenade',         desc:'Arms grenade aim mode. Pull back to set throw distance & direction (green arc); release to lob. Bounces 3×, then BOOM.', rarity:'common',    price:15,  context:'pre',    holdable:false },
   boulder:      { id:'boulder',      emoji:'🪨', name:'Boulder',         desc:'Summon an unstoppable boulder that smashes everything.',          rarity:'epic',      price:32,  context:'pre',    holdable:false, weight:2 },
-  dodgeball:    { id:'dodgeball',    emoji:'🔴', name:'Dodgeball',       desc:'Fire a super-bouncy red ball that ricochets off everything.',     rarity:'rare',      price:35,  context:'pre',    holdable:false },
+  dodgeball:    { id:'dodgeball',    emoji:'🔴', name:'Dodgeball',       desc:'Fire a super-bouncy red ball that ricochets off everything.',     rarity:'epic',      price:42,  context:'pre',    holdable:false, weight:2 },
   explosivo:    { id:'explosivo',    emoji:'💥', name:'Explosivo',       desc:'Detonate a huge explosion at the ball\'s position.',              rarity:'epic',      price:21,  context:'any',    holdable:false },
   ghost_ball:   { id:'ghost_ball',   emoji:'👻', name:'Ghost Ball',      desc:'Hold to pass through walls, rocks and obstacles. 4s.',            rarity:'epic',      price:21,  context:'any',    holdable:true },
-  backspin:     { id:'backspin',     emoji:'🔄', name:'Backspin',        desc:'Slam the brakes mid-roll for precise placement.',                rarity:'common',    price:8,   context:'during', holdable:false },
+  backspin:     { id:'backspin',     emoji:'🔄', name:'Backspin',        desc:'Slam the brakes mid-roll for precise placement.',                rarity:'common',    price:8,   context:'during', holdable:false, weight:4 },
   jumper:       { id:'jumper',       emoji:'🦘', name:'Jumper',          desc:'Jump over obstacles mid-roll — OR pre-load before your swing to launch on fire.', rarity:'common',    price:12,  context:'any',    holdable:false },
   slow_mo:      { id:'slow_mo',      emoji:'🐌', name:'Slow Mo',         desc:'25% speed for 6 seconds. See the chaos in detail.',              rarity:'rare',      price:20,  context:'any',    holdable:false },
   walkies:      { id:'walkies',      emoji:'🦵', name:'Walkies',         desc:'Sprout legs and walk anywhere for 6 seconds.',                   rarity:'rare',      price:22,  context:'pre',    holdable:false },
@@ -15893,6 +17244,53 @@ function consumeCloneDurationMult(cardId) {
   return 1.0;
 }
 
+// v0.20i: undo for armed pre-swing cards. Player tapped (e.g.) Power Shot
+// by accident — re-tap unarms the card and refunds it to the slot. Mirrors
+// the existing cancellable-card refund flow used by sniper/sharpshooter/
+// grenade, just generalized over the armed-cards queue.
+//
+// Notes:
+//   - Instant-fire cards (Explosivo, Lil' Scootch, Reverse) never enter
+//     G._armedCards, so they can't be undone — that's intentional. Once
+//     they fire, they're gone.
+//   - The card's effect flag is reset back to its un-armed state below.
+//     If a card adds a new pre-swing flag, add the reset case here too.
+function unarmCardByInstance(instanceId, cardId) {
+  // 1. Remove from armed queue
+  if(Array.isArray(G._armedCards)) {
+    const aIdx = G._armedCards.findIndex(a => a.instanceId === instanceId);
+    if(aIdx !== -1) G._armedCards.splice(aIdx, 1);
+  }
+  // 2. Reset the card-specific armed flag(s).
+  //    Note: only TRUE pre-swing cards are listed here — cards whose effect
+  //    is queued for the next swing. Instant-effect "any-context" cards like
+  //    Freeze Frame, Slow Mo, and Perpetual Motion start their effect the
+  //    moment they're played, so they don't qualify for undo (per Adam's
+  //    spec: "no undos for accidental card presses that trigger an instant
+  //    ability — explosivo, scootch, etc.").
+  switch(cardId) {
+    case 'power_shot':       G._powerShotStacks = 0; G._powerShotTensionActive = false; break;
+    case 'iron_ball':        G._ironBallActive = false; break;
+    case 'cannonball':       G._cannonballActive = false; break;
+    case 'arc_shot':         G._arcShotActive = false; break;
+    case 'catapult':         G._catapultActive = false; break;
+    case 'wall_magnet':      G._wallMagnetActive = false; break;
+    case 'jumper':           G._jumpPreloaded = false; G._jumpPending = false; break;
+    case 'pinball':          G._pinballArmed = false; break;
+    // freeze_frame / slow_mo / perpetual_motion intentionally NOT here — see
+    // note above. If those land in _armedCards somehow, the cleanup still
+    // removes them from the queue but the timer/effect keeps running.
+  }
+  // 3. updateHandUI clears the card-armed lifted styling so the slot
+  //    visibly drops back into a normal usable state. The card itself
+  //    stayed in the slot the whole time (slot wasn't cleared at arm),
+  //    so no slot-restore step is needed.
+  if(typeof updateHandUI === 'function') updateHandUI();
+  // 4. Tiny SFX/toast feedback so the player sees the undo land.
+  showToast('↩️ ' + (CARD_DEFS[cardId]?.name || 'Card') + ' unarmed', 800);
+  if(typeof sfxCardDiscard === 'function') sfxCardDiscard();
+}
+
 function playCard(instanceId) {
   const idx = G.hand.findIndex(c => c.instanceId === instanceId);
   if (idx === -1) return false;
@@ -15900,10 +17298,25 @@ function playCard(instanceId) {
   const def = CARD_DEFS[card.id];
   if (!def) return false;
   if (!canPlayCard(card.id)) return false;
-  // v0.20g: tapping a card that's already in the armed queue is a no-op —
-  // the effect is already queued, re-tapping shouldn't re-execute the
-  // ability (e.g. shouldn't double-stack Power Shot from one slot tap).
+  // v0.20i: re-tapping an armed card UNARMS it (refund). Was a no-op in
+  // v0.20g — meant well, but accidental taps on Power Shot / Iron Ball /
+  // Cannonball / etc. left the player stuck with a useless slot and the
+  // effect queued whether they wanted it or not. Now: tap once to arm,
+  // tap again to undo. Only applies to armed pre-swing cards (the safe
+  // category); instant-fire cards (Explosivo, Scootch, Reverse, etc.) are
+  // not in _armedCards so they can't be undone — that's the design.
+  // Instant-effect "any-context" cards (Freeze Frame, Slow Mo, Perpetual
+  // Motion) DO end up in _armedCards by virtue of their flags being true,
+  // but their effect already started ticking — undoing them would feel
+  // like a free preview, so we no-op those instead.
+  const _UNDOABLE_ARMED = new Set([
+    'power_shot','iron_ball','cannonball','arc_shot','catapult',
+    'wall_magnet','jumper','pinball'
+  ]);
   if(Array.isArray(G._armedCards) && G._armedCards.some(a => a.instanceId === instanceId)) {
+    if(_UNDOABLE_ARMED.has(card.id)) {
+      unarmCardByInstance(instanceId, card.id);
+    }
     return false;
   }
   // v0.20d: if grenade aim is on and the player plays a different card,
@@ -17378,11 +18791,23 @@ function activateVacuum() {
 
   if(G.rocks) for(const r of G.rocks) collectObstacle(r, r.meshes || []);
   if(G.bumpers) for(const b of G.bumpers) collectObstacle(b, b.meshes || (b.bodyM || b.capM ? [b.bodyM, b.capM].filter(Boolean) : []));
-  if(G.spinBars) for(const s of G.spinBars) collectObstacle(s, s.meshes || (s.mesh ? [s.mesh] : []));
-  if(G.slideBlocks) for(const s of G.slideBlocks) collectObstacle(s, s.meshes || (s.mesh ? [s.mesh] : []));
+  if(G.spinBars) for(const s of G.spinBars) collectObstacle(s, s.meshes || (s.mesh ? [s.mesh] : (s.barGroup ? [s.barGroup] : [])));
+  if(G.slideBlocks) for(const s of G.slideBlocks) collectObstacle(s, s.meshes || (s.mesh ? [s.mesh] : (s.blockGroup ? [s.blockGroup] : [])));
   // v0.20c: vacuum now sucks up spike balls too — previously skipped, leaving
   // spikes inert in the cone after a vacuum hit which felt incomplete.
   if(G.spikes) for(const sp of G.spikes) collectObstacle(sp, sp.meshes || (sp.mesh ? [sp.mesh] : []));
+  // v0.20i: vacuum coverage expanded — popup walls (up-down walls), fans,
+  // pendulums, conveyors, and corner-triangle deflectors all suck up too.
+  // Per pillar #5 (Juice is a Feature), the vacuum should grab everything in
+  // its cone, not just half the obstacle set. Each new type is handed off to
+  // destroyObstacles via collectObstacle just like the existing types.
+  if(G.popupWalls) for(const pw of G.popupWalls) collectObstacle(pw, pw.meshes || (pw.wallMesh ? [pw.wallMesh] : []));
+  if(G.fans) for(const f of G.fans) collectObstacle(f, f.meshes || (f.bladeGroup ? [f.bladeGroup] : []));
+  if(G.pendulums) for(const pd of G.pendulums) collectObstacle(pd, pd.meshes || (pd.pendGroup ? [pd.pendGroup] : []));
+  if(G.conveyors) for(const cv of G.conveyors) collectObstacle(cv, cv.meshes || (cv.arrowGroup ? [cv.arrowGroup] : []));
+  // Note: corner-triangle angled walls are flagged _indestructible by design
+  // (they're course geometry like real walls, not place-on-fairway obstacles),
+  // so vacuum doesn't suck them up — keeps parity with missile/grenade/iron-ball.
 
   // Sort nearest-first for satisfying progressive suction
   obstacleQueue.sort((a, b) => a.dist - b.dist);
@@ -17973,7 +19398,7 @@ function fireSharpshooterBall() {
   if(donBtnFS) donBtnFS.style.display = 'none';
   if(G.ball) {
     const b = G.ball;
-    const baseScale = G.modifiers.some(m=>m.id==='shrink_ray') ? 0.35 : 1.0;
+    const baseScale = getBallVisualScale();
     b.scale.set(1.4*baseScale, 0.55*baseScale, 1.4*baseScale);
     setTimeout(() => { if(b && b.scale) b.scale.set(0.85*baseScale, 1.35*baseScale, 0.85*baseScale); }, 80);
     setTimeout(() => { if(b && b.scale) b.scale.setScalar(baseScale); }, 180);
@@ -18539,9 +19964,11 @@ function throwGrenadeAt(power, dir, opts) {
   _dir.y = 0;
   if(_dir.length() < 0.01) _dir.set(-Math.sin(G.camTheta), 0, -Math.cos(G.camTheta));
   _dir.normalize();
-  // Holy Hand Grenade: 2× blast radius. Note: getBoomScale() (Big Boom perk)
+  // Holy Hand Grenade: 3× blast radius. Note: getBoomScale() (Big Boom perk)
   // still multiplies on top — a holy grenade with Big Boom is genuinely huge.
-  const BLAST_R = BALL_R * 8 * 2 * getBoomScale() * (isHoly ? 2.0 : 1.0); // 8 ball lengths, 2× for HHG
+  // v0.20i: bumped 2× → 3× per Adam — HHG should feel meaningfully bigger
+  // than a regular grenade so it earns its legendary slot.
+  const BLAST_R = BALL_R * 8 * 2 * getBoomScale() * (isHoly ? 3.0 : 1.0); // 8 ball lengths, 3× for HHG
   const lobDist = 4 + _power * 16; // v0.20d: 4-20m driven by player power (was random 12-18)
   const lobTime = 0.8;
   const startPos = G.ballPos.clone();
@@ -18617,10 +20044,18 @@ function throwGrenadeAt(power, dir, opts) {
       gz += gvz * dt;
       gy += gvy * dt;
 
-      // Wall collision — grenade bounces off walls, never goes OOB
+      // Wall collision — grenade bounces off walls, never goes OOB.
+      // v0.20i: when the grenade is airborne above wall-top height, it skips
+      // wall + corner-triangle collision so a high arc actually clears walls
+      // instead of XZ-bouncing off them mid-flight. Once it descends below
+      // the threshold, normal bounce physics resume so a low-glancing
+      // grenade still acts like a grenade. Applies to BOTH regular grenade
+      // and HHG — the threshold is the same Y, the only HHG difference is
+      // its 3× blast radius (set above).
       const GRENADE_R = 0.2;
       const G_WALL_THICK = (G.biome === 'puttputt' ? 0.25 : 0.32) + GRENADE_R;
-      for(const poly of G.wallPolylines) {
+      const GRENADE_FLY_OVER = gy > 1.4;
+      if(!GRENADE_FLY_OVER) for(const poly of G.wallPolylines) {
         for(let wi=0; wi<poly.length-1; wi++) {
           const wax=poly[wi].x, waz=poly[wi].z, wbx=poly[wi+1].x, wbz=poly[wi+1].z;
           const wex=wbx-wax, wez=wbz-waz, wsLSq=wex*wex+wez*wez;
@@ -18638,8 +20073,8 @@ function throwGrenadeAt(power, dir, opts) {
         }
       }
 
-      // Corner triangle collision
-      if(G.angledWalls && G.angledWalls.length) {
+      // Corner triangle collision (skipped while grenade arcs over walls)
+      if(G.angledWalls && G.angledWalls.length && !GRENADE_FLY_OVER) {
         for(const aw of G.angledWalls) {
           if(aw._destroyed) continue;
           for(const edge of aw.edges) {
@@ -19022,6 +20457,312 @@ function activateBoulder() {
 }
 window.activateBoulder = activateBoulder;
 
+// ── v0.20p: The Hunter (elite hole) ───────────────────
+// A slow, relentless eyeball that pursues the ball Mr. X-style. Bounces
+// off walls. Touch = -1 HP + ball gets shoved away from the hole. Spawned
+// once at hole-init via spawnHunter() and updated each frame by
+// updateHunter(dt). Cleanup happens in the per-hole cleanup chain.
+const HUNTER_R = 0.55;          // physical radius (collision)
+const HUNTER_BASE_SPEED = 2.4;  // u/s — slow at first
+const HUNTER_SPEED_PER_STROKE = 0.55;  // ramps each new stroke
+const HUNTER_MAX_SPEED = 6.0;   // cap — never faster than ~floomba
+const HUNTER_DAMAGE_COOLDOWN = 1.0; // seconds between damage ticks
+const HUNTER_KNOCKBACK_SPEED = 14.0; // ball impulse magnitude on hit
+
+function spawnHunter() {
+  if(!G._hunterActive) return;
+  // Pick a spawn position: far corner of fairway from tee. Walk fair cells
+  // and find the one with max distance from tee. Fall back to hole position.
+  let spawnX = G.holePos.x * TILE_SIZE;
+  let spawnZ = G.holePos.y * TILE_SIZE;
+  if(G.grid && G.gridW && G.gridH) {
+    const tx = G.teePos.x, ty = G.teePos.y;
+    let bestD = 0, bestX = spawnX, bestZ = spawnZ;
+    for(let gy = 0; gy < G.gridH; gy++) {
+      for(let gx = 0; gx < G.gridW; gx++) {
+        const c = G.grid[gy] && G.grid[gy][gx];
+        if(c !== CELL.FAIR && c !== CELL.GREEN) continue;
+        const d = Math.hypot(gx - tx, gy - ty);
+        if(d > bestD) {
+          bestD = d;
+          bestX = gx * TILE_SIZE;
+          bestZ = gy * TILE_SIZE;
+        }
+      }
+    }
+    spawnX = bestX; spawnZ = bestZ;
+  }
+
+  // Build the visual: spiky eyeball
+  // - Outer dark sphere (the "body")
+  // - White sclera ring + iris + pupil
+  // - Spiky cone protrusions all over the body (the "spikes")
+  // - Subtle red emissive on iris
+  const baseY = (G.heightMap && G.heightMap.length) ? getTerrainHeight(spawnX, spawnZ) : 0;
+  const grp = new THREE.Group();
+
+  // Body — slightly squashed dark sphere
+  const bodyGeo = new THREE.SphereGeometry(HUNTER_R, 16, 12);
+  const bodyMat = new THREE.MeshStandardMaterial({
+    color: 0x331020, roughness: 0.55, metalness: 0.3,
+    emissive: 0x110008, emissiveIntensity: 0.4,
+  });
+  const body = new THREE.Mesh(bodyGeo, bodyMat);
+  body.castShadow = true;
+  grp.add(body);
+
+  // Spike crown — cone protrusions on the upper hemisphere only
+  // (we want the eye facing forward to remain readable)
+  const spikeMat = new THREE.MeshStandardMaterial({
+    color: 0x551020, roughness: 0.4, metalness: 0.5,
+    emissive: 0x880008, emissiveIntensity: 0.6,
+  });
+  const spikeCount = 24;
+  for(let s = 0; s < spikeCount; s++) {
+    const theta = Math.random() * Math.PI * 2;
+    const phi = Math.random() * Math.PI * 0.55; // upper portion only
+    const sx = Math.sin(phi) * Math.cos(theta) * HUNTER_R * 0.92;
+    const sy = Math.cos(phi) * HUNTER_R * 0.92;
+    const sz = Math.sin(phi) * Math.sin(theta) * HUNTER_R * 0.92;
+    const spikeH = 0.18 + Math.random() * 0.14;
+    const cone = new THREE.Mesh(
+      new THREE.ConeGeometry(0.06, spikeH, 5),
+      spikeMat
+    );
+    cone.position.set(sx, sy, sz);
+    cone.lookAt(sx * 2, sy * 2, sz * 2);
+    cone.rotateX(Math.PI / 2);
+    cone.castShadow = true;
+    grp.add(cone);
+  }
+
+  // Eye sclera (white) — flat disc on the front
+  const scleraGeo = new THREE.SphereGeometry(HUNTER_R * 0.65, 14, 10, 0, Math.PI*2, 0, Math.PI*0.45);
+  const scleraMat = new THREE.MeshStandardMaterial({
+    color: 0xfff5dd, roughness: 0.18, metalness: 0.0,
+    emissive: 0x554433, emissiveIntensity: 0.25,
+  });
+  const sclera = new THREE.Mesh(scleraGeo, scleraMat);
+  sclera.position.set(0, 0, HUNTER_R * 0.55);
+  sclera.rotation.x = Math.PI / 2;
+  grp.add(sclera);
+
+  // Iris — bright red, glows
+  const irisMat = new THREE.MeshStandardMaterial({
+    color: 0xff1020, roughness: 0.2, metalness: 0.0,
+    emissive: 0xff0010, emissiveIntensity: 1.4,
+  });
+  const iris = new THREE.Mesh(new THREE.SphereGeometry(HUNTER_R * 0.32, 12, 8), irisMat);
+  iris.position.set(0, 0, HUNTER_R * 0.78);
+  grp.add(iris);
+
+  // Pupil — black slit
+  const pupilMat = new THREE.MeshStandardMaterial({
+    color: 0x000000, roughness: 0.0, metalness: 0.0,
+  });
+  const pupil = new THREE.Mesh(
+    new THREE.SphereGeometry(HUNTER_R * 0.14, 10, 6),
+    pupilMat
+  );
+  pupil.position.set(0, 0, HUNTER_R * 0.92);
+  pupil.scale.set(1, 1.4, 0.4); // slit-shape
+  grp.add(pupil);
+
+  // Slight float-bob — start at terrain + half-radius height
+  grp.position.set(spawnX, baseY + FLOOR_H/2 + HUNTER_R * 0.95, spawnZ);
+  grp.userData.noOutline = true;
+  scene.add(grp);
+
+  G._hunter = {
+    pos: new THREE.Vector3(spawnX, grp.position.y, spawnZ),
+    vel: new THREE.Vector3(0, 0, 0),
+    mesh: grp,
+    iris: iris,
+    immobileT: 0,
+    bobPhase: Math.random() * Math.PI * 2,
+    spawnY: grp.position.y,
+  };
+
+  showToast('👁️  THE HUNTER STIRS', 1800);
+  // Low ominous pulse SFX
+  if(AC) {
+    try {
+      const ac = getAC(), t = ac.currentTime;
+      const o = ac.createOscillator(); o.type = 'sawtooth';
+      o.frequency.setValueAtTime(60, t);
+      o.frequency.exponentialRampToValueAtTime(35, t + 1.0);
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(0.20, t + 0.15);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 1.2);
+      o.connect(g); g.connect(getACDest());
+      o.start(t); o.stop(t + 1.3);
+    } catch(e) {}
+  }
+}
+
+function updateHunter(dt) {
+  const h = G._hunter;
+  if(!h || !h.mesh) return;
+  if(G.state !== 'playing') return;
+  if(G.inHole) return;
+  if(G._freezeFrameActive) return;  // freeze frame stops everything
+
+  // Tick immobilization
+  if(h.immobileT > 0) {
+    h.immobileT = Math.max(0, h.immobileT - dt);
+    // Dim iris while dazed
+    if(h.iris && h.iris.material) {
+      h.iris.material.emissiveIntensity = 0.3;
+    }
+    // Don't move while immobile, but still bob slightly so it looks alive
+    h.bobPhase += dt * 1.5;
+    h.mesh.position.y = h.spawnY + Math.sin(h.bobPhase) * 0.05;
+    return;
+  }
+
+  // Iris glows angry-bright when active
+  if(h.iris && h.iris.material) {
+    h.iris.material.emissiveIntensity = 1.4;
+  }
+
+  // Compute target speed: base + per-stroke ramp
+  const speed = Math.min(
+    HUNTER_MAX_SPEED,
+    HUNTER_BASE_SPEED + (G._hunterApproachStrokes || 0) * HUNTER_SPEED_PER_STROKE
+  );
+
+  // Steer toward the ball
+  const tx = G.ballPos.x - h.pos.x;
+  const tz = G.ballPos.z - h.pos.z;
+  const distToBall = Math.hypot(tx, tz);
+  if(distToBall > 0.001) {
+    const dirX = tx / distToBall;
+    const dirZ = tz / distToBall;
+    // Smooth-steer: blend current vel toward desired vel
+    const desiredVx = dirX * speed;
+    const desiredVz = dirZ * speed;
+    const STEER_RATE = 4.0; // higher = snappier
+    const blend = 1 - Math.exp(-STEER_RATE * dt);
+    h.vel.x += (desiredVx - h.vel.x) * blend;
+    h.vel.z += (desiredVz - h.vel.z) * blend;
+  }
+
+  // Apply velocity
+  h.pos.x += h.vel.x * dt;
+  h.pos.z += h.vel.z * dt;
+
+  // Wall collision (same SDF pattern as floomba)
+  const wallThick = (G.biome === 'puttputt' ? 0.25 : 0.32) + HUNTER_R;
+  if(G.wallPolylines && G.wallPolylines.length) {
+    for(const poly of G.wallPolylines) {
+      for(let pi = 0; pi < poly.length - 1; pi++) {
+        const ax = poly[pi].x, az = poly[pi].z;
+        const bx = poly[pi+1].x, bz = poly[pi+1].z;
+        const ex = bx - ax, ez = bz - az;
+        const lsq = ex*ex + ez*ez;
+        if(lsq < 0.0001) continue;
+        const tw = Math.max(0, Math.min(1, ((h.pos.x - ax)*ex + (h.pos.z - az)*ez) / lsq));
+        const wcx = ax + tw*ex, wcz = az + tw*ez;
+        const wdx = h.pos.x - wcx, wdz = h.pos.z - wcz;
+        const wdist = Math.hypot(wdx, wdz);
+        if(wdist < wallThick && wdist > 0.001) {
+          const wnx = wdx/wdist, wnz = wdz/wdist;
+          h.pos.x += wnx * (wallThick - wdist);
+          h.pos.z += wnz * (wallThick - wdist);
+          const dot = h.vel.x*wnx + h.vel.z*wnz;
+          if(dot < 0) { h.vel.x -= 1.5 * dot * wnx; h.vel.z -= 1.5 * dot * wnz; }
+        }
+      }
+    }
+  }
+
+  // Bob + position update on the mesh
+  h.bobPhase += dt * 2.5;
+  const bobY = h.spawnY + Math.sin(h.bobPhase) * 0.07;
+  h.mesh.position.set(h.pos.x, bobY, h.pos.z);
+
+  // Face the ball — rotate mesh so iris points at ball
+  if(distToBall > 0.001) {
+    const yawTarget = Math.atan2(tx, tz);
+    h.mesh.rotation.y = yawTarget;
+  }
+
+  // Damage check — distance from ball center to hunter center
+  const ballToHunterDX = G.ballPos.x - h.pos.x;
+  const ballToHunterDZ = G.ballPos.z - h.pos.z;
+  const ballHunterDist = Math.hypot(ballToHunterDX, ballToHunterDZ);
+  // Use BALL_R_EFF for hit-radius so shrunk ball stays consistent.
+  const ballR = isBallShrunk() ? BALL_R * 0.5 : BALL_R;
+  if(ballHunterDist < (HUNTER_R + ballR + 0.05)) {
+    // v0.20p1: Fast ball impact = counter-play. If the ball is moving fast
+    // (e.g. just-fired or post-bounce), it knocks the Hunter BACK and
+    // immobilizes it for 5s instead of taking damage. This is the "fire
+    // projectiles to fight back" mechanic from the design spec, generalized
+    // to any sufficiently fast ball.
+    const ballSpd = Math.hypot(G.ballVel.x, G.ballVel.z);
+    const COUNTERPLAY_SPEED = 8.0;  // ~moderate-strength putt
+    if(ballSpd > COUNTERPLAY_SPEED) {
+      // Knock the Hunter back along the ball's velocity direction
+      const _bvx = G.ballVel.x / ballSpd;
+      const _bvz = G.ballVel.z / ballSpd;
+      const KNOCK_DIST = 4.0;
+      h.pos.x += _bvx * KNOCK_DIST;
+      h.pos.z += _bvz * KNOCK_DIST;
+      h.vel.x = 0; h.vel.z = 0;
+      h.immobileT = 5.0; // 5 seconds frozen — per spec
+      // Ball also loses some momentum (kinetic transfer)
+      G.ballVel.x *= 0.6;
+      G.ballVel.z *= 0.6;
+      showToast('💥 HUNTER STAGGERED!', 1500);
+      triggerShake('heavy');
+      if(typeof spawnHitParticles === 'function') spawnHitParticles(h.pos);
+      // Counter-play SFX — bright impact ping
+      if(AC) {
+        try {
+          const ac = getAC(), t = ac.currentTime;
+          const o = ac.createOscillator(); o.type = 'square';
+          o.frequency.setValueAtTime(900, t);
+          o.frequency.exponentialRampToValueAtTime(220, t + 0.25);
+          const g = ac.createGain();
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.linearRampToValueAtTime(0.18, t + 0.02);
+          g.gain.exponentialRampToValueAtTime(0.001, t + 0.30);
+          o.connect(g); g.connect(getACDest());
+          o.start(t); o.stop(t + 0.32);
+        } catch(e) {}
+      }
+      return; // skip normal damage path
+    }
+    if(G._lastHunterDamageStroke !== G.strokes) {
+      G._lastHunterDamageStroke = G.strokes;
+      const dealt = applyDamage(1, 'hunter');
+      if(dealt > 0) {
+        spawnHpDamagePopup(dealt);
+        showToast('👁️  THE HUNTER STRIKES!', 1100);
+        triggerShake('heavy');
+        if(typeof spawnHitParticles === 'function') spawnHitParticles(G.ballPos);
+      }
+      // Knock ball AWAY from the hole (Mr. X mechanic spec)
+      const _hoff = G._holeWorldOffset || {x: 0, z: 0};
+      const holeWX = G.holePos.x * TILE_SIZE + _hoff.x;
+      const holeWZ = G.holePos.y * TILE_SIZE + _hoff.z;
+      const awayX = G.ballPos.x - holeWX;
+      const awayZ = G.ballPos.z - holeWZ;
+      const awayLen = Math.hypot(awayX, awayZ) || 0.0001;
+      G.ballVel.x += (awayX / awayLen) * HUNTER_KNOCKBACK_SPEED;
+      G.ballVel.z += (awayZ / awayLen) * HUNTER_KNOCKBACK_SPEED;
+      G.ballVel.y = Math.max(G.ballVel.y, 3.0); // pop up a bit
+      G.rolling = true;
+      // Brief immobilization on the hunter so it doesn't ping-pong damage
+      h.immobileT = 1.2;
+      h.vel.x = 0; h.vel.z = 0;
+    }
+  }
+}
+window.spawnHunter = spawnHunter;
+window.updateHunter = updateHunter;
+
 // Spawn a floomba from card — deploys at ball position
 function spawnFloombaFromCard() {
   if(!G._floombas) G._floombas = [];
@@ -19280,6 +21021,59 @@ function spawnSplash(pos) {
     G.particles.push({mesh:m,vel:v,life:0.8,maxLife:0.8});
   }
   if(AC) sfxSplash();
+}
+
+// v0.20l: Barbed Wire spark burst — small red triangular shrapnel firing
+// outward along the wall normal. Sells the "owww" beat at the contact point.
+// nx/nz = wall outward normal (already pointing away from wall surface).
+function spawnBarbedWireSparks(x, y, z, nx, nz) {
+  const pos = new THREE.Vector3(x, y, z);
+  for(let i = 0; i < 9; i++) {
+    const g = new THREE.TetrahedronGeometry(0.06 + Math.random()*0.05);
+    const col = Math.random() < 0.7 ? 0xff2030 : 0xffaa44; // mostly red, some sparks
+    const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({
+      color: col, roughness: 0.6,
+      emissive: col, emissiveIntensity: 0.6,
+    }));
+    m.userData.noOutline = true;
+    m.position.copy(pos);
+    scene.add(m);
+    // Cone of velocity along normal, with spread + upward kick
+    const spread = 1.2;
+    const vx = nx * (1.5 + Math.random()*2.0) + (Math.random()-0.5)*spread;
+    const vz = nz * (1.5 + Math.random()*2.0) + (Math.random()-0.5)*spread;
+    const vy = 1.5 + Math.random()*3.0;
+    const v = new THREE.Vector3(vx, vy, vz);
+    G.particles.push({ mesh: m, vel: v, life: 0.7, maxLife: 0.7 });
+  }
+  // Brief metallic-spike SFX: high noise burst + downward chirp
+  if(AC) {
+    try {
+      const ac = getAC(), t = ac.currentTime;
+      // High-passed noise for the "shink"
+      const sr = ac.sampleRate, bufSec = 0.12;
+      const buf = ac.createBuffer(1, Math.floor(sr*bufSec), sr);
+      const d = buf.getChannelData(0);
+      for(let i = 0; i < d.length; i++) {
+        const tt = i / d.length;
+        d[i] = (Math.random()*2-1) * Math.exp(-tt*8.0) * 0.8;
+      }
+      const src = ac.createBufferSource(); src.buffer = buf;
+      const hp = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 3500;
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.16, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+      src.connect(hp); hp.connect(g); g.connect(getACDest()); src.start(t);
+      // Pitch chirp on top — short downward squeal
+      const o = ac.createOscillator(); o.type = 'sawtooth';
+      o.frequency.setValueAtTime(1800, t);
+      o.frequency.exponentialRampToValueAtTime(620, t + 0.10);
+      const og = ac.createGain();
+      og.gain.setValueAtTime(0.10, t);
+      og.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+      o.connect(og); og.connect(getACDest()); o.start(t); o.stop(t + 0.13);
+    } catch(e) {}
+  }
 }
 
 // v0.20a: Speedball flame trail. Emits small orange particles behind the ball,
@@ -19961,8 +21755,10 @@ function spawnHoleCelebrationParticles(score) {
 function focusCameraOnBall() {
   // Tighter follow — lerp factor 0.12 (was 0.06)
   if(G.inHole) {
-    // Shift camera to center on the hole
-    const hx = G.holePos.x * TILE_SIZE, hz = G.holePos.y * TILE_SIZE;
+    // Shift camera to center on the hole — include moving-hole offset so
+    // the camera tracks a wandering cup rather than its origin (v0.20m).
+    const _hoff = G._holeWorldOffset || {x:0, z:0};
+    const hx = G.holePos.x * TILE_SIZE + _hoff.x, hz = G.holePos.y * TILE_SIZE + _hoff.z;
     const holeTarget = new THREE.Vector3(hx, 0, hz);
     G.camTarget.lerp(holeTarget, 0.08);
   } else {
@@ -20462,8 +22258,8 @@ function fireShot() {
     const perpZ = -G.shotDir.x;
     const SPREAD = 0.9; // world units apart — matches aim preview
     G._threeBalls = [];
-    const _isShrunk = G.modifiers.some(m=>m.id==='shrink_ray');
-    const _tbVisualScale = _isShrunk ? 0.35 : 1.0;
+    const _isShrunk = isBallShrunk();
+    const _tbVisualScale = getBallVisualScale();
     for(let i = -1; i <= 1; i += 1) { // i = -1, 0, 1
       if(i === 0) continue; // centre ball = main ball (G.ball)
       const offX = perpX * i * SPREAD;
@@ -20524,7 +22320,7 @@ function fireShot() {
   if(G.ball) {
     const b = G.ball;
     const power = G.shotPower;
-    const baseScale = G.modifiers.some(m=>m.id==='shrink_ray') ? 0.35 : 1.0;
+    const baseScale = getBallVisualScale();
     const squashAmt = (0.55 + power * 0.3) * baseScale;
     const wideAmt   = (1 + power*0.4) * baseScale;
     b.scale.set(wideAmt, squashAmt, wideAmt);
@@ -20535,6 +22331,8 @@ function fireShot() {
   // Ghost ball is now manually activated via ability button, not auto-fired
   G.strokes++;
   G._holeSwingCount = (G._holeSwingCount||0) + 1;
+  // v0.20p: Hunter ramps up each stroke — Mr. X-style "always closer."
+  if(G._hunterActive) G._hunterApproachStrokes = (G._hunterApproachStrokes || 0) + 1;
   // Reset jump-over dedup for the new shot
   G._jumpOverChecked = new Set();
   G._wallSkipChecked = new Set();
@@ -20542,6 +22340,11 @@ function fireShot() {
   G._ghostThroughChecked = new Set();
   // v0.20c: reset per-swing destruction tracker for SUNK & SMASHED bonus
   G._swingDestroyCount = 0;
+  // v0.20o: Belt-and-suspenders — clear chasm respawn-pending flag so a new
+  // stroke can trigger a fall again. The XZ-exit clear handles 99% of cases;
+  // this is the safety net for any weird edge case where the ball fires
+  // while still inside the pit XZ box.
+  G._chasmRespawnPending = false;
   G.shotPower = 0;
   if(AC) sfxSwing(firedPower);
   if(G.aimArrow){ scene.remove(G.aimArrow); G.aimArrow=null; }
@@ -20698,6 +22501,21 @@ function debugAddCoins() {
   showToast('🪙 +50 coins', 1000);
 }
 
+// v0.20j: Force-show the elite fork on the next nextHole() call,
+// regardless of cadence. Useful for testing without playing through to hole 3.
+// v0.20m: Optional second click cycles tier pool — first click = current hole's
+// tier, subsequent clicks = bump to next tier band so T2/T3 archetypes can be
+// tested without grinding to hole 9+.
+function debugForceElite() {
+  document.getElementById('debug-menu').classList.remove('open');
+  G._eliteForceNext = true;
+  // Cycle: 0 (default tier) → 1 (force T1) → 2 (force T2) → 3 (force T3) → 0
+  G._eliteForceTier = (((G._eliteForceTier || 0) + 1) % 4);
+  const lbl = G._eliteForceTier === 0 ? 'natural pool'
+           : `tier ${G._eliteForceTier} only`;
+  showToast(`⚠️ Elite forced (${lbl})`, 1400);
+}
+
 // v0.20f4: lazy-load eruda mobile console on demand. Once loaded, the floating
 // 🛠 button persists at the corner of the screen — tap to open/close console.
 // We append a tiny script tag and let it self-init via window.eruda.init().
@@ -20836,6 +22654,7 @@ function toggleDebugMenu() {
 document.getElementById('dbg-skip').addEventListener('click', debugSkipHole);
 document.getElementById('dbg-budget').addEventListener('click', debugAddBudget);
 document.getElementById('dbg-coins').addEventListener('click', debugAddCoins);
+{ const _e = document.getElementById('dbg-elite'); if(_e) _e.addEventListener('click', debugForceElite); }
 { const _u = document.getElementById('dbg-unlock-all'); if(_u) _u.addEventListener('click', debugUnlockAll); }
 { const _c = document.getElementById('dbg-console'); if(_c) _c.addEventListener('click', debugOpenConsole); }
 document.getElementById('dbg-close').addEventListener('click', () => {
@@ -21118,6 +22937,155 @@ function updateKeyboardCamera(dt) {
     if(G.walkiesTimer <= 0) {
       endWalkies();
     } else {
+      // ── v0.20i: walkies collision helper ───────────────
+      // Tests an attempted (x, z) position against walls + obstacles. Returns
+      // the largest push-out vector needed to keep the ball clear, or null
+      // if free. Simple SDF — no bouncing, just blocking like a person.
+      const WALK_BALL_R = (isBallShrunk() ? BALL_R*0.5 : BALL_R);
+      const _walkPenetration = (px, pz) => {
+        let pushX = 0, pushZ = 0, hit = false;
+        // Walls (polylines)
+        const WALL_T = 0.25 + WALK_BALL_R;
+        if(G.wallPolylines) {
+          for(const poly of G.wallPolylines) {
+            for(let i=0; i<poly.length-1; i++) {
+              const ax=poly[i].x, az=poly[i].z;
+              const bx=poly[i+1].x, bz=poly[i+1].z;
+              const ex=bx-ax, ez=bz-az;
+              const lenSq = ex*ex + ez*ez;
+              if(lenSq < 0.0001) continue;
+              const t = Math.max(0, Math.min(1, ((px-ax)*ex + (pz-az)*ez) / lenSq));
+              const cx = ax+t*ex, cz = az+t*ez;
+              const dx = px-cx, dz = pz-cz;
+              const d = Math.hypot(dx, dz);
+              if(d < WALL_T && d > 0.001) {
+                const nx = dx/d, nz = dz/d;
+                const overlap = WALL_T - d;
+                pushX += nx * overlap; pushZ += nz * overlap;
+                hit = true;
+              }
+            }
+          }
+        }
+        // Angled wall corner triangles (use point-in-triangle: just block)
+        if(G.angledWalls) {
+          for(const aw of G.angledWalls) {
+            if(aw._destroyed) continue;
+            for(const edge of aw.edges) {
+              const ex=edge.x1-edge.x0, ez=edge.z1-edge.z0;
+              const lenSq = ex*ex + ez*ez;
+              if(lenSq < 0.0001) continue;
+              const t = Math.max(0, Math.min(1, ((px-edge.x0)*ex + (pz-edge.z0)*ez) / lenSq));
+              const cx = edge.x0+t*ex, cz = edge.z0+t*ez;
+              const dx = px-cx, dz = pz-cz;
+              const d = Math.hypot(dx, dz);
+              if(d < WALL_T && d > 0.001) {
+                const nx = dx/d, nz = dz/d;
+                const overlap = WALL_T - d;
+                pushX += nx * overlap; pushZ += nz * overlap;
+                hit = true;
+              }
+            }
+          }
+        }
+        // Circle obstacles (rocks, bumpers, spikes, spinBar pivots)
+        const checkCircle = (wx, wz, r) => {
+          const dx = px - wx, dz = pz - wz;
+          const d = Math.hypot(dx, dz);
+          const minD = r + WALK_BALL_R;
+          if(d < minD && d > 0.001) {
+            const nx = dx/d, nz = dz/d;
+            const overlap = minD - d;
+            pushX += nx * overlap; pushZ += nz * overlap;
+            hit = true;
+          }
+        };
+        if(G.rocks)   for(const o of G.rocks)   { if(!o._destroyed) checkCircle(o.wx, o.wz, o.r||0.5); }
+        if(G.bumpers) for(const o of G.bumpers) { if(!o._destroyed) checkCircle(o.wx, o.wz, o.r||0.4); }
+        if(G.spikes)  for(const o of G.spikes)  { if(!o._destroyed) checkCircle(o.wx, o.wz, o.r||0.45); }
+        // Slide blocks (AABB)
+        if(G.slideBlocks) {
+          for(const sb of G.slideBlocks) {
+            if(sb._destroyed) continue;
+            const off = Math.sin(sb.phase)*sb.range;
+            const bx = sb.wx+(sb.axis==='X'?off:0);
+            const bz = sb.wz+(sb.axis==='Z'?off:0);
+            const hw = sb.halfW + WALK_BALL_R, hd = sb.halfD + WALK_BALL_R;
+            if(px > bx-hw && px < bx+hw && pz > bz-hd && pz < bz+hd) {
+              const dL = px - (bx-hw), dR = (bx+hw) - px;
+              const dF = pz - (bz-hd), dB = (bz+hd) - pz;
+              const oX = Math.min(dL, dR), oZ = Math.min(dF, dB);
+              if(oX < oZ) { pushX += dL < dR ? -oX : oX; }
+              else        { pushZ += dF < dB ? -oZ : oZ; }
+              hit = true;
+            }
+          }
+        }
+        // Pop-up walls (only when raised — when extended over BALL_R above floor)
+        if(G.popupWalls) {
+          for(const pw of G.popupWalls) {
+            if(pw._destroyed) continue;
+            const floorY = pw.baseH + FLOOR_H/2 + WALK_BALL_R;
+            if(!pw.currentTopY || pw.currentTopY < floorY + WALK_BALL_R) continue;
+            const hw = pw.halfW + WALK_BALL_R, hd = pw.halfD + WALK_BALL_R;
+            if(px > pw.wx-hw && px < pw.wx+hw && pz > pw.wz-hd && pz < pw.wz+hd) {
+              const dL = px - (pw.wx-hw), dR = (pw.wx+hw) - px;
+              const dF = pz - (pw.wz-hd), dB = (pw.wz+hd) - pz;
+              const oX = Math.min(dL, dR), oZ = Math.min(dF, dB);
+              if(oX < oZ) { pushX += dL < dR ? -oX : oX; }
+              else        { pushZ += dF < dB ? -oZ : oZ; }
+              hit = true;
+            }
+          }
+        }
+        // Spin bars: treat the rotating bar as a thick segment from pivot → tip
+        if(G.spinBars) {
+          for(const bar of G.spinBars) {
+            if(bar._destroyed) continue;
+            // pivot collision (post)
+            checkCircle(bar.wx, bar.wz, 0.18);
+            // bar arm: segment from pivot along bar.angle, length = bar.len
+            const armLen = bar.len || 1.5;
+            const tipX = bar.wx + Math.cos(bar.angle) * armLen;
+            const tipZ = bar.wz + Math.sin(bar.angle) * armLen;
+            const ex = tipX - bar.wx, ez = tipZ - bar.wz;
+            const lenSq = ex*ex + ez*ez;
+            if(lenSq < 0.0001) continue;
+            const t = Math.max(0, Math.min(1, ((px-bar.wx)*ex + (pz-bar.wz)*ez) / lenSq));
+            const cx = bar.wx + t*ex, cz = bar.wz + t*ez;
+            const dx = px-cx, dz = pz-cz;
+            const d = Math.hypot(dx, dz);
+            const barR = 0.18 + WALK_BALL_R;
+            if(d < barR && d > 0.001) {
+              const nx = dx/d, nz = dz/d;
+              const overlap = barR - d;
+              pushX += nx * overlap; pushZ += nz * overlap;
+              hit = true;
+            }
+          }
+        }
+        return hit ? { x: pushX, z: pushZ } : null;
+      };
+
+      // Attempt a movement step; if the destination is blocked, push out so
+      // the ball can slide along walls instead of getting stuck.
+      const _walkStep = (mx, mz) => {
+        if(!mx && !mz) return false;
+        let nx = G.ballPos.x + mx;
+        let nz = G.ballPos.z + mz;
+        const push = _walkPenetration(nx, nz);
+        if(push) {
+          nx += push.x;
+          nz += push.z;
+          // After push, re-check; if still penetrating, abort this step.
+          const push2 = _walkPenetration(nx, nz);
+          if(push2) return false;
+        }
+        G.ballPos.x = nx;
+        G.ballPos.z = nz;
+        return true;
+      };
+
       // WASD moves in camera-relative directions
       const fwdX = -Math.sin(G.camTheta), fwdZ = -Math.cos(G.camTheta);
       const rgtX =  Math.cos(G.camTheta), rgtZ = -Math.sin(G.camTheta);
@@ -21128,31 +23096,64 @@ function updateKeyboardCamera(dt) {
       if(keys['KeyD'] || keys['ArrowRight']) { mx += rgtX; mz += rgtZ; }
       const len = Math.hypot(mx, mz);
       if(len > 0) {
-        G.ballPos.x += (mx/len) * WALK_SPEED * dt;
-        G.ballPos.z += (mz/len) * WALK_SPEED * dt;
+        _walkStep((mx/len) * WALK_SPEED * dt, (mz/len) * WALK_SPEED * dt);
         G._walkTarget = null; // clear tap target if keyboard used
+        G._walkDir = null;
         const terrY = G.heightMap.length ? getTerrainHeight(G.ballPos.x, G.ballPos.z) : 0;
-        G.ballPos.y = terrY + FLOOR_H/2 + (G.modifiers.some(m=>m.id==="shrink_ray") ? BALL_R*0.5 : BALL_R);
+        G.ballPos.y = terrY + FLOOR_H/2 + WALK_BALL_R;
         if(G.ball) G.ball.position.copy(G.ballPos);
         if(G.ballShadow) { G.ballShadow.position.x = G.ballPos.x; G.ballShadow.position.z = G.ballPos.z; }
       }
-      // Tap-to-walk target movement
-      if(G._walkTarget) {
+      // Tap-to-walk: keep walking in the tapped DIRECTION until time expires
+      // or a wall blocks us. Don't stop at the tap point — that was the old
+      // behavior that felt twitchy on mobile.
+      // v0.20i: convert _walkTarget into a sustained _walkDir on first frame,
+      // then keep stepping in that direction.
+      if(G._walkTarget && !G._walkDir) {
         const tdx = G._walkTarget.x - G.ballPos.x;
         const tdz = G._walkTarget.z - G.ballPos.z;
         const td = Math.hypot(tdx, tdz);
-        if(td < 0.15) {
-          G._walkTarget = null;
+        if(td > 0.05) {
+          G._walkDir = { x: tdx/td, z: tdz/td };
+        }
+        G._walkTarget = null;
+      }
+      if(G._walkDir) {
+        const stepped = _walkStep(G._walkDir.x * WALK_SPEED * dt, G._walkDir.z * WALK_SPEED * dt);
+        if(!stepped) {
+          // Wall hit — clear direction so a fresh tap picks a new heading.
+          G._walkDir = null;
         } else {
-          const step = Math.min(td, WALK_SPEED * dt);
-          G.ballPos.x += (tdx/td) * step;
-          G.ballPos.z += (tdz/td) * step;
           const terrY = G.heightMap.length ? getTerrainHeight(G.ballPos.x, G.ballPos.z) : 0;
-          G.ballPos.y = terrY + FLOOR_H/2 + (G.modifiers.some(m=>m.id==="shrink_ray") ? BALL_R*0.5 : BALL_R);
+          G.ballPos.y = terrY + FLOOR_H/2 + WALK_BALL_R;
           if(G.ball) G.ball.position.copy(G.ballPos);
           if(G.ballShadow) { G.ballShadow.position.x = G.ballPos.x; G.ballShadow.position.z = G.ballPos.z; }
         }
       }
+
+      // ── v0.20i: hole-out detection during walkies ───────
+      // Walk into the cup → finalize the hole. Mirrors the rolling-physics
+      // path: snap to cup, end walkies, call onHoled.
+      if(G.holePos && !G.inHole) {
+        const _hoff = G._holeWorldOffset || {x:0, z:0};
+        const hwx = G.holePos.x * TILE_SIZE + _hoff.x;
+        const hwz = G.holePos.y * TILE_SIZE + _hoff.z;
+        const hDist = Math.hypot(G.ballPos.x - hwx, G.ballPos.z - hwz);
+        const bigHole = G.modifiers.some(m=>m.id==='big_hole');
+        const cupR = bigHole ? 0.55 : 0.30;
+        if(hDist < cupR) {
+          // Snap ball to cup center for a tidy plonk
+          G.ballPos.x = hwx;
+          G.ballPos.z = hwz;
+          if(G.ball) G.ball.position.copy(G.ballPos);
+          // End walkies cleanly so legs disappear before the hole-out anim
+          endWalkies();
+          // Fire hole-out
+          if(typeof onHoled === 'function') onHoled();
+          return;
+        }
+      }
+
       // Camera still follows ball during walk
       G.camTarget.lerp(G.ballPos, 0.08);
 
@@ -21161,10 +23162,12 @@ function updateKeyboardCamera(dt) {
         G._walkieLegPhase = (G._walkieLegPhase || 0) + dt * 8;
         G._walkieLegs.position.copy(G.ballPos);
         // Legs face direction of travel
-        if(G._walkTarget) {
-          const tx = G._walkTarget.x - G.ballPos.x;
-          const tz = G._walkTarget.z - G.ballPos.z;
-          if(Math.hypot(tx, tz) > 0.1) G._walkieLegs.rotation.y = Math.atan2(tx, tz);
+        // v0.20i: use _walkDir for tap-walk facing (not _walkTarget which
+        // was cleared after first frame), or last keyboard input direction.
+        if(G._walkDir) {
+          G._walkieLegs.rotation.y = Math.atan2(G._walkDir.x, G._walkDir.z);
+        } else if(len > 0) {
+          G._walkieLegs.rotation.y = Math.atan2(mx/len, mz/len);
         }
         // Swing child legs alternately
         const children = G._walkieLegs.children;
@@ -21200,6 +23203,7 @@ function endWalkies() {
   G.walkiesActive = false;
   G.walkiesTimer = 0;
   G._walkTarget = null;
+  G._walkDir = null; // v0.20i: clear sustained walk direction
   // Remove leg geometry
   if(G._walkieLegs) { scene.remove(G._walkieLegs); G._walkieLegs = null; }
   // Restore ball material (respecting shrink ray)
@@ -21207,7 +23211,7 @@ function endWalkies() {
     const pColor = isMultiplayer() ? G.players[G.currentPlayer].color : 0xffffff;
     G.ballMesh.material = new THREE.MeshStandardMaterial({color:pColor, roughness:0.15, metalness:0.05});
   }
-  const baseScale = G.modifiers.some(m=>m.id==='shrink_ray') ? 0.35 : 1.0;
+  const baseScale = getBallVisualScale();
   if(G.ball) G.ball.scale.setScalar(baseScale);
   // Enter aim mode at new position
   G.ballVel.set(0,0,0);
@@ -21382,9 +23386,9 @@ function updateHint(msg) {
 // Per-perk shop weights (survival/spectacle boosted, economy reduced)
 const ALL_PERKS = [
   // COMMON — base weight 8
-  { id:'strengthen_swing', name:'Stronger Swing',      emoji:'💪', rarity:'common',    price:10,  stackable:true,  weight:7,
+  { id:'strengthen_swing', name:'Stronger Swing',      emoji:'💪', rarity:'common',    price:10,  stackable:true,  weight:4,
     desc:'+20% shot power. Stacks every purchase — no cap.' },
-  { id:'bouncy_walls',     name:'Rubber Walls',        emoji:'🧱', rarity:'common',    price:15,  stackable:true,  weight:6,
+  { id:'bouncy_walls',     name:'Rubber Walls',        emoji:'🧱', rarity:'common',    price:15,  stackable:true,  weight:3,
     desc:'Increased wall and surface restitution — bouncier everything. Stacks!' },
   { id:'hot_streak',       name:'Hot Streak',          emoji:'🔥', rarity:'common',    price:20,  stackable:false, weight:6,
     desc:'Each consecutive par-or-better hole adds +10% to coin earnings (max ×4). Resets on bogey.' },
@@ -21392,7 +23396,7 @@ const ALL_PERKS = [
     desc:'Coins are pulled toward your ball. Buy up to 3× to increase range and pull strength.' },
   { id:'extra_heart',     name:'Heart',                emoji:'❤️‍🩹', rarity:'common',   price:11,  stackable:true,  weight:4,
     desc:'Heal +2 HP instantly.' },
-  { id:'high_speed_finish', name:'High Speed Finish',  emoji:'🏁', rarity:'common',   price:15,  stackable:false, weight:8,
+  { id:'high_speed_finish', name:'High Speed Finish',  emoji:'🏁', rarity:'common',   price:15,  stackable:false, weight:4,
     desc:'Score +10 coins when you fly into the hole at high speed. Checkered flag celebration!' },
   // RARE — base weight 4
   { id:'speed_hoops',      name:'Speed Hoops',         emoji:'⭕', rarity:'rare',      price:12,  stackable:false, weight:4,
@@ -21515,6 +23519,25 @@ function computeSoloAwards() {
 }
 
 function showGameOver(bustedBudget=false){
+  // v0.20j: clear elite UI state so game-over screen doesn't show stale pip / commit timer
+  if(typeof hideEliteStakesPip === 'function') hideEliteStakesPip();
+  if(G._eliteCommitInterval) { clearInterval(G._eliteCommitInterval); G._eliteCommitInterval = null; }
+  const _eliteFork = document.getElementById('elite-fork-overlay');
+  if(_eliteFork) _eliteFork.classList.remove('visible');
+  const _eliteCommit = document.getElementById('elite-commit-overlay');
+  if(_eliteCommit) _eliteCommit.classList.remove('visible');
+  G._activeElite = null;
+  G._eliteOffer = null;
+  // v0.20n: Chasm runtime state cleanup
+  G._chasmActive = false;
+  G._chasmZone = null;
+  G._chasmRespawnPending = false;
+  // v0.20p: Hunter runtime state cleanup
+  G._hunterActive = false;
+  if(G._hunter && G._hunter.mesh && G._hunter.mesh.parent) {
+    G._hunter.mesh.parent.remove(G._hunter.mesh);
+  }
+  G._hunter = null;
   // v0.20f3: persist run data FIRST, before any UI rendering that might throw.
   // Previously this lived after the overlay HTML build, meaning any exception
   // in computeSoloAwards / template literals / DOM lookups would silently
@@ -22254,6 +24277,13 @@ function initHole() {
   // Clean up floombas from previous hole
   if(G._floombas) { for(const f of G._floombas) { if(f.mesh) scene.remove(f.mesh); } }
   G._floombas = [];
+  // v0.20p: Clean up hunter mesh from previous hole (if any). The active
+  // flag is set later (from data.eliteHunter) so we don't conflate clearing
+  // the old mesh with deciding whether to spawn a new one.
+  if(G._hunter && G._hunter.mesh && G._hunter.mesh.parent) {
+    G._hunter.mesh.parent.remove(G._hunter.mesh);
+  }
+  G._hunter = null;
   G._allBounceTarget = 0;
   G._allBounceCount = 0;
   G.coinMeshes = [];
@@ -22341,12 +24371,43 @@ function initHole() {
   }
 
   createBall();
+  // v0.20k: Not-So-Mini elite — overrides shrink_ray for this hole only.
+  // Same "tiny ball" mechanic, but the camera pulls WAY out and up instead of
+  // hugging close, for a "lost in a giant world" feel. Cleared on next hole.
+  const _notSoMini = !!data.eliteNotSoMini;
+  G._notSoMiniActive = _notSoMini;
+  // v0.20l: Barbed Wire elite — wall collisions deduct 1 HP per stroke.
+  // Runtime flag cached here; consumed in the wall collision branch.
+  G._barbedWireActive = !!data.eliteBarbedWire;
+  G._lastBarbedDamageStroke = -1;
+  // v0.20n: Chasm elite — stash the pit bounds + center for runtime
+  // fall-in detection. Cleared on next hole when no chasm is active.
+  G._chasmActive = !!data.eliteChasm;
+  G._chasmZone   = data.chasmZone || null;
+  G._chasmRespawnPending = false; // edge-trigger to avoid double-respawn loops
+  // v0.20p: The Hunter elite — spawn the eyeball pursuer. Cleanup of any
+  // previous-hole hunter mesh happens in the cleanup-on-hole-init path below
+  // (alongside floombas, walkie legs, etc.). Spawn position = far corner of
+  // fairway from tee so the player has time to react.
+  G._hunterActive = !!data.eliteHunter;
+  G._hunter = null;          // populated below if active
+  G._hunterApproachStrokes = 0;  // increments per stroke, ramps speed
+  G._lastHunterDamageStroke = -1;
   // Shrink ray: tiny ball + closer camera with a lower starting pitch for true
   // "toy in a giant world" feel. v0.17w: _shrinkCamPhi is now a *seed* value used
   // only on hole init — after that G.camPhi is free to respond to drag input so
   // the player can look up/down normally. Previously the value was used as a
   // persistent render override that locked the Y axis.
-  if(G.modifiers.some(m=>m.id==='shrink_ray')) {
+  if(_notSoMini) {
+    // Not-So-Mini takes precedence over shrink_ray. Scaled MORE aggressively
+    // and the camera pushes OUT (not in) for the "exposed in a huge world" beat.
+    if(G.ball) G.ball.scale.setScalar(0.30);   // smaller than shrink_ray's 0.35
+    G._shrinkCamMult = 2.4;                    // far pull-back
+    G._shrinkActive = true;                    // reuses BALL_R_EFF code paths
+    G.camPhi = 0.65;                           // higher pitch — looking down from above
+    camera.fov = 72;                           // wide angle for "swallowed by space" feel
+    camera.updateProjectionMatrix();
+  } else if(G.modifiers.some(m=>m.id==='shrink_ray')) {
     if(G.ball) G.ball.scale.setScalar(0.35);   // was 0.5 — smaller ball
     G._shrinkCamMult = 0.65;                   // was 1.8 — closer, not farther
     G._shrinkActive = true;
@@ -22364,7 +24425,7 @@ function initHole() {
 
   const tx=data.teePos.x*TILE_SIZE, tz=data.teePos.y*TILE_SIZE;
   const teeTerrainY = data.heightMap.length ? getTerrainHeight(tx, tz) : 0;
-  const teeBallR = G.modifiers.some(m=>m.id==='shrink_ray') ? BALL_R * 0.5 : BALL_R;
+  const teeBallR = (_notSoMini || G.modifiers.some(m=>m.id==='shrink_ray')) ? BALL_R * 0.5 : BALL_R;
   G.ballPos.set(tx, teeTerrainY + FLOOR_H/2+teeBallR, tz);
   G.ballVel.set(0,0,0);
   G.ball.position.copy(G.ballPos);
@@ -22387,8 +24448,28 @@ function initHole() {
   updateAimArrow();
 
   updateUI(); updateScorePips();
-  showToast(`Hole ${G.hole+1} · Par ${G.par}`, 2200);
+  // v0.20j+: Elite-aware hole announcement. Standard "Hole X · Par Y" plus a
+  // second beat with the archetype name when an elite is active, so the player
+  // gets the "this is the dangerous one" beat right after the world settles.
+  if(G._activeElite) {
+    const aE = G._activeElite.archetype;
+    showToast(`Hole ${G.hole+1} · Par ${G.par}`, 1600);
+    setTimeout(() => {
+      showToast(`${aE.emoji}  ELITE: ${aE.name}  ${aE.emoji}`, 2400);
+    }, 700);
+  } else {
+    showToast(`Hole ${G.hole+1} · Par ${G.par}`, 2200);
+  }
   updateHint('Tap ball then pull back to shoot\nDrag elsewhere to rotate camera');
+
+  // v0.20p: Hunter elite — spawn the eyeball pursuer if active. Spawn
+  // happens AFTER the hole-load toast so the "THE HUNTER STIRS" beat lands
+  // distinctly from the standard hole announcement.
+  if(G._hunterActive) {
+    setTimeout(() => {
+      if(G._hunterActive && !G._hunter && G.state === 'playing') spawnHunter();
+    }, 900);
+  }
   // v0.20c: snapshot total destructible count for the SCORCHED EARTH achievement
   // (destroy every destructible on a hole). Includes obstacles + wall chunks +
   // angled-wall corner triangles. Pendulums/popups not currently destructible
@@ -23472,7 +25553,7 @@ function switchToNextPlayer() {
   if(G.ball) {
     G.ball.position.copy(G.ballPos);
     G.ball.visible = true;
-    G.ball.scale.setScalar(G.modifiers.some(m=>m.id==='shrink_ray') ? 0.35 : 1.0);
+    G.ball.scale.setScalar(getBallVisualScale());
   }
   if(G.ballShadow) {
     const tY = G.heightMap && G.heightMap.length ? getTerrainHeight(G.ballPos.x, G.ballPos.z) : 0;
@@ -23799,6 +25880,26 @@ function startGame(){
   // offerings + purchases + rerolls; included in saveRunData() for post-run analysis.
   G._currentRunShopVisits = [];
   G._currentShopVisit = null;
+  // v0.20j: Elite Holes — fresh per-run state. _eliteHistory is per-run for
+  // potential Run Award integration ("Coward — skipped every elite", etc.).
+  G._eliteOffer = null;
+  G._activeElite = null;
+  G._eliteWager = 0;
+  G._eliteHistory = [];
+  // v0.20n: Chasm runtime state — reset alongside other elite state.
+  G._chasmActive = false;
+  G._chasmZone = null;
+  G._chasmRespawnPending = false;
+  // v0.20p: Hunter runtime state — clear active flag + state.
+  G._hunterActive = false;
+  if(G._hunter && G._hunter.mesh && G._hunter.mesh.parent) {
+    G._hunter.mesh.parent.remove(G._hunter.mesh);
+  }
+  G._hunter = null;
+  G._hunterApproachStrokes = 0;
+  G._lastHunterDamageStroke = -1;
+  if(G._eliteCommitInterval) { clearInterval(G._eliteCommitInterval); G._eliteCommitInterval = null; }
+  hideEliteStakesPip();
   // v0.20a: apply character starter perks. Each id in starter.perks pushes one
   // stack of that perk into G.modifiers. For stackable perks (scorched_earth,
   // strengthen_swing) this means repeating ids will stack naturally.
@@ -24008,8 +26109,271 @@ function nextHole(){
   document.getElementById('hole-summary').classList.remove('visible');
   document.getElementById('shop-overlay').classList.remove('visible');
   document.getElementById('btn-next').style.display='none';
+
+  // v0.20j: Elite fork check — every 3rd hole, offer Safe vs Elite.
+  // Skipped in multiplayer for now (interplay with mp turn-order is non-trivial).
+  const playerFacing = G.hole + 1;
+  const eliteForced = !!G._eliteForceNext;
+  G._eliteForceNext = false;
+  if(!isMultiplayer() && (eliteForced || shouldShowEliteFork(playerFacing))) {
+    const offer = rollEliteOffer(playerFacing);
+    if(offer) {
+      G._eliteOffer = offer;
+      showEliteFork(playerFacing, offer);
+      return; // initHole fires from the fork picker handlers
+    }
+  }
   initHole();
 }
+
+// ── Elite Holes module (v0.20j) ───────────────────────
+// Cadence: every 3rd hole (3, 6, 9, 12...). Player picks Safe vs Elite.
+// Picking Elite locks in the archetype + a rolled reward; player must beat
+// par to claim it. Tier 3 includes double-or-nothing and copy-card.
+
+function showEliteFork(playerFacingHole, offer) {
+  const { archetype, reward } = offer;
+  const ov = document.getElementById('elite-fork-overlay');
+  if(!ov) { initHole(); return; } // safety fallback
+
+  // Subtitle with hole number
+  const sub = document.getElementById('elite-fork-subtitle');
+  if(sub) sub.textContent = `Hole ${playerFacingHole} of ${G.totalHoles} — Take the safe road, or risk it all`;
+
+  // Archetype card content
+  document.getElementById('elite-arch-emoji').textContent   = archetype.emoji;
+  document.getElementById('elite-arch-name').textContent    = archetype.name;
+  document.getElementById('elite-arch-tagline').textContent = archetype.tagline;
+  document.getElementById('elite-arch-desc').textContent    = archetype.description;
+  document.getElementById('elite-tier-badge').textContent   = `TIER ${archetype.tier}`;
+
+  // Reward chip content
+  document.getElementById('elite-reward-emoji').textContent = reward.emoji;
+  document.getElementById('elite-reward-label').textContent = reward.label;
+  document.getElementById('elite-reward-desc').textContent  = reward.desc;
+
+  // Commit-overlay archetype label
+  const cArch = document.getElementById('elite-commit-archetype');
+  if(cArch) cArch.textContent = `— ${archetype.name.toUpperCase()} —`;
+
+  // Show the fork
+  ov.classList.add('visible');
+  G.state = 'choosing'; // existing state from G.state JSDoc
+
+  // Audio cue: ominous low drone via existing toast/beep system if present.
+  // No new audio bank needed for v1 — soundtrack ducking is hard to add cleanly.
+  if(typeof playSfx === 'function') { try { playSfx('shop_open', 0.6); } catch(e){} }
+}
+
+function hideEliteFork() {
+  const ov = document.getElementById('elite-fork-overlay');
+  if(ov) ov.classList.remove('visible');
+  const co = document.getElementById('elite-commit-overlay');
+  if(co) co.classList.remove('visible');
+  // Cancel any in-flight commit timer
+  if(G._eliteCommitInterval) { clearInterval(G._eliteCommitInterval); G._eliteCommitInterval = null; }
+}
+
+function onElitePickSafe() {
+  if(!G._eliteOffer) { hideEliteFork(); initHole(); return; }
+  // Log the skip so Run Awards can use it later (Coward award etc.)
+  G._eliteHistory.push({
+    hole: G.hole + 1,
+    archetypeId: G._eliteOffer.archetype.id,
+    rewardId: G._eliteOffer.reward.id,
+    taken: false,
+    success: false,
+  });
+  G._eliteOffer = null;
+  G._activeElite = null;
+  hideEliteFork();
+  initHole();
+}
+window.onElitePickSafe = onElitePickSafe;
+
+function onElitePickElite() {
+  if(!G._eliteOffer) return;
+  // Show 2s commit timer with confirm/cancel
+  const co = document.getElementById('elite-commit-overlay');
+  const ring = document.getElementById('elite-commit-ring-fg');
+  if(!co || !ring) {
+    // Fallback: just commit immediately if the commit overlay is missing
+    onEliteCommitConfirm();
+    return;
+  }
+  co.classList.add('visible');
+  // The ring fully drained at 2s ⇒ auto-confirm
+  const TOTAL_MS = 2000;
+  const CIRCUMFERENCE = 339.292; // 2π × 54
+  ring.setAttribute('stroke-dashoffset', '0');
+  const start = performance.now();
+  if(G._eliteCommitInterval) clearInterval(G._eliteCommitInterval);
+  G._eliteCommitInterval = setInterval(() => {
+    const elapsed = performance.now() - start;
+    const t = Math.min(1, elapsed / TOTAL_MS);
+    ring.setAttribute('stroke-dashoffset', String(CIRCUMFERENCE * t));
+    if(t >= 1) {
+      clearInterval(G._eliteCommitInterval);
+      G._eliteCommitInterval = null;
+      onEliteCommitConfirm();
+    }
+  }, 30);
+}
+window.onElitePickElite = onElitePickElite;
+
+function onEliteCommitCancel() {
+  // Just dismiss the commit overlay; player goes back to the fork.
+  if(G._eliteCommitInterval) { clearInterval(G._eliteCommitInterval); G._eliteCommitInterval = null; }
+  const co = document.getElementById('elite-commit-overlay');
+  if(co) co.classList.remove('visible');
+}
+window.onEliteCommitCancel = onEliteCommitCancel;
+
+function onEliteCommitConfirm() {
+  if(G._eliteCommitInterval) { clearInterval(G._eliteCommitInterval); G._eliteCommitInterval = null; }
+  if(!G._eliteOffer) { hideEliteFork(); initHole(); return; }
+  const { archetype, reward } = G._eliteOffer;
+  // Wager handling — for double-or-nothing, snapshot wager up to cap.
+  let wager = 0;
+  if(reward.type === 'double_or_nothing') {
+    wager = Math.min(G.coins, reward.cap || 200);
+  }
+  G._activeElite = { archetype, reward, wager };
+  G._eliteWager = wager;
+  // History entry: taken=true, success determined at hole completion
+  G._eliteHistory.push({
+    hole: G.hole + 1,
+    archetypeId: archetype.id,
+    rewardId: reward.id,
+    taken: true,
+    success: null, // set on hole completion
+    wager,
+  });
+  G._eliteOffer = null;
+  hideEliteFork();
+  // Show stakes pip in HUD
+  showEliteStakesPip(archetype, reward);
+  // Light confirm sfx
+  if(typeof playSfx === 'function') { try { playSfx('powerup', 0.7); } catch(e){} }
+  initHole();
+}
+window.onEliteCommitConfirm = onEliteCommitConfirm;
+
+function showEliteStakesPip(archetype, reward) {
+  const pip = document.getElementById('elite-stakes-pip');
+  if(!pip) return;
+  document.getElementById('elite-stakes-pip-name').textContent =
+    `${archetype.emoji} ${archetype.name}`;
+  document.getElementById('elite-stakes-pip-reward').textContent =
+    `${reward.emoji} ${reward.label}`;
+  pip.classList.add('visible');
+}
+
+function hideEliteStakesPip() {
+  const pip = document.getElementById('elite-stakes-pip');
+  if(pip) pip.classList.remove('visible');
+}
+
+// Called on hole completion to deliver / fail the elite reward.
+// Hooked from the score-finalize flow (see resolveEliteHoleResult call site).
+function resolveEliteHoleResult(strokesUsed, par) {
+  if(!G._activeElite) return;
+  const { archetype, reward, wager } = G._activeElite;
+  const underPar = strokesUsed < par; // strict under par per spec
+  // Find latest history entry for this archetype & flag success
+  const histEntry = G._eliteHistory.length ? G._eliteHistory[G._eliteHistory.length - 1] : null;
+  if(histEntry) histEntry.success = !!underPar;
+
+  if(underPar) {
+    deliverEliteReward(reward, wager);
+  } else {
+    failEliteReward(reward, wager);
+  }
+  // Clear the live elite state (history persists for run awards)
+  G._activeElite = null;
+  G._eliteWager = 0;
+  hideEliteStakesPip();
+}
+
+function deliverEliteReward(reward, wager) {
+  let sub = 'Reward claimed';
+  let label = reward.label;
+  let emoji = reward.emoji;
+  switch(reward.type) {
+    case 'coins':
+      G.coins += reward.amount;
+      sub = `+${reward.amount} coins`;
+      break;
+    case 'restore_hp':
+      G.hp = G.hpMax;
+      sub = 'Healed to full';
+      if(typeof updateUI === 'function') updateUI();
+      break;
+    case 'free_card':
+      // Defer card-pick UI to a future iteration; for v1 we just credit
+      // the player with a discount voucher equal to a typical card price
+      // of that rarity. Logged so we can wire up the proper free-card chooser later.
+      // TODO(v0.20j+): open a card picker for the rolled rarity.
+      G.coins += eliteFreeCardFallbackCoins(reward.rarity);
+      sub = `+${eliteFreeCardFallbackCoins(reward.rarity)} coins (free card placeholder)`;
+      label = `Free ${reward.rarity} Card`;
+      break;
+    case 'double_or_nothing':
+      G.coins += wager; // already had wager → now have 2× wager total
+      sub = `+${wager} coins (doubled!)`;
+      label = 'DOUBLED';
+      emoji = '🎰';
+      break;
+    case 'copy_card':
+      // TODO(v0.20j+): open a card-copy chooser; for v1 grant a small coin payout.
+      G.coins += 50;
+      sub = '+50 coins (copy placeholder)';
+      label = 'Copy Card';
+      break;
+  }
+  showEliteRewardToast(emoji, label, sub);
+  if(typeof updateUI === 'function') updateUI();
+}
+
+function failEliteReward(reward, wager) {
+  let label = 'No reward';
+  let sub = 'Couldn\'t beat par';
+  if(reward.type === 'double_or_nothing' && wager > 0) {
+    G.coins = Math.max(0, G.coins - wager);
+    label = 'Wager Lost';
+    sub = `−${wager} coins`;
+  }
+  showEliteFailToast(label, sub);
+  if(typeof updateUI === 'function') updateUI();
+}
+
+function eliteFreeCardFallbackCoins(rarity) {
+  // Rough avg card prices per rarity, used as a placeholder until the
+  // free-card picker UI is wired in. Aligned with current shop pricing.
+  return ({ uncommon: 12, rare: 22, epic: 38, legendary: 60 })[rarity] || 12;
+}
+
+function showEliteRewardToast(emoji, label, sub) {
+  const t = document.getElementById('elite-reward-toast');
+  if(!t) return;
+  document.getElementById('elite-reward-toast-emoji').textContent = emoji;
+  document.getElementById('elite-reward-toast-label').textContent = label;
+  document.getElementById('elite-reward-toast-sub').textContent   = sub;
+  t.classList.add('visible');
+  setTimeout(() => t.classList.remove('visible'), 2400);
+}
+
+function showEliteFailToast(label, sub) {
+  const t = document.getElementById('elite-fail-toast');
+  if(!t) return;
+  document.getElementById('elite-fail-toast-label').textContent = label;
+  document.getElementById('elite-fail-toast-sub').textContent   = sub;
+  t.classList.add('visible');
+  setTimeout(() => t.classList.remove('visible'), 2400);
+}
+
+// ─────────────────────────────────────────────────────
+
 
 function confirmStartGame() {
   const hasSave = localStorage.getItem(profKey('ggw_autosave'));
@@ -25349,6 +27713,20 @@ function animate(now) {
   if(G._slowMoScale && G._slowMoScale < 1.0) dt *= G._slowMoScale;
   flagTime+=dt;
 
+  // v0.20l: Barbed Wire spike pulse — subtle emissive throb to sell the
+  // menace. ~2 Hz sine over 0.25..0.65 emissive. Cheap and atmospheric.
+  if(G._barbedWireMesh && G._barbedWireMesh.material) {
+    const _bwT = (now / 1000) * 2.0;
+    const _bwPulse = 0.35 + 0.30 * (0.5 + 0.5 * Math.sin(_bwT * Math.PI));
+    G._barbedWireMesh.material.emissiveIntensity = _bwPulse;
+  }
+  // v0.20n: Chasm pit-edge pulse — 1.6 Hz red throb on the warning bars.
+  // Slightly slower than barbed wire so the two feel different.
+  if(G._chasmEdgeMat) {
+    const _ceT = (now / 1000) * 1.6;
+    G._chasmEdgeMat.emissiveIntensity = 0.9 + 0.6 * (0.5 + 0.5 * Math.sin(_ceT * Math.PI));
+  }
+
   // ── Speedball 60s hole timer (v0.20a) ────────────────
   // Uses the shared `dt` which already incorporates Slow Mo — so using Slow Mo
   // actually buys Speedball extra real time, making the defensive card a
@@ -26491,6 +28869,9 @@ function animate(now) {
   updateKeyboardCamera(dt);
   if(G.state === 'playing') updateHandUI();
   if(G.state === 'playing') updateFloombas(dt);
+  // v0.20p: Hunter pursuer — runs after floombas (analogous AI). dt is
+  // already slow-mo scaled at the top of animate.
+  if(G.state === 'playing') updateHunter(dt);
   updateCamera(dt);
   composer.render();
 }
