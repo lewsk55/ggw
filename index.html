@@ -1826,6 +1826,17 @@ position:relative; overflow:hidden;
 .shop-card:active { transform:scale(0.98); }
 .shop-card.owned { opacity:0.5; cursor:default; }
 .shop-card.cant-afford { opacity:0.4; cursor:not-allowed; }
+/* v0.20q: Cards eligible for a free-card voucher get a subtle gold glow
+   so they pop against the regular card row. Pulses gently to draw the eye. */
+.shop-card.free-voucher {
+  border-color:#ffd750 !important;
+  box-shadow:0 0 18px rgba(255,200,80,0.45), inset 0 1px 0 rgba(255,235,150,0.18);
+  animation:shop-free-voucher-pulse 1.8s ease-in-out infinite;
+}
+@keyframes shop-free-voucher-pulse {
+  0%,100% { box-shadow:0 0 14px rgba(255,200,80,0.35); }
+  50%     { box-shadow:0 0 26px rgba(255,210,90,0.65); }
+}
 .shop-card.rarity-common { border-left:3px solid #7ec8e3; }
 .shop-card.rarity-rare { border-left:3px solid #a78bfa; }
 .shop-card.rarity-epic { border-left:3px solid #f59e0b; }
@@ -2736,6 +2747,29 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
   <div id="speedball-timer-val" style="font-size:1.15rem;font-weight:700;color:#fff;line-height:1;text-shadow:0 0 10px rgba(255,140,50,0.7);text-align:center">—</div>
 </div>
 
+<!-- v0.20r: Lap Mode HUD — visible only when active. Top-center pill showing
+     LAP n/3 + elapsed timer. Far enough below the Strokes/Total/Coins panel
+     to not collide on small phones. -->
+<div id="lap-hud" style="display:none;position:fixed;top:170px;left:50%;transform:translateX(-50%);z-index:240;pointer-events:none;font-family:'Playfair Display',serif;background:linear-gradient(140deg,rgba(15,30,40,0.86),rgba(25,50,70,0.86));backdrop-filter:blur(8px);border:2px solid rgba(120,200,255,0.7);border-radius:14px;padding:8px 18px 7px;box-shadow:0 0 18px rgba(80,180,255,0.35),0 2px 10px rgba(0,0,0,0.4);text-align:center;min-width:180px">
+  <div style="font-size:0.5rem;letter-spacing:2.5px;color:#9bd5ff;text-transform:uppercase;margin-bottom:2px">🏁 Lap Mode</div>
+  <div style="display:flex;align-items:center;justify-content:center;gap:14px">
+    <div>
+      <div style="font-size:0.45rem;letter-spacing:1.5px;color:rgba(180,220,255,0.7);text-transform:uppercase">Lap</div>
+      <div id="lap-hud-laps" style="font-size:1.3rem;font-weight:700;color:#fff;line-height:1;text-shadow:0 0 10px rgba(80,180,255,0.6)">0/3</div>
+    </div>
+    <div style="width:1px;height:30px;background:rgba(180,220,255,0.3)"></div>
+    <div>
+      <div style="font-size:0.45rem;letter-spacing:1.5px;color:rgba(180,220,255,0.7);text-transform:uppercase">Time</div>
+      <div id="lap-hud-time" style="font-size:1.3rem;font-weight:700;color:#fff;line-height:1;text-shadow:0 0 10px rgba(80,180,255,0.6);font-variant-numeric:tabular-nums">0.0s</div>
+    </div>
+  </div>
+  <div id="lap-hud-cps" style="display:flex;justify-content:center;gap:6px;margin-top:6px">
+    <span id="lap-cp-1" style="width:10px;height:10px;border-radius:50%;background:#ffe040;box-shadow:0 0 4px #ffc020"></span>
+    <span id="lap-cp-2" style="width:10px;height:10px;border-radius:50%;background:#ffe040;box-shadow:0 0 4px #ffc020"></span>
+    <span id="lap-cp-3" style="width:10px;height:10px;border-radius:50%;background:#ffe040;box-shadow:0 0 4px #ffc020"></span>
+  </div>
+</div>
+
 <!-- OOB grace countdown — shown only while ball is OOB and counting down -->
 <div id="oob-timer" style="display:none;position:fixed;top:28%;left:50%;transform:translateX(-50%);z-index:250;pointer-events:none;text-align:center;font-family:'Playfair Display',serif;color:#ff3333;text-shadow:0 0 12px rgba(255,0,0,0.7),0 2px 4px rgba(0,0,0,0.6)">
   <div style="font-size:0.7rem;letter-spacing:3px;text-transform:uppercase;opacity:0.85;margin-bottom:4px">Out of bounds</div>
@@ -3065,6 +3099,7 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
   <button class="dbg-btn" id="dbg-budget">❤️ Add a life</button>
   <button class="dbg-btn" id="dbg-coins">🪙 +50 coins</button>
   <button class="dbg-btn" id="dbg-elite">⚠️ Force elite next hole</button>
+  <button class="dbg-btn" id="dbg-elite-pick">🎯 Pick specific elite…</button>
   <button class="dbg-btn" id="dbg-unlock-all">🔓 Unlock everything</button>
   <button class="dbg-btn" id="dbg-console">🛠 Open mobile console</button>
   <div style="height:1px;background:rgba(255,255,255,0.15);margin:6px 0"></div>
@@ -3080,6 +3115,15 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
     </div>
   </div>
   <div class="dbg-close" id="dbg-close">close (~ or Esc)</div>
+</div>
+
+<!-- v0.20r: Debug elite-picker submenu — pick a specific archetype to play next.
+     Lets us iterate Lap Mode + other elites without grinding through random rolls. -->
+<div id="dbg-elite-picker" style="display:none;position:fixed;inset:0;background:rgba(8,4,12,0.95);backdrop-filter:blur(8px);z-index:520;flex-direction:column;align-items:center;justify-content:safe center;gap:10px;padding:30px 18px;overflow-y:auto">
+  <div style="font-family:'Playfair Display',serif;font-size:1.4rem;color:#fff;letter-spacing:1px">🎯 Pick Elite Hole</div>
+  <div style="font-size:0.65rem;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.55);margin-bottom:6px">Loads the chosen archetype on the next hole</div>
+  <div id="dbg-elite-pick-list" style="display:flex;flex-direction:column;gap:8px;width:100%;max-width:360px"></div>
+  <button class="dbg-btn" style="margin-top:10px;max-width:200px" onclick="closeDebugElitePicker()">Cancel</button>
 </div>
 
 <!-- Profile picker — shown before main menu -->
@@ -3703,8 +3747,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.20p3';
-const CHANGE_NOTE = 'Bugfix — elite holes restored: G.state was stuck on "choosing" after commit, breaking input + cards + menu.';
+const GAME_VERSION = '0.20t2';
+const CHANGE_NOTE = 'Chasm hidden until rebuild. Wandering Hole roams whole level (no envelope). Hunter −40% speed + stagger 5→8s. Free Uncommon → Free Rare.';
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
@@ -3731,21 +3775,21 @@ const ELITE_ARCHETYPES = {
     id: 'no_walls', tier: 1, enabled: true,
     name: 'No Walls', emoji: '🌪️',
     tagline: 'No perimeter. Pure terror.',
-    description: 'The course has no walls. Hit it out, lose it forever.',
+    description: 'The course has no walls. +1 par to compensate. Hit it out, lose it forever.',
     flag: 'eliteNoWalls',
   },
-  not_so_mini: {
-    id: 'not_so_mini', tier: 1, enabled: true,
-    name: 'Not-So-Mini', emoji: '🦣',
-    tagline: 'You shrink. The course doesn\'t.',
-    description: 'You\'re tiny. The course is huge. Good luck judging distance.',
-    flag: 'eliteNotSoMini',
+  giant_hole: {
+    id: 'giant_hole', tier: 1, enabled: true,
+    name: 'Giant Hole', emoji: '🦣',
+    tagline: 'The course is enormous.',
+    description: 'The whole course is 2× normal size. +2 par to compensate.',
+    flag: 'eliteGiantHole',
   },
   barbed_wire: {
     id: 'barbed_wire', tier: 1, enabled: true,
     name: 'Barbed Wire Walls', emoji: '🪤',
     tagline: 'The walls bite back.',
-    description: 'Every wall is lined with spikes. Touching them costs −1 HP (once per stroke).',
+    description: 'Every wall is lined with spikes. −1 HP per stroke that touches them. +2 par.',
     flag: 'eliteBarbedWire',
   },
   wandering_hole: {
@@ -3756,7 +3800,7 @@ const ELITE_ARCHETYPES = {
     flag: 'eliteWanderingHole',
   },
   chasm: {
-    id: 'chasm', tier: 2, enabled: true,
+    id: 'chasm', tier: 2, enabled: false,  // v0.20t2: hidden until rebuild — implementation needs rework
     name: 'Chasm', emoji: '🌋',
     tagline: 'Mind the gap. The big one.',
     description: 'A spike pit splits the course. Conveyor ramps launch you over — if you have the speed.',
@@ -3770,10 +3814,10 @@ const ELITE_ARCHETYPES = {
     flag: 'eliteHunter',
   },
   lap_mode: {
-    id: 'lap_mode', tier: 3, enabled: false,
+    id: 'lap_mode', tier: 3, enabled: true,
     name: 'Lap Mode', emoji: '🏁',
     tagline: 'Three laps. Beat the clock.',
-    description: 'No hole. No mercy. Race a rectangular track three times. Time = par.',
+    description: 'No hole. Race a rectangular track 3 times. Time = par. 72s = par.',
     flag: 'eliteLapMode',
   },
 };
@@ -3790,8 +3834,8 @@ const ELITE_ARCHETYPES = {
 //   'copy_card'    — duplicate any card the player owns (no rarity restriction)
 const ELITE_REWARDS = {
   // Tier 1 — spicy
-  coins_100:    { id:'coins_100',    type:'coins',         amount:100,        emoji:'🪙', label:'+100 Coins',       desc:'Pure profit if you can pull it off.' },
-  free_uncommon:{ id:'free_uncommon',type:'free_card',     rarity:'uncommon', emoji:'🃏', label:'Free Uncommon Card', desc:'Pick one. It\'s on the house.' },
+  coins_50:     { id:'coins_50',     type:'coins',         amount:50,         emoji:'🪙', label:'+50 Coins',        desc:'Pure profit if you can pull it off.' },
+  free_uncommon:{ id:'free_uncommon',type:'free_card',     rarity:'rare', emoji:'🃏', label:'Free Rare Card', desc:'Pick one. It\'s on the house.' },
   // Tier 2 — dangerous
   coins_200:    { id:'coins_200',    type:'coins',         amount:200,        emoji:'💰', label:'+200 Coins',       desc:'A real haul.' },
   restore_hp:   { id:'restore_hp',   type:'restore_hp',                        emoji:'❤️', label:'Restore All HP',    desc:'Heal back to full. Worth more than gold.' },
@@ -3804,7 +3848,12 @@ const ELITE_REWARDS = {
 };
 
 const ELITE_TIER_REWARD_POOLS = {
-  1: ['coins_100', 'free_uncommon'],
+  // v0.20t1: Tier 1 references 'free_rare' directly. The 'free_uncommon' id
+  // was historically pointing at a nonexistent 'uncommon' rarity (cards are
+  // common/rare/epic/legendary only), so the voucher would never match
+  // anything in the shop. 'free_uncommon' is preserved with rarity:'rare'
+  // for backward compatibility but new pools use 'free_rare'.
+  1: ['coins_50', 'free_rare'],
   2: ['coins_200', 'restore_hp', 'free_rare'],
   3: ['free_epic', 'free_legendary', 'double_or_nothing', 'copy_card'],
 };
@@ -3823,20 +3872,16 @@ function shouldShowEliteFork(playerFacingHoleNum) {
   return playerFacingHoleNum % 3 === 0;
 }
 
-// v0.20k: Returns true if the ball should be drawn/treated at "shrunk" scale,
-// either due to the shrink_ray perk or the Not-So-Mini elite hole.
-// Use this everywhere instead of checking shrink_ray directly so both systems
-// stay in lockstep.
+// v0.20k: Returns true if the ball should be drawn/treated at "shrunk" scale.
+// Currently only shrink_ray triggers this; Giant Hole (v0.20q) leaves the
+// ball at normal size and scales the world instead.
 function isBallShrunk() {
   if(typeof G === 'undefined') return false;
-  if(G._notSoMiniActive) return true;
   return !!(G.modifiers && G.modifiers.some(m => m.id === 'shrink_ray'));
 }
 // Visual scale applied to the ball mesh and trail/aim helpers.
-// Not-So-Mini scales smaller (0.30) than shrink_ray (0.35) for stronger effect.
 function getBallVisualScale() {
   if(typeof G === 'undefined') return 1.0;
-  if(G._notSoMiniActive) return 0.30;
   if(G.modifiers && G.modifiers.some(m => m.id === 'shrink_ray')) return 0.35;
   return 1.0;
 }
@@ -5257,6 +5302,339 @@ function isReachable(grid, W, H, teePos, holePos) {
 // Returns a `chasmZone` descriptor consumed by buildCourse + the runtime
 // fall-in detector. Mutates the passed arrays (clears nearby hazards,
 // pushes new conveyors + spikes). Returns null if no usable segment found.
+// v0.20r: Lap Mode — custom rectangular track replacing the standard
+// generated course. Returns a `data` object compatible with buildCourse.
+//
+// Track is a closed loop: outer perimeter wall, inner empty plug, fairway
+// ring between them. Tee is on the bottom-center of the ring. 4 checkpoints
+// at side midpoints (top-mid, right-mid, left-mid, bottom-mid which is
+// also start/finish). Corner triangle bouncers at each inner corner.
+//
+// Obstacles (bumpers, spikes, popups) sprinkled around the loop at
+// reduced density per spec.
+function buildLapModeCourseData() {
+  const W = 22;
+  const H = 22;
+  const PAD = 2;        // outer EMPTY pad
+  const LANE = 4;       // fairway ring width
+  // Inner empty plug: center hole of the donut
+  const innerLo = PAD + LANE;
+  const innerHi = (W - 1) - PAD - LANE;
+
+  // Build grid: default EMPTY, fairway ring, inner empty
+  const grid = [];
+  for(let y = 0; y < H; y++) {
+    const row = [];
+    for(let x = 0; x < W; x++) {
+      row.push(CELL.EMPTY);
+    }
+    grid.push(row);
+  }
+  // Fill the fairway ring
+  for(let y = 0; y < H; y++) {
+    for(let x = 0; x < W; x++) {
+      const inOuterFair = (x >= PAD && x < W - PAD && y >= PAD && y < H - PAD);
+      const inInnerHole = (x >= innerLo && x <= innerHi && y >= innerLo && y <= innerHi);
+      if(inOuterFair && !inInnerHole) grid[y][x] = CELL.FAIR;
+    }
+  }
+  // Place TEE on bottom-mid of the ring (start/finish line)
+  const teeGx = Math.floor(W / 2);
+  const teeGy = H - 1 - PAD - 1; // 1 cell up from bottom edge of fairway
+  grid[teeGy][teeGx] = CELL.TEE;
+  // Place GREEN at the same spot (start/finish doubles as cup location for
+  // the final hole-out animation when lap 3 completes).
+  grid[teeGy - 1][teeGx] = CELL.GREEN;
+
+  // ── HeightMap (flat) ──────────────────────────────
+  const heightMap = [];
+  for(let y = 0; y < H; y++) {
+    const row = [];
+    for(let x = 0; x < W; x++) row.push(0);
+    heightMap.push(row);
+  }
+  // vertHeights = (W+1) × (H+1) for vertex-grid sampling
+  const vertHeights = [];
+  for(let y = 0; y <= H; y++) {
+    const row = [];
+    for(let x = 0; x <= W; x++) row.push(0);
+    vertHeights.push(row);
+  }
+
+  // ── Tee/Hole grid pos ─────────────────────────────
+  const teePos  = { x: teeGx, y: teeGy };
+  const holePos = { x: teeGx, y: teeGy - 1 };
+
+  // ── Corner triangle bouncers at the four OUTER corners ──
+  // The track has 4 outside corners where the outer wall makes a 90° bend.
+  // We want triangles AT those corners — right-angle at the wall corner,
+  // hypotenuse cutting across the fair cell diagonally so the ball
+  // deflects smoothly around the outside of the turn.
+  //
+  // v0.20t: Corners are now 2× normal size with 1.5× bounce. Legs span
+  // ~1.9 tiles each so the triangle covers a meaningful portion of the
+  // turn area. Bounce factor reduced from 2× to 1.5× to compensate for
+  // the bigger surface area (more frequent + bigger hits).
+  const T = TILE_SIZE_BASE; // lap mode ALWAYS uses base scale (no Giant Hole)
+  const angledWallData = [];
+  // Triangle leg length — 2× the previous value, spans ~1.9 cells
+  const _LEG = T * 1.90;
+  const _addTri = (gx, gy, rOX, rOZ) => {
+    // gx, gy = grid coords of the fair cell hosting the triangle
+    // rOX, rOZ = -1 or +1 — which corner of the cell holds the right-angle
+    //   (matches the OUTSIDE wall corner)
+    const cellCx = gx * T;
+    const cellCz = gy * T;
+    const halfT = T / 2;
+    const rcx = cellCx + rOX * halfT;
+    const rcz = cellCz + rOZ * halfT;
+    // Hypotenuse endpoints: one along each leg, leg length = _LEG,
+    // going away from the rcx/rcz toward the cell interior
+    const hx1 = rcx - rOX * _LEG;
+    const hz1 = rcz;
+    const hx2 = rcx;
+    const hz2 = rcz - rOZ * _LEG;
+    angledWallData.push({ gx, gy, rcx, rcz, hx1, hz1, hx2, hz2, bounceMul: 1.5 });
+  };
+  // OUTER fair corners — the corners of the fairway ring closest to the
+  // outer wall corners. For the top-left corner: fair cell at (PAD, PAD),
+  // the outer wall corner is at this cell's NW corner = (rOX=-1, rOZ=-1).
+  _addTri(PAD,         PAD,         -1, -1); // top-left:    right-angle at NW
+  _addTri(W - 1 - PAD, PAD,         +1, -1); // top-right:   right-angle at NE
+  _addTri(PAD,         H - 1 - PAD, -1, +1); // bottom-left: right-angle at SW
+  _addTri(W - 1 - PAD, H - 1 - PAD, +1, +1); // bottom-right: right-angle at SE
+
+  // ── Obstacle distribution around the loop ──
+  // Per spec: slightly less density than normal. Sprinkle bumpers, spikes,
+  // and popups along the four straights. Use rng() seeded from current run
+  // so different attempts roll different layouts.
+  const bumperData = [];
+  const spikeData  = [];
+  const popupData  = [];
+  // Helper: is this fair cell on a "straight" (not a corner cell)?
+  const _isStraight = (gx, gy) => {
+    // Corners are within LANE/2 of an inner-empty corner
+    const nearInnerLeft = gx < innerLo;
+    const nearInnerRight = gx > innerHi;
+    const nearInnerTop = gy < innerLo;
+    const nearInnerBot = gy > innerHi;
+    // Top straight: y < innerLo, x between innerLo and innerHi (excl. corners)
+    if(nearInnerTop && !nearInnerLeft && !nearInnerRight) return 'top';
+    if(nearInnerBot && !nearInnerLeft && !nearInnerRight) return 'bottom';
+    if(nearInnerLeft && !nearInnerTop && !nearInnerBot) return 'left';
+    if(nearInnerRight && !nearInnerTop && !nearInnerBot) return 'right';
+    return null;
+  };
+  // Walk fairway, collect candidate cells per straight
+  const straightCells = { top: [], right: [], bottom: [], left: [] };
+  for(let y = 0; y < H; y++) {
+    for(let x = 0; x < W; x++) {
+      if(grid[y][x] !== CELL.FAIR) continue;
+      const s = _isStraight(x, y);
+      if(s) straightCells[s].push({ x, y });
+    }
+  }
+  // Reserve clear zone around tee + ahead of tee (start/finish line) so the
+  // first stroke isn't immediately blocked.
+  const _farFromTee = (gx, gy) => Math.hypot(gx - teeGx, gy - teeGy) > 4;
+  // Random helper (reproducible would need a seed, but obstacles are
+  // visual chaos; using Math.random is fine here).
+  const rrand = Math.random;
+  // Bumpers — 2 per straight, away from corners and tee
+  for(const s of ['top', 'right', 'bottom', 'left']) {
+    const candidates = straightCells[s].filter(c => _farFromTee(c.x, c.y));
+    if(candidates.length === 0) continue;
+    // Pick 2 well-spaced cells
+    const picks = [];
+    for(let attempt = 0; attempt < 12 && picks.length < 2; attempt++) {
+      const c = candidates[Math.floor(rrand() * candidates.length)];
+      const tooClose = picks.some(p => Math.hypot(p.x - c.x, p.y - c.y) < 4);
+      if(!tooClose) picks.push(c);
+    }
+    for(const p of picks) {
+      const wx = p.x * T, wz = p.y * T;
+      bumperData.push({ gx: p.x, gy: p.y, wx, wz, radius: 0.45, variant: 'normal' });
+    }
+  }
+  // Spikes — 1 per straight, smaller scary thing the player has to avoid
+  for(const s of ['top', 'right', 'bottom', 'left']) {
+    const candidates = straightCells[s].filter(c => _farFromTee(c.x, c.y));
+    if(candidates.length === 0) continue;
+    const c = candidates[Math.floor(rrand() * candidates.length)];
+    // Only add if no bumper is at this exact cell
+    if(!bumperData.some(b => b.gx === c.x && b.gy === c.y)) {
+      const wx = c.x * T, wz = c.y * T;
+      spikeData.push({ gx: c.x, gy: c.y, wx, wz, radius: 0.55, variant: 'white' });
+    }
+  }
+  // Popup walls — 1 per straight, alternating timing for chaos
+  let _popupPhase = 0;
+  for(const s of ['top', 'right', 'bottom', 'left']) {
+    const candidates = straightCells[s].filter(c => _farFromTee(c.x, c.y));
+    if(candidates.length < 2) continue;
+    const c = candidates[Math.floor(rrand() * candidates.length)];
+    // Don't double-up with bumper/spike
+    if(bumperData.some(b => b.gx === c.x && b.gy === c.y)) continue;
+    if(spikeData.some(sp => sp.gx === c.x && sp.gy === c.y)) continue;
+    const wx = c.x * T, wz = c.y * T;
+    // Popup orientation: perpendicular to travel direction (so it blocks the lane)
+    // Top/bottom straights = travel along X = popup along Z
+    // Left/right straights = travel along Z = popup along X
+    const vertical = (s === 'top' || s === 'bottom');
+    popupData.push({
+      gx: c.x, gy: c.y, wx, wz,
+      length: T * 1.2, width: 0.20, height: 0.55,
+      vertical,
+      closedSecs: 1.6,
+      openSecs: 1.4,
+      phase: _popupPhase,
+    });
+    _popupPhase += 0.7;
+  }
+
+  // ── Coins: scatter along the loop for incentive ──
+  const coinData = [];
+  // Place 1 coin every ~3 cells along the centerline of each straight
+  for(const s of ['top', 'right', 'bottom', 'left']) {
+    const cells = straightCells[s];
+    for(let i = 0; i < cells.length; i += 3) {
+      const c = cells[i];
+      // Skip if obstacle here
+      if(bumperData.some(b => b.gx === c.x && b.gy === c.y)) continue;
+      if(spikeData.some(sp => sp.gx === c.x && sp.gy === c.y)) continue;
+      if(popupData.some(p => p.gx === c.x && p.gy === c.y)) continue;
+      const wx = c.x * T, wz = c.y * T;
+      coinData.push({ wx, wz, value: 1 });
+    }
+  }
+
+  // ── Checkpoint world positions ──
+  // Order: start/finish (bottom-mid), right-mid, top-mid, left-mid → back to start
+  // The player must hit them in that order to count a lap.
+  //
+  // v0.20s: Each non-start checkpoint is now a PAIR of yellow flags on the
+  // opposite walls of the course at that location. The ball passes BETWEEN
+  // them. Detection radius spans the whole course width.
+  //
+  // For cp1 (right-mid): flags on outer right wall + inner right wall
+  // For cp2 (top-mid):    flags on outer top wall + inner top wall
+  // For cp3 (left-mid):   flags on outer left wall + inner left wall
+  // The CENTERLINE position of each pair is what we use for detection.
+  //
+  // Wall positions (world coords):
+  //   Outer top wall    z = (PAD - 0.5) * T
+  //   Outer bottom wall z = (H - 1 - PAD + 0.5) * T
+  //   Outer left wall   x = (PAD - 0.5) * T
+  //   Outer right wall  x = (W - 1 - PAD + 0.5) * T
+  //   Inner top wall    z = (innerLo - 0.5) * T
+  //   Inner bottom wall z = (innerHi + 0.5) * T
+  //   Inner left wall   x = (innerLo - 0.5) * T
+  //   Inner right wall  x = (innerHi + 0.5) * T
+  const _outerTopZ    = (PAD - 0.5) * T;
+  const _outerBotZ    = (H - 1 - PAD + 0.5) * T;
+  const _outerLeftX   = (PAD - 0.5) * T;
+  const _outerRightX  = (W - 1 - PAD + 0.5) * T;
+  const _innerTopZ    = (innerLo - 0.5) * T;
+  const _innerBotZ    = (innerHi + 0.5) * T;
+  const _innerLeftX   = (innerLo - 0.5) * T;
+  const _innerRightX  = (innerHi + 0.5) * T;
+
+  // Centerline midpoints of each side
+  const _midX = Math.floor(W / 2) * T;
+  const _midZ = Math.floor(H / 2) * T;
+
+  // Each checkpoint: { wx, wz (centerline mid), flagA: {wx,wz}, flagB: {wx,wz}, label, axis }
+  // axis indicates the orientation of the flag pair (which axis spans them):
+  //   'x' = pair runs along X (flags at different X, same Z) — used at top/bottom straights
+  //   'z' = pair runs along Z — used at left/right straights
+  const checkpointsWS = [
+    {
+      wx: _midX, wz: _outerBotZ, // start/finish line midpoint
+      flagA: null, flagB: null, // start has no wall-flag pair (different visual)
+      label: 'START', axis: null, isStart: true,
+    },
+    {
+      wx: _outerRightX, wz: _midZ, // cp1 — right straight
+      flagA: { wx: _outerRightX, wz: _midZ },
+      flagB: { wx: _innerRightX, wz: _midZ },
+      label: '1', axis: 'x', isStart: false,
+    },
+    {
+      wx: _midX, wz: _outerTopZ, // cp2 — top straight
+      flagA: { wx: _midX, wz: _outerTopZ },
+      flagB: { wx: _midX, wz: _innerTopZ },
+      label: '2', axis: 'z', isStart: false,
+    },
+    {
+      wx: _outerLeftX, wz: _midZ, // cp3 — left straight
+      flagA: { wx: _outerLeftX, wz: _midZ },
+      flagB: { wx: _innerLeftX, wz: _midZ },
+      label: '3', axis: 'x', isStart: false,
+    },
+  ];
+
+  // ── Tee direction (toward right — first leg) ──
+  const teeDir = { x: 1, z: 0 };
+
+  // ── Par: 12 — 4 strokes per leg × 3 laps. Time bracket adds ±3 on top.
+  // Final score = max(1, actual_strokes + time_delta). Reward fires on < par.
+  const par = 12;
+
+  // Return a data object compatible with buildCourse + the elite plumbing
+  return {
+    grid, W, H,
+    teePos, holePos,
+    par,
+    heightMap, vertHeights,
+    vmW: W + 1, vmH: H + 1,
+    rockData: [], fanData: [],
+    bumperData,
+    spinBarData: [], slideBlockData: [],
+    angledWallData,
+    conveyorData: [],
+    pendulumData: [],
+    popupData,
+    spikeData,
+    leftRail: [], rightRail: [], teeCapPts: [], holeCapPts: [],
+    splineWS: [],
+    coinData,
+    heartData: [],
+    holeDefense: null,
+    teeDir,
+    chasmZone: null,
+    speedHoopData: [],
+    chasmAirborneData: [],
+    eliteActive: true,
+    eliteArchetypeId: 'lap_mode',
+    eliteNoWalls: false,
+    eliteBarbedWire: false,
+    eliteGiantHole: false,
+    eliteWanderingHole: false,
+    eliteChasm: false,
+    eliteHunter: false,
+    eliteLapMode: true,
+    // Lap mode-specific extras
+    lapMode: {
+      checkpointsWS,
+      lapPar: 72.0, // par time in seconds (3 laps × 24s)
+      lapsRequired: 3,
+      // v0.20s: Track geometry for arrow rendering. Outer wall extents
+      // and inner empty extents define the fairway ring.
+      trackBounds: {
+        outerLeftX: _outerLeftX,
+        outerRightX: _outerRightX,
+        outerTopZ: _outerTopZ,
+        outerBotZ: _outerBotZ,
+        innerLeftX: _innerLeftX,
+        innerRightX: _innerRightX,
+        innerTopZ: _innerTopZ,
+        innerBotZ: _innerBotZ,
+      },
+    },
+  };
+}
+
+
 function buildChasmZone(args) {
   const {
     grid, W, H, segInfo, waypoints, offX, offY,
@@ -5264,33 +5642,35 @@ function buildChasmZone(args) {
     bumperData, slideBlockData, angledWallData,
     pendulumData, popupData,
     LANE_W,
+    speedHoopData,        // v0.20t: append the entry-ramp speed hoop here
+    chasmAirborneData,    // v0.20t: append floating spike sphere data here
   } = args;
 
-  // 1. Find longest segment >= 6 cells (need room for ramp+pit+ramp).
-  // We try a 12-cell layout first, then fall back to a compact 8-cell
-  // layout (3 ramp + 2 pit + 3 ramp) if no segment is long enough.
-  const _longCandidates = [...segInfo].filter(s => s.len >= 12).sort((a,b) => b.len - a.len);
+  // v0.20t Chasm rebuild — per Adam's design spec:
+  //   tee → speed hoop (oscillating) → ramp UP → big rectangular pit
+  //   (red spikes + boxed walls + 1-4 floating spike spheres) → landing → hole
+  //
+  // Ball must hit the speed hoop OR use a power shot to clear the pit. The
+  // ramp gives a Y-velocity launch as the ball exits, sending it airborne.
+
+  // 1. Find longest segment for the chasm. Need ~1 ramp + 4 pit + 3 landing
+  //    = 8 cells minimum. Prefer 11+ for room (1 lead-in + 1 ramp + 5 pit + 4 landing).
+  const _longCandidates = [...segInfo].filter(s => s.len >= 11).sort((a,b) => b.len - a.len);
   const _shortCandidates = [...segInfo].filter(s => s.len >= 8).sort((a,b) => b.len - a.len);
-  let seg, RAMP_LEN, PIT_LEN;
+  let seg, RAMP_LEN, PIT_LEN, LANDING_LEN;
   if(_longCandidates.length > 0) {
     seg = _longCandidates[0];
-    RAMP_LEN = 4; PIT_LEN = 4;
+    RAMP_LEN = 2; PIT_LEN = 5; LANDING_LEN = 4;
   } else if(_shortCandidates.length > 0) {
     seg = _shortCandidates[0];
-    RAMP_LEN = 3; PIT_LEN = 2;
+    RAMP_LEN = 1; PIT_LEN = 4; LANDING_LEN = 3;
   } else {
-    return null; // no segment long enough for any chasm — abort
+    return null; // no segment long enough — abort
   }
 
-  // 2. Compute midpoint (in offset grid coords) along the segment
-  const midGX = Math.round((seg.ax + seg.bx) / 2);
-  const midGY = Math.round((seg.ay + seg.by) / 2);
-
-  // 3. Determine "along" axis (segment direction) and "across" axis
-  // The pit + ramps run along the segment; the ramp's push direction
-  // points along the segment toward the hole.
+  // 2. Center the chasm structure along the segment, but biased toward the
+  //    tee end so most of the post-pit landing is BEFORE the hole.
   const isH = seg.dir === 'H';
-  // Compute push direction: along-segment, biased toward the hole
   let pushSign;
   if(isH) {
     pushSign = (holePos.x > teePos.x) === (seg.bx > seg.ax) ? 1 : -1;
@@ -5298,52 +5678,66 @@ function buildChasmZone(args) {
     pushSign = (holePos.y > teePos.y) === (seg.by > seg.ay) ? 1 : -1;
   }
 
-  // 4. Lay out the chasm: the structure along travel is
-  //    [ ramp1 ][ pit ][ ramp2 ]
-  // where each segment length was decided in step 1.
-  const TOTAL_LEN = RAMP_LEN * 2 + PIT_LEN;
-  const HALF_TOTAL = TOTAL_LEN / 2;
+  const TOTAL_LEN = RAMP_LEN + PIT_LEN + LANDING_LEN;
+  // Place the structure starting near the tee end of the segment
+  // (leaves the rest of the segment as natural fairway approaching the hole).
+  // Start offset from segment midpoint: shift back toward tee by half the
+  // structure length, so the WHOLE structure sits in the segment's first half.
+  //
+  // BUG FIX (v0.20t1): Waypoints define the TOP-LEFT corner of the lane,
+  // not the center. The lane spans [a.x, a.x+LANE_W) × [a.y, a.y+LANE_W).
+  // For an H segment (a.y == b.y), midpoint along X gives lane center X
+  // (both corners are at same Y, X-span is symmetric). But midpoint along
+  // Y gives the lane EDGE Y (= seg.ay), not center. So we must shift
+  // segMid by LANE_W/2 along the ACROSS axis to land at lane center.
+  const _laneCtrShift = Math.floor(LANE_W / 2); // = 2 for LANE_W=4
+  const segMidGX = Math.round((seg.ax + seg.bx) / 2) + (isH ? 0 : _laneCtrShift);
+  const segMidGY = Math.round((seg.ay + seg.by) / 2) + (isH ? _laneCtrShift : 0);
+  // Anchor: along-axis position where ramp STARTS. We want ramp+pit+landing
+  // to fit. Place start at segMid - (TOTAL_LEN/2) * pushSign.
+  const startAlong = -Math.floor(TOTAL_LEN / 2);
 
-  // Step direction along segment in grid coords (signed)
-  const dAlong = isH ? pushSign : 0;
-  const _dAlongV = isH ? 0 : pushSign;
-  // Helper: get a cell at (along-offset, across-offset) from midpoint
+  // Helper: get a cell at (along-offset, across-offset) from segMid
   const cellAt = (alongOff, acrossOff) => {
-    const gx = midGX + (isH ? alongOff : acrossOff);
-    const gy = midGY + (isH ? acrossOff : alongOff);
+    const gx = segMidGX + (isH ? alongOff : acrossOff);
+    const gy = segMidGY + (isH ? acrossOff : alongOff);
     return { x: gx, y: gy };
   };
-  // Validate that the full chasm length fits inside fair tiles
+  // Across-axis: lane is LANE_W=4 wide, so we cover 4 cells.
+  // With segMid at lane center, valid range is [-LANE_W/2, LANE_W/2).
+  // For LANE_W=4, that's across ∈ {-2, -1, 0, +1} (4 cells).
   const halfAcross = Math.floor(LANE_W / 2);
+  const acrossLo = -halfAcross;
+  const acrossHi = halfAcross - 1; // EXCLUSIVE upper — fixes 5-cell-traversal bug
   const isFairCell = (x, y) =>
     x >= 0 && y >= 0 && x < W && y < H &&
-    (grid[y][x] === 0 /* CELL.FAIR */ || grid[y][x] === 1 /* TEE */ || grid[y][x] === 2 /* GREEN */);
-  for(let along = -HALF_TOTAL; along < HALF_TOTAL; along++) {
-    for(let across = -halfAcross; across <= halfAcross; across++) {
-      const c = cellAt(along * pushSign, across);
-      if(!isFairCell(c.x, c.y)) return null; // chasm wouldn't fit cleanly
+    (grid[y][x] === CELL.FAIR || grid[y][x] === CELL.TEE || grid[y][x] === CELL.GREEN);
+  // Validate the full chasm fits
+  for(let along = 0; along < TOTAL_LEN; along++) {
+    for(let across = acrossLo; across <= acrossHi; across++) {
+      const c = cellAt((startAlong + along) * pushSign, across);
+      if(!isFairCell(c.x, c.y)) {
+        console.log('[Chasm] validation failed: along='+along+' across='+across+' cell=('+c.x+','+c.y+') seg=', {ax:seg.ax,ay:seg.ay,bx:seg.bx,by:seg.by,len:seg.len,dir:seg.dir}, 'segMid=('+segMidGX+','+segMidGY+')');
+        return null;
+      }
     }
   }
 
-  // 5. Bound boxes (in offset grid coords) for the three regions:
-  //    ramp1: along [-6..-2)  (4 cells)
-  //    pit:   along [-2..+2)  (4 cells)
-  //    ramp2: along [+2..+6)  (4 cells)
-  const cellsRamp1 = [];
-  const cellsPit   = [];
-  const cellsRamp2 = [];
-  for(let along = -HALF_TOTAL; along < HALF_TOTAL; along++) {
-    for(let across = -halfAcross; across <= halfAcross; across++) {
-      const c = cellAt(along * pushSign, across);
-      if(along < -PIT_LEN/2)      cellsRamp1.push(c);
-      else if(along < PIT_LEN/2)  cellsPit.push(c);
-      else                        cellsRamp2.push(c);
+  // 3. Categorize cells: ramp / pit / landing (all in along-axis order)
+  const cellsRamp = [];
+  const cellsPit = [];
+  const cellsLanding = [];
+  for(let along = 0; along < TOTAL_LEN; along++) {
+    for(let across = acrossLo; across <= acrossHi; across++) {
+      const c = cellAt((startAlong + along) * pushSign, across);
+      if(along < RAMP_LEN)              cellsRamp.push(c);
+      else if(along < RAMP_LEN + PIT_LEN) cellsPit.push(c);
+      else                              cellsLanding.push(c);
     }
   }
 
-  // 6. Sweep nearby hazards out of the chasm zone — keep gameplay clean.
-  // We use a generous radius: full chasm bounding box + small buffer.
-  const allChasmCells = [...cellsRamp1, ...cellsPit, ...cellsRamp2];
+  // 4. Sweep nearby hazards out of the chasm zone
+  const allChasmCells = [...cellsRamp, ...cellsPit, ...cellsLanding];
   const inChasm = (gx, gy) => allChasmCells.some(c => c.x === gx && c.y === gy);
   const removeIfInChasm = (arr, getXY) => {
     for(let i = arr.length - 1; i >= 0; i--) {
@@ -5358,23 +5752,18 @@ function buildChasmZone(args) {
   removeIfInChasm(angledWallData, a => ({x: a.gx, y: a.gy}));
   removeIfInChasm(pendulumData, p => ({x: p.gx, y: p.gy}));
   removeIfInChasm(popupData,    p => ({x: p.gx, y: p.gy}));
-  // Fans aren't placed in puttputt biome (always empty array) so no
-  // sweep needed. If fans are ever added here, plumb fanData back through.
-  // Also drop any conveyor whose cells overlap the chasm zone
   for(let i = conveyorData.length - 1; i >= 0; i--) {
     const cv = conveyorData[i];
     if(cv.cells.some(c => inChasm(c.x, c.y))) conveyorData.splice(i, 1);
   }
 
-  // 7. Plant the two ramp conveyors. They push along the segment, toward
-  // the hole. High strength so the ball gets real launch speed.
-  const RAMP_STRENGTH = 26.0; // ~2× a normal conveyor — makes the launch real
-  // Conveyor data: pushDir 'H' means push along X, 'V' means along Z.
-  // Our segment direction: isH=true ⇒ along-axis is X ⇒ pushDir='H'.
+  // 5. Plant the SINGLE entry ramp conveyor. High strength so the ball gets
+  //    a real launch into the air via the ramp wedge mesh + vy injection.
+  const RAMP_STRENGTH = 32.0;  // boosted from 26 — needs to clear bigger pit
   const cvDir = isH ? 'H' : 'V';
-  const ramp1 = {
-    gx: cellsRamp1[0].x, gy: cellsRamp1[0].y,
-    cells: cellsRamp1,
+  const ramp = {
+    gx: cellsRamp[0].x, gy: cellsRamp[0].y,
+    cells: cellsRamp,
     pushDir: cvDir,
     pushSign: pushSign,
     strength: RAMP_STRENGTH,
@@ -5382,38 +5771,81 @@ function buildChasmZone(args) {
     convLen: RAMP_LEN,
     _eliteChasmRamp: true,
   };
-  const ramp2 = {
-    gx: cellsRamp2[0].x, gy: cellsRamp2[0].y,
-    cells: cellsRamp2,
-    pushDir: cvDir,
-    pushSign: pushSign,
-    strength: RAMP_STRENGTH,
-    segDir: seg.dir,
-    convLen: RAMP_LEN,
-    _eliteChasmRamp: true,
-  };
-  conveyorData.push(ramp1, ramp2);
+  conveyorData.push(ramp);
 
-  // 8. Plant DENSE red spikes across the pit area. White vs red is
-  // configurable: tier-1 chasm = white (-1 HP), red variant = -2 HP.
-  // v0.20o: Escalation — pit goes red at hole 15+ (player-facing), making
-  // late-run Chasm elites significantly more punishing. Earlier holes stay
-  // white so first-time encounters teach the mechanic without hammering HP.
-  // Stagger spikes so they don't perfectly tile — visual interest.
-  const PIT_RED_VARIANT = (typeof G !== 'undefined' && G.hole != null && (G.hole + 1) >= 15);
+  // 6. Plant DENSE red spikes across the pit. Always RED variant on the new
+  //    Chasm — the pit is meant to be a clear failure state, not a soft hit.
   for(const c of cellsPit) {
-    const wx = c.x * 2.0; // TILE_SIZE = 2.0 hardcoded here (matches consts above)
+    const wx = c.x * 2.0;
     const wz = c.y * 2.0;
     spikeData.push({
       gx: c.x, gy: c.y, wx, wz,
-      radius: 0.75, // bigger than normal so they're scary-looking
-      variant: PIT_RED_VARIANT ? 'red' : 'white',
+      radius: 0.75,
+      variant: 'red',
       _eliteChasmPit: true,
     });
   }
 
-  // 9. Build the world-space bounds of the pit so runtime can fall-detect.
-  // We store the rectangular AABB of the pit area in world coords.
+  // 7. Plant the SPEED HOOP at the FIRST cell of the ramp (entry point).
+  //    Oscillates laterally across the lane so the player has to time their shot.
+  //    v0.20t1: was placed 1 cell BEFORE the ramp, but that often landed
+  //    outside the carved fairway and the ball never reached it.
+  if(speedHoopData) {
+    const hoopCell = cellAt(startAlong * pushSign, 0);
+    const hoopWX = hoopCell.x * 2.0;
+    const hoopWZ = hoopCell.y * 2.0;
+    // Hoop facing direction: along the travel axis (so ball passes through)
+    const facingAng = isH ? Math.atan2(pushSign, 0) : Math.atan2(0, pushSign);
+    // Oscillate perpendicular to travel: if isH, oscillate along Z; else along X
+    const oscAxis = isH ? 'z' : 'x';
+    speedHoopData.push({
+      wx: hoopWX, wz: hoopWZ,
+      axis: oscAxis,
+      amplitude: 2.5,
+      speed: 1.6,
+      phase: 0,
+      facingAng: facingAng,
+      boost: 1.9,
+    });
+  }
+
+  // 8. Floating spike spheres above the pit. Count scales with hole number:
+  //    1-2 on early holes, 3-4 on late holes. Drift laterally (across-axis)
+  //    above the pit floor so the player has to dodge them mid-flight.
+  if(chasmAirborneData) {
+    const _holeIdx = (typeof G !== 'undefined' && G.hole != null) ? (G.hole + 1) : 1;
+    let sphereCount;
+    if(_holeIdx >= 13)      sphereCount = 4;
+    else if(_holeIdx >= 9)  sphereCount = 3;
+    else if(_holeIdx >= 5)  sphereCount = 2;
+    else                    sphereCount = 1;
+    // Place them along the pit's along-axis at evenly spaced positions
+    // The pit spans cells from RAMP_LEN to RAMP_LEN + PIT_LEN - 1 (along)
+    for(let s = 0; s < sphereCount; s++) {
+      // Position along the pit
+      const f = (s + 1) / (sphereCount + 1); // 0.33, 0.67 for 2 spheres etc.
+      const alongIdx = RAMP_LEN + Math.floor(f * PIT_LEN);
+      // Center on lane (across=0); oscillation handles lateral motion
+      const centerCell = cellAt((startAlong + alongIdx) * pushSign, 0);
+      const wx = centerCell.x * 2.0;
+      const wz = centerCell.y * 2.0;
+      // Y position: above the ground so the ball's flight trajectory crosses
+      // these (typical max launch height ~2-3 units, so spheres at 1.5-2 work).
+      const y = 1.6 + (s % 2) * 0.4; // alternate heights for variety
+      // Oscillate ACROSS the lane (perpendicular to travel)
+      const oscAxis = isH ? 'z' : 'x';
+      chasmAirborneData.push({
+        wx, wz, y,
+        oscAxis,
+        oscAmp: 2.5 + Math.random() * 0.8,    // half-lane swing
+        oscSpeed: 0.9 + Math.random() * 0.5,  // slow drift, varied
+        oscPhase: s * (Math.PI / 1.5),        // staggered phases
+        radius: 0.55,
+      });
+    }
+  }
+
+  // 9. World-space pit bounds for runtime fall-detect
   const pitMinGX = Math.min(...cellsPit.map(c => c.x));
   const pitMaxGX = Math.max(...cellsPit.map(c => c.x));
   const pitMinGY = Math.min(...cellsPit.map(c => c.y));
@@ -5433,9 +5865,10 @@ function buildChasmZone(args) {
       z: (pitMinGY + pitMaxGY) * 0.5 * T,
     },
     rampDir: { x: isH ? pushSign : 0, z: isH ? 0 : pushSign },
-    redVariant: PIT_RED_VARIANT,
+    redVariant: true,
     rampLen: RAMP_LEN,
     pitLen: PIT_LEN,
+    landingLen: LANDING_LEN,
     isH,
     pushSign,
     segLen: seg.len,
@@ -5447,6 +5880,14 @@ function generatePuttPuttCourse(holeNum) {
   const LANE_W = 4;   // fairway width in cells
   const PAD = 6;
   const HALF = LANE_W / 2;  // 2 — offset from waypoint corner to lane centre
+
+  // v0.20t: Elite holes (except Lap Mode) get +35% guaranteed minimum
+  // obstacle count. Bumps every per-type N below by 35% via this multiplier.
+  // Lap Mode uses its own custom course-data builder so this never applies
+  // there (the generator isn't even called for Lap Mode).
+  const _activeElite = (typeof G !== 'undefined' && G._activeElite) ? G._activeElite : null;
+  const _eliteIsObstacleBuffed = !!(_activeElite && _activeElite.archetype.flag !== 'eliteLapMode');
+  const _eliteObsMul = _eliteIsObstacleBuffed ? 1.35 : 1.0;
 
   // ── 1. Build a right-angle path from segments ─────────
   // v0.18a: pathMult comes from difficulty table (0.70 at ★1 → 1.40 at ★6-10).
@@ -5716,7 +6157,7 @@ function generatePuttPuttCourse(holeNum) {
   // much stronger bounce. Rare spawn chance scales with hole + difficulty.
   const bumperData = [];
   // v0.20f: count + power-variant probability now scale by holeRamp (run progress)
-  const bumperN = Math.floor((1 + Math.floor(rng()*2) + Math.floor(diff*0.7) + Math.floor(holeRamp*0.25) + (diff>=4?2:0)) * areaScale);
+  const bumperN = Math.floor((1 + Math.floor(rng()*2) + Math.floor(diff*0.7) + Math.floor(holeRamp*0.25) + (diff>=4?2:0)) * areaScale * _eliteObsMul);
   const powerBumperP = Math.min(0.25, Math.max(0, (holeRamp - 2) * 0.03 + (diff - 2) * 0.04));
   const trsh = [...fair].sort(()=>rng()-0.5);
   for(let p=0,i=0; i<trsh.length&&p<Math.min(bumperN, Math.floor((4+diff+Math.floor(diff/4)*2) * areaScale)); i++) {
@@ -5743,7 +6184,7 @@ function generatePuttPuttCourse(holeNum) {
   const spinBarData = [];
   // v0.20f: count threshold by holeRamp; spike-bar variants already used
   // _totalHolesForRamp midHole/lateHole, which was correct.
-  const spinN = holeRamp<1?0:Math.floor((Math.floor(rng()*2)+Math.floor(diff*0.3)+(diff>=4?1:0)) * areaScale);
+  const spinN = holeRamp<1?0:Math.floor((Math.floor(rng()*2)+Math.floor(diff*0.3)+(diff>=4?1:0)) * areaScale * _eliteObsMul);
   // Variant probabilities: before mid only plain; mid→late a chance of
   // spiked; late+ a chance of red-spiked (with spiked still possible).
   // v0.20f: keyed off holeRamp so 9-hole and 18-hole runs hit the SAME peak
@@ -5776,7 +6217,7 @@ function generatePuttPuttCourse(holeNum) {
   // ── 9. Slide block data ───────────────────────────────
   // Variable face length: full, three-quarter, or half of lane width.
   const slideBlockData = [];
-  const slideN = holeRamp<6?0:Math.floor((Math.floor(rng()*2)+Math.floor(diff*0.25)+(diff>=4?1:0)) * areaScale);
+  const slideN = holeRamp<6?0:Math.floor((Math.floor(rng()*2)+Math.floor(diff*0.25)+(diff>=4?1:0)) * areaScale * _eliteObsMul);
   const slsh = [...fair].sort(()=>rng()-0.5);
   for(let p=0,i=0; i<slsh.length&&p<Math.min(slideN, Math.floor((1+Math.floor(diff/3)+(diff>=4?1:0)) * areaScale)); i++) {
     const c=slsh[i];
@@ -5807,7 +6248,7 @@ function generatePuttPuttCourse(holeNum) {
 
   // ── 9b. Bumper clusters ───────────────────────────────
   const clusterData=[];
-  const clusterN=holeRamp<4?0:1+Math.floor(rng()*Math.ceil(diff/2));
+  const clusterN=holeRamp<4?0:Math.ceil((1+Math.floor(rng()*Math.ceil(diff/2)))*_eliteObsMul);
   const clsh=[...fair].sort(()=>rng()-0.5);
   for(let p=0,i=0;i<clsh.length&&p<Math.min(clusterN,2);i++){
     const c=clsh[i];
@@ -5905,7 +6346,7 @@ function generatePuttPuttCourse(holeNum) {
   // Only push forward (toward hole) or backward along the segment axis.
   // At least 8 cells long with variation. Stronger force than before.
   const conveyorData=[];
-  const convN=holeRamp<1?0:1+Math.floor(rng()*diff*0.6);
+  const convN=holeRamp<1?0:Math.ceil((1+Math.floor(rng()*diff*0.6))*_eliteObsMul);
   // Sort segments by length (longest first) to prefer long straights
   const convSegOrder = [...segInfo].sort((a,b)=>b.len-a.len);
   for(let si_i=0;si_i<convSegOrder.length&&conveyorData.length<Math.min(convN,3);si_i++){
@@ -5971,7 +6412,7 @@ function generatePuttPuttCourse(holeNum) {
 
   // ── 9f. Pop-up wall data ──────────────────────────────
   const popupData=[];
-  const popupN=holeRamp<1?0:1+Math.floor(rng()*2)+Math.floor(diff*0.4)+(diff>=4?1:0);
+  const popupN=holeRamp<1?0:Math.ceil((1+Math.floor(rng()*2)+Math.floor(diff*0.4)+(diff>=4?1:0))*_eliteObsMul);
   for(let wi=0;wi<segInfo.length&&popupData.length<Math.min(popupN,2+(diff>=4?1:0));wi++){
     const si=segInfo[wi];
     if(si.len<6) continue;
@@ -6006,7 +6447,7 @@ function generatePuttPuttCourse(holeNum) {
 
   // ── 10. Rock obstacles ────────────────────────────────
   const rockData = [];
-  const rockN = Math.max(0, Math.floor((Math.floor(diff * 0.4) + Math.floor(rng() * 2) - 1) * areaScale));
+  const rockN = Math.max(0, Math.floor((Math.floor(diff * 0.4) + Math.floor(rng() * 2) - 1) * areaScale * _eliteObsMul));
   const rsh = [...fair].sort(()=>rng()-0.5);
   for(let p=0,i=0; i<rsh.length&&p<Math.min(rockN, Math.floor(diff * areaScale)); i++) {
     const c = rsh[i];
@@ -6035,8 +6476,8 @@ function generatePuttPuttCourse(holeNum) {
   // v0.20f: introductions and ramps now use holeRamp (run-progress equivalent).
   // Old <2 of 9 → ~22% in (was hole 2). Equivalent in 18-hole scale ≈ holeRamp >= 4.
   const spikeN = (holeRamp < 4 || diff < 2) ? 0
-    : Math.floor((Math.floor(rng() * 3) + Math.floor(diff * 0.4) + (diff>=4?1:0)) * areaScale);
-  const spikeMax = Math.floor((3 + Math.floor(diff / 2) + (holeRamp>=14?1:0)) * areaScale);
+    : Math.floor((Math.floor(rng() * 3) + Math.floor(diff * 0.4) + (diff>=4?1:0)) * areaScale * _eliteObsMul);
+  const spikeMax = Math.floor((3 + Math.floor(diff / 2) + (holeRamp>=14?1:0)) * areaScale * _eliteObsMul);
   // Red-spike probability: 0 at early holes, ramping to ~40% in the late game at diff 4+.
   // Clamp to 50% so white is always the majority look.
   const redSpikeP = Math.min(0.50, Math.max(0, (holeRamp - 3) * 0.06 + (diff - 2) * 0.05));
@@ -6559,7 +7000,7 @@ function generatePuttPuttCourse(holeNum) {
     eliteArchetypeId:   elite ? elite.archetype.id : null,
     eliteNoWalls:       !!(elite && elite.archetype.flag === 'eliteNoWalls'),
     eliteBarbedWire:    !!(elite && elite.archetype.flag === 'eliteBarbedWire'),
-    eliteNotSoMini:     !!(elite && elite.archetype.flag === 'eliteNotSoMini'),
+    eliteGiantHole:     !!(elite && elite.archetype.flag === 'eliteGiantHole'),
     eliteWanderingHole: !!(elite && elite.archetype.flag === 'eliteWanderingHole'),
     eliteChasm:         !!(elite && elite.archetype.flag === 'eliteChasm'),
     eliteHunter:        !!(elite && elite.archetype.flag === 'eliteHunter'),
@@ -6574,8 +7015,13 @@ function generatePuttPuttCourse(holeNum) {
     holeDefense = {
       kind: 'moving_hole',
       pattern: 'wander',           // new pattern type — handled in buildCourse
-      amplitude: 6.0,              // travel envelope half-extent (auto-shrunk if needed)
+      amplitude: 6.0,              // ignored when _eliteFloomba is true (free roam)
       speed: 6.0,                  // world units / sec, matches Floomba 1×
+      // v0.20t2: Wandering Hole elite is FULL-LEVEL Floomba — the hole roams
+      // anywhere walls don't block, NOT a contained envelope. This flag is
+      // checked in the runtime wander step to skip the envelope clamp + the
+      // envelope ring visual.
+      _eliteFloomba: true,
       // Stub fields the existing moving_hole code expects but wander ignores:
       speedFactor: 1.0,
       phase: 0,
@@ -6592,14 +7038,21 @@ function generatePuttPuttCourse(holeNum) {
   // plays as normal but the elite's reward still triggers on under-par.
   // (Consider this a "got lucky, no pit" outcome — strictly upside.)
   let chasmZone = null;
+  // v0.20t: Two new course data arrays for Chasm rebuild — populated by
+  // buildChasmZone if the elite is active, otherwise empty.
+  const speedHoopData = [];
+  const chasmAirborneData = [];
   if(eliteFlags.eliteChasm) {
+    console.log('[Chasm] Calling buildChasmZone, segInfo lengths:', segInfo.map(s=>s.len));
     chasmZone = buildChasmZone({
       grid, W, H, segInfo, waypoints, offX, offY,
       teePos, holePos, conveyorData, spikeData, rockData,
       bumperData, slideBlockData, angledWallData,
       pendulumData, popupData,
       LANE_W,
+      speedHoopData, chasmAirborneData,
     });
+    console.log('[Chasm] Result:', chasmZone ? 'BUILT' : 'NULL', 'speedHoops:', speedHoopData.length, 'airborne:', chasmAirborneData.length);
   }
 
   return {grid,W,H,teePos,holePos,par,heightMap,vertHeights,vmW,vmH,
@@ -6608,13 +7061,18 @@ function generatePuttPuttCourse(holeNum) {
           leftRail, rightRail, teeCapPts, holeCapPts, splineWS:ppSplineWS, coinData, heartData,
           holeDefense, teeDir,
           chasmZone,
+          speedHoopData, chasmAirborneData,
           ...eliteFlags};
 }
 
 
 
 // ── Build 3D course ───────────────────────────────────
-const TILE_SIZE = 2.0;
+// v0.20q: TILE_SIZE is the single source of truth for grid→world conversion.
+// Normally 2.0. Bumped to 8.0 (×4) for the Giant Hole elite, then restored.
+// Toggling happens ONLY at hole-init/teardown — never mid-frame.
+let TILE_SIZE = 2.0;
+const TILE_SIZE_BASE = 2.0;
 const WALL_H = 0.7;
 const FLOOR_H = 0.18;
 
@@ -6623,6 +7081,7 @@ function buildCourse(data) {
   G._bgTrees = []; // reset background tree tracking
   // v0.20l: clear stale elite mesh refs — fresh mesh built per hole if applicable
   G._barbedWireMesh = null;
+  G._barbedWireBarbMat = null;
   const group = new THREE.Group();
   G.courseGroup = group;
   scene.add(group);
@@ -7044,48 +7503,49 @@ function buildCourse(data) {
         const hiddenHole = G.modifiers.some(m=>m.id==='bowling_ball') || G.modifiers.some(m=>m.id==='all_bounce');
         if(!hiddenHole) {
         const bigHole = G.modifiers.some(m=>m.id==='big_hole');
-        const cupR = bigHole ? 0.60 : 0.30;
-        const cupG=new THREE.CylinderGeometry(cupR,cupR,0.04,20);
+        // v0.20r: Giant Hole scales the cup + flag visuals 4× so the cup
+        // doesn't look like a pinprick on the giant fairway. Physics catch
+        // radius is bumped separately in the hole-detect code.
+        const _gWorldS = TILE_SIZE / TILE_SIZE_BASE;
+        const cupR = (bigHole ? 0.60 : 0.30) * _gWorldS;
+        const cupG=new THREE.CylinderGeometry(cupR,cupR,0.04 * _gWorldS,20);
         const cupM=new THREE.Mesh(cupG,MAT.hole);
         cupM.position.set(cx, cY + 0.03, cz);
         cupM.receiveShadow=true;
         group.add(cupM);
-        // v0.19t: keep a reference so moving-hole defense can translate the
-        // cup alongside the flag + beacon. Also stash the base position to
-        // drive offsets relatively.
         G._cupMesh = cupM;
         G._cupBaseY = cY + 0.03;
 
         const fg2=G.flagGroup=new THREE.Group();
-        const poleG=new THREE.CylinderGeometry(0.04,0.04,2.4,8);
+        const poleG=new THREE.CylinderGeometry(0.04 * _gWorldS, 0.04 * _gWorldS, 2.4 * _gWorldS, 8);
         const poleMesh=new THREE.Mesh(poleG,MAT.flagPole);
-        poleMesh.position.y=1.2;
+        poleMesh.position.y = 1.2 * _gWorldS;
         fg2.add(poleMesh);
         // Bigger flag — 2× size, higher up on a taller pole
-        const flG=new THREE.PlaneGeometry(1.0,0.7);
+        const flG=new THREE.PlaneGeometry(1.0 * _gWorldS, 0.7 * _gWorldS);
         const flagMat = new THREE.MeshStandardMaterial({
           color: 0xff2020, emissive: 0xff4040, emissiveIntensity: 0.6,
           side: THREE.DoubleSide, roughness: 0.55, metalness: 0.1,
         });
         const flM=new THREE.Mesh(flG,flagMat);
-        flM.position.set(0.5, 2.15, 0);
+        flM.position.set(0.5 * _gWorldS, 2.15 * _gWorldS, 0);
         fg2.add(flM);
         // Yellow stripe on the flag for contrast — small inner plane
-        const flStripeG = new THREE.PlaneGeometry(0.95, 0.18);
+        const flStripeG = new THREE.PlaneGeometry(0.95 * _gWorldS, 0.18 * _gWorldS);
         const flStripeMat = new THREE.MeshStandardMaterial({
           color: 0xffea40, emissive: 0xffcc20, emissiveIntensity: 0.8,
           side: THREE.DoubleSide, roughness: 0.5, metalness: 0.1,
         });
         const flStripe = new THREE.Mesh(flStripeG, flStripeMat);
-        flStripe.position.set(0.5, 2.15, 0.001); // tiny offset to prevent z-fighting
+        flStripe.position.set(0.5 * _gWorldS, 2.15 * _gWorldS, 0.001); // tiny offset to prevent z-fighting
         fg2.add(flStripe);
         // Flag-top ball ornament
-        const topBallG = new THREE.SphereGeometry(0.09, 8, 6);
+        const topBallG = new THREE.SphereGeometry(0.09 * _gWorldS, 8, 6);
         const topBallMat = new THREE.MeshStandardMaterial({
           color: 0xffea40, emissive: 0xffcc20, emissiveIntensity: 1.5,
         });
         const topBall = new THREE.Mesh(topBallG, topBallMat);
-        topBall.position.y = 2.45;
+        topBall.position.y = 2.45 * _gWorldS;
         topBall.userData.noOutline = true;
         fg2.add(topBall);
         fg2.position.set(cx, cY+FLOOR_H/2, cz);
@@ -7175,6 +7635,22 @@ function buildCourse(data) {
         }
         G.holeBeacon.gravRings = gravRings;
         G.holeBeacon.gravSoundPlaying = false;
+        // v0.20s: In Lap Mode, the hole only appears on the FINAL lap.
+        // Hide all of: cup mesh, flag group, see-thru cup ring, beacon
+        // column, beacon orbs, gravity rings. Re-shown by the lap-complete
+        // handler when entering lap 3.
+        if(data.eliteLapMode) {
+          if(G._cupMesh) G._cupMesh.visible = false;
+          if(G.flagGroup) G.flagGroup.visible = false;
+          if(G._holeSeeThruCup) G._holeSeeThruCup.visible = false;
+          if(G.holeBeacon && G.holeBeacon.beaconCol) G.holeBeacon.beaconCol.visible = false;
+          if(G.holeBeacon && G.holeBeacon.particles) {
+            for(const p of G.holeBeacon.particles) if(p && p.mesh) p.mesh.visible = false;
+          }
+          if(G.holeBeacon && G.holeBeacon.gravRings) {
+            for(const r of G.holeBeacon.gravRings) if(r) r.visible = false;
+          }
+        }
         } // end if(!hiddenHole)
       }
 
@@ -7310,62 +7786,86 @@ function buildCourse(data) {
       // (the wall polylines are already pushed below); purely visual + wired
       // to the damage hook in the main physics loop.
       if(data.eliteBarbedWire && rawEdges.length) {
-        const SPIKE_H = 0.32;        // height above wall top
-        const SPIKE_HALF_W = 0.07;   // base half-width (perpendicular to edge)
-        const SPACING = 0.32;        // distance between spike tips along edge
-        const positions = [];
-        const indices = [];
-        let vIdx = 0;
+        // v0.20q: Real barbed-wire look — a horizontal black strand running
+        // along each edge with X-shaped barbs every ~0.4u. Replaces the old
+        // pyramid spikes which read as "red caltrops" rather than wire.
+        const STRAND_R    = 0.025;       // wire thickness
+        const STRAND_LIFT = 0.05;        // how far above wall top
+        const BARB_LEN    = 0.18;        // each crossed-X arm length
+        const BARB_R      = 0.018;       // each crossed-X arm radius
+        const BARB_SPACING = 0.40;       // distance between barb clusters
+        const wireMat = new THREE.MeshStandardMaterial({
+          color: 0x101010, roughness: 0.55, metalness: 0.85,
+          emissive: 0x000000, emissiveIntensity: 0.0,
+        });
+        const barbMat = new THREE.MeshStandardMaterial({
+          color: 0x080808, roughness: 0.50, metalness: 0.90,
+          // Subtle dark-red emissive so they're visible against dark walls
+          // but stay reading as black, not red.
+          emissive: 0x220000, emissiveIntensity: 0.25,
+        });
+        // Combine all wire+barb segments into a single Group so we can
+        // clean up via reference (and pulse uniformly via barbMat).
+        const bwGroup = new THREE.Group();
+        bwGroup.userData.noOutline = true;
         for(const e of rawEdges) {
           const ex = e.ox1 - e.ox0;
           const ez = e.oz1 - e.oz0;
           const elen = Math.hypot(ex, ez) || 0.0001;
-          const tx = ex / elen, tz = ez / elen;     // edge tangent (along)
-          const px = -tz, pz = tx;                  // edge perpendicular (outward)
-          // We want spikes pointing UP from the wall top. Build small triangular
-          // pyramids: 4 base verts (slightly inset to give base plate) + 1 tip.
-          const numSpikes = Math.max(2, Math.floor(elen / SPACING));
-          for(let s = 0; s < numSpikes; s++) {
-            const f = (s + 0.5) / numSpikes; // 0..1 along edge
-            const cx2 = e.ox0 + ex * f;
-            const cz2 = e.oz0 + ez * f;
-            // Top y at this fraction
-            const cy  = e.topY0 + (e.topY1 - e.topY0) * f;
-            // Pyramid base: 4 verts forming a small diamond around (cx2,cy,cz2)
-            const baseY = cy + 0.005;
-            const tipY  = cy + SPIKE_H;
-            const halfL = 0.08; // base half-length along tangent
-            const halfW = SPIKE_HALF_W;
-            // Verts: 0=base front (along+), 1=base outward (perp+), 2=base back (along-), 3=base inward (perp-), 4=tip
-            const v0 = [cx2 + tx*halfL,            baseY, cz2 + tz*halfL];
-            const v1 = [cx2 + px*halfW,            baseY, cz2 + pz*halfW];
-            const v2 = [cx2 - tx*halfL,            baseY, cz2 - tz*halfL];
-            const v3 = [cx2 - px*halfW,            baseY, cz2 - pz*halfW];
-            const v4 = [cx2,                       tipY,  cz2                ];
-            positions.push(...v0, ...v1, ...v2, ...v3, ...v4);
-            // 4 triangular faces (base→base→tip)
-            const i0 = vIdx, i1 = vIdx+1, i2 = vIdx+2, i3 = vIdx+3, i4 = vIdx+4;
-            indices.push(i0, i1, i4);
-            indices.push(i1, i2, i4);
-            indices.push(i2, i3, i4);
-            indices.push(i3, i0, i4);
-            vIdx += 5;
+          const tx = ex / elen, tz = ez / elen;
+          // Wire strand: a thin cylinder oriented along the edge direction.
+          // Three.js cylinders default to Y-axis up; we rotate to align Y
+          // with our edge tangent. The strand sits at the top of the wall.
+          const cy0 = e.topY0 + STRAND_LIFT;
+          const cy1 = e.topY1 + STRAND_LIFT;
+          const wireGeo = new THREE.CylinderGeometry(STRAND_R, STRAND_R, elen, 5, 1, true);
+          const wireMesh = new THREE.Mesh(wireGeo, wireMat);
+          // Position at midpoint
+          const mxw = (e.ox0 + e.ox1) / 2;
+          const mzw = (e.oz0 + e.oz1) / 2;
+          const myw = (cy0 + cy1) / 2;
+          wireMesh.position.set(mxw, myw, mzw);
+          // Build a rotation that maps cylinder Y-axis onto edge tangent.
+          // Cylinder local Y is [0,1,0]; we want it to point along (tx, 0, tz)
+          // (with a small tilt for height difference at edge ends, but for
+          // typical flat puttputt holes this is fine).
+          const cylYaw = Math.atan2(tx, tz); // yaw to align Y with horizontal travel
+          // Rotate Y axis to lie horizontally along edge — need a 90° pitch
+          // around X first, then yaw.
+          wireMesh.rotation.order = 'YXZ';
+          wireMesh.rotation.set(Math.PI / 2, cylYaw, 0);
+          wireMesh.castShadow = true;
+          bwGroup.add(wireMesh);
+
+          // X-shaped barbs at regular intervals
+          const numBarbs = Math.max(1, Math.floor(elen / BARB_SPACING));
+          for(let s = 0; s < numBarbs; s++) {
+            const f = (s + 0.5) / numBarbs;
+            const bcx = e.ox0 + ex * f;
+            const bcz = e.oz0 + ez * f;
+            const bcy = e.topY0 + (e.topY1 - e.topY0) * f + STRAND_LIFT;
+            // Each barb is two crossed cylinders. Each arm is rotated
+            // ~45° relative to the wire's tangent (so they form an X
+            // when viewed from above) AND tilted up so the spikes
+            // angle outward and slightly upward like real barbed wire.
+            for(let arm = 0; arm < 2; arm++) {
+              const armGeo = new THREE.CylinderGeometry(BARB_R, BARB_R * 0.4, BARB_LEN, 4);
+              const armMesh = new THREE.Mesh(armGeo, barbMat);
+              armMesh.position.set(bcx, bcy + BARB_LEN * 0.3, bcz);
+              // Yaw so the arm crosses the wire at ~±45°. Two arms → X.
+              const armYaw = cylYaw + (arm === 0 ? Math.PI/4 : -Math.PI/4);
+              // Tilt upward ~30° so spikes point up + outward — looks barbed
+              // rather than skewered-flat.
+              armMesh.rotation.order = 'YXZ';
+              armMesh.rotation.set(-Math.PI / 6, armYaw, 0);
+              armMesh.castShadow = true;
+              bwGroup.add(armMesh);
+            }
           }
         }
-        if(indices.length) {
-          const sgeo = new THREE.BufferGeometry();
-          sgeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positions), 3));
-          sgeo.setIndex(indices);
-          sgeo.computeVertexNormals();
-          const smat = new THREE.MeshStandardMaterial({
-            color: 0x661111, roughness: 0.4, metalness: 0.5,
-            emissive: 0xff2030, emissiveIntensity: 0.35,
-          });
-          const sMesh = new THREE.Mesh(sgeo, smat);
-          sMesh.castShadow = true;
-          group.add(sMesh);
-          G._barbedWireMesh = sMesh; // for optional pulse animation later
-        }
+        group.add(bwGroup);
+        G._barbedWireMesh = bwGroup;
+        G._barbedWireBarbMat = barbMat; // for optional pulse animation
       }
 
       // Group consecutive edges on the same line into chunks of 2-4 tiles
@@ -7849,6 +8349,7 @@ function buildCourse(data) {
         mesh: tm,
         squashT: 0,
         _indestructible: true,
+        bounceMul: aw.bounceMul || 1.0,  // v0.20r: lap-mode outer corners use 2×
       });
     }
   }
@@ -8252,8 +8753,69 @@ function buildCourse(data) {
         }
       }
     }
+    // v0.20t: Floating spike spheres above the pit. Drift laterally per
+    // chasmAirborneData; collision damages ball + bounces it back.
+    G._chasmAirborne = [];
+    if(data.chasmAirborneData && data.chasmAirborneData.length) {
+      const sphereMat = new THREE.MeshStandardMaterial({
+        color: 0x884030, emissive: 0xcc1010, emissiveIntensity: 0.5,
+        roughness: 0.4, metalness: 0.5,
+      });
+      const spikeMat = new THREE.MeshStandardMaterial({
+        color: 0xee2020, emissive: 0xff1010, emissiveIntensity: 0.7,
+        roughness: 0.3, metalness: 0.7,
+      });
+      for(const sp of data.chasmAirborneData) {
+        const sphereGroup = new THREE.Group();
+        // Core orb
+        const sphereG = new THREE.SphereGeometry(sp.radius, 12, 8);
+        const sphereM = new THREE.Mesh(sphereG, sphereMat);
+        sphereGroup.add(sphereM);
+        // Spikes radiating outward in 6 directions (full coverage so it
+        // looks like a spiked sea-urchin from any angle).
+        const spikeLen = sp.radius * 0.9;
+        const spikeR = sp.radius * 0.18;
+        const spikeDirs = [
+          [1, 0, 0], [-1, 0, 0],
+          [0, 1, 0], [0, -1, 0],
+          [0, 0, 1], [0, 0, -1],
+          // Diagonals — denser look
+          [0.7, 0.7, 0], [-0.7, 0.7, 0], [0.7, -0.7, 0], [-0.7, -0.7, 0],
+          [0, 0.7, 0.7], [0, -0.7, 0.7], [0, 0.7, -0.7], [0, -0.7, -0.7],
+        ];
+        for(const [dx, dy, dz] of spikeDirs) {
+          const spikeG = new THREE.ConeGeometry(spikeR, spikeLen, 6);
+          const spikeM = new THREE.Mesh(spikeG, spikeMat);
+          // Position the spike out from center, oriented outward
+          spikeM.position.set(dx * sp.radius, dy * sp.radius, dz * sp.radius);
+          // Cone default points along +Y. Rotate so it points outward along (dx,dy,dz).
+          const dir = new THREE.Vector3(dx, dy, dz).normalize();
+          const yAxis = new THREE.Vector3(0, 1, 0);
+          const q = new THREE.Quaternion().setFromUnitVectors(yAxis, dir);
+          spikeM.quaternion.copy(q);
+          // Push spike outward by half-length so its base is on the sphere surface
+          spikeM.position.x += dir.x * spikeLen * 0.5;
+          spikeM.position.y += dir.y * spikeLen * 0.5;
+          spikeM.position.z += dir.z * spikeLen * 0.5;
+          spikeM.userData.noOutline = true;
+          sphereGroup.add(spikeM);
+        }
+        sphereGroup.position.set(sp.wx, sp.y, sp.wz);
+        group.add(sphereGroup);
+        G._chasmAirborne.push({
+          mesh: sphereGroup,
+          baseWX: sp.wx, baseWZ: sp.wz, y: sp.y,
+          oscAxis: sp.oscAxis, oscAmp: sp.oscAmp,
+          oscSpeed: sp.oscSpeed, oscPhase: sp.oscPhase,
+          radius: sp.radius,
+          // Runtime: current world XZ (updated per frame)
+          wx: sp.wx, wz: sp.wz,
+        });
+      }
+    }
   } else {
     G._chasmEdgeMat = null;
+    G._chasmAirborne = [];
   }
 
   // Trees must never overlap the fairway. We place them in
@@ -8315,7 +8877,10 @@ function buildCourse(data) {
   // ── Coins ─────────────────────────────────────────────
   G.coinMeshes = [];
   if(data.coinData && data.coinData.length) {
-    const coinGeo  = new THREE.CylinderGeometry(0.18, 0.18, 0.07, 16);
+    // v0.20r: scale coin visuals + glow with TILE_SIZE so they pop at the
+    // same proportional size on Giant Hole as on a normal hole.
+    const _coinWorldS = TILE_SIZE / TILE_SIZE_BASE;
+    const coinGeo  = new THREE.CylinderGeometry(0.18 * _coinWorldS, 0.18 * _coinWorldS, 0.07 * _coinWorldS, 16);
     const coinMat  = new THREE.MeshStandardMaterial({
       color: 0xffd700, roughness: 0.05, metalness: 1.0,
       emissive: 0xffaa00, emissiveIntensity: 0.4,
@@ -8326,7 +8891,7 @@ function buildCourse(data) {
     });
     for(const cd of data.coinData) {
       const terrY = getTerrainHeight(cd.wx, cd.wz);
-      const y = terrY + FLOOR_H / 2 + 0.28;
+      const y = terrY + FLOOR_H / 2 + 0.28 * _coinWorldS;
       const isSpecial = (cd.value || 1) === 5;
       const coinScale = isSpecial ? 1.6 : 1.0;
 
@@ -8347,7 +8912,7 @@ function buildCourse(data) {
       group.add(pivot);
 
       // Bloom glow disc — flat on the ground, not part of the pivot
-      const glowG = new THREE.CylinderGeometry(0.32 * coinScale, 0.32 * coinScale, 0.02, 16);
+      const glowG = new THREE.CylinderGeometry(0.32 * coinScale * _coinWorldS, 0.32 * coinScale * _coinWorldS, 0.02 * _coinWorldS, 16);
       const glowClone = glowMat.clone();
       if(isSpecial) { glowClone.emissiveIntensity = 3.0; glowClone.opacity = 0.7; }
       const glowM = new THREE.Mesh(glowG, glowClone);
@@ -8386,12 +8951,15 @@ function buildCourse(data) {
     });
     for(const hd of data.heartData) {
       const terrY = getTerrainHeight(hd.wx, hd.wz);
-      const y = terrY + FLOOR_H / 2 + 0.32;
+      // v0.20r: heart visuals scale with TILE_SIZE for Giant Hole legibility
+      const _heartWorldS = TILE_SIZE / TILE_SIZE_BASE;
+      const y = terrY + FLOOR_H / 2 + 0.32 * _heartWorldS;
 
       // Pivot group — spins around Y
       const pivot = new THREE.Group();
       pivot.position.set(hd.wx, y, hd.wz);
       pivot.userData.noOutline = true;
+      pivot.scale.setScalar(_heartWorldS);
 
       // Heart body: two lobe spheres on top + downward-pointing cone beneath.
       // Scale is tuned so it reads at camera distance; slightly larger than
@@ -8459,6 +9027,40 @@ function buildCourse(data) {
       hoopMesh.userData.noOutline = true;
       group.add(hoopMesh);
       G.speedHoops.push({wx:pt.x, wz:pt.z, y, mesh:hoopMesh, triggered:false});
+    }
+  }
+
+  // v0.20t: Course-placed oscillating speed hoops — used by elite holes
+  // (Lap Mode, Giant Hole, Chasm). Re-uses the perk speed hoop visual
+  // language but adds lateral oscillation and per-stroke retrigger.
+  // Data shape: { wx, wz, y?, axis ('x'|'z'), amplitude, speed, phase, facingAng, boost? }
+  if(data.speedHoopData && data.speedHoopData.length) {
+    const courseHoopMat = new THREE.MeshStandardMaterial({
+      color: 0x00eeff, roughness: 0.2, metalness: 0.6,
+      transparent: true, opacity: 0.85,
+      emissive: 0x00ccee, emissiveIntensity: 0.7,
+    });
+    for(const sh of data.speedHoopData) {
+      const terrY = G.heightMap.length ? getTerrainHeight(sh.wx, sh.wz) : 0;
+      const y = (sh.y != null) ? sh.y : (terrY + FLOOR_H/2 + 0.9);
+      const torusG = new THREE.TorusGeometry(0.85, 0.11, 8, 24);
+      const hoopMesh = new THREE.Mesh(torusG, courseHoopMat.clone());
+      hoopMesh.position.set(sh.wx, y, sh.wz);
+      hoopMesh.rotation.y = sh.facingAng || 0;
+      hoopMesh.userData.noOutline = true;
+      group.add(hoopMesh);
+      G.speedHoops.push({
+        wx: sh.wx, wz: sh.wz, y, mesh: hoopMesh, triggered: false,
+        // Oscillation state — base position + per-frame offset
+        _coursePlaced: true,
+        baseWX: sh.wx, baseWZ: sh.wz,
+        oscAxis: sh.axis || 'x',
+        oscAmp: sh.amplitude || 3.0,
+        oscSpeed: sh.speed || 1.4,        // radians/sec
+        oscPhase: sh.phase || 0,
+        facingAng: sh.facingAng || 0,
+        boost: sh.boost || 1.8,
+      });
     }
   }
 
@@ -8566,9 +9168,13 @@ function buildCourse(data) {
       // Shrink in small steps (0.9×) to preserve as much amplitude as
       // possible. Up to 8 tries means amp can drop to ~45% of its original
       // request but only if the fairway truly can't accommodate.
-      for(let tries = 0; tries < 8; tries++) {
-        if(checkPoints(amp)) break;
-        amp *= 0.90;
+      // v0.20t2: Wandering Hole elite skips this shrink — the hole roams
+      // the whole level, the envelope is irrelevant.
+      if(!hd._eliteFloomba) {
+        for(let tries = 0; tries < 8; tries++) {
+          if(checkPoints(amp)) break;
+          amp *= 0.90;
+        }
       }
       state.amp = Math.max(1.0, amp);
       // Visual: a subtle glowing rail along the travel envelope so the player
@@ -8619,15 +9225,19 @@ function buildCourse(data) {
         // v0.20m: Wandering Hole — soft red dashed ring showing the envelope
         // the cup stays inside. Uses TorusGeometry to suggest "this area is
         // dangerous"; ring color is angry-red rather than safe-cyan.
-        const wEnvMat = new THREE.MeshStandardMaterial({
-          color: 0xff5555, emissive: 0xff2244, emissiveIntensity: 0.55,
-          transparent: true, opacity: 0.30, depthWrite: false,
-        });
-        const ring = new THREE.Mesh(new THREE.TorusGeometry(state.amp, 0.07, 6, 48), wEnvMat);
-        ring.rotation.x = Math.PI / 2;
-        ring.position.set(cx, baseY + 0.02, cz);
-        ring.userData.noOutline = true;
-        defGroup.add(ring);
+        // v0.20t2: When _eliteFloomba is set the hole roams the WHOLE level
+        // (no envelope), so we skip the ring entirely.
+        if(!hd._eliteFloomba) {
+          const wEnvMat = new THREE.MeshStandardMaterial({
+            color: 0xff5555, emissive: 0xff2244, emissiveIntensity: 0.55,
+            transparent: true, opacity: 0.30, depthWrite: false,
+          });
+          const ring = new THREE.Mesh(new THREE.TorusGeometry(state.amp, 0.07, 6, 48), wEnvMat);
+          ring.rotation.x = Math.PI / 2;
+          ring.position.set(cx, baseY + 0.02, cz);
+          ring.userData.noOutline = true;
+          defGroup.add(ring);
+        }
         // Stash the envelope center so we can clamp the cup to it
         state._wanderCenter = { x: cx, z: cz };
         // Seed initial velocity at random angle, speed from hd.speed (default 6)
@@ -8693,20 +9303,25 @@ function buildCourse(data) {
           const wv = state._wanderVel;
           let nx2 = wo.x + wv.x * dt;
           let nz2 = wo.z + wv.z * dt;
-          // 1. Envelope clamp — bounce off the inside of the amp circle
-          const envR = state.amp;
-          const distSq = nx2*nx2 + nz2*nz2;
-          if(distSq > envR*envR) {
-            const d = Math.sqrt(distSq) || 1;
-            const nrx = nx2/d, nrz = nz2/d;        // outward radial normal
-            const dotR = wv.x*nrx + wv.z*nrz;
-            if(dotR > 0) {
-              wv.x -= 2*dotR*nrx;
-              wv.z -= 2*dotR*nrz;
+          // 1. Envelope clamp — bounce off the inside of the amp circle.
+          //    v0.20t2: Wandering Hole elite (_eliteFloomba) skips the
+          //    envelope so the hole can roam the WHOLE level. Walls
+          //    (step 2) are the only constraint.
+          if(!hd._eliteFloomba) {
+            const envR = state.amp;
+            const distSq = nx2*nx2 + nz2*nz2;
+            if(distSq > envR*envR) {
+              const d = Math.sqrt(distSq) || 1;
+              const nrx = nx2/d, nrz = nz2/d;        // outward radial normal
+              const dotR = wv.x*nrx + wv.z*nrz;
+              if(dotR > 0) {
+                wv.x -= 2*dotR*nrx;
+                wv.z -= 2*dotR*nrz;
+              }
+              // Push back inside the envelope
+              nx2 = nrx * (envR - 0.01);
+              nz2 = nrz * (envR - 0.01);
             }
-            // Push back inside the envelope
-            nx2 = nrx * (envR - 0.01);
-            nz2 = nrz * (envR - 0.01);
           }
           // 2. Wall SDF bounce — same pattern as floomba, but cheaper:
           // we only check polylines once and reflect velocity if hit. No
@@ -9229,6 +9844,212 @@ function buildCourse(data) {
     // Base: par * 5 + 8, plus 2 per hole completed for escalating difficulty
     G._allBounceTarget = G.par * 5 + 8 + (G.hole * 2);
     G._allBounceCount = 0;
+  }
+
+  // ── Lap Mode: build checkpoint flag pylons ──────────
+  // v0.20r: 4 vertical pylons placed at each checkpoint position. Start
+  // red (unpassed), turn green when passed during a lap. Refs stored on
+  // G._lapCheckpointMeshes for per-frame state changes.
+  // v0.20s: Turn checkpoints are now PAIRS of yellow flags on opposite
+  // walls of the course (instead of one flag in the middle). The start
+  // checkpoint is still a single white-checkered pylon at the finish line.
+  if(data.eliteLapMode && data.lapMode) {
+    G._lapCheckpointMeshes = [];
+    for(let i = 0; i < data.lapMode.checkpointsWS.length; i++) {
+      const cp = data.lapMode.checkpointsWS[i];
+      const isStart = !!cp.isStart;
+      // Helper: build a single flag pylon at the given world pos
+      const _buildFlagPylon = (wx, wz, isStartFlag) => {
+        const fGroup = new THREE.Group();
+        fGroup.position.set(wx, 0, wz);
+        // Pole — slim cylinder
+        const poleG = new THREE.CylinderGeometry(0.06, 0.06, 2.4, 8);
+        const poleMat = new THREE.MeshStandardMaterial({
+          color: 0xddccaa, roughness: 0.5, metalness: 0.2,
+        });
+        const pole = new THREE.Mesh(poleG, poleMat);
+        pole.position.y = 1.2;
+        fGroup.add(pole);
+        // Flag plane — yellow for turn cps, white-checkered for start
+        const flagMat = new THREE.MeshStandardMaterial({
+          color: isStartFlag ? 0xffffff : 0xffe040,
+          emissive: isStartFlag ? 0xaaaaaa : 0xffc020,
+          emissiveIntensity: 1.0,
+          side: THREE.DoubleSide, roughness: 0.5, metalness: 0.1,
+        });
+        const flagG = new THREE.PlaneGeometry(0.7, 0.45);
+        const flag = new THREE.Mesh(flagG, flagMat);
+        flag.position.set(0.4, 2.0, 0);
+        fGroup.add(flag);
+        // Glowing ring around the base
+        const ringG = new THREE.RingGeometry(0.50, 0.70, 24);
+        const ringMat = new THREE.MeshBasicMaterial({
+          color: isStartFlag ? 0xffffff : 0xffe060,
+          transparent: true, opacity: 0.55,
+          side: THREE.DoubleSide,
+        });
+        const ring = new THREE.Mesh(ringG, ringMat);
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.y = 0.02;
+        fGroup.add(ring);
+        group.add(fGroup);
+        return { group: fGroup, flag, flagMat, ring, ringMat };
+      };
+      if(isStart) {
+        // Single pylon at the start/finish line
+        const pylon = _buildFlagPylon(cp.wx, cp.wz, true);
+        G._lapCheckpointMeshes.push({
+          ...pylon, isStart: true, idx: i, pair: false,
+        });
+      } else {
+        // Two flag pylons on opposite walls
+        const a = _buildFlagPylon(cp.flagA.wx, cp.flagA.wz, false);
+        const b = _buildFlagPylon(cp.flagB.wx, cp.flagB.wz, false);
+        G._lapCheckpointMeshes.push({
+          isStart: false, idx: i, pair: true,
+          a, b, // each has { group, flag, flagMat, ring, ringMat }
+        });
+      }
+    }
+  } else {
+    G._lapCheckpointMeshes = null;
+  }
+
+  // ── Lap Mode: directional travel arrows ─────────────
+  // v0.20s: Show big yellow chevrons on the fairway pointing in the
+  // direction the player should travel. Placed in the middle of each
+  // straight (along the track centerline) at regular intervals, sized
+  // to be unmistakable but not block ball travel.
+  // v0.20t: Switched from 3D cones to flat plane meshes with a procedurally-
+  // drawn arrow texture (the ↑ shape). Reads as a clean 2D symbol on the
+  // fairway, more legible at low camera angles.
+  // Travel order: bottom (start) → right → top → left → back to start.
+  // World axes: +X = right, +Z = down (away from start). So:
+  //   bottom straight: +X travel (start → right corner)
+  //   right straight:  -Z travel (right corner → top corner)
+  //   top straight:    -X travel (top corner → left corner)
+  //   left straight:   +Z travel (left corner → bottom = start)
+  if(data.eliteLapMode && data.lapMode && data.lapMode.trackBounds) {
+    const tb = data.lapMode.trackBounds;
+    // Lane center for each straight (world coords)
+    const bottomZ = (tb.outerBotZ + tb.innerBotZ) / 2;
+    const topZ    = (tb.outerTopZ + tb.innerTopZ) / 2;
+    const rightX  = (tb.outerRightX + tb.innerRightX) / 2;
+    const leftX   = (tb.outerLeftX + tb.innerLeftX) / 2;
+    // Build the arrow texture once via a canvas. Triangle pointing UP
+    // along the +Y axis of the canvas (texture coords 0,0 = top-left).
+    // We'll draw a thick yellow chevron with a soft outer glow.
+    const _arrowCanvas = document.createElement('canvas');
+    _arrowCanvas.width = 128; _arrowCanvas.height = 128;
+    const _ax = _arrowCanvas.getContext('2d');
+    _ax.clearRect(0, 0, 128, 128);
+    // Glow halo
+    _ax.shadowColor = 'rgba(255, 200, 60, 0.65)';
+    _ax.shadowBlur = 16;
+    // Solid arrow head + shaft
+    _ax.fillStyle = '#ffe040';
+    _ax.beginPath();
+    // Arrow points UP (toward small Y); shape:
+    //   apex at (64, 12)
+    //   wings at (12, 64) and (116, 64)
+    //   shaft inner notch at (84, 64) → (84, 116) → (44, 116) → (44, 64)
+    _ax.moveTo(64, 12);
+    _ax.lineTo(116, 64);
+    _ax.lineTo(84, 64);
+    _ax.lineTo(84, 116);
+    _ax.lineTo(44, 116);
+    _ax.lineTo(44, 64);
+    _ax.lineTo(12, 64);
+    _ax.closePath();
+    _ax.fill();
+    // Bright inner highlight
+    _ax.shadowBlur = 0;
+    _ax.fillStyle = 'rgba(255, 255, 200, 0.55)';
+    _ax.beginPath();
+    _ax.moveTo(64, 28);
+    _ax.lineTo(98, 64);
+    _ax.lineTo(76, 64);
+    _ax.lineTo(76, 100);
+    _ax.lineTo(52, 100);
+    _ax.lineTo(52, 64);
+    _ax.lineTo(30, 64);
+    _ax.closePath();
+    _ax.fill();
+    const _arrowTex = new THREE.CanvasTexture(_arrowCanvas);
+    _arrowTex.minFilter = THREE.LinearFilter;
+    _arrowTex.magFilter = THREE.LinearFilter;
+    const ARROW_MAT = new THREE.MeshBasicMaterial({
+      map: _arrowTex, transparent: true,
+      depthWrite: false, // sit on top of fairway without depth conflicts
+      side: THREE.DoubleSide,
+    });
+    const arrowGroup = new THREE.Group();
+    // Build a single chevron mesh at the given XZ pos pointing along travel.
+    // The texture's "up" direction maps to local +Y of the plane after we
+    // lay it flat (rotate -π/2 around X). After laying flat, plane local +Y
+    // points along world -Z. So texture-up corresponds to world -Z by default.
+    // travelAng (atan2(dx, dz)) measures yaw from +Z. We rotate around world
+    // Y by (travelAng + π) so that texture-up (which started at world -Z)
+    // ends up pointing along the travel direction.
+    const ARROW_SIZE = 1.6; // plane edge length in world units
+    const _addArrow = (wx, wz, travelAng) => {
+      const planeG = new THREE.PlaneGeometry(ARROW_SIZE, ARROW_SIZE);
+      const am = new THREE.Mesh(planeG, ARROW_MAT);
+      am.position.set(wx, 0.06, wz);
+      am.rotation.order = 'YXZ';
+      // Lay flat first (-π/2 around X), then yaw to face travel direction.
+      // Adding π corrects for the texture's "up" being world -Z after lay-flat.
+      am.rotation.set(-Math.PI / 2, travelAng + Math.PI, 0);
+      am.userData.noOutline = true;
+      arrowGroup.add(am);
+    };
+    const ARROWS_PER_STRAIGHT = 6;
+    // Bottom straight: +X travel
+    {
+      const angTravel = Math.atan2(1, 0);
+      const xStart = tb.outerLeftX + 2.0;
+      const xEnd   = tb.outerRightX - 2.0;
+      for(let i = 0; i < ARROWS_PER_STRAIGHT; i++) {
+        const f = (i + 0.5) / ARROWS_PER_STRAIGHT;
+        const wx = xStart + (xEnd - xStart) * f;
+        _addArrow(wx, bottomZ, angTravel);
+      }
+    }
+    // Right straight: -Z travel
+    {
+      const angTravel = Math.atan2(0, -1);
+      const zStart = tb.outerBotZ - 2.0;
+      const zEnd   = tb.outerTopZ + 2.0;
+      for(let i = 0; i < ARROWS_PER_STRAIGHT; i++) {
+        const f = (i + 0.5) / ARROWS_PER_STRAIGHT;
+        const wz = zStart + (zEnd - zStart) * f;
+        _addArrow(rightX, wz, angTravel);
+      }
+    }
+    // Top straight: -X travel
+    {
+      const angTravel = Math.atan2(-1, 0);
+      const xStart = tb.outerRightX - 2.0;
+      const xEnd   = tb.outerLeftX + 2.0;
+      for(let i = 0; i < ARROWS_PER_STRAIGHT; i++) {
+        const f = (i + 0.5) / ARROWS_PER_STRAIGHT;
+        const wx = xStart + (xEnd - xStart) * f;
+        _addArrow(wx, topZ, angTravel);
+      }
+    }
+    // Left straight: +Z travel
+    {
+      const angTravel = Math.atan2(0, 1);
+      const zStart = tb.outerTopZ + 2.0;
+      const zEnd   = tb.outerBotZ - 2.0;
+      for(let i = 0; i < ARROWS_PER_STRAIGHT; i++) {
+        const f = (i + 0.5) / ARROWS_PER_STRAIGHT;
+        const wz = zStart + (zEnd - zStart) * f;
+        _addArrow(leftX, wz, angTravel);
+      }
+    }
+    group.add(arrowGroup);
+    G._lapArrowGroup = arrowGroup;
   }
 
   return group;
@@ -11708,7 +12529,9 @@ function updatePhysics(dt) {
         const dot = G.ballVel.x*nx + G.ballVel.z*nz;
         if(dot < 0) {
           // v0.20h: Pinball forces full energy preservation on triangle deflects
-          const awBounce = G._pinballActive ? 1.0 : BOUNCE*2.0;
+          // v0.20r: bounceMul lets specific triangles boost the kick (lap mode = 2×)
+          const _bMul = aw.bounceMul || 1.0;
+          const awBounce = (G._pinballActive ? 1.0 : BOUNCE*2.0) * _bMul;
           G.ballVel.x -= (1+awBounce) * dot * nx;
           G.ballVel.z -= (1+awBounce) * dot * nz;
           if(G.ballVel.y < 0.5) G.ballVel.y += 0.8;
@@ -11757,7 +12580,9 @@ function updatePhysics(dt) {
         const dot = G.ballVel.x*bestNx + G.ballVel.z*bestNz;
         if(dot < 0) {
           // v0.20h: Pinball forces full energy preservation on edge deflects
-          const awBounce = G._pinballActive ? 1.0 : BOUNCE*2.0;
+          // v0.20r: bounceMul respected here too (lap mode outer corners)
+          const _bMul = aw.bounceMul || 1.0;
+          const awBounce = (G._pinballActive ? 1.0 : BOUNCE*2.0) * _bMul;
           G.ballVel.x -= (1+awBounce) * dot * bestNx;
           G.ballVel.z -= (1+awBounce) * dot * bestNz;
           if(G.ballVel.y < 0.5) G.ballVel.y += 0.8;
@@ -11971,15 +12796,20 @@ function updatePhysics(dt) {
       if(hoop.triggered) continue;
       const dist = Math.hypot(G.ballPos.x-hoop.wx, G.ballPos.z-hoop.wz);
       const yDist = Math.abs(G.ballPos.y - hoop.y);
-      if(dist < 0.9 && yDist < 0.8) {
+      // v0.20t: course-placed hoops are slightly bigger so the timing window
+      // through the moving hoop feels fair (1.1u vs 0.9u).
+      const _hoopR = hoop._coursePlaced ? 1.1 : 0.9;
+      if(dist < _hoopR && yDist < 0.8) {
         hoop.triggered = true;
         const spd = Math.hypot(G.ballVel.x, G.ballVel.z);
-        if(spd > 0.1) { G.ballVel.x *= 1.8; G.ballVel.z *= 1.8; }
+        const _boost = hoop.boost || 1.8;
+        if(spd > 0.1) { G.ballVel.x *= _boost; G.ballVel.z *= _boost; }
         hoop.mesh.material.emissiveIntensity = 3.0;
         hoop.mesh.material.opacity = 1.0;
-        setTimeout(()=>{ if(hoop.mesh.material) { hoop.mesh.material.emissiveIntensity=0.5; hoop.mesh.material.opacity=0.3; }}, 300);
-        collectCoin(hoop.wx, hoop.wz);
-        showToast('⭕ +Boost +Coin!', 700);
+        setTimeout(()=>{ if(hoop.mesh.material) { hoop.mesh.material.emissiveIntensity=0.7; hoop.mesh.material.opacity=0.85; }}, 300);
+        // Course-placed hoops don't drop coins (they're a track feature, not a perk)
+        if(!hoop._coursePlaced) collectCoin(hoop.wx, hoop.wz);
+        showToast(hoop._coursePlaced ? '⭕ +Boost!' : '⭕ +Boost +Coin!', 700);
         recordStyleEvent('speed_hoop');
         if(AC) sfxJump();
       }
@@ -12356,6 +13186,18 @@ function updatePhysics(dt) {
       // dvx/dvz already computed correctly in buildCourse
       G.ballVel.x += cv.dvx * cv.strength * subDt;
       G.ballVel.z += cv.dvz * cv.strength * subDt;
+      // v0.20t: Chasm entry ramp injects vertical velocity so the ball
+      // launches into the air to clear the pit. The boost is proportional
+      // to ball's horizontal speed — slow shots get a smaller launch
+      // (and likely fall in), fast shots get a big launch (clear the pit).
+      if(cv._eliteChasmRamp) {
+        const horizSpd = Math.hypot(G.ballVel.x, G.ballVel.z);
+        // Lift rate: enough that a moderately fast ball (≈18 u/s) gains ~5
+        // u/s of vy over the ramp's traversal time. With ramp length ~2
+        // cells = 4u and travel ≈ 0.22s, that's ~22 u/s² of upward accel.
+        const liftAccel = Math.min(28, horizSpd * 1.4);
+        G.ballVel.y += liftAccel * subDt;
+      }
       // Track conveyor ride for style scoring
       cv._rideTime = (cv._rideTime || 0) + subDt;
       if(cv._rideTime >= 1.0 && !cv._rideScored) {
@@ -12485,7 +13327,9 @@ function updatePhysics(dt) {
 
   // ── Coin pickup ────────────────────────────────────────
   if(G.coinMeshes && G.coinMeshes.length && G.rolling && !ghostActive) {
-    const COIN_R = 0.55;
+    // v0.20r: coin pickup radius scales with TILE_SIZE so coins on Giant Hole
+    // (visually 4× bigger) collect at their rendered footprint.
+    const COIN_R = 0.55 * (TILE_SIZE / TILE_SIZE_BASE);
     const magnetStacks = G.modifiers.filter(m => m.id === 'magnet').length;
     const magnetR    = [0, 2.5, 4.5, 7.0][Math.min(magnetStacks, 3)];
     const magnetPull = [0, 2.5, 4.5, 7.0][Math.min(magnetStacks, 3)];
@@ -12537,7 +13381,7 @@ function updatePhysics(dt) {
   // v0.20f: pickup radius bumped 0.55 → 0.85 — heart visual + glow disc reads
   // bigger than the old hitbox; this makes the collider match the silhouette.
   if(G.heartMeshes && G.heartMeshes.length && G.rolling && !ghostActive) {
-    const HEART_R = 0.85;
+    const HEART_R = 0.85 * (TILE_SIZE / TILE_SIZE_BASE);
     for(const h of G.heartMeshes) {
       if(h.collected) continue;
       const dx = G.ballPos.x - h.wx;
@@ -12610,7 +13454,9 @@ function updatePhysics(dt) {
   const holeTerrainY = G.heightMap.length ? getTerrainHeight(hp.x*TILE_SIZE, hp.y*TILE_SIZE) : 0;
   const holePosWorld = new THREE.Vector3(holeWX, holeTerrainY + FLOOR_H/2, holeWZ);
   const holeDistXZ = Math.hypot(G.ballPos.x - holeWX, G.ballPos.z - holeWZ);
-  const holeRadius = G.modifiers.find(m=>m.id==='big_hole') ? 1.1 : 0.55;
+  // v0.20r: scale catch radius with TILE_SIZE so Giant Hole's visible cup
+  // actually catches at its rendered footprint.
+  const holeRadius = (G.modifiers.find(m=>m.id==='big_hole') ? 1.1 : 0.55) * (TILE_SIZE / TILE_SIZE_BASE);
 
   // ── Ghost Ball timer ────────────────────────────────
   if(G.ghostBallActive && G._ghostTimer > 0) {
@@ -13090,7 +13936,17 @@ function updatePhysics(dt) {
     }
   }
 
-  if(holeDistXZ < holeRadius && G.ballVel.y < 4.0 && !G._bowlingPins && !G._allBounceTarget) {
+  // v0.20r: In Lap Mode, the ball passes over the start/finish position
+  // many times before actually finishing — suppress standard hole-detect
+  // and let triggerLapModeFinish handle the win condition.
+  // v0.20r: In Lap Mode, the ball passes over the start/finish position
+  // many times before actually finishing — suppress standard hole-detect
+  // EXCEPT on the final lap, where the cup is visible and rolling in
+  // counts as the win.
+  const _lapAllowHoleOut = G._lapModeActive && G._lapModeCfg
+    && G._lapNum >= G._lapModeCfg.lapsRequired - 1; /* on final lap */
+  if(holeDistXZ < holeRadius && G.ballVel.y < 4.0 && !G._bowlingPins && !G._allBounceTarget
+     && (!G._lapModeActive || _lapAllowHoleOut)) {
     // v0.19v: if this is a moving hole, freeze it and snap the ball to the
     // hole's current position so the drop animation lands on the cup.
     if(G._holeDefense && G._holeDefense.kind === 'moving_hole' && G._holeDefenseState) {
@@ -14825,6 +15681,31 @@ function onHoled() {
   if(G.inHole) return; // guard against double-call
   G.inHole = true;
   G.rolling = false;
+  // v0.20s: Lap Mode hole-out — when the player sinks the cup on the final
+  // lap, compute time-bracket par delta and override G.strokes so the
+  // standard scoring path picks it up. Strokes count + time = par scoring
+  // (dual pressure): final = max(1, actual_strokes + time_delta).
+  if(G._lapModeActive && G._lapModeCfg && G._lapTimerActive) {
+    G._lapFinalT = performance.now() - G._lapStartT;
+    G._lapTimerActive = false;
+    const elapsedSec = G._lapFinalT / 1000;
+    let timeDelta;
+    if(elapsedSec < 60)        timeDelta = -3;
+    else if(elapsedSec < 66)   timeDelta = -2;
+    else if(elapsedSec < 72)   timeDelta = -1;
+    else if(elapsedSec === 72) timeDelta = 0;
+    else if(elapsedSec < 78)   timeDelta = +1;
+    else if(elapsedSec < 84)   timeDelta = +2;
+    else                       timeDelta = +3;
+    const actualStrokes = G.strokes;
+    const effectiveStrokes = Math.max(1, actualStrokes + timeDelta);
+    G.strokes = effectiveStrokes;
+    // Tag the hole-summary toast — par delta in human terms
+    const dStr = timeDelta === 0 ? 'par' : (timeDelta < 0 ? `${timeDelta}` : `+${timeDelta}`);
+    setTimeout(() => {
+      showToast(`🏁 ${elapsedSec.toFixed(1)}s · ${actualStrokes} strokes · ${dStr} time`, 2600);
+    }, 50);
+  }
   // v0.20c: SUNK & SMASHED — if this swing destroyed something AND holed,
   // fire a flagship style event before finalizeShot picks up _shotEvents.
   if((G._swingDestroyCount||0) > 0) {
@@ -15717,11 +16598,19 @@ function renderShop() {
     grid.innerHTML += '<div class="shop-section-label">🃏 Cards <span class="shop-section-desc">— active abilities you play from your hand</span></div>';
     for(const card of cardPicks) {
       const scaledPrice = getScaledCardPrice(card);
-      const canAfford = G.coins >= scaledPrice;
+      // v0.20q: Check for a free-card voucher matching this card's rarity.
+      // Vouchers come from elite hole rewards (free_card type). Each
+      // voucher is consumed on use; multiple vouchers stack.
+      const hasVoucher = (G._freeCardVouchers || []).includes(card.rarity);
+      const canAfford = hasVoucher || (G.coins >= scaledPrice);
       const deckCount = G.deck.filter(c => c === card.id).length;
       let cls = `shop-card rarity-${card.rarity}`;
       if(!canAfford) cls += ' cant-afford';
+      if(hasVoucher)  cls += ' free-voucher';
       const stackHtml = deckCount > 0 ? `<span class="shop-stackable">(×${deckCount} in deck)</span>` : '';
+      const priceHtml = hasVoucher
+        ? `<span class="shop-price"><s style="opacity:0.5">🪙 ${scaledPrice}</s> <span style="color:#ffd750;font-weight:700;letter-spacing:1px;">FREE</span></span>`
+        : `<span class="shop-price"><span class="coin-s">🪙</span> ${scaledPrice}</span>`;
       grid.innerHTML += `
         <div class="${cls}" onclick="buyCard('${card.id}')">
           <div class="shop-card-emoji">${card.emoji}</div>
@@ -15730,7 +16619,7 @@ function renderShop() {
             <div class="shop-card-desc">${card.desc}</div>
             <div class="shop-card-meta">
               <span class="rarity-badge">${card.rarity.toUpperCase()}</span>
-              <span class="shop-price"><span class="coin-s">🪙</span> ${scaledPrice}</span>
+              ${priceHtml}
             </div>
           </div>
         </div>`;
@@ -15818,12 +16707,23 @@ window.buyCard = function(id) {
   const card = CARD_DEFS[id];
   if(!card) return;
   const scaledPrice = getScaledCardPrice(card);
-  if(G.coins < scaledPrice) return;
-  G.coins -= scaledPrice;
-  trackStat('coinsSpent', scaledPrice);
+  // v0.20q: Free-card voucher consumption. If the player has a voucher
+  // matching this card's rarity, use it instead of charging coins. Vouchers
+  // are FIFO — first matching one consumed.
+  if(!G._freeCardVouchers) G._freeCardVouchers = [];
+  const voucherIdx = G._freeCardVouchers.indexOf(card.rarity);
+  const useVoucher = voucherIdx >= 0;
+  if(!useVoucher && G.coins < scaledPrice) return;
+  if(useVoucher) {
+    G._freeCardVouchers.splice(voucherIdx, 1);
+    showToast(`🃏 Free ${card.rarity} card claimed!`, 1400);
+  } else {
+    G.coins -= scaledPrice;
+    trackStat('coinsSpent', scaledPrice);
+  }
   G.deck.push(id);
   // v0.20a3: telemetry — mark purchase on current visit's offerings.
-  if(typeof _markShopPurchase === 'function') _markShopPurchase(id, 'card');
+  if(typeof _markShopPurchase === 'function') _markShopPurchase(id, useVoucher ? 'card_voucher' : 'card');
   updateCoinHUD();
   if(AC) { for(let k=0;k<3;k++) setTimeout(()=>sfxCoinPickup(), k*100); }
   // Remove from card picks and re-render (don't close shop)
@@ -20473,10 +21373,15 @@ window.activateBoulder = activateBoulder;
 // off walls. Touch = -1 HP + ball gets shoved away from the hole. Spawned
 // once at hole-init via spawnHunter() and updated each frame by
 // updateHunter(dt). Cleanup happens in the per-hole cleanup chain.
-const HUNTER_R = 0.55;          // physical radius (collision)
-const HUNTER_BASE_SPEED = 2.4;  // u/s — slow at first
-const HUNTER_SPEED_PER_STROKE = 0.55;  // ramps each new stroke
-const HUNTER_MAX_SPEED = 6.0;   // cap — never faster than ~floomba
+// v0.20q: Buffs — 2× size, +25% speed, phases through walls (no SDF
+// collision, just relentless pursuit), ball bounces off it.
+// v0.20t2: Speed nerfed −40% (was too fast — hard to outrun even with
+// the per-stroke ramp-up). Base 3.0 → 1.8, per-stroke 0.69 → 0.41,
+// max 7.5 → 4.5. Stagger duration also bumped (see HUNTER_STAGGER_T).
+const HUNTER_R = 1.10;          // physical radius (was 0.55) — 2× the ball
+const HUNTER_BASE_SPEED = 1.8;  // u/s — v0.20t2: was 3.0, −40%
+const HUNTER_SPEED_PER_STROKE = 0.41; // v0.20t2: was 0.69, −40%
+const HUNTER_MAX_SPEED = 4.5;   // v0.20t2: was 7.5, −40%
 const HUNTER_DAMAGE_COOLDOWN = 1.0; // seconds between damage ticks
 const HUNTER_KNOCKBACK_SPEED = 14.0; // ball impulse magnitude on hit
 
@@ -20663,30 +21568,9 @@ function updateHunter(dt) {
   h.pos.x += h.vel.x * dt;
   h.pos.z += h.vel.z * dt;
 
-  // Wall collision (same SDF pattern as floomba)
-  const wallThick = (G.biome === 'puttputt' ? 0.25 : 0.32) + HUNTER_R;
-  if(G.wallPolylines && G.wallPolylines.length) {
-    for(const poly of G.wallPolylines) {
-      for(let pi = 0; pi < poly.length - 1; pi++) {
-        const ax = poly[pi].x, az = poly[pi].z;
-        const bx = poly[pi+1].x, bz = poly[pi+1].z;
-        const ex = bx - ax, ez = bz - az;
-        const lsq = ex*ex + ez*ez;
-        if(lsq < 0.0001) continue;
-        const tw = Math.max(0, Math.min(1, ((h.pos.x - ax)*ex + (h.pos.z - az)*ez) / lsq));
-        const wcx = ax + tw*ex, wcz = az + tw*ez;
-        const wdx = h.pos.x - wcx, wdz = h.pos.z - wcz;
-        const wdist = Math.hypot(wdx, wdz);
-        if(wdist < wallThick && wdist > 0.001) {
-          const wnx = wdx/wdist, wnz = wdz/wdist;
-          h.pos.x += wnx * (wallThick - wdist);
-          h.pos.z += wnz * (wallThick - wdist);
-          const dot = h.vel.x*wnx + h.vel.z*wnz;
-          if(dot < 0) { h.vel.x -= 1.5 * dot * wnx; h.vel.z -= 1.5 * dot * wnz; }
-        }
-      }
-    }
-  }
+  // v0.20q: Hunter phases through walls — no SDF collision. The horror.
+  // Per Adam's spec: walls don't stop The Hunter. Player can ONLY counter
+  // by hitting it with a fast ball/projectile (handled below).
 
   // Bob + position update on the mesh
   h.bobPhase += dt * 2.5;
@@ -20721,10 +21605,23 @@ function updateHunter(dt) {
       h.pos.x += _bvx * KNOCK_DIST;
       h.pos.z += _bvz * KNOCK_DIST;
       h.vel.x = 0; h.vel.z = 0;
-      h.immobileT = 5.0; // 5 seconds frozen — per spec
-      // Ball also loses some momentum (kinetic transfer)
-      G.ballVel.x *= 0.6;
-      G.ballVel.z *= 0.6;
+      h.immobileT = 8.0; // v0.20t2: was 5.0 — longer breathing room for the player after a successful counter-hit
+      // v0.20q: Ball BOUNCES off the Hunter (not just dampened). Reflect
+      // velocity along the contact normal (ball-from-hunter), preserving
+      // most speed so the ball gets a real ricochet. Per Adam's spec.
+      const nx = (G.ballPos.x - h.pos.x);
+      const nz = (G.ballPos.z - h.pos.z);
+      const nmag = Math.hypot(nx, nz) || 0.0001;
+      const nrx = nx / nmag, nrz = nz / nmag;
+      const vDotN = G.ballVel.x * nrx + G.ballVel.z * nrz;
+      // Reflect: v' = v - 2(v·n)n; then preserve 90% of speed (slight
+      // energy loss feels right — pure 100% reflection looks rubber-bandy).
+      G.ballVel.x = (G.ballVel.x - 2 * vDotN * nrx) * 0.9;
+      G.ballVel.z = (G.ballVel.z - 2 * vDotN * nrz) * 0.9;
+      // Push ball outside Hunter radius so it doesn't immediately re-collide
+      const SEPARATION = HUNTER_R + ballR + 0.10;
+      G.ballPos.x = h.pos.x + nrx * SEPARATION;
+      G.ballPos.z = h.pos.z + nrz * SEPARATION;
       showToast('💥 HUNTER STAGGERED!', 1500);
       triggerShake('heavy');
       if(typeof spawnHitParticles === 'function') spawnHitParticles(h.pos);
@@ -20773,6 +21670,385 @@ function updateHunter(dt) {
 }
 window.spawnHunter = spawnHunter;
 window.updateHunter = updateHunter;
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Lap Mode runtime — v0.20r
+// ═══════════════════════════════════════════════════════════════════════════
+// Per-frame checkpoint detection, lap counter, timer ticking, OOB respawn,
+// and win-condition trigger after 3 laps complete. Hooked from animate().
+//
+// State (initialized in initHole):
+//   G._lapModeActive       — boolean gate
+//   G._lapModeCfg          — { checkpointsWS, lapPar, lapsRequired }
+//   G._lapNum              — laps completed so far (0..3)
+//   G._lapPassed           — [bool×4] which checkpoints passed THIS lap
+//   G._lapNextCheckpoint   — index of the next checkpoint to hit
+//   G._lapStartT           — performance.now() of first stroke
+//   G._lapTimerActive      — true after first stroke, false after lap 3
+//   G._lapFinalT           — final elapsed ms when lap 3 completes
+//   G._lapLastCheckpointWS — world pos for OOB respawn
+//   G._lapCheckpointMeshes — visual flag refs (red/green state)
+const LAP_CHECKPOINT_RADIUS = 1.4;   // ball-cp distance to register
+const LAP_OOB_DROP_Y       = -2.5;   // ball below this Y = out of bounds
+function updateLapMode(dt) {
+  if(!G._lapModeActive) return;
+  if(!G._lapModeCfg) return;
+  if(G.inHole) return;
+  // v0.20r: After lap 3 completes, _lapTimerActive flips to false and we
+  // wait for onHoled to fire. Don't re-process checkpoints during this window.
+  if(G._lapNum >= G._lapModeCfg.lapsRequired) {
+    // Still update HUD so timer freezes at final value
+    const hudFin = document.getElementById('lap-hud');
+    if(hudFin) {
+      const lapsEl = document.getElementById('lap-hud-laps');
+      if(lapsEl) lapsEl.textContent = `${G._lapNum}/${G._lapModeCfg.lapsRequired}`;
+      const timeEl = document.getElementById('lap-hud-time');
+      if(timeEl && G._lapFinalT) timeEl.textContent = `${(G._lapFinalT/1000).toFixed(1)}s`;
+    }
+    return;
+  }
+  const cfg = G._lapModeCfg;
+  const cps = cfg.checkpointsWS;
+
+  // ── HUD: show + tick once per frame ──
+  const hud = document.getElementById('lap-hud');
+  if(hud) {
+    if(hud.style.display !== 'block') hud.style.display = 'block';
+    const lapsEl = document.getElementById('lap-hud-laps');
+    if(lapsEl) lapsEl.textContent = `${G._lapNum}/${cfg.lapsRequired}`;
+    const timeEl = document.getElementById('lap-hud-time');
+    if(timeEl) {
+      const elapsed = G._lapTimerActive ? (performance.now() - G._lapStartT) / 1000 : 0;
+      timeEl.textContent = `${elapsed.toFixed(1)}s`;
+    }
+    // Update checkpoint dot indicators (1, 2, 3 — start always passed)
+    for(let i = 1; i <= 3; i++) {
+      const dot = document.getElementById(`lap-cp-${i}`);
+      if(dot) {
+        if(G._lapPassed[i]) {
+          dot.style.background = '#40ff60';
+          dot.style.boxShadow = '0 0 6px #20ff40';
+        } else {
+          dot.style.background = '#ffe040';
+          dot.style.boxShadow = '0 0 4px #ffc020';
+        }
+      }
+    }
+  }
+
+  // ── Timer activation: starts on first stroke ──
+  if(!G._lapTimerActive && G.strokes >= 1) {
+    G._lapTimerActive = true;
+    G._lapStartT = performance.now();
+  }
+
+  // ── OOB respawn: ball fell below world floor ──
+  if(G.ballPos.y < LAP_OOB_DROP_Y && !G._lapRespawnPending) {
+    G._lapRespawnPending = true;
+    const safe = G._lapLastCheckpointWS || { x: cps[0].wx, z: cps[0].wz };
+    setTimeout(() => {
+      G.ballPos.set(safe.x, FLOOR_H/2 + BALL_R, safe.z);
+      G.ballVel.set(0, 0, 0);
+      G.ball.position.copy(G.ballPos);
+      G.rolling = false;
+      G.aimMode = true;
+      G._lapRespawnPending = false;
+      showToast('🏁 Respawn at last checkpoint', 1200);
+    }, 50);
+  }
+
+  // ── Checkpoint detection ──
+  // v0.20s: For wall-pair checkpoints, detect when the ball CROSSES the
+  // line connecting the two flags. Each pair has an `axis` indicating
+  // which world axis the line spans (the line itself is perpendicular to
+  // that axis at the centerline midpoint).
+  //   - axis 'x' pair (cp1=right, cp3=left): line spans X at constant Z=midZ;
+  //     ball is "in the zone" when |ball.z - cp.wz| < CP_THICKNESS
+  //   - axis 'z' pair (cp2=top): line spans Z at constant X=midX;
+  //     ball is "in the zone" when |ball.x - cp.wx| < CP_THICKNESS
+  // Start checkpoint uses the simple radius test — it's a single pylon.
+  const CP_THICKNESS = 1.5;  // ball must be within 1.5u of the line
+  for(let i = 0; i < cps.length; i++) {
+    const cp = cps[i];
+    let inZone = false;
+    if(cp.isStart) {
+      const dx = G.ballPos.x - cp.wx;
+      const dz = G.ballPos.z - cp.wz;
+      inZone = (Math.hypot(dx, dz) < LAP_CHECKPOINT_RADIUS);
+    } else if(cp.axis === 'x') {
+      // Pair on left/right straight: line runs along X at z = cp.wz
+      // Ball must be within thickness of that Z, and within fairway X span
+      // (just check it's INSIDE the wall extent so we don't false-trigger
+      // outside the course)
+      const inThickness = Math.abs(G.ballPos.z - cp.wz) < CP_THICKNESS;
+      const xLo = Math.min(cp.flagA.wx, cp.flagB.wx);
+      const xHi = Math.max(cp.flagA.wx, cp.flagB.wx);
+      const inSpan = G.ballPos.x >= xLo - 0.5 && G.ballPos.x <= xHi + 0.5;
+      inZone = inThickness && inSpan;
+    } else if(cp.axis === 'z') {
+      // Pair on top/bottom straight: line runs along Z at x = cp.wx
+      const inThickness = Math.abs(G.ballPos.x - cp.wx) < CP_THICKNESS;
+      const zLo = Math.min(cp.flagA.wz, cp.flagB.wz);
+      const zHi = Math.max(cp.flagA.wz, cp.flagB.wz);
+      const inSpan = G.ballPos.z >= zLo - 0.5 && G.ballPos.z <= zHi + 0.5;
+      inZone = inThickness && inSpan;
+    }
+    if(!inZone) continue;
+    // In zone. Two cases (same as before):
+    //   (1) i === G._lapNextCheckpoint — they're hitting the next-in-sequence
+    //   (2) i === 0 (start/finish) AND all 3 turn-checkpoints already passed
+    //       AND _lapNextCheckpoint has wrapped → completes a lap
+    if(i === G._lapNextCheckpoint && !G._lapPassed[i]) {
+      G._lapPassed[i] = true;
+      G._lapLastCheckpointWS = { x: cp.wx, z: cp.wz };
+      // Visual: turn pair (or single start pylon) green
+      const m = G._lapCheckpointMeshes && G._lapCheckpointMeshes[i];
+      if(m) {
+        if(m.pair) {
+          m.a.flagMat.color.setHex(0x40ff60);
+          m.a.flagMat.emissive.setHex(0x10ff30);
+          m.a.ringMat.color.setHex(0x40ff80);
+          m.b.flagMat.color.setHex(0x40ff60);
+          m.b.flagMat.emissive.setHex(0x10ff30);
+          m.b.ringMat.color.setHex(0x40ff80);
+        } else if(m.flagMat) {
+          m.flagMat.color.setHex(0x40ff60);
+          m.flagMat.emissive.setHex(0x10ff30);
+          m.ringMat.color.setHex(0x40ff80);
+        }
+      }
+      G._lapNextCheckpoint = (G._lapNextCheckpoint + 1) % cps.length;
+      // Tone — quick pickup-style ping
+      if(AC) {
+        try {
+          const ac = getAC(), t = ac.currentTime;
+          const o = ac.createOscillator(); o.type = 'triangle';
+          o.frequency.setValueAtTime(660, t);
+          o.frequency.exponentialRampToValueAtTime(990, t + 0.10);
+          const g = ac.createGain();
+          g.gain.setValueAtTime(0.12, t);
+          g.gain.exponentialRampToValueAtTime(0.001, t + 0.20);
+          o.connect(g); g.connect(getACDest());
+          o.start(t); o.stop(t + 0.22);
+        } catch(e) {}
+      }
+      const labels = ['START', 'CP 1/3', 'CP 2/3', 'CP 3/3'];
+      showToast(`✓ ${labels[i] || `CP ${i}`}`, 1000);
+    }
+    // Lap-complete check: ball at start (i===0), all 3 turn cps passed (1,2,3),
+    // and next-pointer has wrapped to 0 (meaning we just came around from cp 3).
+    // The start cp is pre-set passed at init and stays passed across laps —
+    // it acts as the "lap line", not a sequence step.
+    //
+    // v0.20s: On the FINAL lap (when cup is visible), crossing the start
+    // line does NOT auto-complete the hole. The player must roll into the
+    // cup. Only laps 1 → 2 and 2 → 3 trigger via crossing-start.
+    if(i === 0 && G._lapPassed[1] && G._lapPassed[2] && G._lapPassed[3]
+       && G._lapNextCheckpoint === 0 /* just wrapped from cp 3 */
+       && G._lapNum < cfg.lapsRequired - 1 /* not yet on final lap */) {
+      // Lap complete!
+      G._lapNum++;
+      const lapsLeft = cfg.lapsRequired - G._lapNum;
+      if(lapsLeft > 0) {
+        // v0.20s: When entering the FINAL lap, reveal the hole. Players see
+        // the cup pop into existence with sparkles + a toast — this is the
+        // "go for it" moment.
+        const isFinalLap = (lapsLeft === 1);
+        if(isFinalLap) {
+          if(G._cupMesh) G._cupMesh.visible = true;
+          if(G.flagGroup) G.flagGroup.visible = true;
+          if(G._holeSeeThruCup) G._holeSeeThruCup.visible = true;
+          if(G.holeBeacon && G.holeBeacon.beaconCol) G.holeBeacon.beaconCol.visible = true;
+          if(G.holeBeacon && G.holeBeacon.particles) {
+            for(const p of G.holeBeacon.particles) if(p && p.mesh) p.mesh.visible = true;
+          }
+          if(G.holeBeacon && G.holeBeacon.gravRings) {
+            for(const r of G.holeBeacon.gravRings) if(r) r.visible = true;
+          }
+          // Pop SFX — chime + bigger fanfare on top of the standard lap sfx
+          if(typeof spawnHitParticles === 'function' && G._cupMesh) {
+            spawnHitParticles(G._cupMesh.position);
+          }
+          showToast('🏁 FINAL LAP — sink it in the cup!', 2400);
+        } else {
+          showToast(`🏁 Lap ${G._lapNum}/${cfg.lapsRequired} — ${lapsLeft} to go!`, 1500);
+        }
+        // Reset lap state — keep start always passed
+        G._lapPassed = [true, false, false, false];
+        G._lapNextCheckpoint = 1;
+        // Reset turn-checkpoint flags to yellow (their "ready" state)
+        if(G._lapCheckpointMeshes) {
+          for(let k = 1; k < G._lapCheckpointMeshes.length; k++) {
+            const m = G._lapCheckpointMeshes[k];
+            const _resetPair = (p) => {
+              p.flagMat.color.setHex(0xffe040);
+              p.flagMat.emissive.setHex(0xffc020);
+              p.ringMat.color.setHex(0xffe060);
+            };
+            if(m.pair) { _resetPair(m.a); _resetPair(m.b); }
+            else if(m.flagMat) {
+              m.flagMat.color.setHex(0xffe040);
+              m.flagMat.emissive.setHex(0xffc020);
+              m.ringMat.color.setHex(0xffe060);
+            }
+          }
+        }
+        // SFX — bigger, layered
+        if(AC) {
+          try {
+            const ac = getAC(), t = ac.currentTime;
+            for(let n = 0; n < 3; n++) {
+              const o = ac.createOscillator(); o.type = 'sine';
+              o.frequency.setValueAtTime(440 + n*220, t + n*0.05);
+              const g = ac.createGain();
+              g.gain.setValueAtTime(0.1, t + n*0.05);
+              g.gain.exponentialRampToValueAtTime(0.001, t + n*0.05 + 0.3);
+              o.connect(g); g.connect(getACDest());
+              o.start(t + n*0.05); o.stop(t + n*0.05 + 0.3);
+            }
+          } catch(e) {}
+        }
+      } else {
+        // 3 laps done — finish the race
+        G._lapFinalT = performance.now() - G._lapStartT;
+        G._lapTimerActive = false;
+        triggerLapModeFinish();
+      }
+    }
+  }
+}
+window.updateLapMode = updateLapMode;
+
+// v0.20t: Per-frame oscillation for course-placed speed hoops. Lateral
+// sliding back and forth along their oscillation axis. Uses absolute time
+// (not dt accumulation) so phase stays stable across frame drops.
+function updateCourseSpeedHoops(dt) {
+  if(!G.speedHoops || !G.speedHoops.length) return;
+  const tNow = (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000;
+  for(const hoop of G.speedHoops) {
+    if(!hoop._coursePlaced) continue;
+    if(!hoop.mesh) continue;
+    const offset = Math.sin(tNow * hoop.oscSpeed + hoop.oscPhase) * hoop.oscAmp;
+    if(hoop.oscAxis === 'z') {
+      hoop.wx = hoop.baseWX;
+      hoop.wz = hoop.baseWZ + offset;
+    } else {
+      hoop.wx = hoop.baseWX + offset;
+      hoop.wz = hoop.baseWZ;
+    }
+    hoop.mesh.position.x = hoop.wx;
+    hoop.mesh.position.z = hoop.wz;
+  }
+}
+window.updateCourseSpeedHoops = updateCourseSpeedHoops;
+
+// v0.20t: Per-frame oscillation + ball collision for Chasm airborne spike
+// spheres. Spheres drift laterally; ball that touches one takes -1 HP and
+// is bounced back vertically/horizontally so it doesn't immediately re-hit.
+function updateChasmAirborne(dt) {
+  if(!G._chasmAirborne || !G._chasmAirborne.length) return;
+  const tNow = (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000;
+  for(const ab of G._chasmAirborne) {
+    if(!ab.mesh) continue;
+    const offset = Math.sin(tNow * ab.oscSpeed + ab.oscPhase) * ab.oscAmp;
+    if(ab.oscAxis === 'z') {
+      ab.wx = ab.baseWX;
+      ab.wz = ab.baseWZ + offset;
+    } else {
+      ab.wx = ab.baseWX + offset;
+      ab.wz = ab.baseWZ;
+    }
+    ab.mesh.position.x = ab.wx;
+    ab.mesh.position.z = ab.wz;
+    // Slow rotation for visual life
+    ab.mesh.rotation.y += dt * 0.6;
+    ab.mesh.rotation.x += dt * 0.3;
+    // Ball collision — only when ball is airborne (y > 0.4 above ground)
+    // and moving (we don't hit-check stationary balls).
+    if(!G.rolling) continue;
+    if(G.inHole) continue;
+    const dx = G.ballPos.x - ab.wx;
+    const dy = G.ballPos.y - ab.y;
+    const dz = G.ballPos.z - ab.wz;
+    const distSq = dx*dx + dy*dy + dz*dz;
+    const hitR = ab.radius + (typeof BALL_R_EFF !== 'undefined' ? BALL_R_EFF : 0.3);
+    if(distSq < hitR * hitR) {
+      // Stagger to prevent multi-frame triggers — use a per-sphere cooldown
+      if(ab._cdUntil && tNow < ab._cdUntil) continue;
+      ab._cdUntil = tNow + 0.5;
+      // Damage
+      if(typeof loseHP === 'function') loseHP(1);
+      else if(typeof G.hp === 'number') G.hp = Math.max(0, G.hp - 1);
+      // Bounce ball away from sphere center
+      const dist = Math.sqrt(distSq) || 0.01;
+      const nx = dx / dist, ny = dy / dist, nz = dz / dist;
+      const speed = Math.hypot(G.ballVel.x, G.ballVel.y, G.ballVel.z);
+      const bouncebackSpd = Math.max(6, speed * 0.7);
+      G.ballVel.x = nx * bouncebackSpd;
+      G.ballVel.y = Math.max(2.0, ny * bouncebackSpd);
+      G.ballVel.z = nz * bouncebackSpd;
+      // Visual ping
+      if(typeof spawnHitParticles === 'function') {
+        spawnHitParticles({ x: ab.wx, y: ab.y, z: ab.wz });
+      }
+      if(typeof showToast === 'function') showToast('💥 Spike sphere! −1 HP', 1200);
+      if(typeof triggerShake === 'function') triggerShake(0.45);
+    }
+  }
+}
+window.updateChasmAirborne = updateChasmAirborne;
+
+// Called when the player completes the final lap. Compute par from final
+// time, set G.strokes accordingly, and trigger the standard hole-out flow.
+//
+// Scoring approach (per Adam's "dual pressure" spec):
+//   - Player's actual strokes are tracked normally (they accumulate as
+//     they tap-shoot through the laps).
+//   - The TIME delta from par (72s) adjusts effective strokes.
+//   - Final hole-out strokes = max(1, actual_strokes + time_delta)
+//   - Elite reward fires if final < par (4).
+//
+// Time → stroke-delta brackets (per Adam's spec, 6s each, par = 72s):
+//   < 60s     → -3 (eagle territory)
+//   60-66s    → -2
+//   66-72s    → -1
+//   == 72s    → 0 (par)
+//   72-78s    → +1
+//   78-84s    → +2
+//   84s+      → +3 (cap)
+function triggerLapModeFinish() {
+  const par = G.par || 4;
+  const elapsedSec = (G._lapFinalT || 0) / 1000;
+  let timeDelta;
+  if(elapsedSec < 60)       timeDelta = -3;
+  else if(elapsedSec < 66)  timeDelta = -2;
+  else if(elapsedSec < 72)  timeDelta = -1;
+  else if(elapsedSec === 72) timeDelta = 0;
+  else if(elapsedSec < 78)  timeDelta = +1;
+  else if(elapsedSec < 84)  timeDelta = +2;
+  else                      timeDelta = +3;
+  // Combine: actual strokes + time delta, clamped ≥ 1
+  const actualStrokes = G.strokes;
+  const effectiveStrokes = Math.max(1, actualStrokes + timeDelta);
+  G.strokes = effectiveStrokes;
+  const finalDelta = effectiveStrokes - par;
+  // Fanfare
+  const dStr = finalDelta <= 0 ? finalDelta : '+'+finalDelta;
+  showToast(`🏁 ${elapsedSec.toFixed(1)}s · ${actualStrokes} strokes · ${dStr} par`, 2600);
+  // Position ball at start/finish for the cup-drop animation
+  const cp0 = G._lapModeCfg.checkpointsWS[0];
+  G.ballPos.set(cp0.wx, FLOOR_H/2 + BALL_R, cp0.wz);
+  G.ballVel.set(0, 0, 0);
+  G.ball.position.copy(G.ballPos);
+  // Trigger hole-out via the standard path (handles HP, scorecard, summary).
+  // Do NOT pre-set G.inHole — onHoled has an early-return guard on that flag.
+  setTimeout(() => {
+    if(typeof onHoled === 'function') {
+      onHoled();
+    }
+  }, 800);
+}
+window.triggerLapModeFinish = triggerLapModeFinish;
 
 // Spawn a floomba from card — deploys at ball position
 function spawnFloombaFromCard() {
@@ -22342,6 +23618,14 @@ function fireShot() {
   // Ghost ball is now manually activated via ability button, not auto-fired
   G.strokes++;
   G._holeSwingCount = (G._holeSwingCount||0) + 1;
+  // v0.20t: Reset triggered flag on course-placed (oscillating) speed hoops
+  // so each stroke can use them again. Perk-spawned hoops stay one-shot per
+  // hole (their behavior is unchanged).
+  if(G.speedHoops) {
+    for(const h of G.speedHoops) {
+      if(h._coursePlaced) h.triggered = false;
+    }
+  }
   // v0.20p: Hunter ramps up each stroke — Mr. X-style "always closer."
   if(G._hunterActive) G._hunterApproachStrokes = (G._hunterApproachStrokes || 0) + 1;
   // Reset jump-over dedup for the new shot
@@ -22416,7 +23700,10 @@ canvas.addEventListener('wheel', e=>{
   // deltaY > 0 when scrolling down — interpret as "zoom out" (farther).
   // Step is proportional to current distance for smooth feel at any zoom.
   const step = G.camDist * 0.0015 * e.deltaY;
-  G.camDist = Math.max(4, Math.min(30, G.camDist + step));
+  // v0.20q: Upper zoom clamp scales with TILE_SIZE so Giant Hole players can
+  // pan out to see the whole 4× course (otherwise they'd hit the 30u ceiling).
+  const _zoomMax = 30 * (TILE_SIZE / TILE_SIZE_BASE);
+  G.camDist = Math.max(4, Math.min(_zoomMax, G.camDist + step));
 }, { passive: false });
 
 // Touch events
@@ -22442,7 +23729,7 @@ canvas.addEventListener('touchmove', e=>{
   if(e.touches.length===2 && input.pinching) {
     const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
     const delta=input.lastPinchDist-d;
-    G.camDist=Math.max(4,Math.min(30,G.camDist+delta*0.04));
+    G.camDist=Math.max(4,Math.min(30 * (TILE_SIZE / TILE_SIZE_BASE),G.camDist+delta*0.04));
     input.lastPinchDist=d;
 
     const midX=(e.touches[0].clientX+e.touches[1].clientX)*0.5;
@@ -22526,6 +23813,100 @@ function debugForceElite() {
            : `tier ${G._eliteForceTier} only`;
   showToast(`⚠️ Elite forced (${lbl})`, 1400);
 }
+
+// v0.20r: Pick a specific elite archetype to play next. Bypasses the fork
+// screen entirely — sets G._activeElite directly with a rolled reward,
+// then triggers nextHole() to load it. Lets us iterate any archetype
+// without having to grind through forks.
+function openDebugElitePicker() {
+  document.getElementById('debug-menu').classList.remove('open');
+  const list = document.getElementById('dbg-elite-pick-list');
+  if(!list) return;
+  list.innerHTML = '';
+  // List every enabled archetype, with rarity coloring per tier
+  const tierColors = { 1: '#7eddc1', 2: '#ffaa44', 3: '#ff5060' };
+  for(const arch of Object.values(ELITE_ARCHETYPES)) {
+    if(!arch.enabled) continue;
+    const btn = document.createElement('button');
+    btn.style.cssText = `
+      display:flex;align-items:center;gap:10px;
+      padding:11px 14px;border-radius:12px;
+      background:rgba(255,255,255,0.06);
+      border:1.5px solid ${tierColors[arch.tier]}80;
+      color:#fff;font-family:'Inter',sans-serif;
+      font-size:0.85rem;text-align:left;cursor:pointer;
+      transition:background 0.15s;
+    `;
+    btn.innerHTML = `
+      <div style="font-size:1.6rem;line-height:1">${arch.emoji}</div>
+      <div style="flex:1">
+        <div style="font-weight:700;letter-spacing:0.3px">${arch.name}</div>
+        <div style="font-size:0.62rem;color:rgba(255,255,255,0.55);margin-top:2px">${arch.tagline}</div>
+      </div>
+      <div style="font-size:0.55rem;letter-spacing:1.5px;color:${tierColors[arch.tier]};font-weight:700">T${arch.tier}</div>
+    `;
+    btn.onclick = () => debugLoadEliteNow(arch.id);
+    list.appendChild(btn);
+  }
+  document.getElementById('dbg-elite-picker').style.display = 'flex';
+}
+window.openDebugElitePicker = openDebugElitePicker;
+
+function closeDebugElitePicker() {
+  document.getElementById('dbg-elite-picker').style.display = 'none';
+}
+window.closeDebugElitePicker = closeDebugElitePicker;
+
+// Skip the fork screen and load a specific elite immediately. Picks a
+// random reward from that tier's pool so the reward delivery code path
+// still gets exercised in tests.
+//
+// If called mid-hole: we end the current hole at par (no penalty/no reward),
+// then queue the chosen elite as the active one for the next initHole.
+// If called from menu/holed state: just set the active elite and advance.
+function debugLoadEliteNow(archetypeId) {
+  closeDebugElitePicker();
+  const arch = ELITE_ARCHETYPES[archetypeId];
+  if(!arch) return;
+  const rewardPool = ELITE_TIER_REWARD_POOLS[arch.tier] || [];
+  const rewardId = rewardPool[Math.floor(Math.random() * rewardPool.length)];
+  const reward = ELITE_REWARDS[rewardId];
+  // Set up active elite state directly — bypass fork + commit
+  G._activeElite = { archetype: arch, reward, wager: 0 };
+  G._eliteWager = 0;
+  G._eliteOffer = null;
+  if(!G._eliteHistory) G._eliteHistory = [];
+  G._eliteHistory.push({
+    hole: G.hole + 1,
+    archetypeId: arch.id,
+    rewardId: reward.id,
+    taken: true,
+    success: null,
+    wager: 0,
+    debug: true,
+  });
+  showToast(`${arch.emoji} Loading ${arch.name}…`, 1200);
+  // Always go through nextHole() — it handles cleanup of any in-progress
+  // hole state (cards, hunter, chasm refs, etc.) and increments G.hole.
+  // The active elite we just set will be picked up when initHole reads
+  // G._activeElite.archetype.flag in the data plumbing.
+  if(G.state === 'menu' || G.state === 'gameover') {
+    showToast('Start a run first, then pick the elite', 1800);
+    G._activeElite = null;
+    G._eliteHistory.pop();
+    return;
+  }
+  // Skip current hole's reward summary; force-advance.
+  G.state = 'playing';
+  const hs = document.getElementById('hole-summary');
+  if(hs) hs.classList.remove('visible');
+  if(typeof closeShop === 'function') {
+    const so = document.getElementById('shop-overlay');
+    if(so && so.classList.contains('visible')) closeShop();
+  }
+  nextHole();
+}
+window.debugLoadEliteNow = debugLoadEliteNow;
 
 // v0.20f4: lazy-load eruda mobile console on demand. Once loaded, the floating
 // 🛠 button persists at the corner of the screen — tap to open/close console.
@@ -22666,6 +24047,7 @@ document.getElementById('dbg-skip').addEventListener('click', debugSkipHole);
 document.getElementById('dbg-budget').addEventListener('click', debugAddBudget);
 document.getElementById('dbg-coins').addEventListener('click', debugAddCoins);
 { const _e = document.getElementById('dbg-elite'); if(_e) _e.addEventListener('click', debugForceElite); }
+{ const _ep = document.getElementById('dbg-elite-pick'); if(_ep) _ep.addEventListener('click', openDebugElitePicker); }
 { const _u = document.getElementById('dbg-unlock-all'); if(_u) _u.addEventListener('click', debugUnlockAll); }
 { const _c = document.getElementById('dbg-console'); if(_c) _c.addEventListener('click', debugOpenConsole); }
 document.getElementById('dbg-close').addEventListener('click', () => {
@@ -23207,7 +24589,7 @@ function updateKeyboardCamera(dt) {
   if(keys['KeyA']) G.camTheta -= CAM_ROT_SPEED * dt;
   if(keys['KeyD']) G.camTheta += CAM_ROT_SPEED * dt;
   if(keys['KeyW']) G.camDist = Math.max(4,  G.camDist - CAM_ZOOM_SPEED * dt);
-  if(keys['KeyS']) G.camDist = Math.min(30, G.camDist + CAM_ZOOM_SPEED * dt);
+  if(keys['KeyS']) G.camDist = Math.min(30 * (TILE_SIZE / TILE_SIZE_BASE), G.camDist + CAM_ZOOM_SPEED * dt);
 }
 
 function endWalkies() {
@@ -23539,6 +24921,16 @@ function showGameOver(bustedBudget=false){
   if(_eliteCommit) _eliteCommit.classList.remove('visible');
   G._activeElite = null;
   G._eliteOffer = null;
+  // v0.20q: Restore TILE_SIZE in case a Giant Hole was active when the
+  // run ended. Otherwise the menu camera + next run's first hole inherit
+  // the bumped scale until the next initHole() sets it explicitly.
+  TILE_SIZE = TILE_SIZE_BASE;
+  // v0.20r: Lap Mode HUD + state cleanup
+  G._lapModeActive = false;
+  G._lapModeCfg = null;
+  G._lapTimerActive = false;
+  const _lapHudGo = document.getElementById('lap-hud');
+  if(_lapHudGo) _lapHudGo.style.display = 'none';
   // v0.20n: Chasm runtime state cleanup
   G._chasmActive = false;
   G._chasmZone = null;
@@ -24147,6 +25539,16 @@ window.importSaveFile = importSaveFile;
 
 // ── Game flow ─────────────────────────────────────────
 function initHole() {
+  // v0.20q: Giant Hole elite — bump TILE_SIZE to 4× normal so the entire
+  // generated world is 4× bigger. Ball physics, ball size, gravity, friction
+  // are all unchanged — the course just stretches out. Restored at hole-end.
+  // MUST run before generatePuttPuttCourse so the generator emits scaled
+  // world-coords from the start.
+  if(G._activeElite && G._activeElite.archetype.flag === 'eliteGiantHole') {
+    TILE_SIZE = TILE_SIZE_BASE * 2.0;
+  } else {
+    TILE_SIZE = TILE_SIZE_BASE;
+  }
   // ── Per-hole perk state reset ───────────────────────
   G._slowMoUsedThisHole = false;
   G._slowMoPerkActive = false;
@@ -24208,7 +25610,100 @@ function initHole() {
     } catch(e) { /* save assembly failure — skip */ }
   }
 
-  const data = generatePuttPuttCourse(G.hole);
+  // v0.20r: Lap Mode uses a custom course-data builder instead of the
+  // standard putt-putt generator. The data shape is the same so buildCourse
+  // can consume it transparently.
+  let data;
+  if(G._activeElite && G._activeElite.archetype.flag === 'eliteLapMode') {
+    data = buildLapModeCourseData();
+  } else {
+    data = generatePuttPuttCourse(G.hole);
+  }
+
+  // v0.20r: Giant Hole — scale obstacle sizes (visual + physics) by 4×.
+  // Positions are already 4× via TILE_SIZE; radii aren't, so a course of
+  // tiny obstacles spaced super far apart felt empty. Scaling radii here
+  // before buildCourse runs means both visual meshes AND physics use the
+  // bumped values without touching any of the construction sites.
+  if(data.eliteGiantHole) {
+    const S = TILE_SIZE / TILE_SIZE_BASE; // 2× when Giant Hole active
+    // Bumpers carry `radius` (used for both mesh geo + collision)
+    if(data.bumperData) for(const b of data.bumperData) b.radius *= S;
+    // Rocks carry `radius` (collision + visual sphere)
+    if(data.rockData)   for(const r of data.rockData)   r.radius *= S;
+    // Spikes carry `radius` (visual + a tiny collision check)
+    if(data.spikeData)  for(const s of data.spikeData)  s.radius *= S;
+    // Spinning bars: length, halfLen, baseR (physics + visual)
+    if(data.spinBarData) for(const b of data.spinBarData) {
+      if(b.length    != null) b.length    *= S;
+      if(b.halfLen   != null) b.halfLen   *= S;
+      if(b.baseR     != null) b.baseR     *= S;
+      if(b.barW      != null) b.barW      *= S;
+      if(b.barH      != null) b.barH      *= S;
+    }
+    // Sliding blocks: dims (visual + collision)
+    if(data.slideBlockData) for(const sb of data.slideBlockData) {
+      if(sb.length != null) sb.length *= S;
+      if(sb.width  != null) sb.width  *= S;
+      if(sb.height != null) sb.height *= S;
+    }
+    // Conveyors carry per-cell width/length implicitly via TILE_SIZE,
+    // so their "tiles" already grow with the world. The arrows on top
+    // are scaled in buildCourse separately (see below).
+    // Pendulums + popups: lengths
+    if(data.pendulumData) for(const p of data.pendulumData) {
+      if(p.length    != null) p.length    *= S;
+      if(p.bobR      != null) p.bobR      *= S;
+      if(p.armR      != null) p.armR      *= S;
+    }
+    if(data.popupData) for(const p of data.popupData) {
+      if(p.length    != null) p.length    *= S;
+      if(p.height    != null) p.height    *= S;
+      if(p.width     != null) p.width     *= S;
+    }
+    // Angled walls: triangle extent + 2× bounce on Giant Hole (v0.20t)
+    if(data.angledWallData) for(const a of data.angledWallData) {
+      if(a.size != null) a.size *= S;
+      // ax/az/bx/bz/wx/wz are already in world coords (auto-scaled via TILE_SIZE)
+      // Bounce buff: every corner triangle on a Giant Hole hits 2× harder so
+      // the player can use them to cover the bigger course distances faster.
+      a.bounceMul = (a.bounceMul || 1.0) * 2.0;
+    }
+    // v0.20t: Giant Hole speed hoops — sprinkle 2-3 oscillating hoops along
+    // the course spline so the player can use them to traverse the bigger
+    // distances faster. Course-placed (re-triggerable per stroke).
+    if(data.splineWS && data.splineWS.length > 4) {
+      if(!data.speedHoopData) data.speedHoopData = [];
+      const sw = data.splineWS;
+      const hoopCount = 2 + Math.floor(Math.random() * 2); // 2 or 3
+      const placed = [];
+      for(let attempt = 0; attempt < 60 && placed.length < hoopCount; attempt++) {
+        // Stay clear of tee and hole (first/last 12% of spline)
+        const idx = Math.floor(sw.length * 0.18) + Math.floor(Math.random() * (sw.length * 0.64));
+        const pt = sw[Math.min(idx, sw.length - 1)];
+        if(placed.some(p => Math.hypot(p.wx - pt.x, p.wz - pt.z) < TILE_SIZE * 4)) continue;
+        const prev = sw[Math.max(0, idx - 1)];
+        const next = sw[Math.min(sw.length - 1, idx + 1)];
+        const dx = next.x - prev.x, dz = next.z - prev.z;
+        const segAng = Math.atan2(dx, dz); // facing along path
+        // Oscillate perpendicular to the path so the ball has to time it
+        // (oscillating along the path would make it always reachable).
+        const oscAxis = (Math.abs(dx) > Math.abs(dz)) ? 'z' : 'x';
+        data.speedHoopData.push({
+          wx: pt.x, wz: pt.z,
+          axis: oscAxis,
+          amplitude: 2.5,                             // half-lane swing
+          speed: 1.2 + Math.random() * 0.4,           // 1.2–1.6 rad/s
+          phase: Math.random() * Math.PI * 2,
+          facingAng: segAng,
+          boost: 1.7,                                 // slightly less than perk's 1.8
+        });
+        placed.push({ wx: pt.x, wz: pt.z });
+      }
+    }
+    // Coins + hearts: pickup mesh size scaled at build time via worldScale
+    // (read from TILE_SIZE in buildCourse, see the coin/heart blocks).
+  }
   G.grid = data.grid;
   G.gridW = data.W;
   G.gridH = data.H;
@@ -24220,6 +25715,15 @@ function initHole() {
   G.teePos = {x:data.teePos.x, y:data.teePos.y};
   G.holePos = {x:data.holePos.x, y:data.holePos.y};
   G.par = data.par;
+  // v0.20q: Elite-specific par adjustments. These apply on top of standard par.
+  //   Giant Hole: +3 par (course is 4× longer; need ~4× strokes, but
+  //               extra-padding for forgiving feel)
+  //   Barbed Wire: +2 par (per Adam's spec — wall bounces cost HP, so
+  //               give the player breathing room)
+  //   No Walls:   +1 par (per Adam's spec — recovering from OOB takes strokes)
+  if(data.eliteGiantHole)  G.par += 2;
+  if(data.eliteBarbedWire) G.par += 2;
+  if(data.eliteNoWalls)    G.par += 1;
   // v0.20a1: Speedball timer scales with par — par × 7 seconds per hole.
   // A par-3 = 21s, par-5 = 35s, par-8 = 56s. Resets on every new hole;
   // active flag clears so the timer doesn't tick until the first swing.
@@ -24382,11 +25886,11 @@ function initHole() {
   }
 
   createBall();
-  // v0.20k: Not-So-Mini elite — overrides shrink_ray for this hole only.
-  // Same "tiny ball" mechanic, but the camera pulls WAY out and up instead of
-  // hugging close, for a "lost in a giant world" feel. Cleared on next hole.
-  const _notSoMini = !!data.eliteNotSoMini;
-  G._notSoMiniActive = _notSoMini;
+  // v0.20q: Giant Hole elite — TILE_SIZE was already bumped at function top;
+  // the world is 4× normal. Ball + camera tuning bumps slightly to give a
+  // sense of distance, but the BALL stays full size. Cleared next hole.
+  const _giantHole = !!data.eliteGiantHole;
+  G._giantHoleActive = _giantHole;
   // v0.20l: Barbed Wire elite — wall collisions deduct 1 HP per stroke.
   // Runtime flag cached here; consumed in the wall collision branch.
   G._barbedWireActive = !!data.eliteBarbedWire;
@@ -24404,31 +25908,39 @@ function initHole() {
   G._hunter = null;          // populated below if active
   G._hunterApproachStrokes = 0;  // increments per stroke, ramps speed
   G._lastHunterDamageStroke = -1;
-  // Shrink ray: tiny ball + closer camera with a lower starting pitch for true
-  // "toy in a giant world" feel. v0.17w: _shrinkCamPhi is now a *seed* value used
-  // only on hole init — after that G.camPhi is free to respond to drag input so
-  // the player can look up/down normally. Previously the value was used as a
-  // persistent render override that locked the Y axis.
-  if(_notSoMini) {
-    // Not-So-Mini takes precedence over shrink_ray. Scaled MORE aggressively
-    // and the camera pushes OUT (not in) for the "exposed in a huge world" beat.
-    if(G.ball) G.ball.scale.setScalar(0.30);   // smaller than shrink_ray's 0.35
-    G._shrinkCamMult = 2.4;                    // far pull-back
-    G._shrinkActive = true;                    // reuses BALL_R_EFF code paths
-    G.camPhi = 0.65;                           // higher pitch — looking down from above
-    camera.fov = 72;                           // wide angle for "swallowed by space" feel
-    camera.updateProjectionMatrix();
-  } else if(G.modifiers.some(m=>m.id==='shrink_ray')) {
-    if(G.ball) G.ball.scale.setScalar(0.35);   // was 0.5 — smaller ball
-    G._shrinkCamMult = 0.65;                   // was 1.8 — closer, not farther
+  // v0.20r: Lap Mode runtime state. Activated when the elite course data
+  // ships a `lapMode` block. Tracked across the entire hole; reset at
+  // hole-init below.
+  G._lapModeActive = !!(data.eliteLapMode && data.lapMode);
+  // Hide HUD when not in lap mode (visibility otherwise persists between holes)
+  const _lapHud = document.getElementById('lap-hud');
+  if(_lapHud) _lapHud.style.display = G._lapModeActive ? 'block' : 'none';
+  G._lapModeCfg = data.lapMode || null;
+  G._lapNum = 0;
+  G._lapNextCheckpoint = 1; // 0=start, 1=first turn after start; player must hit 1→2→3→0 (return to start) for one lap
+  G._lapPassed = [false, false, false, false]; // tracks which checkpoints passed THIS lap; index 0 = start (always true at hole-load)
+  if(G._lapModeActive) G._lapPassed[0] = true;
+  G._lapStartT = 0;        // ms timestamp of first stroke
+  G._lapTimerActive = false;
+  G._lapFinalT = 0;        // ms elapsed when 3 laps complete
+  G._lapLastCheckpointWS = G._lapModeActive
+    ? { x: data.lapMode.checkpointsWS[0].wx, z: data.lapMode.checkpointsWS[0].wz }
+    : null;
+  G._lapRespawnPending = false; // edge-trigger guard for OOB respawn
+  // Ball scale: Giant Hole keeps ball full size (world is huge instead).
+  // Shrink Ray perk still shrinks ball + pulls camera in close.
+  if(G.modifiers.some(m=>m.id==='shrink_ray')) {
+    if(G.ball) G.ball.scale.setScalar(0.35);
+    G._shrinkCamMult = 0.65;
     G._shrinkActive = true;
-    G.camPhi = 1.15;                           // seed the lower pitch (drag can change)
-    camera.fov = 65;                           // was 72 — slightly less wide so ball reads larger
+    G.camPhi = 1.15;
+    camera.fov = 65;
     camera.updateProjectionMatrix();
   } else {
+    if(G.ball) G.ball.scale.setScalar(1.0); // ensure restored from prior shrink hole
     G._shrinkCamMult = 1.0;
     G._shrinkActive = false;
-    camera.fov = 55;                           // restore normal FOV
+    camera.fov = 55;
     camera.updateProjectionMatrix();
   }
   createAimArrow();
@@ -24436,7 +25948,7 @@ function initHole() {
 
   const tx=data.teePos.x*TILE_SIZE, tz=data.teePos.y*TILE_SIZE;
   const teeTerrainY = data.heightMap.length ? getTerrainHeight(tx, tz) : 0;
-  const teeBallR = (_notSoMini || G.modifiers.some(m=>m.id==='shrink_ray')) ? BALL_R * 0.5 : BALL_R;
+  const teeBallR = G.modifiers.some(m=>m.id==='shrink_ray') ? BALL_R * 0.5 : BALL_R;
   G.ballPos.set(tx, teeTerrainY + FLOOR_H/2+teeBallR, tz);
   G.ballVel.set(0,0,0);
   G.ball.position.copy(G.ballPos);
@@ -24452,7 +25964,15 @@ function initHole() {
   G.camTheta = Math.atan2(-td.x / tdLen, -td.z / tdLen);
   G.camPhi = 0.85;
   const courseDist = Math.hypot(hx-tx, hz-tz);
+  // v0.20q: Giant Hole = world is 4× bigger. Per Adam's spec, START the
+  // camera at the SAME distance as a normal hole — this maximizes the
+  // "look how huge this course is" feel by emphasizing the size mismatch
+  // between the ball and the course. Players can pinch out to zoom further
+  // if they want a wider view (clamps already scale via TILE_SIZE).
   G.camDist = Math.max(9, Math.min(18, courseDist * 0.9 + 7));
+  // Note: courseDist is in world units, which on Giant Hole is 4× larger,
+  // so the formula naturally clamps to 18 (the previous max). That IS the
+  // "usual" distance — at the upper end of the normal range. Good.
 
   // Aim arrow starts facing away from camera (into the course)
   syncAimToCamera();
@@ -25897,6 +27417,8 @@ function startGame(){
   G._activeElite = null;
   G._eliteWager = 0;
   G._eliteHistory = [];
+  G._freeCardVouchers = [];  // v0.20q: cleared per-run; pending elite-card claims
+  TILE_SIZE = TILE_SIZE_BASE;  // v0.20q: defensive reset; Giant Hole sets it on hole-init
   // v0.20n: Chasm runtime state — reset alongside other elite state.
   G._chasmActive = false;
   G._chasmZone = null;
@@ -26279,13 +27801,10 @@ function onEliteCommitConfirm() {
 window.onEliteCommitConfirm = onEliteCommitConfirm;
 
 function showEliteStakesPip(archetype, reward) {
-  const pip = document.getElementById('elite-stakes-pip');
-  if(!pip) return;
-  document.getElementById('elite-stakes-pip-name').textContent =
-    `${archetype.emoji} ${archetype.name}`;
-  document.getElementById('elite-stakes-pip-reward').textContent =
-    `${reward.emoji} ${reward.label}`;
-  pip.classList.add('visible');
+  // v0.20q: Pip removed — it covered the par UI on mobile. The hole-start
+  // toast (in initHole) already announces the elite; players don't need
+  // a persistent reminder. Function kept as a no-op so existing call sites
+  // don't break.
 }
 
 function hideEliteStakesPip() {
@@ -26329,12 +27848,12 @@ function deliverEliteReward(reward, wager) {
       if(typeof updateUI === 'function') updateUI();
       break;
     case 'free_card':
-      // Defer card-pick UI to a future iteration; for v1 we just credit
-      // the player with a discount voucher equal to a typical card price
-      // of that rarity. Logged so we can wire up the proper free-card chooser later.
-      // TODO(v0.20j+): open a card picker for the rolled rarity.
-      G.coins += eliteFreeCardFallbackCoins(reward.rarity);
-      sub = `+${eliteFreeCardFallbackCoins(reward.rarity)} coins (free card placeholder)`;
+      // v0.20q: Issue a voucher claimable at the next pro shop visit.
+      // The shop renders any card matching this rarity with FREE pricing.
+      // Vouchers stack — multiple elites can grant multiple choices.
+      if(!G._freeCardVouchers) G._freeCardVouchers = [];
+      G._freeCardVouchers.push(reward.rarity);
+      sub = `Pick any ${reward.rarity} card free at next shop`;
       label = `Free ${reward.rarity} Card`;
       break;
     case 'double_or_nothing':
@@ -27732,12 +29251,12 @@ function animate(now) {
   if(G._slowMoScale && G._slowMoScale < 1.0) dt *= G._slowMoScale;
   flagTime+=dt;
 
-  // v0.20l: Barbed Wire spike pulse — subtle emissive throb to sell the
-  // menace. ~2 Hz sine over 0.25..0.65 emissive. Cheap and atmospheric.
-  if(G._barbedWireMesh && G._barbedWireMesh.material) {
+  // v0.20l: Barbed Wire menace tell — subtle dark-red emissive throb on the
+  // barbs (NOT the wire strand — keeping the strand pure black).
+  // v0.20q: New geometry uses bwGroup + barbMat ref instead of single mesh.
+  if(G._barbedWireBarbMat) {
     const _bwT = (now / 1000) * 2.0;
-    const _bwPulse = 0.35 + 0.30 * (0.5 + 0.5 * Math.sin(_bwT * Math.PI));
-    G._barbedWireMesh.material.emissiveIntensity = _bwPulse;
+    G._barbedWireBarbMat.emissiveIntensity = 0.18 + 0.20 * (0.5 + 0.5 * Math.sin(_bwT * Math.PI));
   }
   // v0.20n: Chasm pit-edge pulse — 1.6 Hz red throb on the warning bars.
   // Slightly slower than barbed wire so the two feel different.
@@ -27802,26 +29321,32 @@ function animate(now) {
   // v0.19v: Hat tilts opposite to travel direction — sells the wind
   // rushing past and is just funny. Tilt axis is perpendicular to travel
   // direction; magnitude ramps from 0 at rest to ~0.9 rad at fast speeds.
-  // v0.20f4: tilt sign flipped so the hat now leans BACKWARD (away from
-  // travel) — as if the wind is about to blow it off. Previously was
-  // leaning into travel direction which read as "diving" not "blowing off".
+  // v0.20q: hat tilt sign was wrong — we WANT the hat to lean OPPOSITE
+  // to travel direction (the wind blows it backward). With YXZ-equivalent
+  // Euler (yaw applied first, then pitch on local X), positive rotation.x
+  // tilts the top of the hat in the +Z local direction. Since the model's
+  // local +Z points along the travel direction after yaw, a +tilt actually
+  // leans the hat FORWARD into travel. We want backward, hence -tilt — same
+  // as before, BUT Adam reported it was visibly wrong. The bug was actually
+  // that we set rotation.x AFTER rotation.y in non-XYZ-safe order. Setting
+  // them in a single set() call ensures consistent application.
   if(G.hat && G.ball) {
     G.hat.position.set(G.ballPos.x, G.ballPos.y + BALL_R, G.ballPos.z);
     G.hat.visible = G.ball.visible;
-    // Compute XZ speed from physics velocity for a stable reading.
     const vx = G.ballVel ? G.ballVel.x : 0;
     const vz = G.ballVel ? G.ballVel.z : 0;
     const vMag = Math.hypot(vx, vz);
     const targetTilt = vMag < 0.15 ? 0 : Math.min(0.9, vMag * 0.05);
-    // Smooth the tilt so quick transitions don't pop.
     G._hatTilt = (G._hatTilt || 0) + (targetTilt - (G._hatTilt || 0)) * Math.min(1, dt * 8);
     if(vMag >= 0.15) {
-      const travelAng = Math.atan2(vx, vz); // yaw direction of travel
-      G.hat.rotation.set(0, 0, 0);
-      G.hat.rotation.y = travelAng;
-      // v0.20f4: NEGATIVE X rotation now — hat top tilts BACKWARD
-      // (opposite to travel direction). Reads as "wind blowing it off".
-      G.hat.rotation.x = -G._hatTilt;
+      const travelAng = Math.atan2(vx, vz);
+      // We need YXZ order for "yaw then pitch around local-X" semantics.
+      // Three.js default is XYZ, so we explicitly set the order here.
+      G.hat.rotation.order = 'YXZ';
+      // Yaw to face travel direction; pitch tilts the hat AWAY FROM travel
+      // (top leans backward into the wind). Positive X in YXZ tilts top
+      // toward +localZ, which after yaw points opposite to travel direction.
+      G.hat.rotation.set(G._hatTilt, travelAng, 0);
     } else {
       // At rest, smoothly return to upright.
       G.hat.rotation.x += (0 - G.hat.rotation.x) * Math.min(1, dt * 6);
@@ -27829,26 +29354,15 @@ function animate(now) {
   }
 
   // v0.20a: Character attachment (rhino horns, glasses) — follows ball
-  // position, stays upright. For characters facing a travel direction, the
-  // attachment rotates around Y so "forward-facing" decorations (horns tilt
-  // forward, glasses face out front) actually orient with ball motion.
-  // At rest, lerps back to zero yaw so the attachment doesn't snap.
+  // position, stays upright.
+  // v0.20q: Glasses now face AWAY FROM CAMERA, not direction of travel.
+  // The player always sees the front of their character's face. Yaw is
+  // derived from G.camTheta + π (same convention as syncAimToCamera).
   if(G._charAttachment && G.ball) {
     G._charAttachment.position.set(G.ballPos.x, G.ballPos.y + BALL_R * 0.7, G.ballPos.z);
     G._charAttachment.visible = G.ball.visible;
-    const vx = G.ballVel ? G.ballVel.x : 0;
-    const vz = G.ballVel ? G.ballVel.z : 0;
-    const vMag = Math.hypot(vx, vz);
-    if(vMag >= 0.15) {
-      const travelAng = Math.atan2(vx, vz);
-      G._charAttachmentYaw = travelAng;
-      G._charAttachment.rotation.set(0, travelAng, 0);
-    } else if(typeof G._charAttachmentYaw === 'number') {
-      // Smoothly return to last-known travel yaw at rest (avoid snap)
-      G._charAttachment.rotation.set(0, G._charAttachmentYaw, 0);
-    } else {
-      G._charAttachment.rotation.set(0, 0, 0);
-    }
+    const _faceAng = (G.camTheta || 0) + Math.PI;
+    G._charAttachment.rotation.set(0, _faceAng, 0);
   }
 
   // v0.20a: Speedball flame trail. Only when character has flameTrail trait,
@@ -27893,8 +29407,10 @@ function animate(now) {
       const hwx = hp.x * TILE_SIZE + off.x;
       const hwz = hp.y * TILE_SIZE + off.z;
       const dxR = G.ballPos.x - hwx, dzR = G.ballPos.z - hwz;
-      const hRad = G.modifiers.find(m=>m.id==='big_hole') ? 1.1 : 0.55;
-      if(Math.hypot(dxR, dzR) < hRad) {
+      const hRad = (G.modifiers.find(m=>m.id==='big_hole') ? 1.1 : 0.55) * (TILE_SIZE / TILE_SIZE_BASE);
+      const _lapAllowHoleOut2 = G._lapModeActive && G._lapModeCfg
+        && G._lapNum >= G._lapModeCfg.lapsRequired - 1;
+      if(Math.hypot(dxR, dzR) < hRad && (!G._lapModeActive || _lapAllowHoleOut2)) {
         // v0.19v: freeze the hole immediately so flag/cup/beacon don't drift
         // away while the sink animation plays.
         if(G._holeDefenseState) G._holeDefenseState.frozen = true;
@@ -28391,7 +29907,7 @@ function animate(now) {
 
         // Hole sink
         const hDist = Math.hypot(tb.pos.x-hx, tb.pos.z-hz);
-        const holeRadius = G.modifiers.find(m=>m.id==='big_hole') ? 1.1 : 0.55;
+        const holeRadius = (G.modifiers.find(m=>m.id==='big_hole') ? 1.1 : 0.55) * (TILE_SIZE / TILE_SIZE_BASE);
         if(hDist < holeRadius && tb.vel.y < 4.0) {
           // This ball sunk! Trigger hole-in for main ball if it hasn't holed yet
           if(!G.inHole) {
@@ -28891,6 +30407,13 @@ function animate(now) {
   // v0.20p: Hunter pursuer — runs after floombas (analogous AI). dt is
   // already slow-mo scaled at the top of animate.
   if(G.state === 'playing') updateHunter(dt);
+  // v0.20r: Lap Mode tick — checkpoint detection, lap counting, timer,
+  // OOB respawn. Only runs when active (gated inside).
+  if(G.state === 'playing') updateLapMode(dt);
+  // v0.20t: Course-placed (oscillating) speed hoops
+  if(G.state === 'playing') updateCourseSpeedHoops(dt);
+  // v0.20t: Chasm airborne spike spheres
+  if(G.state === 'playing') updateChasmAirborne(dt);
   updateCamera(dt);
   composer.render();
 }
