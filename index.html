@@ -3587,10 +3587,18 @@ window.onerror = function(msg, url, line, col, err) {
 
 // ── Scene setup ───────────────────────────────────────
 const canvas = document.getElementById('canvas');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+// v0.20t3: Mobile perf patch. The three biggest wins on long holes are:
+//  1. pixelRatio cap — was 2.0 (4× the pixels of a 1.0 display on Retina);
+//     clamped to 1.5 on mobile cuts shaded pixels by ~44%.
+//  2. antialias off on mobile — OutlinePass already gives the toon edge look,
+//     and MSAA is expensive on mobile GPUs. Negligible visual cost.
+//  3. PCFShadowMap (cheap) instead of PCFSoftShadowMap on mobile — softer
+//     shadow filtering is the most expensive shadow mode three.js offers.
+const _GGW_isMobile = window.innerWidth < 900 || 'ontouchstart' in window;
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: !_GGW_isMobile });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, _GGW_isMobile ? 1.5 : 2));
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = _GGW_isMobile ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
 renderer.setClearColor(0x87CEEB);
 
 const scene = new THREE.Scene();
@@ -3611,7 +3619,7 @@ function initComposer() {
   outlinePass.hiddenEdgeColor.set(0x000000);
   composer.addPass(outlinePass);
   // FXAA for light anti-aliasing — desktop only (skip on mobile for performance)
-  const isMobile = window.innerWidth < 900 || 'ontouchstart' in window;
+  const isMobile = _GGW_isMobile;
   if(!isMobile) {
     const fxaa = new THREE.ShaderPass(THREE.FXAAShader);
     fxaa.material.uniforms['resolution'].value.set(1/window.innerWidth, 1/window.innerHeight);
@@ -3747,8 +3755,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.20t2';
-const CHANGE_NOTE = 'Chasm hidden until rebuild. Wandering Hole roams whole level (no envelope). Hunter −40% speed + stagger 5→8s. Free Uncommon → Free Rare.';
+const GAME_VERSION = '0.20t3';
+const CHANGE_NOTE = 'Smoothed L4 obstacle cliff (now ramps to L10). Mobile perf patch. Hunter dist-speed + obstacle-phase. Parkour fixed on spinner sides/power bumpers/sliders/popup. Free Rare = card OR perk. Barbed Wire promoted to T2 (75c or free epic). In Bounds + Jump no longer skips walls.';
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
@@ -3786,11 +3794,16 @@ const ELITE_ARCHETYPES = {
     flag: 'eliteGiantHole',
   },
   barbed_wire: {
-    id: 'barbed_wire', tier: 1, enabled: true,
+    id: 'barbed_wire', tier: 2, enabled: true,  // v0.20t3: promoted from tier 1 → 2 (per Adam)
     name: 'Barbed Wire Walls', emoji: '🪤',
     tagline: 'The walls bite back.',
     description: 'Every wall is lined with spikes. −1 HP per stroke that touches them. +2 par.',
     flag: 'eliteBarbedWire',
+    // v0.20t3: per-archetype reward override. Bypasses ELITE_TIER_REWARD_POOLS
+    // and uses these reward IDs directly. 75 coins OR free epic — meaningfully
+    // different from the standard tier-2 pool because barbed wire is more
+    // punishing for the same archetype-tier slot.
+    customRewardPool: ['coins_75', 'free_epic'],
   },
   wandering_hole: {
     id: 'wandering_hole', tier: 2, enabled: true,
@@ -3835,14 +3848,16 @@ const ELITE_ARCHETYPES = {
 const ELITE_REWARDS = {
   // Tier 1 — spicy
   coins_50:     { id:'coins_50',     type:'coins',         amount:50,         emoji:'🪙', label:'+50 Coins',        desc:'Pure profit if you can pull it off.' },
-  free_uncommon:{ id:'free_uncommon',type:'free_card',     rarity:'rare', emoji:'🃏', label:'Free Rare Card', desc:'Pick one. It\'s on the house.' },
+  // v0.20t3: 75-coin reward, used by barbed_wire's custom pool (between tier 1's 50 and tier 2's 200)
+  coins_75:     { id:'coins_75',     type:'coins',         amount:75,         emoji:'🪙', label:'+75 Coins',        desc:'A respectable haul for taking the bite.' },
+  free_uncommon:{ id:'free_uncommon',type:'free_card',     rarity:'rare', emoji:'🃏', label:'Free Rare', desc:'Pick a rare card OR perk free at the next shop.' },
   // Tier 2 — dangerous
   coins_200:    { id:'coins_200',    type:'coins',         amount:200,        emoji:'💰', label:'+200 Coins',       desc:'A real haul.' },
   restore_hp:   { id:'restore_hp',   type:'restore_hp',                        emoji:'❤️', label:'Restore All HP',    desc:'Heal back to full. Worth more than gold.' },
-  free_rare:    { id:'free_rare',    type:'free_card',     rarity:'rare',     emoji:'🃏', label:'Free Rare Card',    desc:'Better deck, no purchase necessary.' },
+  free_rare:    { id:'free_rare',    type:'free_card',     rarity:'rare',     emoji:'🃏', label:'Free Rare',         desc:'Pick a rare card OR perk free at the next shop.' },
   // Tier 3 — hellish
-  free_epic:    { id:'free_epic',    type:'free_card',     rarity:'epic',     emoji:'🃏', label:'Free Epic Card',    desc:'Build-defining loot.' },
-  free_legendary:{id:'free_legendary',type:'free_card',    rarity:'legendary',emoji:'🌟', label:'Free Legendary Card', desc:'Run-defining loot.' },
+  free_epic:    { id:'free_epic',    type:'free_card',     rarity:'epic',     emoji:'🃏', label:'Free Epic',         desc:'Pick an epic card OR perk free at the next shop.' },
+  free_legendary:{id:'free_legendary',type:'free_card',    rarity:'legendary',emoji:'🌟', label:'Free Legendary',    desc:'Pick a legendary card OR perk free at the next shop.' },
   double_or_nothing:{id:'double_or_nothing',type:'double_or_nothing', cap:200, emoji:'🎲', label:'Double or Nothing',  desc:'Wager up to 200 coins. Win the hole, double up. Bust = lose it all.' },
   copy_card:    { id:'copy_card',    type:'copy_card',                         emoji:'🎴', label:'Copy Any Card',     desc:'Duplicate any card you own. No restrictions.' },
 };
@@ -3897,7 +3912,8 @@ function rollEliteOffer(playerFacingHoleNum) {
     .filter(a => a.enabled && tiers.includes(a.tier));
   if(candidates.length === 0) return null; // safety: nothing enabled
   const archetype = candidates[Math.floor(Math.random() * candidates.length)];
-  const rewardPool = ELITE_TIER_REWARD_POOLS[archetype.tier] || [];
+  // v0.20t3: archetype can supply customRewardPool to override its tier's pool.
+  const rewardPool = archetype.customRewardPool || ELITE_TIER_REWARD_POOLS[archetype.tier] || [];
   if(rewardPool.length === 0) return null;
   const rewardId = rewardPool[Math.floor(Math.random() * rewardPool.length)];
   const reward = ELITE_REWARDS[rewardId];
@@ -6157,7 +6173,9 @@ function generatePuttPuttCourse(holeNum) {
   // much stronger bounce. Rare spawn chance scales with hole + difficulty.
   const bumperData = [];
   // v0.20f: count + power-variant probability now scale by holeRamp (run progress)
-  const bumperN = Math.floor((1 + Math.floor(rng()*2) + Math.floor(diff*0.7) + Math.floor(holeRamp*0.25) + (diff>=4?2:0)) * areaScale * _eliteObsMul);
+  // v0.20t3: replaced (diff>=4?2:0) cliff with smooth ramp Math.floor(Math.max(0, (diff-2)))
+  // diff 3:+1, 4:+2, 5:+3 ... 10:+8 — preserves diff-4 feel, extends ramp to top tiers
+  const bumperN = Math.floor((1 + Math.floor(rng()*2) + Math.floor(diff*0.7) + Math.floor(holeRamp*0.25) + Math.floor(Math.max(0, (diff-2)))) * areaScale * _eliteObsMul);
   const powerBumperP = Math.min(0.25, Math.max(0, (holeRamp - 2) * 0.03 + (diff - 2) * 0.04));
   const trsh = [...fair].sort(()=>rng()-0.5);
   for(let p=0,i=0; i<trsh.length&&p<Math.min(bumperN, Math.floor((4+diff+Math.floor(diff/4)*2) * areaScale)); i++) {
@@ -6184,7 +6202,9 @@ function generatePuttPuttCourse(holeNum) {
   const spinBarData = [];
   // v0.20f: count threshold by holeRamp; spike-bar variants already used
   // _totalHolesForRamp midHole/lateHole, which was correct.
-  const spinN = holeRamp<1?0:Math.floor((Math.floor(rng()*2)+Math.floor(diff*0.3)+(diff>=4?1:0)) * areaScale * _eliteObsMul);
+  // v0.20t3: (diff>=4?1:0) cliff → Math.floor(Math.max(0, 0.5*(diff-2)))
+  // diff 3:+0, 4:+1, 5:+1, 6:+2 ... 10:+4
+  const spinN = holeRamp<1?0:Math.floor((Math.floor(rng()*2)+Math.floor(diff*0.3)+Math.floor(Math.max(0, 0.5*(diff-2)))) * areaScale * _eliteObsMul);
   // Variant probabilities: before mid only plain; mid→late a chance of
   // spiked; late+ a chance of red-spiked (with spiked still possible).
   // v0.20f: keyed off holeRamp so 9-hole and 18-hole runs hit the SAME peak
@@ -6195,7 +6215,7 @@ function generatePuttPuttCourse(holeNum) {
   const spikedBarP    = holeRamp >= _rampMid  ? Math.min(0.50, 0.15 + (holeRamp - _rampMid)  * 0.08 + (diff - 2) * 0.05) : 0;
   const redSpikedBarP = holeRamp >= _rampLate ? Math.min(0.35, 0.10 + (holeRamp - _rampLate) * 0.08 + (diff - 2) * 0.04) : 0;
   const sbsh = [...fair].sort(()=>rng()-0.5);
-  for(let p=0,i=0; i<sbsh.length&&p<Math.min(spinN, Math.floor((2+Math.floor(diff/2)+(diff>=4?1:0)) * areaScale)); i++) {
+  for(let p=0,i=0; i<sbsh.length&&p<Math.min(spinN, Math.floor((2+Math.floor(diff/2)+Math.floor(Math.max(0, 0.5*(diff-2)))) * areaScale)); i++) {
     const c=sbsh[i];
     if(grid[c.y][c.x]!==CELL.FAIR) continue;
     if(teeDist(c)<minHazardDist+2||holeDist(c)<minHazardDist+2) continue;
@@ -6217,9 +6237,10 @@ function generatePuttPuttCourse(holeNum) {
   // ── 9. Slide block data ───────────────────────────────
   // Variable face length: full, three-quarter, or half of lane width.
   const slideBlockData = [];
-  const slideN = holeRamp<6?0:Math.floor((Math.floor(rng()*2)+Math.floor(diff*0.25)+(diff>=4?1:0)) * areaScale * _eliteObsMul);
+  // v0.20t3: (diff>=4?1:0) cliff → Math.floor(Math.max(0, 0.5*(diff-2)))
+  const slideN = holeRamp<6?0:Math.floor((Math.floor(rng()*2)+Math.floor(diff*0.25)+Math.floor(Math.max(0, 0.5*(diff-2)))) * areaScale * _eliteObsMul);
   const slsh = [...fair].sort(()=>rng()-0.5);
-  for(let p=0,i=0; i<slsh.length&&p<Math.min(slideN, Math.floor((1+Math.floor(diff/3)+(diff>=4?1:0)) * areaScale)); i++) {
+  for(let p=0,i=0; i<slsh.length&&p<Math.min(slideN, Math.floor((1+Math.floor(diff/3)+Math.floor(Math.max(0, 0.5*(diff-2)))) * areaScale)); i++) {
     const c=slsh[i];
     if(grid[c.y][c.x]!==CELL.FAIR) continue;
     if(teeDist(c)<minHazardDist+2||holeDist(c)<minHazardDist+2) continue;
@@ -6412,8 +6433,9 @@ function generatePuttPuttCourse(holeNum) {
 
   // ── 9f. Pop-up wall data ──────────────────────────────
   const popupData=[];
-  const popupN=holeRamp<1?0:Math.ceil((1+Math.floor(rng()*2)+Math.floor(diff*0.4)+(diff>=4?1:0))*_eliteObsMul);
-  for(let wi=0;wi<segInfo.length&&popupData.length<Math.min(popupN,2+(diff>=4?1:0));wi++){
+  // v0.20t3: (diff>=4?1:0) cliff → Math.floor(Math.max(0, 0.5*(diff-2)))
+  const popupN=holeRamp<1?0:Math.ceil((1+Math.floor(rng()*2)+Math.floor(diff*0.4)+Math.floor(Math.max(0, 0.5*(diff-2))))*_eliteObsMul);
+  for(let wi=0;wi<segInfo.length&&popupData.length<Math.min(popupN,2+Math.floor(Math.max(0, 0.5*(diff-2))));wi++){
     const si=segInfo[wi];
     if(si.len<6) continue;
     const frac=0.4+rng()*0.2;
@@ -6475,8 +6497,9 @@ function generatePuttPuttCourse(holeNum) {
   // ramp up by hole for late-run tension.
   // v0.20f: introductions and ramps now use holeRamp (run-progress equivalent).
   // Old <2 of 9 → ~22% in (was hole 2). Equivalent in 18-hole scale ≈ holeRamp >= 4.
+  // v0.20t3: (diff>=4?1:0) cliff → Math.floor(Math.max(0, 0.5*(diff-2)))
   const spikeN = (holeRamp < 4 || diff < 2) ? 0
-    : Math.floor((Math.floor(rng() * 3) + Math.floor(diff * 0.4) + (diff>=4?1:0)) * areaScale * _eliteObsMul);
+    : Math.floor((Math.floor(rng() * 3) + Math.floor(diff * 0.4) + Math.floor(Math.max(0, 0.5*(diff-2)))) * areaScale * _eliteObsMul);
   const spikeMax = Math.floor((3 + Math.floor(diff / 2) + (holeRamp>=14?1:0)) * areaScale * _eliteObsMul);
   // Red-spike probability: 0 at early holes, ramping to ~40% in the late game at diff 4+.
   // Clamp to 50% so white is always the majority look.
@@ -9783,6 +9806,13 @@ function buildCourse(data) {
         }
       }
     }
+    // v0.20t3: Tag every In Bounds segment array with a `_topY` so the wall
+    // physics treats the ball as ALWAYS below the In Bounds wall top — even
+    // when airborne via Jump. The visible glow stays at ibH = 2.8m and the
+    // physics top now matches that. Ghost still phases through (handled by
+    // ghostActive check in the wall loop). Inbound segments are pushed onto
+    // wallPolylines later (in initHole) so the property survives untouched.
+    G._inboundsWalls._topY = ibH;
     // Also add green glow lines on top of existing course walls
     for(const poly of G.wallPolylines) {
       for(let si=0;si<poly.length-1;si++) {
@@ -11657,16 +11687,62 @@ function updatePhysics(dt) {
       // (∼45° cone tolerance so an obstacle sideswipe still triggers).
       const DIR_DOT_MIN = 0.7;
       let bestTarget = null, bestClear = Infinity;
-      const ptest = (tx, tz, tag) => {
+      // Generic point-test (used for cylindrical obstacles)
+      const ptest = (tx, tz, tag, customR) => {
         const odx = tx - G.ballPos.x, odz = tz - G.ballPos.z;
         const d = Math.hypot(odx, odz);
         if(d < 0.01) return;
-        const r = OBST_R[tag] || 0.7;
+        const r = (customR != null) ? customR : (OBST_R[tag] || 0.7);
         const clear = d - r - BALL_R;
         if(clear > CONTACT_MARGIN) return;     // too far — wait
         const dn = (odx/d) * pdirX + (odz/d) * pdirZ;
         if(dn < DIR_DOT_MIN) return;           // not moving toward it
         if(clear < bestClear) { bestClear = clear; bestTarget = { wx: tx, wz: tz, tag }; }
+      };
+      // v0.20t3: segment test (for spin bars). Treats the obstacle as a thick
+      // line segment from (ax,az) to (bx,bz), finds closest point to the ball,
+      // and uses that as the contact point. Fixes the long-standing bug where
+      // hitting the SIDES (tips) of a spinner did not trigger parkour because
+      // the old code only tested distance to the bar's pivot center.
+      const segtest = (ax, az, bx2, bz2, radius, tag) => {
+        const ex = bx2-ax, ez = bz2-az, segLenSq = ex*ex + ez*ez;
+        let cx, cz;
+        if(segLenSq < 0.0001) { cx = ax; cz = az; }
+        else {
+          const t = Math.max(0, Math.min(1, ((G.ballPos.x-ax)*ex + (G.ballPos.z-az)*ez)/segLenSq));
+          cx = ax + t*ex; cz = az + t*ez;
+        }
+        const odx = cx - G.ballPos.x, odz = cz - G.ballPos.z;
+        const d = Math.hypot(odx, odz);
+        if(d < 0.01) return;
+        const clear = d - radius - BALL_R;
+        if(clear > CONTACT_MARGIN) return;
+        const dn = (odx/d) * pdirX + (odz/d) * pdirZ;
+        if(dn < DIR_DOT_MIN) return;
+        if(clear < bestClear) { bestClear = clear; bestTarget = { wx: cx, wz: cz, tag }; }
+      };
+      // v0.20t3: rectangle test (for slide blocks and pop-up walls). Treats
+      // the obstacle as an axis-aligned rectangle centred at (rx, rz) with
+      // half-extents (hw, hd), finds closest point on the rectangle to the
+      // ball. Fixes parkour failing on slide blocks (which have long
+      // half-extents along their slide axis) and adds parkour to pop-up walls.
+      const recttest = (rx, rz, hw, hd, tag) => {
+        const dx = G.ballPos.x - rx, dz = G.ballPos.z - rz;
+        const cdx = Math.max(-hw, Math.min(hw, dx));
+        const cdz = Math.max(-hd, Math.min(hd, dz));
+        const cx = rx + cdx, cz = rz + cdz;
+        const odx = cx - G.ballPos.x, odz = cz - G.ballPos.z;
+        const d = Math.hypot(odx, odz);
+        if(d < 0.01) {
+          // Ball center is inside rectangle — already touching, force-trigger
+          if(0 < bestClear) { bestClear = 0; bestTarget = { wx: cx, wz: cz, tag }; }
+          return;
+        }
+        const clear = d - BALL_R;
+        if(clear > CONTACT_MARGIN) return;
+        const dn = (odx/d) * pdirX + (odz/d) * pdirZ;
+        if(dn < DIR_DOT_MIN) return;
+        if(clear < bestClear) { bestClear = clear; bestTarget = { wx: cx, wz: cz, tag }; }
       };
       const tryList = (arr, tag) => {
         if(!arr) return;
@@ -11677,9 +11753,50 @@ function updatePhysics(dt) {
         }
       };
       tryList(G.rocks, 'rock');
-      tryList(G.bumpers, 'bumper');
-      tryList(G.spinBars, 'spin_bar');
-      tryList(G.slideBlocks, 'slide_block');
+      // v0.20t3: bumpers use their actual radius (power-bumpers are 1.6× larger;
+      // previously parkour treated all bumpers as 0.55, missing the outer
+      // ring of power bumpers).
+      if(G.bumpers) {
+        for(const b of G.bumpers) {
+          if(!b || b._destroyed) continue;
+          if(b.wx == null || b.wz == null) continue;
+          ptest(b.wx, b.wz, 'bumper', (b.r || 0.55));
+        }
+      }
+      // v0.20t3: spin bars — segment-aware (handles bar tips/sides correctly).
+      if(G.spinBars) {
+        for(const s of G.spinBars) {
+          if(!s || s._destroyed) continue;
+          const cosA = Math.cos(s.angle), sinA = Math.sin(s.angle);
+          const tipAx = s.wx - cosA*s.len, tipAz = s.wz + sinA*s.len;
+          const tipBx = s.wx + cosA*s.len, tipBz = s.wz - sinA*s.len;
+          // Bar body is ~0.3m thick; treat as 0.3m radius segment.
+          segtest(tipAx, tipAz, tipBx, tipBz, 0.3, 'spin_bar');
+        }
+      }
+      // v0.20t3: slide blocks — rectangle-aware at CURRENT slid position.
+      if(G.slideBlocks) {
+        for(const sb of G.slideBlocks) {
+          if(!sb || sb._destroyed) continue;
+          const soff = Math.sin(sb.phase||0) * (sb.range||0);
+          const sbx = sb.wx + (sb.axis==='X' ? soff : 0);
+          const sbz = sb.wz + (sb.axis==='Z' ? soff : 0);
+          recttest(sbx, sbz, (sb.halfW || 0.4), (sb.halfD || 0.4), 'slide_block');
+        }
+      }
+      // v0.20t3: pop-up walls — rectangle-aware. Only test when wall is up
+      // (visible above its lower lip threshold). If wall is currently retracted,
+      // there's nothing to vault over.
+      if(G.popupWalls) {
+        for(const pw of G.popupWalls) {
+          if(!pw || pw._destroyed) continue;
+          // Only when wall mesh is meaningfully extended above floor.
+          const wallTopY = pw.currentTopY || ((pw.baseH || 0) + (pw.wallH || 0));
+          const minLipY = (pw.baseH || 0) + 0.4; // wall must be at least 0.4m up
+          if(wallTopY < minLipY) continue;
+          recttest(pw.wx, pw.wz, (pw.halfW || 0.4), (pw.halfD || 0.4), 'popup_wall');
+        }
+      }
       tryList(G.spikes, 'spike');   // v0.19z6: vault ground spikes too
       // v0.19z6: scan spike-ring balls (rotating hazards around the hole).
       // Each ball's world position depends on ring angle, so we compute it
@@ -12467,6 +12584,48 @@ function updatePhysics(dt) {
       }
     }
     } // end !ballAboveWall
+
+    // v0.20t3: Second pass — In Bounds tall walls (2.8m). The standard wall
+    // pass above gates on `!ballAboveWall`, where ballAboveWall = ball.y > 1.22m.
+    // That early-out lets a Jump (apex ~2m) clear standard 0.75m walls, which
+    // is the desired behaviour for normal walls. But In Bounds is supposed to
+    // be UN-jumpable (the visual is a 2.8m blue Tron grid). This pass runs
+    // ONLY against In Bounds-tagged polylines, with the segment's own _topY
+    // as the threshold. Ghost still phases through. Cannonball does NOT eat
+    // In Bounds walls (they're a perk, not destructible terrain).
+    if(!ghostActive && !launchGrace) {
+      for(const poly of G.wallPolylines) {
+        if(!poly._inbounds) continue;
+        const segTop = poly._topY || 2.8;
+        if(G.ballPos.y > segTop) continue; // truly above the In Bounds wall — let it pass
+        for(let i=0; i<poly.length-1; i++) {
+          const ax=poly[i].x,   az=poly[i].z;
+          const bx=poly[i+1].x, bz=poly[i+1].z;
+          const ex=bx-ax, ez=bz-az;
+          const segLenSq = ex*ex+ez*ez;
+          if(segLenSq < 0.0001) continue;
+          const tRaw = ((G.ballPos.x-ax)*ex+(G.ballPos.z-az)*ez)/segLenSq;
+          const t = Math.max(0, Math.min(1, tRaw));
+          const cx = ax+t*ex, cz = az+t*ez;
+          const dx = G.ballPos.x-cx, dz = G.ballPos.z-cz;
+          const dist = Math.hypot(dx, dz);
+          if(dist < 0.001 || dist > WALL_THICK + 0.5) continue;
+          if(dist < WALL_THICK) {
+            // Push out along contact normal + reflect XZ velocity
+            const nx = dx / dist, nz = dz / dist;
+            const overlap = WALL_THICK - dist;
+            G.ballPos.x += nx * overlap;
+            G.ballPos.z += nz * overlap;
+            const vDotN = G.ballVel.x * nx + G.ballVel.z * nz;
+            if(vDotN < 0) {
+              G.ballVel.x = (G.ballVel.x - 2 * vDotN * nx) * wb;
+              G.ballVel.z = (G.ballVel.z - 2 * vDotN * nz) * wb;
+            }
+            pushed = true;
+          }
+        }
+      }
+    }
   }
 
   // ── Corner triangle collision ────────────────────────
@@ -16632,14 +16791,21 @@ function renderShop() {
     for(const perk of picks) {
       const owned = !perk.stackable && G.modifiers.find(m => m.id === perk.id);
       const scaledPrice = getScaledPrice(perk);
-      const canAfford = G.coins >= scaledPrice;
+      // v0.20t3: free-rarity vouchers (from elite "free_card" rewards) now apply
+      // to perks AND cards of matching rarity. Owned non-stackable perks can't
+      // use the voucher (no value to consuming it on something already-owned).
+      const hasVoucher = !owned && (G._freeCardVouchers || []).includes(perk.rarity);
+      const canAfford = hasVoucher || G.coins >= scaledPrice;
       const stackCount = G.modifiers.filter(m => m.id === perk.id).length;
       let cls = `shop-card rarity-${perk.rarity}`;
       if(owned) cls += ' owned';
       else if(!canAfford) cls += ' cant-afford';
+      if(hasVoucher) cls += ' free-voucher';
       const priceHtml = owned
         ? `<span class="shop-owned-badge">Owned</span>`
-        : `<span class="shop-price"><span class="coin-s">🪙</span> ${scaledPrice}</span>`;
+        : (hasVoucher
+            ? `<span class="shop-price"><s style="opacity:0.5">🪙 ${scaledPrice}</s> <span style="color:#ffd750;font-weight:700;letter-spacing:1px;">FREE</span></span>`
+            : `<span class="shop-price"><span class="coin-s">🪙</span> ${scaledPrice}</span>`);
       const stackHtml = perk.stackable && stackCount > 0
         ? `<span class="shop-stackable">(×${stackCount} owned)</span>` : '';
       grid.innerHTML += `
@@ -16740,7 +16906,13 @@ window.buyPerk = function(id) {
   const owned = !perk.stackable && G.modifiers.find(m => m.id === id);
   if(owned) return;
   const scaledPrice = getScaledPrice(perk);
-  if(G.coins < scaledPrice) {
+  // v0.20t3: free-rarity voucher consumption on perks. FIFO match by rarity,
+  // mirroring buyCard. Vouchers from elite "free_card" rewards work on either
+  // cards or perks now.
+  if(!G._freeCardVouchers) G._freeCardVouchers = [];
+  const voucherIdx = G._freeCardVouchers.indexOf(perk.rarity);
+  const useVoucher = voucherIdx >= 0;
+  if(!useVoucher && G.coins < scaledPrice) {
     const cards = document.querySelectorAll('.shop-card');
     cards.forEach(c => { if(c.onclick && c.getAttribute('onclick')?.includes(id)) {
       c.style.transition = 'background 0.1s';
@@ -16749,11 +16921,16 @@ window.buyPerk = function(id) {
     }});
     return;
   }
-  G.coins -= scaledPrice;
-  trackStat('coinsSpent', scaledPrice);
+  if(useVoucher) {
+    G._freeCardVouchers.splice(voucherIdx, 1);
+    showToast(`⭐ Free ${perk.rarity} perk claimed!`, 1400);
+  } else {
+    G.coins -= scaledPrice;
+    trackStat('coinsSpent', scaledPrice);
+  }
   G.modifiers.push({ ...perk });
   // v0.20a3: telemetry — mark purchase on current visit's offerings.
-  if(typeof _markShopPurchase === 'function') _markShopPurchase(id, 'perk');
+  if(typeof _markShopPurchase === 'function') _markShopPurchase(id, useVoucher ? 'perk_voucher' : 'perk');
   // v0.19f: track perks-bought for pineapple-hat achievement
   G._perksBoughtThisRun = (G._perksBoughtThisRun || 0) + 1;
   applyPerkEffect(perk.id);
@@ -21542,11 +21719,19 @@ function updateHunter(dt) {
     h.iris.material.emissiveIntensity = 1.4;
   }
 
-  // Compute target speed: base + per-stroke ramp
-  const speed = Math.min(
-    HUNTER_MAX_SPEED,
-    HUNTER_BASE_SPEED + (G._hunterApproachStrokes || 0) * HUNTER_SPEED_PER_STROKE
-  );
+  // v0.20t3: Distance-based speed ramp. When the Hunter is FAR from the
+  // player (>30 ball-lengths ≈ 13.2m), it sprints toward you at HUNTER_MAX_SPEED.
+  // As it closes within ~30 ball-lengths it eases down to the base+per-stroke
+  // speed it had before. This makes the Hunter encounter the ball more often
+  // (no more long lulls where it's lagging across a big level) while keeping
+  // close-range pacing the same. Linear ramp keeps the easing predictable.
+  const _baseSpd = HUNTER_BASE_SPEED + (G._hunterApproachStrokes || 0) * HUNTER_SPEED_PER_STROKE;
+  const _ballLen = BALL_R * 2;          // diameter — one "ball length"
+  const _farDist = _ballLen * 30;       // ≈ 13.2m
+  const _distToBall_pre = Math.hypot(G.ballPos.x - h.pos.x, G.ballPos.z - h.pos.z);
+  const _distFrac = Math.min(1, Math.max(0, _distToBall_pre / _farDist));
+  // 0 → close (use base), 1 → far (use max). Linear blend.
+  const speed = Math.min(HUNTER_MAX_SPEED, _baseSpd + (HUNTER_MAX_SPEED - _baseSpd) * _distFrac);
 
   // Steer toward the ball
   const tx = G.ballPos.x - h.pos.x;
@@ -21569,8 +21754,34 @@ function updateHunter(dt) {
   h.pos.z += h.vel.z * dt;
 
   // v0.20q: Hunter phases through walls — no SDF collision. The horror.
-  // Per Adam's spec: walls don't stop The Hunter. Player can ONLY counter
-  // by hitting it with a fast ball/projectile (handled below).
+  // v0.20t3: Hunter ALSO phases through ALL obstacles (bumpers, spin bars,
+  // slide blocks, pop-up walls, spike rings, conveyors, clusters, rocks).
+  // This is intentional and deliberately uncoded — there are no collision
+  // checks against G.bumpers / G.spinBars / etc. for the Hunter mesh, only
+  // for the ball. If you ever add a Hunter-vs-obstacle interaction, gate it
+  // behind a 'physical' Hunter variant; the default Hunter must remain a
+  // ghost-pass-through entity (Adam's design call). Player counter-play is
+  // ONLY via fast ball/projectile impact (handled below at COUNTERPLAY_SPEED).
+  //
+  // Stuck-detector safety net: if the Hunter has barely moved in the last
+  // ~1.2s but the ball is far away, snap a small forward kick toward the ball.
+  // This catches edge cases where steering oscillation between two equally
+  // attractive frames drops the Hunter near zero velocity.
+  if(!h._stuckProbe) h._stuckProbe = { lastX: h.pos.x, lastZ: h.pos.z, t: 0 };
+  h._stuckProbe.t += dt;
+  if(h._stuckProbe.t > 1.2) {
+    const moved = Math.hypot(h.pos.x - h._stuckProbe.lastX, h.pos.z - h._stuckProbe.lastZ);
+    // If moved less than 0.4m in 1.2s while ball is >2m away, kick toward ball.
+    if(moved < 0.4 && _distToBall_pre > 2.0) {
+      const _kx = (G.ballPos.x - h.pos.x) / _distToBall_pre;
+      const _kz = (G.ballPos.z - h.pos.z) / _distToBall_pre;
+      h.vel.x = _kx * speed;
+      h.vel.z = _kz * speed;
+    }
+    h._stuckProbe.lastX = h.pos.x;
+    h._stuckProbe.lastZ = h.pos.z;
+    h._stuckProbe.t = 0;
+  }
 
   // Bob + position update on the mesh
   h.bobPhase += dt * 2.5;
@@ -22418,6 +22629,20 @@ function spawnHoleParticles(pos) {
 }
 
 function updateParticles(dt) {
+  // v0.20t3: Particle ceiling. Chaotic builds (Pinball + Demolition + Bounce
+  // & Boom + Explosivo) on long holes can spawn debris faster than it expires,
+  // and the array growth tanks mobile FPS. Cap at 220 (mobile) / 400 (desktop)
+  // by dropping the OLDEST particles when over budget. Visually unnoticeable
+  // since the oldest particles are typically the most faded.
+  const _PARTICLE_CAP = _GGW_isMobile ? 220 : 400;
+  if(G.particles.length > _PARTICLE_CAP) {
+    const _excess = G.particles.length - _PARTICLE_CAP;
+    for(let i = 0; i < _excess; i++) {
+      const p = G.particles[i];
+      if(p && p.mesh) scene.remove(p.mesh);
+    }
+    G.particles.splice(0, _excess);
+  }
   G.particles = G.particles.filter(p=>{
     p.life -= dt;
     if(p.life<=0){ scene.remove(p.mesh); return false; }
@@ -25879,7 +26104,13 @@ function initHole() {
 
   // ── Register Inbounds walls in physics ──────────────
   if(G._inboundsWalls) {
+    // v0.20t3: tag each segment with _topY = 2.8m so the airborne early-out
+    // in the wall collision loop doesn't allow the ball to skip In Bounds
+    // walls via Jump. Without the tag, jumping cleared them at ~1.22m.
+    const ibTopY = G._inboundsWalls._topY || 2.8;
     for(const seg of G._inboundsWalls) {
+      seg._topY = ibTopY;
+      seg._inbounds = true;
       G.wallPolylines.push(seg);
     }
     // Note: ghost ball skips wall collision via ghostActive check, so these are permeable to ghost
@@ -27849,12 +28080,12 @@ function deliverEliteReward(reward, wager) {
       break;
     case 'free_card':
       // v0.20q: Issue a voucher claimable at the next pro shop visit.
-      // The shop renders any card matching this rarity with FREE pricing.
-      // Vouchers stack — multiple elites can grant multiple choices.
+      // v0.20t3: voucher now usable on EITHER a card OR a perk of the matching
+      // rarity; the shop renders both with FREE pricing. Vouchers stack.
       if(!G._freeCardVouchers) G._freeCardVouchers = [];
       G._freeCardVouchers.push(reward.rarity);
-      sub = `Pick any ${reward.rarity} card free at next shop`;
-      label = `Free ${reward.rarity} Card`;
+      sub = `Pick any ${reward.rarity} card or perk free at next shop`;
+      label = `Free ${reward.rarity}`;
       break;
     case 'double_or_nothing':
       G.coins += wager; // already had wager → now have 2× wager total
