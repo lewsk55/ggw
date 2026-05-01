@@ -2923,6 +2923,14 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
 
 <!-- Pre-hole Double or Nothing wager button (standalone, visible during play) -->
 <div id="challenge-badge" style="display:none"></div>
+<!-- v0.20u: Hole-intro banner. Big centered text on hole start that
+     announces "Hole N · Par X" and the mini-challenge name, then scales
+     and translates down to where the challenge badge normally sits. -->
+<div id="hole-intro-banner" style="display:none">
+  <div id="hole-intro-line1"></div>
+  <div id="hole-intro-line2"></div>
+  <div id="hole-intro-elite"></div>
+</div>
 <div id="challenge-desc" style="display:none"></div>
 <style>
 #challenge-badge {
@@ -2948,6 +2956,52 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
   0%   { transform:translateX(-50%) scale(1); background:rgba(0,0,0,0.4); }
   30%  { transform:translateX(-50%) scale(1.25); background:rgba(120,220,120,0.55); color:#fff; box-shadow:0 0 22px rgba(120,220,120,0.6); }
   100% { transform:translateX(-50%) scale(1); background:rgba(0,0,0,0.4); }
+}
+/* v0.20u: Hole-intro banner — big centered display on hole start.
+   Lives across the top half of the screen briefly, then scales down
+   and translates up to dock at the challenge-badge position. Three
+   lines: hole/par, mini-challenge name, optional elite tag. */
+#hole-intro-banner {
+  position:fixed; left:50%; top:24%;
+  transform:translate(-50%, 0) scale(1);
+  pointer-events:none; z-index:25;
+  text-align:center;
+  font-family:'Lato',sans-serif;
+  text-shadow:
+    0 2px 14px rgba(0,0,0,0.65),
+    0 0 30px rgba(0,0,0,0.4);
+  transition:transform 0.85s cubic-bezier(0.5, 0, 0.2, 1), opacity 0.6s ease-out;
+  opacity:0;
+  width:88%; max-width:600px;
+}
+#hole-intro-banner.show { opacity:1; }
+/* Docked = scaled down, parked just above the challenge badge */
+#hole-intro-banner.docked {
+  top:8px;
+  transform:translate(-50%, 0) scale(0.32);
+  opacity:0; /* fade out completely once badge is settled */
+}
+#hole-intro-line1 {
+  font-size:2.4rem; font-weight:900; letter-spacing:2px;
+  color:#ffffff; margin-bottom:6px;
+}
+#hole-intro-line2 {
+  font-size:1.2rem; font-weight:700; letter-spacing:1.2px;
+  color:#ffe57e; /* warm yellow for the challenge */
+  text-transform:uppercase;
+}
+#hole-intro-elite {
+  margin-top:8px;
+  font-size:0.95rem; font-weight:800; letter-spacing:1.5px;
+  color:#ff8e9e; /* elite blood-red ember */
+  text-transform:uppercase;
+}
+/* Mobile: tighter sizing so the banner doesn't dominate small screens */
+@media (max-width:899px) {
+  #hole-intro-banner { top:18%; }
+  #hole-intro-line1 { font-size:1.8rem; }
+  #hole-intro-line2 { font-size:0.95rem; }
+  #hole-intro-elite { font-size:0.78rem; }
 }
 #challenge-desc {
   position:fixed; font-family:'Lato',sans-serif;
@@ -3156,7 +3210,6 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
   </div>
   <div class="tagline">A Minigolf Roguelike</div>
   <h1>Golf Gone<br>Wrong</h1>
-  <p>Procedurally generated minigolf.<br>Drag to look around.<br>Tap the ball, pull back &amp; release to shoot.</p>
 
   <div class="seed-row">
     <input class="seed-input" id="seed-input" placeholder="Seed (optional)" maxlength="12" spellcheck="false" autocomplete="off"/>
@@ -3206,7 +3259,7 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
   <button class="play-btn" onclick="openAchievements()" style="margin-top:6px;background:rgba(245,200,66,0.18);border:1px solid rgba(245,200,66,0.5);color:#f5c842;font-size:0.85rem;padding:10px 28px">🏆 Achievements</button>
   <button class="play-btn" id="btn-import-save" style="margin-top:6px;background:rgba(120,120,120,0.6);font-size:0.7rem;padding:8px 20px" onclick="importSaveFile()">📂 Import Save</button>
   <input type="file" id="import-save-input" accept=".ggwsave,application/json" style="display:none">
-  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.20g2</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Crash fix: phasing_holes ReferenceError on cz</div></div>
+  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.20y4</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Portal Grenade: legendary tag (epic-rate appearance)</div></div>
 
   <!-- v0.19j: Inline profile picker — skip the separate slot-picks screen -->
   <div class="section-label" style="margin-top:14px">Save Slot</div>
@@ -3524,11 +3577,19 @@ void main() {
     // Hide objects tagged noOutline during depth capture.
     // We also propagate to children — if a parent is noOutline,
     // children shouldn't write depth either.
+    // v0.20x: a mesh tagged BOTH noOutline AND blocksOutlineDepth keeps
+    // its depth in the buffer (so it occludes geometry behind it from
+    // edge detection), but no edges are drawn AROUND its silhouette.
+    // Used for portal doors — they need to occlude the world behind
+    // them so the player doesn't see outlines of stuff bleeding through
+    // the rendered RTT texture.
     const hidden = [];
     this.scene.traverse(obj => {
       // Check obj itself OR any ancestor that was already hidden
       const parentHidden = obj.parent && hidden.includes(obj.parent);
       if ((obj.userData.noOutline || parentHidden) && obj.visible) {
+        // Skip the hide if this object explicitly blocks outline-depth
+        if (obj.userData.blocksOutlineDepth) return;
         hidden.push(obj);
         obj.visible = false;
       }
@@ -3640,6 +3701,9 @@ function resizeRenderer() {
       fxaaPass.material.uniforms['resolution'].value.set(1/w, 1/h);
     }
   }
+  // v0.20y: portal RTTs are screen-aspect — must resize so the window-
+  // effect screen-space UV math stays correct after a viewport change.
+  if (typeof _resizePortalRTTs === 'function') _resizePortalRTTs();
 }
 resizeRenderer();
 window.addEventListener('resize', resizeRenderer);
@@ -3755,8 +3819,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.20t3';
-const CHANGE_NOTE = 'Smoothed L4 obstacle cliff (now ramps to L10). Mobile perf patch. Hunter dist-speed + obstacle-phase. Parkour fixed on spinner sides/power bumpers/sliders/popup. Free Rare = card OR perk. Barbed Wire promoted to T2 (75c or free epic). In Bounds + Jump no longer skips walls.';
+const GAME_VERSION = '0.20y4';
+const CHANGE_NOTE = 'Portal Grenade: now displays as legendary rarity (red border, glow, badge) but keeps epic-tier weight (2) so it appears at the same rate. Special enough to deserve the legendary tag without being rare-of-rares unobtainable.';
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
@@ -3825,6 +3889,17 @@ const ELITE_ARCHETYPES = {
     tagline: 'It sees you. It is coming.',
     description: 'A spiky eyeball stalks you across strokes. Slow, relentless, hungry. Touch = −1 HP and a knock away from the hole.',
     flag: 'eliteHunter',
+  },
+  speed_hole: {
+    // v0.20u: Speed Holes — every obstacle moves at 2.5× speed (and the
+    // hole obstacle itself, if any, also screams along). 50-coin bonus
+    // for surviving. Spinners become genuinely scary.
+    id: 'speed_hole', tier: 2, enabled: true,
+    name: 'Speed Hole', emoji: '⚡',
+    tagline: 'Everything is moving. Faster.',
+    description: 'Every obstacle is on 2.5× speed. The hole itself, if it moves, sprints. Watch out for those spinners! +50 🪙 bonus for surviving.',
+    flag: 'eliteSpeedHole',
+    customRewardPool: ['coins_50'],
   },
   lap_mode: {
     id: 'lap_mode', tier: 3, enabled: true,
@@ -7028,6 +7103,7 @@ function generatePuttPuttCourse(holeNum) {
     eliteChasm:         !!(elite && elite.archetype.flag === 'eliteChasm'),
     eliteHunter:        !!(elite && elite.archetype.flag === 'eliteHunter'),
     eliteLapMode:       !!(elite && elite.archetype.flag === 'eliteLapMode'),
+    eliteSpeedHole:     !!(elite && elite.archetype.flag === 'eliteSpeedHole'),
   };
 
   // v0.20m: Wandering Hole elite — override any rolled holeDefense with our
@@ -9280,7 +9356,11 @@ function buildCourse(data) {
         // included. Without this, the cup kept drifting under a frozen ball,
         // which made the card useless on moving-hole levels.
         if(G._freezeFrameActive) return;
-        const phase = totalT * (0.9 * hd.speedFactor) + hd.phase;
+        // v0.20u: Speed Hole elite — the cup itself screams along at the
+        // archetype multiplier. Applied to oscillating phase rate AND
+        // (further down) to the wander-mode velocity.
+        const _shMul = G._speedHoleMul || 1;
+        const phase = totalT * (0.9 * hd.speedFactor) * _shMul + hd.phase;
         let ox = 0, oz = 0;
         if(hd.pattern === 'line') {
           const v = Math.sin(phase) * state.amp;
@@ -9382,8 +9462,9 @@ function buildCourse(data) {
           }
           // 3. Re-normalize speed so bounces don't slowly bleed energy.
           // Floomba-like: velocity magnitude stays constant.
+          // v0.20u: Speed Hole elite — wander velocity also scales by _shMul.
           const vmag = Math.hypot(wv.x, wv.z) || 0.0001;
-          const targetSpd = state._wanderSpeed || 6.0;
+          const targetSpd = (state._wanderSpeed || 6.0) * _shMul;
           wv.x = wv.x / vmag * targetSpd;
           wv.z = wv.z / vmag * targetSpd;
           // 4. Commit and write outputs.
@@ -12037,6 +12118,18 @@ function updatePhysics(dt) {
 
   G.ballVel.y += GRAVITY * subDt;
   G.ballPos.addScaledVector(G.ballVel, subDt);
+  // v0.20u: Portal Grenade — ball teleport check. Runs after the ball
+  // moves but BEFORE wall/terrain collision resolves, so the ball gets
+  // re-positioned and re-velocity-rotated before geometry checks fight
+  // against an "inside the door" intermediate state.
+  // v0.20v: portals NO LONGER despawn on pass-through. Player can roll
+  // back and forth through them as much as they want. They close at
+  // hole-out (handled in onHoled).
+  if(G._portalEntry && G._portalExit && G.rolling) {
+    if(!G._ballPortalState) G._ballPortalState = { _lastPortalT: 0 };
+    const _nowSec = performance.now() / 1000;
+    tryPortalTeleportXZ(G.ballPos, G.ballVel, G._ballPortalState, _nowSec);
+  }
   // Analytics: accumulate XZ travel distance (horizontal path length only)
   if(G.rolling) {
     G._holeBallDistance = (G._holeBallDistance||0) + Math.hypot(G.ballVel.x, G.ballVel.z) * subDt;
@@ -13113,8 +13206,10 @@ function updatePhysics(dt) {
       if(G._parkourImmunity || G._vacuumImmunity) continue;
       // Advance bar angle for this substep FIRST — must happen regardless
       // of whether ball is near enough to collide, so the bar always spins.
+      // v0.20u: Speed Hole elite cranks rotation rate by G._speedHoleMul (2.5×).
+      const _shMul = G._speedHoleMul || 1;
       const prevAngle = bar.angle;
-      bar.angle += bar.speed * subDt * (G._freezeFrameActive ? 0 : 1);
+      bar.angle += bar.speed * subDt * (G._freezeFrameActive ? 0 : 1) * _shMul;
       const newAngle = bar.angle;
       // v0.20i: ghost ball passes through spin bars — bars KEEP spinning
       // (angle advance above runs regardless), but collision is skipped so
@@ -13188,8 +13283,13 @@ function updatePhysics(dt) {
           // surface velocity in XZ = (-speed * rz,  speed * rx) would be
           // for CCW in XZ. With Three.js convention (positive Y-rot goes
           // +X → -Z), the surface velocity is (speed * rz,  -speed * rx).
-          const surfVx =  bar.speed * rz;
-          const surfVz = -bar.speed * rx;
+          // v0.20u: Speed Hole — bar.angle is being advanced at _shMul× rate,
+          // so the effective angular velocity is bar.speed * _shMul. Without
+          // this, reflection uses the wrong tangent speed and slow-feeling
+          // bounces happen on the fast-moving bar (visual/physics mismatch).
+          const _effSpeed = bar.speed * _shMul;
+          const surfVx =  _effSpeed * rz;
+          const surfVz = -_effSpeed * rx;
 
           // Reflect ball velocity relative to moving surface
           const relVx = G.ballVel.x - surfVx;
@@ -13489,28 +13589,67 @@ function updatePhysics(dt) {
     // v0.20r: coin pickup radius scales with TILE_SIZE so coins on Giant Hole
     // (visually 4× bigger) collect at their rendered footprint.
     const COIN_R = 0.55 * (TILE_SIZE / TILE_SIZE_BASE);
-    const magnetStacks = G.modifiers.filter(m => m.id === 'magnet').length;
-    const magnetR    = [0, 2.5, 4.5, 7.0][Math.min(magnetStacks, 3)];
-    const magnetPull = [0, 2.5, 4.5, 7.0][Math.min(magnetStacks, 3)];
+    // v0.20u: Coin Magnet is no longer stackable — single purchase grants
+    // a beefy default range + escort behavior. Range/pull values are 2× the
+    // legacy stack-1 numbers (was 2.5/2.5, now 5.0/5.5) so the perk reads
+    // as a clear power tool instead of a "buy 3 to make it work" trap.
+    const hasMagnet = G.modifiers.some(m => m.id === 'magnet');
+    const magnetR    = hasMagnet ? 5.0 : 0;
+    const magnetPull = hasMagnet ? 5.5 : 0;
+    // Escort feel: once a coin is "captured" (entered the magnet field
+    // while ball was moving), it gets its own velocity that trails the
+    // ball with damping — coins form a tail of ducklings behind the ball.
+    const ESCORT_ACCEL = 22;     // how aggressively coins steer to ball
+    const ESCORT_DAMP  = 4.5;    // velocity damping per second
+    const ESCORT_MAX_V = 14;     // hard cap on coin speed
     for(const c of G.coinMeshes) {
       if(c.collected) continue;
       const dx = G.ballPos.x - c.wx;
       const dz = G.ballPos.z - c.wz;
       const dist2D = Math.hypot(dx, dz);
       if(magnetR > 0 && dist2D < magnetR && dist2D > 0.01) {
+        // Initialize escort velocity lazily on first capture
+        if(c.escortVx === undefined) { c.escortVx = 0; c.escortVz = 0; }
+        c._escorted = true;
+        // Steer toward ball with stronger pull at closer range (snappy near, slow far)
+        const proximityBoost = 1 + (1 - dist2D / magnetR) * 1.2;
+        const ax = (dx / dist2D) * ESCORT_ACCEL * proximityBoost;
+        const az = (dz / dist2D) * ESCORT_ACCEL * proximityBoost;
+        c.escortVx += ax * dt;
+        c.escortVz += az * dt;
+        // Direct pull layer (legacy behavior, doubled) so coins don't
+        // feel laggy at close range — escort velocity is the trail flavor,
+        // direct pull is the "I am being magneted" baseline.
         const pull = magnetPull * dt;
         c.wx += (dx / dist2D) * pull;
         c.wz += (dz / dist2D) * pull;
-        if(c.pivot) {
-          c.pivot.position.x = c.wx;
-          c.pivot.position.z = c.wz;
-        } else {
-          c.mesh.position.x = c.wx;
-          c.mesh.position.z = c.wz;
-        }
-        c.glowMesh.position.x = c.wx;
-        c.glowMesh.position.z = c.wz;
       }
+      // Apply escort velocity (continues briefly after ball leaves range —
+      // gives the trailing-tail look as ball outpaces them)
+      if(c.escortVx !== undefined && (c._escorted || Math.hypot(c.escortVx, c.escortVz) > 0.05)) {
+        const vmag = Math.hypot(c.escortVx, c.escortVz);
+        if(vmag > ESCORT_MAX_V) {
+          c.escortVx = (c.escortVx / vmag) * ESCORT_MAX_V;
+          c.escortVz = (c.escortVz / vmag) * ESCORT_MAX_V;
+        }
+        c.wx += c.escortVx * dt;
+        c.wz += c.escortVz * dt;
+        // Damping
+        const dampF = Math.max(0, 1 - ESCORT_DAMP * dt);
+        c.escortVx *= dampF;
+        c.escortVz *= dampF;
+        if(dist2D >= magnetR) c._escorted = false; // out of field — let velocity decay naturally
+      }
+      // Sync visual position
+      if(c.pivot) {
+        c.pivot.position.x = c.wx;
+        c.pivot.position.z = c.wz;
+      } else {
+        c.mesh.position.x = c.wx;
+        c.mesh.position.z = c.wz;
+      }
+      c.glowMesh.position.x = c.wx;
+      c.glowMesh.position.z = c.wz;
       if(dist2D < COIN_R && !ghostActive) {
         c.collected = true;
         if(G.courseGroup) {
@@ -15267,6 +15406,48 @@ function checkChallengeCompletion(isMid) {
   }
 }
 
+// v0.20u: Big-text hole intro. Shows the hole/par + mini-challenge name
+// at the center-top of the screen for ~1.6s, then scales down and fades
+// to make room for the challenge badge that takes over for the hole.
+// Defensive: clears any prior intro timers so rapid hole transitions
+// don't double-stack the animation.
+function showHoleIntroBanner({hole, par, challenge, elite}) {
+  const banner = document.getElementById('hole-intro-banner');
+  if(!banner) return;
+  const l1 = document.getElementById('hole-intro-line1');
+  const l2 = document.getElementById('hole-intro-line2');
+  const lE = document.getElementById('hole-intro-elite');
+  if(!l1 || !l2 || !lE) return;
+  clearTimeout(G._holeIntroSettleTimer);
+  clearTimeout(G._holeIntroHideTimer);
+  l1.textContent = `Hole ${hole} · Par ${par}`;
+  l2.textContent = challenge ? `🎯 ${challenge}` : '';
+  l2.style.display = challenge ? '' : 'none';
+  if(elite) {
+    lE.textContent = `${elite.emoji}  ELITE: ${elite.name}  ${elite.emoji}`;
+    lE.style.display = '';
+  } else {
+    lE.textContent = '';
+    lE.style.display = 'none';
+  }
+  // Hard reset to big-state, then fade in next frame
+  banner.classList.remove('docked');
+  banner.style.display = '';
+  banner.classList.remove('show');
+  // Force reflow so the transition fires from opacity 0 instead of skipping
+  void banner.offsetWidth;
+  requestAnimationFrame(() => banner.classList.add('show'));
+  // After ~1.5s, scale-down + dock at top
+  G._holeIntroSettleTimer = setTimeout(() => {
+    banner.classList.add('docked');
+  }, 1500);
+  // After dock animation completes, hide entirely
+  G._holeIntroHideTimer = setTimeout(() => {
+    banner.style.display = 'none';
+    banner.classList.remove('show', 'docked');
+  }, 2450);
+}
+
 function updateChallengeBadge() {
   const badge = document.getElementById('challenge-badge');
   const desc = document.getElementById('challenge-desc');
@@ -15840,6 +16021,10 @@ function onHoled() {
   if(G.inHole) return; // guard against double-call
   G.inHole = true;
   G.rolling = false;
+  // v0.20u: Portal Grenade despawns at hole-out (rule "D" — earliest of
+  // hole-out OR first ball pass-through). Safe to call even if no
+  // portals are active.
+  if(typeof clearPortalGrenade === 'function') clearPortalGrenade();
   // v0.20s: Lap Mode hole-out — when the player sinks the cup on the final
   // lap, compute time-bracket par delta and override G.strokes so the
   // standard scoring path picks it up. Strokes count + time = par scoring
@@ -17649,6 +17834,10 @@ function fireProjectile({ blastRadius = 4.0, travelSpeed = 22, color = 0xff4400,
   const corePos = startPos.clone();
   // Mutable speed so acceleration can ramp it up per frame (Sharpshooter winds up over distance).
   let curSpeed = travelSpeed;
+  // v0.20u: Portal Grenade — per-projectile teleport cooldown stamp.
+  // Allocated even if no portals exist; the helper bails out fast when
+  // there's nothing to do.
+  const _missilePortalState = { _lastPortalT: 0 };
   G._missileAnim = (dt) => {
     // Acceleration ramp — only applies if accel > 0, capped by maxSpeed
     if(accel > 0 && curSpeed < maxSpeed) {
@@ -17667,6 +17856,22 @@ function fireProjectile({ blastRadius = 4.0, travelSpeed = 22, color = 0xff4400,
       corePos.x += dir.x * subStep;
       corePos.z += dir.z * subStep;
       travelled += subStep;
+      // v0.20u: Portal Grenade — missile teleport. Treat (dir * curSpeed)
+      // as a velocity vector; on teleport, the helper rotates that
+      // vector into the exit's frame and we re-derive dir from it. The
+      // missile's spiral offset is computed off the new dir below, so
+      // the corkscrew doesn't break visually.
+      if(G._portalEntry && G._portalExit) {
+        const _velTmp = { x: dir.x * curSpeed, z: dir.z * curSpeed };
+        const _nowSec = performance.now() / 1000;
+        if(tryPortalTeleportXZ(corePos, _velTmp, _missilePortalState, _nowSec)) {
+          const _len = Math.hypot(_velTmp.x, _velTmp.z) || 1;
+          dir.x = _velTmp.x / _len;
+          dir.z = _velTmp.z / _len;
+          // Don't despawn portals on missile pass — design says the BALL
+          // is what triggers the despawn. Projectiles are bonus chaos.
+        }
+      }
       // Compute spiral offset at this sub-step (lerp phase across sub-steps for smoothness)
       const subPhase = spiralPhase + (sstep - SWEEP + 1) * spiralAngularSpeed * (subStep / Math.max(curSpeed, 0.01));
       const spX = -dir.z, spZ = dir.x; // right-hand perpendicular in XZ
@@ -17838,7 +18043,7 @@ function triggerCheckeredFlag() {
 // v0.20g: three_balls, bowling_ball deactivated (bowling_ball was already
 // hidden via weight=0; now formally inactive via the same path).
 const INACTIVE_PERKS = new Set(['double_or_nothing', 'thin_ice', 'coin_bouncer', 'three_balls', 'bowling_ball']);
-const INACTIVE_CARDS = new Set(['airstrike', 'wrecking_ball', 'portal_pair', 'wall_magnet', 'arc_shot', 'golden_path', 'slow_mo']);
+const INACTIVE_CARDS = new Set(['airstrike', 'wrecking_ball', 'wall_magnet', 'arc_shot', 'golden_path', 'slow_mo']);
 
 const CARD_DEFS = {
   lil_scootch:  { id:'lil_scootch',  emoji:'🧤', name:"Lil' Scootch",    desc:'Cartoon glove gives the ball a nudge.',                        rarity:'common',    price:10,   context:'any',    holdable:false },
@@ -17863,7 +18068,18 @@ const CARD_DEFS = {
   cannonball:   { id:'cannonball',   emoji:'💣', name:'Cannonball',      desc:'This swing: blast through walls AND spikes — both shatter on contact. Great for off-roading.',     rarity:'epic',      price:25,  context:'pre',    holdable:false },
   wrecking_ball:{ id:'wrecking_ball',emoji:'⛓️', name:'Wrecking Ball',   desc:'Ball swings on a chain arc, destroying everything in the sweep.', rarity:'epic',      price:24,  context:'during', holdable:false },
   reverse:      { id:'reverse',      emoji:'⏪', name:'Reverse',         desc:'Instantly reverse the ball\'s direction. Full speed. BIG combo points — huge bonus if it leads to a hole.', rarity:'common',    price:10,  context:'during', holdable:false },
-  portal_pair:  { id:'portal_pair',  emoji:'🕳️', name:'Portal Pair',     desc:'Place two portals. Ball enters one, exits the other.',            rarity:'legendary', price:30,  context:'pre',    holdable:false },
+  // v0.20u: Portal Grenade — legendary card. Arms a green entry-portal
+  // preview ~5 ball-radii in front of the ball, then a stronger-than-default
+  // grenade lob places the purple exit portal where it lands. Ball + ALL
+  // projectiles teleport between the two doors. See-through render-to-texture
+  // (256×256, half-framerate) makes the doors look genuinely magical.
+  // v0.20v: rebalanced — epic (was legendary), $30, weight 2. Flow simplified:
+  // throw the exit (purple) first, entry (green) auto-places in front of
+  // ball facing the exit. Portals persist after pass-through (close on
+  // hole-out only). OOB lobs snap to nearest in-bounds cell.
+  portal_grenade: { id:'portal_grenade', emoji:'🟣', name:'Portal Grenade',
+    desc:'Lob a grenade — wherever it lands becomes a purple exit portal. A green entry portal auto-places in front of your ball, facing the exit. Ball + missiles + dodgeballs + grenades + boulders all teleport through. Stays open until hole-out.',
+    rarity:'legendary', price:30, context:'pre', holdable:false, weight:2 },
   holy_hand_grenade: { id:'holy_hand_grenade', emoji:'⛪', name:'Holy Hand Grenade', desc:'And the Lord did grin. Lob a sanctified grenade — 2× blast radius. Spares corner walls (the Lord is merciful).', rarity:'legendary', price:25, context:'pre', holdable:false, weight:1 },
   pinball:      { id:'pinball',      emoji:'🎰', name:'Pinball',         desc:'12 seconds of invulnerable, frictionless, perfectly bouncy ball. The walls cannot hurt you. The walls cannot hold you.', rarity:'legendary', price:32, context:'pre', holdable:false, weight:1 },
   freeze_frame: { id:'freeze_frame', emoji:'🧊', name:'Freeze Frame',    desc:'All moving obstacles freeze for 10 seconds.',                    rarity:'rare',      price:11,  context:'any',    holdable:false, weight:3 },
@@ -18411,8 +18627,22 @@ function playCard(instanceId) {
   // cancel the grenade aim (refunds the grenade card). Prevents a stuck
   // aim state and silent loss of the grenade card.
   // v0.20h: also cancel for holy_hand_grenade — both share aim mode.
-  if(G._grenadeAiming && card.id !== 'grenade' && card.id !== 'holy_hand_grenade') {
+  // v0.20u: portal_grenade joins the same family — the throw-mode and
+  // arming-mode both need to be cancelled if the player plays anything
+  // else, so the preview doesn't strand in scene and the cooldown state
+  // doesn't leak across cards.
+  if(G._grenadeAiming && card.id !== 'grenade' && card.id !== 'holy_hand_grenade' && card.id !== 'portal_grenade') {
+    if(G._portalThrowMode) {
+      // Mid-throw cancel — we already committed the entry; refund the
+      // card and tear down the entry portal so the player isn't left
+      // with a half-functional pair.
+      if(G._portalEntry) clearPortalGrenade();
+      G._portalThrowMode = false;
+    }
     cancelGrenadeAim();
+  }
+  if(G._portalArming && card.id !== 'portal_grenade') {
+    _cancelPortalArming();
   }
 
   // Find which slot this card was in (for animation)
@@ -18432,7 +18662,7 @@ function playCard(instanceId) {
   // v0.20d: grenade joins the cancellable list — tapping it arms aim mode,
   // and the player can cancel by re-tapping the card before throwing.
   // v0.20h: holy_hand_grenade also cancellable (uses same aim flow).
-  if(card.id === 'sniper' || card.id === 'sharpshooter' || card.id === 'grenade' || card.id === 'holy_hand_grenade') {
+  if(card.id === 'sniper' || card.id === 'sharpshooter' || card.id === 'grenade' || card.id === 'holy_hand_grenade' || card.id === 'portal_grenade') {
     G._pendingCancellableCard = { id: card.id, instanceId, slotIdx: playedSlotIdx };
   } else {
     G._pendingCancellableCard = null;
@@ -18635,7 +18865,7 @@ function executeCardAbility(id) {
     case 'airstrike':    showToast('🎯 Airstrike coming soon!', 1000); break;
     case 'cannonball':   G._cannonballActive = true; showToast('💣 Cannonball armed — smash through walls!', 1000); break;
     case 'wrecking_ball': showToast('⛓️ Wrecking Ball coming soon!', 1000); break;
-    case 'portal_pair':  showToast('🕳️ Portals coming soon!', 1000); break;
+    case 'portal_grenade': armPortalGrenade(); break;
     case 'floomba':      spawnFloombaFromCard(); break;
     case 'perpetual_motion': activatePerpetualMotion(); break;
     case 'wall_magnet':  G._wallMagnetActive = true; showToast('🧲 Wall Magnet armed!', 800); break;
@@ -19240,6 +19470,8 @@ function activateDodgeball() {
     const og = ac.createGain(); og.gain.setValueAtTime(0.3,t); og.gain.exponentialRampToValueAtTime(0.001,t+0.15);
     o.connect(og); og.connect(getACDest()); o.start(t); o.stop(t+0.15);
   }
+  // v0.20u: Portal Grenade per-projectile teleport cooldown stamp.
+  let _dbPortalState = { _lastPortalT: 0 };
   G._missileAnim = (dt) => {
     const groundY = G.heightMap.length ? getTerrainHeight(px, pz) : 0;
     const floorY = groundY + FLOOR_H/2 + 0.25;
@@ -19262,6 +19494,18 @@ function activateDodgeball() {
     for(let _s = 0; _s < SUB; _s++) {
       px += dx * subDt;
       pz += dz * subDt;
+      // v0.20u: Portal teleport check — runs BEFORE wall collision so a
+      // dodgeball entering the portal doesn't first ricochet off geometry
+      // behind the door.
+      if(G._portalEntry && G._portalExit) {
+        const _posTmp = { x: px, z: pz };
+        const _velTmp = { x: dx, z: dz };
+        const _nowSec = performance.now() / 1000;
+        if(tryPortalTeleportXZ(_posTmp, _velTmp, _dbPortalState, _nowSec)) {
+          px = _posTmp.x; pz = _posTmp.z;
+          dx = _velTmp.x; dz = _velTmp.z;
+        }
+      }
 
       // Wall SDF collision
       for(const poly of G.wallPolylines) {
@@ -20072,6 +20316,11 @@ function spawnVacuumConeVfx(x, z, dirX, dirZ, len, halfAngle) {
 
 function activateMulligan() {
   if(!G.undoState || G.strokes < 1) return;
+  // v0.20u: VHS rewind effect — fires immediately so the visual lands
+  // before the state pop. Decoupled from any other state restore so it
+  // never interferes with gameplay logic.
+  spawnVhsRewindEffect();
+
   G.ballPos.copy(G.undoState.pos);
   G.ballVel.set(0,0,0);
   G.strokes = G.undoState.strokes;
@@ -20083,6 +20332,32 @@ function activateMulligan() {
     G.drawPile = G.undoState.drawPile ? G.undoState.drawPile.slice() : [];
     updateHandUI();
   }
+  // v0.20u: HP restore — re-credit any damage taken since the snapshot.
+  // Falls back gracefully on saves from before this field existed.
+  if(typeof G.undoState.hp === 'number') {
+    const hpDelta = G.undoState.hp - G.hp;
+    G.hp = G.undoState.hp;
+    if(typeof G.undoState.hpMax === 'number') G.hpMax = G.undoState.hpMax;
+    if(typeof G.undoState.lives === 'number') G.lives = G.undoState.lives;
+    // Sync HUD HP indicators
+    if(typeof updateUI === 'function') updateUI();
+    if(hpDelta > 0) {
+      // Quick green pulse to signal the heal landed
+      setTimeout(() => showToast(`💚 +${hpDelta} HP refunded`, 1100), 320);
+    }
+  }
+  // v0.20u: Camera restore — put the player back where they were aiming
+  // before the swing. We set aimManualOverride for one tick so the
+  // auto-camera doesn't immediately yank back to the ball's old direction.
+  if(typeof G.undoState.camTheta === 'number') {
+    G.camTheta = G.undoState.camTheta;
+  }
+  if(typeof G.undoState.camPhi === 'number') {
+    G.camPhi = G.undoState.camPhi;
+  }
+  if(G.undoState.camTarget && G.camTarget) {
+    G.camTarget.copy(G.undoState.camTarget);
+  }
   G.rolling = false;
   G.aimMode = true;
   G.rollingSlowTimer = 0;
@@ -20091,9 +20366,117 @@ function activateMulligan() {
   createAimArrow();
   if(G.ball) G.ball.position.copy(G.ballPos);
   focusCameraOnBall();
-  showToast('↩️ Mulligan! Stroke & cards refunded.', 1400);
+  showToast('↩️ Mulligan! Stroke, cards & HP refunded.', 1400);
   triggerShake('light');
   updateUI();
+}
+
+// v0.20u: VHS-rewind fullscreen overlay — scanlines, color fringing,
+// REW marker, brief blur — fires once on Mulligan. Pure visual; cleans
+// itself up after ~900ms. Self-contained so it can't leak references
+// into any game state.
+function spawnVhsRewindEffect() {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = `
+    position:fixed; inset:0; pointer-events:none; z-index:9999;
+    background:
+      repeating-linear-gradient(
+        0deg,
+        rgba(255,255,255,0.04) 0px,
+        rgba(255,255,255,0.04) 1px,
+        rgba(0,0,0,0.10) 2px,
+        rgba(0,0,0,0.10) 3px
+      );
+    mix-blend-mode:overlay;
+    opacity:0;
+    transition:opacity 0.08s ease-in;
+  `;
+  // RGB fringe layer (chromatic aberration vibe)
+  const fringe = document.createElement('div');
+  fringe.style.cssText = `
+    position:absolute; inset:0;
+    box-shadow:
+      inset 8px 0 24px rgba(255,0,80,0.25),
+      inset -8px 0 24px rgba(0,180,255,0.25);
+    opacity:0.85;
+  `;
+  // Tracking-noise band that scrolls top→bottom
+  const band = document.createElement('div');
+  band.style.cssText = `
+    position:absolute; left:0; right:0; height:42px;
+    top:-50px;
+    background:
+      linear-gradient(to bottom,
+        transparent 0%,
+        rgba(255,255,255,0.55) 30%,
+        rgba(255,255,255,0.85) 50%,
+        rgba(255,255,255,0.55) 70%,
+        transparent 100%);
+    filter:blur(2px);
+    transition:top 0.7s linear;
+    mix-blend-mode:screen;
+  `;
+  // REW marker chip — top-left, blinking ◀◀ REW
+  const rew = document.createElement('div');
+  rew.style.cssText = `
+    position:absolute; top:18px; left:22px;
+    color:#ff5566; font-family:'Courier New',monospace;
+    font-size:1.1rem; font-weight:900;
+    text-shadow:0 0 6px #ff334d, 0 1px 0 rgba(0,0,0,0.4);
+    letter-spacing:1.5px;
+    animation:vhs-rew-blink 0.18s steps(2) infinite;
+  `;
+  rew.textContent = '◀◀ REW';
+  // Inject keyframes once
+  if(!document.getElementById('vhs-rew-style')) {
+    const st = document.createElement('style');
+    st.id = 'vhs-rew-style';
+    st.textContent = `@keyframes vhs-rew-blink { 0%,49%{opacity:1} 50%,100%{opacity:0.35} }`;
+    document.head.appendChild(st);
+  }
+  overlay.appendChild(fringe);
+  overlay.appendChild(band);
+  overlay.appendChild(rew);
+  document.body.appendChild(overlay);
+  // Brief renderer/canvas blur via the overlay's blend, plus an actual
+  // CSS filter on the canvas if we can find it (revert after).
+  const canvas = document.querySelector('canvas');
+  let savedFilter = '';
+  if(canvas) { savedFilter = canvas.style.filter || ''; canvas.style.filter = 'blur(1.4px) saturate(1.4) hue-rotate(-6deg)'; }
+  requestAnimationFrame(() => {
+    overlay.style.opacity = '1';
+    band.style.top = '110%'; // scroll the tracking band
+  });
+  // SFX: short noisy whoosh for the rewind
+  if(typeof AC !== 'undefined' && AC) {
+    const ac = getAC(), t = ac.currentTime;
+    const buf = makeNoiseBuffer(0.55, true);
+    const src = ac.createBufferSource(); src.buffer = buf;
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0.18, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.8);
+    const bp = ac.createBiquadFilter();
+    bp.type = 'bandpass'; bp.frequency.setValueAtTime(3200, t);
+    bp.frequency.exponentialRampToValueAtTime(700, t + 0.8);
+    bp.Q.value = 1.4;
+    src.connect(bp); bp.connect(g); g.connect(getACDest());
+    src.start(t); src.stop(t + 0.85);
+    // Descending tonal whine for "tape spinning back"
+    const o = ac.createOscillator(); o.type = 'sawtooth';
+    o.frequency.setValueAtTime(900, t);
+    o.frequency.exponentialRampToValueAtTime(180, t + 0.7);
+    const og = ac.createGain();
+    og.gain.setValueAtTime(0.06, t);
+    og.gain.exponentialRampToValueAtTime(0.001, t + 0.75);
+    o.connect(og); og.connect(getACDest());
+    o.start(t); o.stop(t + 0.78);
+  }
+  // Cleanup
+  setTimeout(() => {
+    overlay.style.opacity = '0';
+    if(canvas) canvas.style.filter = savedFilter;
+  }, 700);
+  setTimeout(() => { overlay.remove(); }, 950);
 }
 
 function activateReverse() {
@@ -20444,6 +20827,15 @@ function fireSharpshooterBall() {
       cardSlots: G.cardSlots ? G.cardSlots.map(s => s ? {...s} : null) : [],
       discard: G.discard ? G.discard.slice() : [],
       drawPile: G.drawPile ? G.drawPile.slice() : [],
+      // v0.20u: Mulligan now restores HP + camera. Without these, taking
+      // damage during a swing was permanent and the camera snapped to
+      // wherever it landed post-shot.
+      hp: G.hp,
+      hpMax: G.hpMax,
+      lives: G.lives,
+      camTheta: G.camTheta,
+      camPhi: G.camPhi,
+      camTarget: G.camTarget ? G.camTarget.clone() : null,
     };
     updateUndoBtn();
   }
@@ -20897,6 +21289,1099 @@ function activateShooter() {
 }
 window.activateShooter = activateShooter;
 
+// ── Portal Grenade (legendary, v0.20u) ────────────────
+// Two paired free-standing floor doors. Green = entry (placed in front
+// of the ball when the card is armed); Purple = exit (placed where a
+// player-thrown grenade lands). Ball + every projectile pass through:
+// position teleports to the partner portal, velocity rotates by the
+// angle delta between portal facings. Per-object 0.5s teleport cooldown
+// prevents infinite loops. See-through view via two 256×256 render
+// targets, half-framerate alternating updates so cost stays in budget.
+//
+// Despawn: end of hole OR after first ball pass-through (whichever
+// first). Cup sink also despawns since hole-out fires its own cleanup.
+// v0.20w: door dimensions bumped ~20% from v0.20u baseline (was 16R × 32R)
+// to make portals more inviting visual targets and forgive slight ball
+// drift on entry. Now ~9.6 ball-widths × 19.2 ball-heights.
+const _PORTAL_DOOR_W = BALL_R * 19.2;
+const _PORTAL_DOOR_H = BALL_R * 38.4;
+const _PORTAL_HALFW  = _PORTAL_DOOR_W * 0.5;
+const _PORTAL_HALFH  = _PORTAL_DOOR_H * 0.5;
+const _PORTAL_TELEPORT_COOLDOWN = 0.5;
+// v0.20y: full Portal-game window approach (Option A). RTT is rendered at
+// matching screen aspect; the screen-space UV shader on the door samples
+// it at pixel-perfect alignment for true window-effect parallax.
+// v0.20y3: bumped to full-screen-resolution (was half-res) with a 2048
+// long-side cap (was 1024). Combined with devicePixelRatio awareness,
+// the portal view looks native on most displays. The half-framerate
+// alternation (one portal updates per frame) keeps the perf budget in
+// check even at the higher resolution.
+const _PORTAL_RTT_MAX = 2048;
+const _PORTAL_RTT_MIN = 256;
+function _computePortalRttSize() {
+  // Match screen aspect at full screen-res, capped at _PORTAL_RTT_MAX
+  // long-side. Apply devicePixelRatio (capped at 2) so retina/4K screens
+  // get crisp output without exploding render cost on mobile.
+  const w = (typeof window !== 'undefined') ? (window.innerWidth || 800) : 800;
+  const h = (typeof window !== 'undefined') ? (window.innerHeight || 600) : 600;
+  const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) ? Math.min(2, window.devicePixelRatio) : 1;
+  const pxW = w * dpr;
+  const pxH = h * dpr;
+  const longPx  = Math.max(pxW, pxH);
+  const shortPx = Math.min(pxW, pxH);
+  const scale   = Math.min(1.0, _PORTAL_RTT_MAX / longPx);
+  const targetLong  = Math.max(_PORTAL_RTT_MIN, Math.round(longPx  * scale));
+  const targetShort = Math.max(_PORTAL_RTT_MIN, Math.round(shortPx * scale));
+  return w >= h
+    ? { w: targetLong,  h: targetShort }
+    : { w: targetShort, h: targetLong  };
+}
+// v0.20y: called from resizeRenderer when the viewport changes. Resizes
+// any existing portal RTTs so screen-space UV math stays aspect-correct.
+// IMPORTANT: this function is called from resizeRenderer() which runs
+// during initial page load — BEFORE the portal-module consts and the
+// G state object further down the file are initialized. We use try/
+// catch to detect the TDZ state of G; `typeof G` would itself throw.
+function _resizePortalRTTs() {
+  let g;
+  try { g = G; } catch (_e) { return; } // G in TDZ → init phase, bail
+  if (!g) return;
+  const hasPortals = g._portalEntry || g._portalExit;
+  if (!hasPortals) return;
+  // Safe to read consts now — portal-module init has run by the time
+  // a portal exists in the scene.
+  const sz = _computePortalRttSize();
+  ['_portalEntry', '_portalExit'].forEach(key => {
+    const p = g[key];
+    if (!p || !p.renderTarget) return;
+    if (p.renderTarget.width === sz.w && p.renderTarget.height === sz.h) return;
+    p.renderTarget.setSize(sz.w, sz.h);
+  });
+}
+const _PORTAL_ENTRY_COLOR = 0x33ff66;   // green
+const _PORTAL_EXIT_COLOR  = 0xb966ff;   // purple
+const _PORTAL_ENTRY_PREVIEW_DIST = BALL_R * 10; // ~5 ball-widths in front
+
+// Reset the per-hole portal state. Called from clearPortalGrenade and
+// from initHole's per-hole reset block (defensive — clearPortalGrenade
+// also runs on hole-end so this is mostly a belt-and-suspenders init).
+function _resetPortalState() {
+  G._portalEntry  = null;   // {x,z,facing,disc,frame,renderTarget,camera}
+  G._portalExit   = null;   // same shape
+  G._portalArming = false;  // true while card is armed but entry not committed yet
+  G._portalArmingPreview = null; // preview mesh that follows the ball
+  G._portalRttFrame = 0;    // alternates 0/1 across animate frames for half-fps
+}
+
+// Arm Portal Grenade. v0.20v simplification: NO manual entry placement
+// step. Tap card → grenade-aim mode opens immediately for the EXIT
+// (purple) portal. After exit lands, the entry (green) auto-places in
+// front of the ball facing the exit. Tap card again or press ESC to
+// cancel + refund.
+function armPortalGrenade() {
+  if(G.inHole || G.state !== 'playing' || G.rolling) return;
+  // Already in throw-mode (re-tap on the card) — cancel + refund
+  if(G._portalThrowMode || G._portalArming) {
+    if(G._portalThrowMode) {
+      // Throw-mode is just grenade-aim with our flag set. Route through
+      // cancelGrenadeAim which handles the refund pattern.
+      G._portalThrowMode = false;
+      cancelGrenadeAim();
+    } else {
+      _cancelPortalArming();
+    }
+    return;
+  }
+  // Establish a clean state — kill any leftover portals from a previous
+  // arming attempt that somehow lingered.
+  if(G._portalEntry || G._portalExit) clearPortalGrenade();
+  _resetPortalState();
+  // Open grenade-aim straight away. _portalThrowMode tells the release
+  // handler to route to _throwExitPortalGrenade() instead of the regular
+  // grenade detonation path.
+  G._portalThrowMode = true;
+  G._grenadeAiming = true;
+  // Default to 50% so a tap-without-drag still throws somewhere sensible.
+  // (Was 0.8 in v0.20u, dropped to match regular grenade default — the
+  // preview now matches the actual lob, so 50% is the right base.)
+  G._grenadePower = 0.5;
+  // Establish shotDir from camera if it's not set
+  if(!G.shotDir || G.shotDir.length() < 0.01) {
+    G.shotDir.set(-Math.sin(G.camTheta), 0, -Math.cos(G.camTheta)).normalize();
+    G.shotAngle = G.camTheta + Math.PI;
+  }
+  showToast('🟣 Lob the exit portal — pull back to aim & throw', 1700);
+  rebuildGrenadePreview();
+  // Audible "arm" chime
+  if(AC) {
+    const ac = getAC(), t = ac.currentTime;
+    [600, 900, 1320].forEach((f, i) => {
+      const o = ac.createOscillator(); o.type = 'triangle';
+      o.frequency.setValueAtTime(f, t + i*0.06);
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.06, t + i*0.06);
+      g.gain.exponentialRampToValueAtTime(0.001, t + i*0.06 + 0.18);
+      o.connect(g); g.connect(getACDest());
+      o.start(t + i*0.06); o.stop(t + i*0.06 + 0.2);
+    });
+  }
+}
+window.armPortalGrenade = armPortalGrenade;
+
+// Build the preview disc the player sees while aiming. Lower-key than
+// the final portal mesh — it pulses gently and is partially transparent
+// so the player understands "this isn't placed yet."
+function _buildPortalPreviewMesh() {
+  const group = new THREE.Group();
+  // The "doorway" disc — vertical plane standing on the ground
+  const doorGeo = new THREE.PlaneGeometry(_PORTAL_DOOR_W, _PORTAL_DOOR_H);
+  const doorMat = new THREE.MeshBasicMaterial({
+    color: _PORTAL_ENTRY_COLOR,
+    transparent: true, opacity: 0.32,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+  });
+  const door = new THREE.Mesh(doorGeo, doorMat);
+  door.position.y = _PORTAL_HALFH;
+  door.userData.noOutline = true;
+  group.add(door);
+  // Glowing ring around the door edge — pure visual frame
+  const frameGeo = new THREE.PlaneGeometry(_PORTAL_DOOR_W * 1.08, _PORTAL_DOOR_H * 1.05);
+  const frameMat = new THREE.MeshBasicMaterial({
+    color: _PORTAL_ENTRY_COLOR,
+    transparent: true, opacity: 0.55,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+  });
+  const frame = new THREE.Mesh(frameGeo, frameMat);
+  frame.position.y = _PORTAL_HALFH;
+  frame.position.z = -0.01; // sit just behind the disc so it reads as a ring
+  frame.userData.noOutline = true;
+  group.add(frame);
+  group.userData.noOutline = true;
+  group.userData.isPortalPreview = true;
+  return group;
+}
+
+function _cancelPortalArming() {
+  if(G._portalArmingPreview) {
+    scene.remove(G._portalArmingPreview);
+    G._portalArmingPreview.traverse(o => {
+      if(o.geometry) o.geometry.dispose();
+      if(o.material) o.material.dispose();
+    });
+    G._portalArmingPreview = null;
+  }
+  G._portalArming = false;
+  G._portalPreviewTicker = false;
+  // v0.20w: phase distinguishes whether the card is refundable. If the
+  // exit portal exists, we're in PHASE 2 — the lob already fired, the
+  // card is fully spent, no refund. We just tear down the orphan exit
+  // and tell the player the entry was cancelled. If exit doesn't exist
+  // we're in PHASE 1 (pre-lob) and the standard refund applies.
+  const inPhase2 = !!G._portalExit;
+  if(inPhase2) {
+    clearPortalGrenade();
+    showToast('🟢 Entry cancelled — exit closed', 1100);
+    return;
+  }
+  // Phase 1 cancel: refund the card (lob never fired)
+  const pending = G._pendingCancellableCard;
+  if(pending && pending.id === 'portal_grenade') {
+    const discardIdx = G.discard.lastIndexOf(pending.id);
+    if(discardIdx !== -1) G.discard.splice(discardIdx, 1);
+    const refundedCard = { id: pending.id, instanceId: 'c_' + Math.random().toString(36).slice(2, 10) };
+    const slots = G.cardSlots || [];
+    let placed = false;
+    if(pending.slotIdx >= 0 && pending.slotIdx < slots.length && !slots[pending.slotIdx]) {
+      slots[pending.slotIdx] = refundedCard; placed = true;
+    } else {
+      for(let i = 0; i < slots.length; i++) {
+        if(!slots[i]) { slots[i] = refundedCard; placed = true; break; }
+      }
+    }
+    G.hand.push(refundedCard);
+    G._pendingCancellableCard = null;
+    if(typeof updateHandUI === 'function') updateHandUI();
+    showToast('↩️ Portal Grenade refunded', 800);
+  } else {
+    showToast('🟢 Portal Grenade cancelled', 700);
+  }
+}
+
+// Update the preview mesh's transform each frame. Called from the animate
+// loop while G._portalPreviewTicker is true. The preview sits at a fixed
+// distance in front of the ball, oriented to face the camera-forward
+// (like a doorway you're about to walk through).
+function tickPortalPreview() {
+  if(!G._portalPreviewTicker || !G._portalArmingPreview) return;
+  // Direction from ball outward along camera-forward
+  const dirX = -Math.sin(G.camTheta), dirZ = -Math.cos(G.camTheta);
+  const px = G.ballPos.x + dirX * _PORTAL_ENTRY_PREVIEW_DIST;
+  const pz = G.ballPos.z + dirZ * _PORTAL_ENTRY_PREVIEW_DIST;
+  const py = G.heightMap.length ? getTerrainHeight(px, pz) : 0;
+  const grp = G._portalArmingPreview;
+  grp.position.set(px, py + FLOOR_H/2, pz);
+  // Door faces ball — rotate around Y so the plane normal points back
+  // toward the ball. atan2(-dirX, -dirZ) rotates the plane normal (+Z
+  // local) to face -dir in world space.
+  grp.rotation.y = Math.atan2(-dirX, -dirZ);
+  // Gentle pulse on opacity for "I am alive"
+  const t = performance.now() * 0.001;
+  const pulseA = 0.32 + Math.sin(t * 3.2) * 0.08;
+  const pulseB = 0.55 + Math.sin(t * 3.2 + 1.0) * 0.12;
+  if(grp.children[0] && grp.children[0].material) grp.children[0].material.opacity = pulseA;
+  if(grp.children[1] && grp.children[1].material) grp.children[1].material.opacity = pulseB;
+}
+
+// v0.20w: Phase 2 entry portal placement. After the exit lands, a green
+// preview disc orbits around the ball at fixed radius. Player drags the
+// camera to rotate the placement angle. Tap on ball to commit. ESC or
+// re-tap card cancels (the exit is already placed and stays — only the
+// entry attempt cancels; player has to tap card again to retry phase 2,
+// but the EXIT is locked in once thrown).
+function _enterEntryPlacementPhase() {
+  G._portalThrowMode = false;
+  // Now we're in arming-mode for the ENTRY door (green) — distance is
+  // fixed, only direction changes. Reuse the existing preview-mesh
+  // infrastructure (kept from v0.20u) — re-activating it just by
+  // setting these flags.
+  G._portalArming = true;
+  G._portalArmingPreview = _buildPortalPreviewMesh();
+  scene.add(G._portalArmingPreview);
+  G._portalPreviewTicker = true;
+  showToast('🟢 Drag camera to aim entry · tap ball to drop', 2400);
+  if(AC) {
+    const ac = getAC(), t = ac.currentTime;
+    [400, 600].forEach((f, i) => {
+      const o = ac.createOscillator(); o.type = 'triangle';
+      o.frequency.setValueAtTime(f, t + i*0.06);
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.07, t + i*0.06);
+      g.gain.exponentialRampToValueAtTime(0.001, t + i*0.06 + 0.18);
+      o.connect(g); g.connect(getACDest());
+      o.start(t + i*0.06); o.stop(t + i*0.06 + 0.2);
+    });
+  }
+}
+
+// Player tapped the ball during phase 2 → drop the entry portal at the
+// current preview location.
+function commitEntryPortalAndArmThrow() {
+  if(!G._portalArming || !G._portalArmingPreview) return false;
+  const grp = G._portalArmingPreview;
+  let px = grp.position.x, pz = grp.position.z;
+  // v0.20w: snap entry portal POSITION to fairway-center, but KEEP the
+  // preview's facing (which already points the door's outward normal
+  // back toward the ball). Corridor-axis logic is the right call for
+  // the EXIT door (placed far from the player, needs to face down the
+  // corridor flow), but the entry's whole purpose is to face the player
+  // — that's where they're shooting from.
+  const snapped = _snapToFairwayCenter(px, pz);
+  px = snapped.x; pz = snapped.z;
+  // After the snap, the door's "face toward ball" angle needs a refresh
+  // since position moved. Recompute from the new (px, pz) → ball.
+  const dirX = G.ballPos.x - px, dirZ = G.ballPos.z - pz;
+  const dlen = Math.hypot(dirX, dirZ) || 1;
+  const facing = Math.atan2(dirX / dlen, dirZ / dlen);
+  // Tear down preview
+  scene.remove(grp);
+  grp.traverse(o => {
+    if(o.geometry) o.geometry.dispose();
+    if(o.material) o.material.dispose();
+  });
+  G._portalArmingPreview = null;
+  G._portalPreviewTicker = false;
+  G._portalArming = false;
+  // Build the actual entry portal at the committed (snapped) spot
+  G._portalEntry = _buildPortal('entry', px, pz, facing);
+  scene.add(G._portalEntry.group);
+  showToast('🟢🟣 Portals open! Send it through.', 1600);
+  if(AC) {
+    const ac = getAC(), t = ac.currentTime;
+    const o = ac.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(180, t);
+    o.frequency.exponentialRampToValueAtTime(60, t + 0.12);
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0.18, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
+    o.connect(g); g.connect(getACDest());
+    o.start(t); o.stop(t + 0.18);
+  }
+  return true;
+}
+window.commitEntryPortalAndArmThrow = commitEntryPortalAndArmThrow;
+
+// Build a portal record — meshes, RTT, RTT camera. Called for both
+// entry and exit. role = 'entry' | 'exit' picks the color.
+function _buildPortal(role, x, z, facing) {
+  const color = role === 'entry' ? _PORTAL_ENTRY_COLOR : _PORTAL_EXIT_COLOR;
+  const group = new THREE.Group();
+  group.position.set(x, 0, z);
+  group.rotation.y = facing;
+  group.userData.noOutline = true;
+
+  // v0.20y: RTT sized to match screen aspect (Option A — full Portal-style
+  // window). The door material is a custom ShaderMaterial that samples
+  // the RTT using SCREEN-SPACE UVs — so each pixel of the door shows
+  // exactly what would be visible at that pixel if the door were a
+  // physical window into the partner's space.
+  const rtSize = _computePortalRttSize();
+  const rt = new THREE.WebGLRenderTarget(rtSize.w, rtSize.h, {
+    minFilter: THREE.LinearFilter,
+    magFilter: THREE.LinearFilter,
+    format: THREE.RGBAFormat,
+    depthBuffer: true,
+    stencilBuffer: false,
+  });
+
+  // Door disc — textured with the RTT view. Custom shader does screen-
+  // space UV sampling: vertex shader exports clip-space position, frag
+  // shader normalizes to UV and samples the RTT. This is what makes the
+  // texture move correctly with parallax instead of stretching like a
+  // flat sticker as the player moves.
+  const doorGeo = new THREE.PlaneGeometry(_PORTAL_DOOR_W, _PORTAL_DOOR_H);
+  const doorMat = new THREE.ShaderMaterial({
+    uniforms: {
+      tPortal: { value: rt.texture },
+    },
+    vertexShader: `
+      varying vec4 vScreenPos;
+      void main() {
+        vScreenPos = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        gl_Position = vScreenPos;
+      }
+    `,
+    fragmentShader: `
+      uniform sampler2D tPortal;
+      varying vec4 vScreenPos;
+      void main() {
+        // Perspective divide → clip space [-1,1] → UV [0,1]
+        vec2 uv = (vScreenPos.xy / vScreenPos.w) * 0.5 + 0.5;
+        gl_FragColor = texture2D(tPortal, uv);
+      }
+    `,
+    side: THREE.FrontSide,
+    transparent: false,
+    depthWrite: true,
+  });
+  const door = new THREE.Mesh(doorGeo, doorMat);
+  door.position.y = _PORTAL_HALFH;
+  door.userData.noOutline = true;
+  door.userData.blocksOutlineDepth = true;
+  group.add(door);
+
+  // Thin glowing ring frame just outside the door silhouette
+  const frameInnerW = _PORTAL_DOOR_W;
+  const frameInnerH = _PORTAL_DOOR_H;
+  const frameThick = 0.16;
+  // Build the frame as four thin rectangles around the door
+  const frameMat = new THREE.MeshBasicMaterial({
+    color, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false,
+  });
+  const _addFrameStrip = (w, h, ox, oy) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), frameMat);
+    m.position.set(ox, _PORTAL_HALFH + oy, 0.005);
+    m.userData.noOutline = true;
+    group.add(m);
+  };
+  _addFrameStrip(frameInnerW + frameThick*2, frameThick,  0,  frameInnerH/2 + frameThick/2); // top
+  _addFrameStrip(frameInnerW + frameThick*2, frameThick,  0, -frameInnerH/2 - frameThick/2); // bottom
+  _addFrameStrip(frameThick, frameInnerH,  -frameInnerW/2 - frameThick/2, 0); // left
+  _addFrameStrip(frameThick, frameInnerH,   frameInnerW/2 + frameThick/2, 0); // right
+
+  // Soft outer glow plane (back of frame, semi-transparent)
+  const glowGeo = new THREE.PlaneGeometry(_PORTAL_DOOR_W * 1.4, _PORTAL_DOOR_H * 1.18);
+  const glowMat = new THREE.MeshBasicMaterial({
+    color, transparent: true, opacity: 0.18, side: THREE.DoubleSide, depthWrite: false,
+  });
+  const glow = new THREE.Mesh(glowGeo, glowMat);
+  glow.position.y = _PORTAL_HALFH;
+  glow.position.z = -0.02;
+  glow.userData.noOutline = true;
+  group.add(glow);
+
+  // Camera that renders THE OTHER side's view INTO this portal's RTT.
+  // Position will be set each frame from the partner portal's location
+  // when both portals exist. For now, place it as a no-op fallback.
+  const cam = new THREE.PerspectiveCamera(70, 1, 0.1, 200);
+
+  // Tiny entrance sparkle as the portal opens — particles bursting outward
+  spawnPortalOpenParticles(x, z, color);
+  if(AC) {
+    const ac = getAC(), t = ac.currentTime;
+    [400, 600, 900, 1350].forEach((f, i) => {
+      const o = ac.createOscillator(); o.type = role === 'entry' ? 'sine' : 'triangle';
+      o.frequency.setValueAtTime(f, t + i*0.04);
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.07, t + i*0.04);
+      g.gain.exponentialRampToValueAtTime(0.001, t + i*0.04 + 0.22);
+      o.connect(g); g.connect(getACDest());
+      o.start(t + i*0.04); o.stop(t + i*0.04 + 0.24);
+    });
+  }
+  triggerShake('light');
+
+  return {
+    role, x, z, facing,
+    group, doorMesh: door, doorMat,
+    renderTarget: rt, camera: cam,
+    openedAt: performance.now(),
+  };
+}
+
+// Particle burst for portal-open. Standalone (doesn't hook into hit FX).
+function spawnPortalOpenParticles(x, z, color) {
+  const N = 18;
+  const grp = new THREE.Group();
+  grp.userData.noOutline = true;
+  const py = (G.heightMap.length ? getTerrainHeight(x, z) : 0) + FLOOR_H/2 + 0.4;
+  const sparkles = [];
+  for(let i = 0; i < N; i++) {
+    const sg = new THREE.SphereGeometry(0.08, 4, 4);
+    const sm = new THREE.MeshBasicMaterial({color, transparent:true, opacity:1});
+    const s = new THREE.Mesh(sg, sm);
+    s.position.set(x, py, z);
+    s.userData.noOutline = true;
+    const ang = (i / N) * Math.PI * 2 + Math.random() * 0.3;
+    sparkles.push({mesh:s, vx: Math.cos(ang)*4, vy: 1.5+Math.random()*1.5, vz: Math.sin(ang)*4, life:0.7, mat:sm});
+    scene.add(s);
+  }
+  // Animate sparkle radial burst + fade
+  const start = performance.now();
+  const tick = () => {
+    const t = (performance.now() - start) / 1000;
+    if(t > 0.7) {
+      sparkles.forEach(s => {
+        scene.remove(s.mesh);
+        s.mesh.geometry.dispose();
+        s.mat.dispose();
+      });
+      return;
+    }
+    const dt = 0.016;
+    sparkles.forEach(s => {
+      s.mesh.position.x += s.vx * dt;
+      s.mesh.position.y += s.vy * dt;
+      s.mesh.position.z += s.vz * dt;
+      s.vy -= 6 * dt;
+      s.mat.opacity = 1 - (t / 0.7);
+    });
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+
+// v0.20w: snap a world position to the center of the nearest FAIR/TEE/
+// GREEN cell. Searches outward in a square spiral up to ~5 cells. If no
+// playable cell is found, returns the input unchanged.
+function _snapToFairwayCenter(wx, wz) {
+  if(!G.grid || !G.gridW || !G.gridH) return {x: wx, z: wz};
+  const startGx = Math.round(wx / TILE_SIZE);
+  const startGz = Math.round(wz / TILE_SIZE);
+  const isPlayable = (gx, gz) => {
+    if(gx < 0 || gz < 0 || gx >= G.gridW || gz >= G.gridH) return false;
+    const c = G.grid[gz][gx];
+    return c === CELL.FAIR || c === CELL.TEE || c === CELL.GREEN;
+  };
+  // Check center first
+  if(isPlayable(startGx, startGz)) {
+    return {x: startGx * TILE_SIZE, z: startGz * TILE_SIZE};
+  }
+  // Outward square-spiral search up to radius 5
+  for(let r = 1; r <= 5; r++) {
+    let bestGx = null, bestGz = null, bestDist = Infinity;
+    for(let dz = -r; dz <= r; dz++) {
+      for(let dx = -r; dx <= r; dx++) {
+        // Only ring at radius r (skip interior — already checked)
+        if(Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
+        const gx = startGx + dx, gz = startGz + dz;
+        if(!isPlayable(gx, gz)) continue;
+        // Pick the closest in this ring (Euclidean to original)
+        const cx = gx * TILE_SIZE, cz = gz * TILE_SIZE;
+        const d = Math.hypot(cx - wx, cz - wz);
+        if(d < bestDist) { bestDist = d; bestGx = gx; bestGz = gz; }
+      }
+    }
+    if(bestGx !== null) {
+      return {x: bestGx * TILE_SIZE, z: bestGz * TILE_SIZE};
+    }
+  }
+  return {x: wx, z: wz};
+}
+
+// v0.20w: compute door facing perpendicular to local corridor walls.
+// Algorithm: at the snapped fairway-center cell, look at the 4-neighborhood.
+// The corridor "axis" is the line through whichever 2 (or more) neighbors
+// are also playable. Door normal = corridor axis. The half-direction
+// (which way along the axis) is picked by alignment with throwDir so the
+// player's chosen direction of travel is preserved when possible.
+//
+// Cases:
+//   • Two opposite neighbors playable (e.g. N+S, E+W) → straight corridor
+//     → axis = that line. Pick half closest to throwDir.
+//   • One neighbor only (dead end) → axis = direction toward that neighbor.
+//   • Adjacent corner (e.g. N+E) → diagonal corridor → axis = diagonal.
+//   • All 4 neighbors playable (intersection / wide green) → no clear
+//     corridor → fall back to throwDir.
+//   • No neighbors playable (single isolated cell — shouldn't happen
+//     normally) → fall back to throwDir.
+function _computeExitDoorFacing(landX, landZ, throwDirX, throwDirZ) {
+  // Default fallback: face the throw direction
+  let fwdX = throwDirX, fwdZ = throwDirZ;
+  const tdLen = Math.hypot(fwdX, fwdZ) || 1;
+  fwdX /= tdLen; fwdZ /= tdLen;
+
+  if(!G.grid || !G.gridW || !G.gridH) {
+    return Math.atan2(fwdX, fwdZ);
+  }
+  const gx = Math.round(landX / TILE_SIZE);
+  const gz = Math.round(landZ / TILE_SIZE);
+  const isPlayable = (x, z) => {
+    if(x < 0 || z < 0 || x >= G.gridW || z >= G.gridH) return false;
+    const c = G.grid[z][x];
+    return c === CELL.FAIR || c === CELL.TEE || c === CELL.GREEN;
+  };
+  const N = isPlayable(gx, gz - 1);
+  const S = isPlayable(gx, gz + 1);
+  const E = isPlayable(gx + 1, gz);
+  const W = isPlayable(gx - 1, gz);
+  const count = (N ? 1 : 0) + (S ? 1 : 0) + (E ? 1 : 0) + (W ? 1 : 0);
+
+  // Build a candidate axis from the neighbor pattern
+  let axisX = 0, axisZ = 0;
+  if(count === 0 || count >= 4) {
+    // No neighbors, or wide-open intersection → keep throwDir fallback
+    return Math.atan2(fwdX, fwdZ);
+  } else if(N && S && !E && !W) {
+    // Straight N-S corridor (Z axis in this engine — gz increases southward)
+    axisZ = 1; axisX = 0;
+  } else if(E && W && !N && !S) {
+    // Straight E-W corridor
+    axisX = 1; axisZ = 0;
+  } else if(count === 1) {
+    // Dead end — axis points toward the one open neighbor
+    if(N) { axisX = 0; axisZ = -1; }
+    else if(S) { axisX = 0; axisZ = 1; }
+    else if(E) { axisX = 1; axisZ = 0; }
+    else if(W) { axisX = -1; axisZ = 0; }
+  } else if(count === 2) {
+    // Adjacent corner (N+E, N+W, S+E, S+W) → diagonal axis
+    let nx = 0, nz = 0;
+    if(N) nz -= 1; if(S) nz += 1;
+    if(E) nx += 1; if(W) nx -= 1;
+    const len = Math.hypot(nx, nz) || 1;
+    axisX = nx / len; axisZ = nz / len;
+  } else if(count === 3) {
+    // T-junction. The "missing" neighbor side is the wall side; corridor
+    // continues along the line through the two opposite neighbors. Find
+    // the missing one and use the perpendicular axis.
+    if(!N) { axisX = 1; axisZ = 0; }      // missing N → corridor runs E-W
+    else if(!S) { axisX = 1; axisZ = 0; } // missing S → same
+    else if(!E) { axisX = 0; axisZ = 1; } // missing E → corridor runs N-S
+    else if(!W) { axisX = 0; axisZ = 1; } // missing W → same
+  }
+
+  // Pick the half of the axis that's closest to throwDir, so the player's
+  // intended direction is preserved when the corridor allows it.
+  const dot = axisX * fwdX + axisZ * fwdZ;
+  if(dot < 0) { axisX = -axisX; axisZ = -axisZ; }
+  return Math.atan2(axisX, axisZ);
+}
+
+// Place exit portal at the supplied position + facing. (v0.20w: facing
+// is computed by the caller via _computeExitDoorFacing — separated so
+// future callers like a debug "force exit at X,Z" can reuse the spawn
+// logic without inheriting the auto-rotation heuristic.)
+function _placeExitPortal(landX, landZ, facing) {
+  G._portalExit = _buildPortal('exit', landX, landZ, facing);
+  scene.add(G._portalExit.group);
+}
+
+// Update RTT camera positions + render the partner-side view into each
+// portal's render target. Uses half-framerate alternation: even frames
+// update entry's RTT, odd frames update exit's. With composer-based
+// post-processing in the main pipeline, we MUST setRenderTarget(rt) →
+// render → setRenderTarget(null) so the main composer.render() runs
+// against the back buffer, not the portal RTT.
+// v0.20y: full Portal-game window technique (Option A). Three pieces:
+//   1. RTT camera POSITION = main camera mirrored through the portal
+//      pair (same as Option B). This is the spatial "fold."
+//   2. RTT camera FORWARD DIRECTION = main camera's forward, mirrored
+//      through the portal (the player's view continued through the door).
+//      This was the key Option B got wrong — Option B looked AT the
+//      partner's center, which produced a stable but parallax-incorrect
+//      image. Looking through the fold gives angularly-correct geometry.
+//   3. RTT camera FOV/aspect match the main camera, and the door's
+//      shader samples by SCREEN-SPACE UV. Combined, this means each
+//      pixel of the door shows EXACTLY what would be visible at that
+//      screen pixel if the door were a real window into partner's space.
+//   4. OBLIQUE NEAR-CLIP PLANE at partner's door surface. Without it,
+//      geometry between the RTT camera and the partner door (i.e.,
+//      stuff "behind" the partner from the player's perspective) renders
+//      in the texture, breaking the illusion. Lengyel's projection-
+//      matrix oblique clip technique handles this with zero render-time
+//      cost — just modifies four projection-matrix elements.
+const _portalObliquePlane = new THREE.Plane();
+const _portalObliqueClipVec = new THREE.Vector4();
+const _portalObliqueQ = new THREE.Vector4();
+function _applyObliqueProjection(cam, planeNormalX, planeNormalY, planeNormalZ, planePointX, planePointY, planePointZ) {
+  // Build plane in WORLD space: N · P + d = 0, with N pointing FORWARD
+  // (away from RTT camera, into the world we want to keep).
+  _portalObliquePlane.setFromNormalAndCoplanarPoint(
+    new THREE.Vector3(planeNormalX, planeNormalY, planeNormalZ).normalize(),
+    new THREE.Vector3(planePointX, planePointY, planePointZ)
+  );
+  // Transform plane to camera space. THREE.Plane.applyMatrix4 uses the
+  // inverse-transpose of the rotation portion; matrixWorldInverse is the
+  // correct transform for taking world coords TO camera coords.
+  _portalObliquePlane.applyMatrix4(cam.matrixWorldInverse);
+  // Build clipPlane vec4 in camera space
+  _portalObliqueClipVec.set(
+    _portalObliquePlane.normal.x,
+    _portalObliquePlane.normal.y,
+    _portalObliquePlane.normal.z,
+    _portalObliquePlane.constant
+  );
+  // Lengyel oblique clip — modify projection matrix M (column-major).
+  // M[0]=m00, M[5]=m11, M[8]=m02, M[9]=m12, M[10]=m22, M[14]=m23.
+  // q = vec4 in column with elements indexed as (.x, .y, .z, .w).
+  const m = cam.projectionMatrix.elements;
+  const C = _portalObliqueClipVec;
+  const sgnx = C.x < 0 ? -1 : 1;
+  const sgny = C.y < 0 ? -1 : 1;
+  _portalObliqueQ.set(
+    (sgnx + m[8])  / m[0],
+    (sgny + m[9])  / m[5],
+    -1.0,
+    (1.0 + m[10]) / m[14]
+  );
+  // c = C * (2 / dot(C, q))
+  const dotCQ = C.x * _portalObliqueQ.x + C.y * _portalObliqueQ.y + C.z * _portalObliqueQ.z + C.w * _portalObliqueQ.w;
+  if (Math.abs(dotCQ) < 1e-6) return; // degenerate — bail without changing matrix
+  const scale = 2.0 / dotCQ;
+  // Replace third row (column-major: indices 2, 6, 10, 14)
+  m[2]  = C.x * scale;
+  m[6]  = C.y * scale;
+  m[10] = C.z * scale + 1.0;
+  m[14] = C.w * scale;
+}
+
+function tickPortalRTT() {
+  if(!G._portalEntry || !G._portalExit) return;
+  G._portalRttFrame = (G._portalRttFrame + 1) & 1;
+  // Pick which portal updates this frame
+  const updateMe   = G._portalRttFrame === 0 ? G._portalEntry : G._portalExit;
+  const partner    = G._portalRttFrame === 0 ? G._portalExit  : G._portalEntry;
+  if(!updateMe || !partner) return;
+  const cam = updateMe.camera;
+
+  // ── 1. Mirror player camera POSITION through portal pair ──
+  const dxC = camera.position.x - updateMe.x;
+  const dzC = camera.position.z - updateMe.z;
+  const cE = Math.cos(updateMe.facing), sE = Math.sin(updateMe.facing);
+  const aE = dxC * cE - dzC * sE;
+  const nE = dxC * sE + dzC * cE;
+  // Degenerate guard: skip RTT if player is behind the door.
+  if(nE < 0.2) return;
+  const updateMeGroundY = G.heightMap.length ? getTerrainHeight(updateMe.x, updateMe.z) : 0;
+  const partnerGroundY  = G.heightMap.length ? getTerrainHeight(partner.x, partner.z) : 0;
+  const hE = camera.position.y - updateMeGroundY;
+  const aP = -aE;
+  const nP = -nE;
+  const cP = Math.cos(partner.facing), sP = Math.sin(partner.facing);
+  const camX = partner.x + aP * cP + nP * sP;
+  const camZ = partner.z - aP * sP + nP * cP;
+  const camY = partnerGroundY + hE;
+  cam.position.set(camX, camY, camZ);
+
+  // ── 2. Mirror player camera FORWARD through portal pair ──
+  // Get main camera's forward direction in world space.
+  // Three.js cameras look along -Z; world forward = (0, 0, -1) transformed
+  // by camera's quaternion.
+  const fwd = new THREE.Vector3(0, 0, -1);
+  fwd.applyQuaternion(camera.quaternion);
+  // Project forward into entry-local frame, flip horizontals, reproject.
+  const fAE = fwd.x * cE - fwd.z * sE;
+  const fHE = fwd.y;       // vertical preserved
+  const fNE = fwd.x * sE + fwd.z * cE;
+  const fAP = -fAE;
+  const fNP = -fNE;
+  const fwdWorldX = fAP * cP + fNP * sP;
+  const fwdWorldY = fHE;
+  const fwdWorldZ = -fAP * sP + fNP * cP;
+  cam.lookAt(camX + fwdWorldX, camY + fwdWorldY, camZ + fwdWorldZ);
+
+  // ── 3. Match player FOV + aspect ──
+  cam.fov = camera.fov;
+  // Aspect comes from the RTT dimensions (which we sized to match screen
+  // aspect at construction). If the screen was resized after portal
+  // construction, the resize handler will rebuild the RTT.
+  const rtW = updateMe.renderTarget.width;
+  const rtH = updateMe.renderTarget.height;
+  cam.aspect = rtW / rtH;
+  cam.near = 0.1;
+  cam.far  = camera.far;
+  cam.updateProjectionMatrix();
+  cam.updateMatrixWorld(true); // refresh matrixWorldInverse for plane transform
+
+  // ── 4. Oblique near-clip at partner's door plane ──
+  // Plane normal = partner's outward direction (forward, away from RTT cam).
+  // Plane point = partner's door center at door-mid-height.
+  const planeNX = Math.sin(partner.facing);
+  const planeNY = 0;
+  const planeNZ = Math.cos(partner.facing);
+  const planePX = partner.x;
+  const planePY = partnerGroundY + FLOOR_H/2 + _PORTAL_HALFH;
+  const planePZ = partner.z;
+  _applyObliqueProjection(cam, planeNX, planeNY, planeNZ, planePX, planePY, planePZ);
+
+  // ── 5. Hide both portal groups during render to avoid self-artifacts ──
+  updateMe.group.visible = false;
+  partner.group.visible = false;
+  const prevTarget = renderer.getRenderTarget();
+  try {
+    renderer.setRenderTarget(updateMe.renderTarget);
+    renderer.clear();
+    renderer.render(scene, cam);
+  } finally {
+    renderer.setRenderTarget(prevTarget);
+    updateMe.group.visible = true;
+    partner.group.visible = true;
+  }
+}
+
+// Generic XZ-plane teleport check. Called once per ball substep and once
+// per frame for each projectile. Returns true if the entity teleported,
+// false otherwise. The caller is responsible for setting velocity from
+// the new direction (we mutate posObj.x/.z and velObj.x/.z directly,
+// preserving Y components untouched — portals are floor-mounted, so a
+// flying projectile keeps its Y).
+//
+// posObj: {x, z} (and optional y for height gating; we don't gate Y
+//                 currently — the door is tall enough that any reasonable
+//                 ball/projectile Y is "in range").
+// velObj: {x, z}
+// stateRef: object with `_lastPortalT` field used for the cooldown gate.
+//           We mutate stateRef._lastPortalT when teleport happens.
+// nowSec:  performance.now() / 1000
+function tryPortalTeleportXZ(posObj, velObj, stateRef, nowSec) {
+  if(!G._portalEntry || !G._portalExit) return false;
+  // Cooldown check — prevents infinite loops if a teleport's exit lands
+  // back inside the partner portal's volume (which can happen if the
+  // exit door is angled into a wall and the ball ricochets immediately).
+  if(stateRef._lastPortalT && nowSec - stateRef._lastPortalT < _PORTAL_TELEPORT_COOLDOWN) return false;
+  const e = G._portalEntry, x = G._portalExit;
+  // For each portal, do a proximity test against its door plane.
+  // Door is vertical, length = _PORTAL_DOOR_W along the local X axis.
+  // v0.20w1: portals are now ONE-SIDED. The teleport only fires when the
+  // ball is on the front (+outward, +Z local) side of the door AND
+  // moving INTO the front face (velocity has a component along -outward).
+  // This matches Portal-the-game's convention and fixes the bug where a
+  // ball entering from behind the entry would emerge with reversed
+  // velocity and immediately fly back through the partner door from
+  // behind, appearing to "come out the back."
+  const _check = (portal) => {
+    const dx = posObj.x - portal.x;
+    const dz = posObj.z - portal.z;
+    // With group.rotation.y = facing, world +Z local = (sin f, 0, cos f).
+    // along  = projection onto door's local X axis (door width)
+    // normal = projection onto door's local Z axis (door's outward direction)
+    const cf = Math.cos(portal.facing), sf = Math.sin(portal.facing);
+    const along  = dx * cf - dz * sf;
+    const normal = dx * sf + dz * cf;
+    if(Math.abs(along) > _PORTAL_HALFW) return false;
+    // Thickness threshold — within ~0.6m of the door plane on either side
+    if(Math.abs(normal) > 0.6) return false;
+    // v0.20w1: front-side gate. Ball must be approaching from the +outward
+    // side, moving in -outward direction. Equivalently: velocity's
+    // component along the door's outward normal must be NEGATIVE (moving
+    // toward the back face, "through" the door from front to back).
+    // A ball on the back side moving forward (vAlongNormal > 0) is
+    // ignored — it sails through the door visually transparent.
+    const vAlongNormal = velObj.x * sf + velObj.z * cf;
+    if(vAlongNormal >= 0) return false;
+    return true;
+  };
+  let entered, partner;
+  if(_check(e))      { entered = e; partner = x; }
+  else if(_check(x)) { entered = x; partner = e; }
+  else return false;
+  // v0.20x: portal-correct velocity transform via local-frame flip.
+  // The previous (partner.facing - entered.facing + π) world-rotation
+  // formula worked when both portals faced the same direction but was
+  // wrong for different facings — the +π conflicted with the way
+  // Three.js's right-hand-rule Y rotation maps to the door's local
+  // frame. Direct local-frame math is provably correct for any pair
+  // of facings, exactly mirroring how Portal-the-game handles it.
+  //
+  // Algorithm:
+  //   1. Express ball velocity in entry-local frame (along, normal).
+  //   2. Flip both: (-along, -normal). This is the 180° rotation about
+  //      the door's vertical axis — angle of incidence = angle of exit.
+  //   3. Project back to world via partner-local frame.
+  // Same treatment for the door-local position offset, so a ball
+  // entering off-center on the left exits at the corresponding off-
+  // center spot on the partner.
+  const cE = Math.cos(entered.facing), sE = Math.sin(entered.facing);
+  const cP = Math.cos(partner.facing), sP = Math.sin(partner.facing);
+  // Entry-local components of velocity:
+  //   along  = vx*cos(entered.facing) - vz*sin(entered.facing)
+  //   normal = vx*sin(entered.facing) + vz*cos(entered.facing)
+  const vAlongE  = velObj.x * cE - velObj.z * sE;
+  const vNormalE = velObj.x * sE + velObj.z * cE;
+  // Flip both → partner-local
+  const vAlongP  = -vAlongE;
+  const vNormalP = -vNormalE;
+  // Reproject to world: world = vAlong*localX + vNormal*localZ
+  // partner.localX = (cP, 0, -sP), partner.localZ = (sP, 0, cP)
+  velObj.x = vAlongP * cP + vNormalP * sP;
+  velObj.z = -vAlongP * sP + vNormalP * cP;
+
+  // Same flip for the entry's position offset relative to the entry
+  // door, so off-center entries emerge at the corresponding mirrored
+  // off-center position on partner.
+  const dxE = posObj.x - entered.x;
+  const dzE = posObj.z - entered.z;
+  const aE = dxE * cE - dzE * sE;     // along entry door
+  const nE = dxE * sE + dzE * cE;     // normal to entry door (small, < 0.6)
+  const aP = -aE;
+  const nP = -nE;
+  // Place at partner's reflection point + forward-push so we don't
+  // instantly re-enter (the cooldown also guards this, but the push
+  // is the physical "you're on the partner's outward side now").
+  const pushDist = 0.7;
+  const partnerX = partner.x + aP * cP + nP * sP;
+  const partnerZ = partner.z - aP * sP + nP * cP;
+  const outX = Math.sin(partner.facing) * pushDist;
+  const outZ = Math.cos(partner.facing) * pushDist;
+  posObj.x = partnerX + outX;
+  posObj.z = partnerZ + outZ;
+  stateRef._lastPortalT = nowSec;
+  // FX: portal whoosh + brief shake
+  triggerShake('light');
+  if(AC) {
+    const ac = getAC(), t = ac.currentTime;
+    const o = ac.createOscillator(); o.type = 'sawtooth';
+    o.frequency.setValueAtTime(900, t);
+    o.frequency.exponentialRampToValueAtTime(220, t + 0.25);
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0.18, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.28);
+    o.connect(g); g.connect(getACDest());
+    o.start(t); o.stop(t + 0.3);
+  }
+  return true;
+}
+
+// Custom exit-portal grenade lob.
+// v0.20w rewrites:
+//   - Distance MATCHES preview EXACTLY (4 + power*32 → 4-36m vs regular
+//     grenade's 4-20m). Wider range so the card can reach across long
+//     fairways without needing perfect aim.
+//   - NO BOUNCE: first ground contact = portal placement. The preview
+//     showed where the grenade hits ground; that's where it stops.
+//     Predictable, no mid-air-drift, no "second hop went OOB" failure.
+//   - Same arc shape as the preview (gvy0=10, lobTime=0.8, G_GRAV=-22)
+//     so the trajectory line is dead accurate.
+//   - On placement, OOB-rescue if the landing cell is unplayable, then
+//     hand off to PHASE 2 — entry portal placement around the ball
+//     (player drags camera to rotate, taps ball to commit).
+function _throwExitPortalGrenade(power, dir) {
+  G._pendingCancellableCard = null;
+  // Match preview math EXACTLY — same gvy0, same gravity, same lobTime,
+  // same lobDist formula. The visible arc is now ground truth.
+  const _power = Math.max(0.1, Math.min(1.0, power || 0.5));
+  const _dir = (dir || G.shotDir).clone();
+  _dir.y = 0;
+  if(_dir.length() < 0.01) _dir.set(-Math.sin(G.camTheta), 0, -Math.cos(G.camTheta));
+  _dir.normalize();
+  // 4-36m wide power range so Portal Grenade can cover long fairways.
+  const lobDist = 4 + _power * 32;
+  const lobTime = 0.8;
+  const startPos = G.ballPos.clone();
+  startPos.y += 0.3;
+  const landX = startPos.x + _dir.x * lobDist;
+  const landZ = startPos.z + _dir.z * lobDist;
+  const landTerrY = G.heightMap.length ? getTerrainHeight(landX, landZ) : 0;
+
+  // Build a small purple grenade mesh
+  const grenadeGroup = new THREE.Group();
+  const bodyMat = new THREE.MeshStandardMaterial({
+    color:0xb966ff, roughness:0.3, metalness:0.4,
+    emissive:0x6633aa, emissiveIntensity:0.55
+  });
+  const bodyMesh = new THREE.Mesh(new THREE.SphereGeometry(0.18, 10, 8), bodyMat);
+  grenadeGroup.add(bodyMesh);
+  const haloMat = new THREE.MeshBasicMaterial({color:0xb966ff, transparent:true, opacity:0.55, depthWrite:false});
+  const haloMesh = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.04, 4, 12), haloMat);
+  haloMesh.rotation.x = Math.PI / 2;
+  haloMesh.userData.noOutline = true;
+  grenadeGroup.add(haloMesh);
+  grenadeGroup.position.copy(startPos);
+  grenadeGroup.userData.noOutline = true;
+  scene.add(grenadeGroup);
+
+  // Landing target ring (purple)
+  const targetMat = new THREE.MeshStandardMaterial({
+    color:0xb966ff, emissive:0x9944dd, emissiveIntensity:1.0,
+    transparent:true, opacity:0.5, side:THREE.DoubleSide
+  });
+  const targetMesh = new THREE.Mesh(new THREE.TorusGeometry(0.6, 0.06, 6, 24), targetMat);
+  targetMesh.rotation.x = Math.PI / 2;
+  targetMesh.position.set(landX, landTerrY + FLOOR_H/2 + 0.03, landZ);
+  targetMesh.userData.noOutline = true;
+  scene.add(targetMesh);
+
+  triggerShake('light');
+  if(AC) sfxJump();
+
+  // Single-arc, single-impact physics. gvy0/G_GRAV match the preview.
+  const lobStart = performance.now();
+  let landed = false, finalX = landX, finalZ = landZ;
+  let gx = startPos.x, gz = startPos.z, gy = startPos.y;
+  const gvx = (landX - startPos.x) / lobTime;
+  const gvz = (landZ - startPos.z) / lobTime;
+  let gvy = 10;          // matches preview
+  const G_GRAV = -22;    // matches preview
+
+  G._missileAnim = (dt) => {
+    if(!landed) {
+      gvy += G_GRAV * dt;
+      gx += gvx * dt; gz += gvz * dt; gy += gvy * dt;
+      // Wall bounce ONLY while airborne above wall height — same fly-over
+      // gate as regular grenade. Below the threshold we just plant on
+      // first ground contact (no horizontal wall bounce).
+      const groundY = G.heightMap.length ? getTerrainHeight(gx, gz) : 0;
+      const floorY = groundY + FLOOR_H/2 + 0.18;
+      grenadeGroup.position.set(gx, gy, gz);
+      grenadeGroup.rotation.x += dt * 8;
+      grenadeGroup.rotation.z += dt * 5;
+      targetMat.opacity = 0.35 + Math.sin((performance.now()-lobStart)*0.008) * 0.15;
+      if(gy <= floorY && gvy < 0) {
+        // First contact = land. No bounce, no second hop.
+        landed = true; finalX = gx; finalZ = gz;
+      }
+      return;
+    }
+    // Landed → cleanup the in-flight visuals + place portals.
+    scene.remove(grenadeGroup);
+    grenadeGroup.traverse(o => {
+      if(o.geometry) o.geometry.dispose();
+      if(o.material) o.material.dispose();
+    });
+    scene.remove(targetMesh);
+    targetMesh.geometry.dispose();
+    targetMat.dispose();
+    G._missileAnim = null;
+    // v0.20w: snap landing to nearest FAIR-cell center. This handles
+    // OOB rescue (cells outside the fairway just don't qualify) AND
+    // centers the door between corridor walls in one step. The old
+    // _rescueOOBPortalLanding fallback is left defined but bypassed.
+    const snapped = _snapToFairwayCenter(finalX, finalZ);
+    finalX = snapped.x; finalZ = snapped.z;
+    // Door normal = perpendicular to walls = along corridor axis at the
+    // snapped cell. _computeExitDoorFacing now reads G.grid neighbors
+    // and picks the corridor axis directly; falls back to throw direction
+    // for ambiguous wide-open cells.
+    const exitFacing = _computeExitDoorFacing(finalX, finalZ, _dir.x, _dir.z);
+    _placeExitPortal(finalX, finalZ, exitFacing);
+    // Hand off to PHASE 2 — entry placement around the ball
+    _enterEntryPlacementPhase();
+  };
+}
+
+// Returns true if a world point is in a playable cell (FAIR/TEE/GREEN/SAND).
+// Sand counts so portals can land in bunkers — chaotic but legal.
+function _isInBoundsForPortal(wx, wz) {
+  if(!G.grid || !G.gridW || !G.gridH) return true; // no grid → assume safe
+  const c = getCell(wx, wz);
+  return c === CELL.FAIR || c === CELL.TEE || c === CELL.GREEN || c === CELL.SAND;
+}
+
+// If (lx, lz) is OOB, walk back along the line from (sx, sz) → (lx, lz)
+// in small steps until we find an in-bounds cell. Returns {x, z} of the
+// rescued point. If the line has no in-bounds segment (shouldn't happen
+// given the ball is always on a playable cell), returns the ball
+// position (no-op, portal effectively spawns under the player).
+function _rescueOOBPortalLanding(sx, sz, lx, lz) {
+  if(_isInBoundsForPortal(lx, lz)) return {x: lx, z: lz};
+  // Walk from landing back toward ball, in TILE_SIZE/3 steps. The first
+  // in-bounds sample wins. Cap at 60 steps so a wildly OOB land doesn't
+  // hang the loop.
+  const dx = sx - lx, dz = sz - lz;
+  const dist = Math.hypot(dx, dz);
+  if(dist < 0.01) return {x: sx, z: sz};
+  const step = TILE_SIZE / 3;
+  const nSteps = Math.min(60, Math.ceil(dist / step));
+  const nx = dx / dist, nz = dz / dist;
+  for(let i = 1; i <= nSteps; i++) {
+    const tx = lx + nx * step * i;
+    const tz = lz + nz * step * i;
+    if(_isInBoundsForPortal(tx, tz)) {
+      // Pull a touch further inward so the portal isn't right at the
+      // boundary (visually + collision-safety).
+      return {x: tx + nx * 0.4, z: tz + nz * 0.4};
+    }
+  }
+  return {x: sx, z: sz};
+}
+
+// Auto-place the entry (green) portal a fixed distance in front of the
+// ball, oriented to face the exit portal. v0.20v: replaces the old
+// manual-aim entry placement step. Player tap card → throw → both
+// portals spawn together with no further input.
+function _autoPlaceEntryPortal(exitX, exitZ) {
+  // Direction from ball to exit — entry sits in front of ball ALONG this
+  // direction. That way the player's natural shoot-toward-exit instinct
+  // sends the ball directly into the entry portal.
+  let dirX = exitX - G.ballPos.x;
+  let dirZ = exitZ - G.ballPos.z;
+  const dlen = Math.hypot(dirX, dirZ) || 1;
+  dirX /= dlen; dirZ /= dlen;
+  const ex = G.ballPos.x + dirX * _PORTAL_ENTRY_PREVIEW_DIST;
+  const ez = G.ballPos.z + dirZ * _PORTAL_ENTRY_PREVIEW_DIST;
+  // Door faces the ball (so the ball walks INTO it and exits the partner).
+  // Local +Z is the door normal. We want the door's normal pointing back
+  // toward the ball ⇒ atan2(-dirX, -dirZ).
+  const facing = Math.atan2(-dirX, -dirZ);
+  G._portalEntry = _buildPortal('entry', ex, ez, facing);
+  scene.add(G._portalEntry.group);
+}
+
+// Despawn portals + dispose RTT. Safe to call multiple times. Clears
+// _portalEntry/_portalExit and per-object cooldown stamps.
+function clearPortalGrenade() {
+  const _kill = (p) => {
+    if(!p) return;
+    if(p.group && p.group.parent) p.group.parent.remove(p.group);
+    if(p.group) p.group.traverse(o => {
+      if(o.geometry) o.geometry.dispose();
+      if(o.material) {
+        if(o.material.map && o.material.map !== p.renderTarget?.texture) o.material.map.dispose();
+        o.material.dispose();
+      }
+    });
+    if(p.renderTarget) {
+      try { p.renderTarget.dispose(); } catch(_e) {}
+    }
+  };
+  _kill(G._portalEntry);
+  _kill(G._portalExit);
+  if(G._portalArmingPreview) {
+    if(G._portalArmingPreview.parent) G._portalArmingPreview.parent.remove(G._portalArmingPreview);
+    G._portalArmingPreview.traverse(o => {
+      if(o.geometry) o.geometry.dispose();
+      if(o.material) o.material.dispose();
+    });
+  }
+  _resetPortalState();
+  // Clear the ball's portal cooldown so a new run / new hole starts fresh
+  if(G._ballPortalState) G._ballPortalState._lastPortalT = 0;
+  G._portalThrowMode = false;
+}
+window.clearPortalGrenade = clearPortalGrenade;
+
 // ── Grenade — arc lob with delayed explosion ──────────
 function activateGrenade() {
   if(G.inHole || G.state !== 'playing' || G.rolling) return;
@@ -20974,9 +22459,12 @@ function teardownGrenadePreview() {
 function rebuildGrenadePreview() {
   if(!G._grenadeAiming) return;
   if(!G._grenadePreview) G._grenadePreview = {};
-  // Same physics constants as throwGrenadeAt below — keep in sync.
+  // v0.20w: preview is portal-aware — Portal Grenade gets a wider power
+  // range (4-36m vs regular 4-20m) and a purple arc to match the exit
+  // door color. Keeps regular grenade math untouched for everything else.
+  const isPortal = !!G._portalThrowMode;
   const power = Math.max(0.1, Math.min(1.0, G._grenadePower || 0.5));
-  const lobDist = 4 + power * 16; // 4-20m
+  const lobDist = isPortal ? (4 + power * 32) : (4 + power * 16);
   const lobTime = 0.8;
   const dir = G.shotDir.clone().normalize();
   const startX = G.ballPos.x, startZ = G.ballPos.z, startY = G.ballPos.y + 0.3;
@@ -20987,7 +22475,7 @@ function rebuildGrenadePreview() {
   const gvz = (landZ - startZ) / lobTime;
   const gvy0 = 10;
   const G_GRAV = -22;
-  // Sample the arc (~24 points) — green dots fading from bright to dim.
+  // Sample the arc (~24 points) — colored dots fading from bright to dim.
   const PTS = 24;
   const samples = [];
   for(let i = 0; i <= PTS; i++) {
@@ -21002,16 +22490,20 @@ function rebuildGrenadePreview() {
   if(G._grenadePreview.line) { scene.remove(G._grenadePreview.line); G._grenadePreview.line = null; }
   if(G._grenadePreview.dots) { scene.remove(G._grenadePreview.dots); G._grenadePreview.dots = null; }
   if(G._grenadePreview.ring) { scene.remove(G._grenadePreview.ring); G._grenadePreview.ring = null; }
-  // Green polyline along arc (semi-transparent so it doesn't overwhelm)
+  // Color: green for regular grenade, purple for portal exit-throw
+  const lineColor = isPortal ? 0xb966ff : 0x44ff44;
+  const dotColor  = isPortal ? 0xc488ff : 0x66ff66;
+  const ringColor = isPortal ? 0xb966ff : 0x44ff44;
+  const ringEmissive = isPortal ? 0x9944dd : 0x22aa22;
   const lineGeo = new THREE.BufferGeometry().setFromPoints(samples);
-  const lineMat = new THREE.LineBasicMaterial({ color: 0x44ff44, transparent: true, opacity: 0.7, linewidth: 2 });
+  const lineMat = new THREE.LineBasicMaterial({ color: lineColor, transparent: true, opacity: 0.7, linewidth: 2 });
   const line = new THREE.Line(lineGeo, lineMat);
   line.userData.noOutline = true;
   scene.add(line);
   G._grenadePreview.line = line;
   // Dot trail along arc — small bright spheres at each sample
   const dotsGroup = new THREE.Group();
-  const dotMat = new THREE.MeshBasicMaterial({ color: 0x66ff66, transparent: true, opacity: 0.85 });
+  const dotMat = new THREE.MeshBasicMaterial({ color: dotColor, transparent: true, opacity: 0.85 });
   for(let i = 0; i < samples.length; i++) {
     const dotGeo = new THREE.SphereGeometry(0.07, 6, 4);
     const dot = new THREE.Mesh(dotGeo, dotMat);
@@ -21021,12 +22513,13 @@ function rebuildGrenadePreview() {
   }
   scene.add(dotsGroup);
   G._grenadePreview.dots = dotsGroup;
-  // Landing ring — green torus at projected landing spot, at the grenade blast
-  // radius so the player can see what gets hit.
-  const BLAST_R = BALL_R * 8 * 2 * getBoomScale();
-  const ringGeo = new THREE.TorusGeometry(BLAST_R, 0.06, 6, 24);
+  // Landing ring — torus at projected landing spot. Regular grenade uses
+  // the blast radius so the player sees what gets hit. Portal exit
+  // doesn't blast — show a smaller portal-door-sized indicator instead.
+  const RING_R = isPortal ? (_PORTAL_HALFW || 1.76) : (BALL_R * 8 * 2 * getBoomScale());
+  const ringGeo = new THREE.TorusGeometry(RING_R, 0.08, 6, 28);
   const ringMat = new THREE.MeshStandardMaterial({
-    color: 0x44ff44, emissive: 0x22aa22, emissiveIntensity: 0.9,
+    color: ringColor, emissive: ringEmissive, emissiveIntensity: 0.9,
     transparent: true, opacity: 0.55, side: THREE.DoubleSide
   });
   const ring = new THREE.Mesh(ringGeo, ringMat);
@@ -21122,6 +22615,8 @@ function throwGrenadeAt(power, dir, opts) {
   let gvz = (landZ - startPos.z) / lobTime;
   let gvy = 10; // strong initial upward velocity for visible arc
   const G_GRAV = -22;
+  // v0.20u: Portal Grenade per-projectile teleport cooldown stamp.
+  const _grenPortalState = { _lastPortalT: 0 };
 
   G._missileAnim = (dt) => {
     const elapsed = (performance.now() - lobStart) / 1000;
@@ -21131,6 +22626,18 @@ function throwGrenadeAt(power, dir, opts) {
       gx += gvx * dt;
       gz += gvz * dt;
       gy += gvy * dt;
+      // v0.20u: Portal teleport — runs after position advance, before
+      // wall collision. The grenade keeps its gy/gvy on teleport (portals
+      // are floor-mounted, the door is tall enough to accept any arc).
+      if(G._portalEntry && G._portalExit) {
+        const _posTmp = { x: gx, z: gz };
+        const _velTmp = { x: gvx, z: gvz };
+        const _nowSec = performance.now() / 1000;
+        if(tryPortalTeleportXZ(_posTmp, _velTmp, _grenPortalState, _nowSec)) {
+          gx = _posTmp.x; gz = _posTmp.z;
+          gvx = _velTmp.x; gvz = _velTmp.z;
+        }
+      }
 
       // Wall collision — grenade bounces off walls, never goes OOB.
       // v0.20i: when the grenade is airborne above wall-top height, it skips
@@ -21481,12 +22988,30 @@ function activateBoulder() {
   // can still clear most paths, but late-hole/hazard-dense holes can survive.
   const maxDist = 64;
   const hitSet = new Set(); // track what we've already hit
+  // v0.20u: Portal Grenade per-projectile teleport cooldown stamp.
+  const _boulderPortalState = { _lastPortalT: 0 };
 
   G._missileAnim = (dt2) => {
     const step = BOULDER_SPEED * dt2;
     travelled += step;
     boulderMesh.position.x += dir.x * step;
     boulderMesh.position.z += dir.z * step;
+    // v0.20u: Portal teleport. Boulder uses a direction-locked path
+    // (no vel field) so we treat (dir × BOULDER_SPEED) as velocity, then
+    // re-derive dir from the rotated result. Boulder doesn't despawn the
+    // portals on pass — only the player ball does.
+    if(G._portalEntry && G._portalExit) {
+      const _posTmp = { x: boulderMesh.position.x, z: boulderMesh.position.z };
+      const _velTmp = { x: dir.x * BOULDER_SPEED, z: dir.z * BOULDER_SPEED };
+      const _nowSec = performance.now() / 1000;
+      if(tryPortalTeleportXZ(_posTmp, _velTmp, _boulderPortalState, _nowSec)) {
+        boulderMesh.position.x = _posTmp.x;
+        boulderMesh.position.z = _posTmp.z;
+        const _len = Math.hypot(_velTmp.x, _velTmp.z) || 1;
+        dir.x = _velTmp.x / _len;
+        dir.z = _velTmp.z / _len;
+      }
+    }
     const terrNow = G.heightMap.length ? getTerrainHeight(boulderMesh.position.x, boulderMesh.position.z) : 0;
     boulderMesh.position.y = terrNow + BOULDER_R;
     // Roll rotation
@@ -23505,6 +25030,14 @@ function onPointerDown(x, y, id) {
     updateHandUI();
   }
   if(G.aimMode && !G.rolling && !G.inHole && hitTestBall(x,y)) {
+    // v0.20w: phase-2 entry portal commit. If we're in arming mode (exit
+    // already placed, entry preview orbiting the ball), tapping the ball
+    // drops the entry door at the preview's current location. The next
+    // pointerdown after that runs the normal ball-drag flow.
+    if(G._portalArming) {
+      commitEntryPortalAndArmThrow();
+      return;
+    }
     input.ballDragging = true;
     input.ballStartX = x;
     input.ballStartY = y;
@@ -23599,7 +25132,14 @@ function onPointerUp() {
       G._grenadePower = 0;
       const _holy = !!G._holyHandGrenadeArmed;
       G._holyHandGrenadeArmed = false;
-      throwGrenadeAt(_power, G.shotDir, _holy ? {holy:true} : null);
+      // v0.20u: Portal Grenade — when _portalThrowMode is on, the release
+      // places the EXIT portal at the lob's landing spot instead of
+      // detonating. Route to our custom lobber and skip the regular boom.
+      if(G._portalThrowMode) {
+        _throwExitPortalGrenade(_power, G.shotDir);
+      } else {
+        throwGrenadeAt(_power, G.shotDir, _holy ? {holy:true} : null);
+      }
       G.shotPower = 0;
       updateAimArrow();
     } else {
@@ -23724,6 +25264,14 @@ function fireShot() {
       cardSlots: G.cardSlots ? G.cardSlots.map(s => s ? {...s} : null) : [],
       discard: G.discard ? G.discard.slice() : [],
       drawPile: G.drawPile ? G.drawPile.slice() : [],
+      // v0.20u: full Mulligan restore — HP + camera so Mulligan truly
+      // returns the world to its pre-swing state.
+      hp: G.hp,
+      hpMax: G.hpMax,
+      lives: G.lives,
+      camTheta: G.camTheta,
+      camPhi: G.camPhi,
+      camTarget: G.camTarget ? G.camTarget.clone() : null,
     };
     updateUndoBtn();
   }
@@ -24294,7 +25842,19 @@ window.addEventListener('keydown', e => {
     const escOpen = document.getElementById('escape-menu').classList.contains('open');
     if(escOpen) { closeEscMenu(); return; }
     // v0.20d: Esc during grenade aim cancels & refunds the card
+    // v0.20u: also handles portal arming + portal throw modes.
+    if(G._portalArming) {
+      _cancelPortalArming();
+      return;
+    }
     if(G._grenadeAiming) {
+      // If we're in the exit-throw phase of portal grenade, the card
+      // has already been consumed (entry portal placed) — best to
+      // also tear the entry down and refund as if cancelled.
+      if(G._portalThrowMode) {
+        if(G._portalEntry) clearPortalGrenade();
+        G._portalThrowMode = false;
+      }
       cancelGrenadeAim();
       G.shotPower = 0;
       updateAimArrow();
@@ -24355,7 +25915,12 @@ window.addEventListener('keydown', e => {
         G._grenadePower = 0;
         const _holy = !!G._holyHandGrenadeArmed;
         G._holyHandGrenadeArmed = false;
-        throwGrenadeAt(_power, G.shotDir, _holy ? {holy:true} : null);
+        // v0.20u: Portal Grenade exit-portal route, same as in onPointerUp
+        if(G._portalThrowMode) {
+          _throwExitPortalGrenade(_power, G.shotDir);
+        } else {
+          throwGrenadeAt(_power, G.shotDir, _holy ? {holy:true} : null);
+        }
         G.shotPower = 0;
         updateAimArrow();
       } else {
@@ -25010,8 +26575,8 @@ const ALL_PERKS = [
     desc:'Increased wall and surface restitution — bouncier everything. Stacks!' },
   { id:'hot_streak',       name:'Hot Streak',          emoji:'🔥', rarity:'common',    price:20,  stackable:false, weight:6,
     desc:'Each consecutive par-or-better hole adds +10% to coin earnings (max ×4). Resets on bogey.' },
-  { id:'magnet',           name:'Coin Magnet',         emoji:'🧲', rarity:'common',    price:15,  stackable:true,  weight:8,
-    desc:'Coins are pulled toward your ball. Buy up to 3× to increase range and pull strength.' },
+  { id:'magnet',           name:'Coin Magnet',         emoji:'🧲', rarity:'common',    price:18,  stackable:false, weight:8,
+    desc:'Coins are pulled toward your ball — and tag along like ducklings as it rolls.' },
   { id:'extra_heart',     name:'Heart',                emoji:'❤️‍🩹', rarity:'common',   price:11,  stackable:true,  weight:4,
     desc:'Heal +2 HP instantly.' },
   { id:'high_speed_finish', name:'High Speed Finish',  emoji:'🏁', rarity:'common',   price:15,  stackable:false, weight:4,
@@ -26139,6 +27704,10 @@ function initHole() {
   G._hunter = null;          // populated below if active
   G._hunterApproachStrokes = 0;  // increments per stroke, ramps speed
   G._lastHunterDamageStroke = -1;
+  // v0.20u: Speed Hole elite — global motion multiplier applied at every
+  // obstacle's phase/angle advance site. 2.5× is the upper end of the
+  // 200–300% target range — enough to make spinners genuinely terrifying.
+  G._speedHoleMul = data.eliteSpeedHole ? 2.5 : 1.0;
   // v0.20r: Lap Mode runtime state. Activated when the elite course data
   // ships a `lapMode` block. Tracked across the entire hole; reset at
   // hole-init below.
@@ -26211,17 +27780,16 @@ function initHole() {
 
   updateUI(); updateScorePips();
   // v0.20j+: Elite-aware hole announcement. Standard "Hole X · Par Y" plus a
-  // second beat with the archetype name when an elite is active, so the player
-  // gets the "this is the dangerous one" beat right after the world settles.
-  if(G._activeElite) {
-    const aE = G._activeElite.archetype;
-    showToast(`Hole ${G.hole+1} · Par ${G.par}`, 1600);
-    setTimeout(() => {
-      showToast(`${aE.emoji}  ELITE: ${aE.name}  ${aE.emoji}`, 2400);
-    }, 700);
-  } else {
-    showToast(`Hole ${G.hole+1} · Par ${G.par}`, 2200);
-  }
+  // v0.20u: Hole-intro banner — replaces the old toast-only announcement.
+  // Big centered "Hole N · Par X" + mini-challenge name; optionally a
+  // blood-red ELITE tag below. Lives ~1.6s big, then scales down and
+  // fades while the challenge badge takes over for the rest of the hole.
+  showHoleIntroBanner({
+    hole:    G.hole + 1,
+    par:     G.par,
+    challenge: (G._holeChallenge && G._holeChallenge.label) || null,
+    elite:   G._activeElite ? G._activeElite.archetype : null,
+  });
   updateHint('Tap ball then pull back to shoot\nDrag elsewhere to rotate camera');
 
   // v0.20p: Hunter elite — spawn the eyeball pursuer if active. Spawn
@@ -26293,6 +27861,9 @@ function initHole() {
   G._cloneDoubleDurationFor = null;
   G._ironBallExtraShot = false;
   G._wallMagnetActive = false;
+  // v0.20u: Portal Grenade — clean up any prior-hole portals + reset
+  // the per-ball cooldown stamp.
+  if(typeof clearPortalGrenade === 'function') clearPortalGrenade();
   discardHand();
   shuffleDeck();
   // Derive initial draw count from modifiers directly — single source of truth.
@@ -26348,6 +27919,30 @@ function initHole() {
     }
     G.cardSlots[0] = dcInjectedCard;
     updateHandUI();
+    // v0.20u: drawCards() above set slot 0's inline opacity/transform to 0
+    // for its deal-in animation, but the queued setTimeout that animates
+    // it back in finds the originally-drawn card at its NEW index (slot 1
+    // after the shift), leaving slot 0 — now holding the DC card —
+    // permanently at opacity:0. Fix: explicitly clear the stale inline
+    // styles on slot 0 and run a fresh deal-in animation for the DC card
+    // so it sparkles into place.
+    const dcSlotEl = document.getElementById('card-slot-' + CARD_SLOT_KEYS[0]);
+    if(dcSlotEl) {
+      // Reset any stale inline state from drawCards' pre-animation hide
+      dcSlotEl.style.transition = 'none';
+      dcSlotEl.style.transform = 'translateY(40px) scale(0.7)';
+      dcSlotEl.style.opacity = '0';
+      requestAnimationFrame(() => {
+        dcSlotEl.style.transition = 'transform 0.3s cubic-bezier(0.34,1.56,0.64,1), opacity 0.25s ease-out';
+        dcSlotEl.style.transform = 'translateY(0) scale(1)';
+        dcSlotEl.style.opacity = '1';
+        setTimeout(() => {
+          dcSlotEl.style.transition = '';
+          dcSlotEl.style.transform = '';
+          dcSlotEl.style.opacity = '';
+        }, 360);
+      });
+    }
     // Animate the dealer's choice slot in with a sparkle
     setTimeout(() => spawnCloneSparkleAtSlot(0), 200);
   }
@@ -26941,7 +28536,6 @@ function escMainMenu() {
     </div>
     <div class="tagline">A Minigolf Roguelike</div>
     <h1>Golf Gone<br>Wrong</h1>
-    <p>Procedurally generated minigolf.<br>Drag to look around.<br>Tap the ball, pull back &amp; release to shoot.</p>
     <div class="seed-row">
       <input class="seed-input" id="seed-input" placeholder="Seed (optional)" maxlength="12" spellcheck="false" autocomplete="off"/>
       <button class="seed-btn" id="btn-random-seed">🎲 Random</button>
@@ -27661,6 +29255,8 @@ function startGame(){
   }
   G._hunter = null;
   G._hunterApproachStrokes = 0;
+  // v0.20u: Speed Hole elite — reset multiplier per run.
+  G._speedHoleMul = 1.0;
   G._lastHunterDamageStroke = -1;
   if(G._eliteCommitInterval) { clearInterval(G._eliteCommitInterval); G._eliteCommitInterval = null; }
   hideEliteStakesPip();
@@ -30499,9 +32095,10 @@ function animate(now) {
     // Angle is advanced inside updatePhysics substep loop.
     // When not rolling (menu, aiming, holed), advance angle here for visual.
     const _freezeMult = G._freezeFrameActive ? 0 : 1; // 0 = frozen
+    const _speedMul = G._speedHoleMul || 1; // v0.20u: Speed Hole elite
     if(G.spinBars) {
       for(const bar of G.spinBars) {
-        if(!G.rolling) bar.angle += bar.speed * dt * _freezeMult;
+        if(!G.rolling) bar.angle += bar.speed * dt * _freezeMult * _speedMul;
         if(bar.barGroup) {
           bar.barGroup.rotation.y = bar.angle;
         }
@@ -30513,7 +32110,7 @@ function animate(now) {
     // ── Pendulum animation + collision ──────────────────
     if(G.pendulums) {
       for(const pd of G.pendulums) {
-        pd.phase += pd.speed * dt;
+        pd.phase += pd.speed * dt * _speedMul; // v0.20u: Speed Hole
         const angle = Math.sin(pd.phase) * pd.swingAmp;
         if(pd.pendGroup) pd.pendGroup.rotation.y = angle;
 
@@ -30541,7 +32138,8 @@ function animate(now) {
               G.ballPos.x+=nx5*(minD5-dist5);
               G.ballPos.z+=nz5*(minD5-dist5);
               // Angular velocity of the arm tip at contact point
-              const angVel = pd.speed * Math.cos(pd.phase) * pd.swingAmp;
+              // v0.20u: phase is being advanced at _speedMul× rate
+              const angVel = pd.speed * Math.cos(pd.phase) * pd.swingAmp * _speedMul;
               const rx5=cpx5-pd.wx, rz5=cpz5-pd.wz;
               const surfVx5 = pd.segDir==='H' ? -angVel*rz5 : angVel*rz5;
               const surfVz5 = pd.segDir==='H' ?  angVel*rx5 : -angVel*rx5;
@@ -30564,7 +32162,7 @@ function animate(now) {
     if(G.popupWalls) {
       for(const pw of G.popupWalls) {
         // Slower: period generated as 3.5–5.5s in data, advance here
-        pw.phase += (2*Math.PI/pw.period)*dt*_freezeMult;
+        pw.phase += (2*Math.PI/pw.period)*dt*_freezeMult*_speedMul; // v0.20u: Speed Hole
         // Use a smoothstep-shaped cycle: wall fully up for ~40% of cycle,
         // smooth rise/fall transitions, fully buried for ~40% of cycle.
         const raw = Math.sin(pw.phase);  // -1..1
@@ -30584,7 +32182,7 @@ function animate(now) {
     if(G.slideBlocks) {
       for(const sb of G.slideBlocks) {
         sb.prevPhase = sb.phase;
-        sb.phase += (2 * Math.PI / sb.period) * dt * _freezeMult;
+        sb.phase += (2 * Math.PI / sb.period) * dt * _freezeMult * _speedMul; // v0.20u: Speed Hole
         const offset = Math.sin(sb.phase) * sb.range;
         if(sb.blockGroup) {
           sb.blockGroup.position.x = sb.wx + (sb.axis==='X' ? offset : 0);
@@ -30645,7 +32243,17 @@ function animate(now) {
   if(G.state === 'playing') updateCourseSpeedHoops(dt);
   // v0.20t: Chasm airborne spike spheres
   if(G.state === 'playing') updateChasmAirborne(dt);
+  // v0.20u: Portal Grenade — preview tick (while arming) + RTT update
+  // (while both portals exist). RTT runs alternating per frame for
+  // half-fps performance budget. Must run BEFORE composer.render() so
+  // setRenderTarget(null) restoration is in place.
+  // v0.20y: tickPortalRTT must run AFTER updateCamera — the window-
+  // tracking RTT mirrors the player camera through the portal pair, so
+  // it needs THIS frame's camera state, not last frame's. Without this
+  // ordering the parallax lags by one frame and feels "swimmy."
+  if(G.state === 'playing') tickPortalPreview();
   updateCamera(dt);
+  if(G.state === 'playing') tickPortalRTT();
   composer.render();
 }
 initComposer();
