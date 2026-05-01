@@ -3259,7 +3259,7 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
   <button class="play-btn" onclick="openAchievements()" style="margin-top:6px;background:rgba(245,200,66,0.18);border:1px solid rgba(245,200,66,0.5);color:#f5c842;font-size:0.85rem;padding:10px 28px">🏆 Achievements</button>
   <button class="play-btn" id="btn-import-save" style="margin-top:6px;background:rgba(120,120,120,0.6);font-size:0.7rem;padding:8px 20px" onclick="importSaveFile()">📂 Import Save</button>
   <input type="file" id="import-save-input" accept=".ggwsave,application/json" style="display:none">
-  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.20y4</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Portal Grenade: legendary tag (epic-rate appearance)</div></div>
+  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.20y5</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Portal: declutter — suppress outlines on geometry past the portal</div></div>
 
   <!-- v0.19j: Inline profile picker — skip the separate slot-picks screen -->
   <div class="section-label" style="margin-top:14px">Save Slot</div>
@@ -3456,6 +3456,7 @@ class EffectComposer {
 // ── OutlinePass ─────────────────────────────────────────────────────────────
 // Depth-buffer edge detection — draws black lines wherever depth changes sharply.
 // Does NOT require a second scene render or overrideMaterial hacks.
+const _outlineTmpVec3 = new THREE.Vector3();
 class OutlinePass {
   constructor(resolution, scene, camera) {
     this.scene = scene; this.camera = camera;
@@ -3583,7 +3584,49 @@ void main() {
     // Used for portal doors — they need to occlude the world behind
     // them so the player doesn't see outlines of stuff bleeding through
     // the rendered RTT texture.
+    // v0.20y5: when active portals exist, ALSO suppress outlines on any
+    // mesh that's farther from the camera than the closer portal. This
+    // declutters the visual area around the portal so players can read
+    // the portal's RTT content clearly without competing world-space
+    // outlines stretching across the same screen region.
+    const _portalCullDepth = (() => {
+      try {
+        const e = G._portalEntry, x = G._portalExit;
+        if (!e && !x) return null;
+        // World→camera transform: read from current camera. Camera looks
+        // down -Z, so camera-space depth = -z_camera (positive in front).
+        const m = this.camera.matrixWorldInverse;
+        const _depth = (px, pz) => {
+          // Transform world point (px, anyY, pz) into camera space, take -z.
+          // We use ground-level Y (door's center isn't critical for the
+          // threshold; portals are tall enough that a single midpoint
+          // depth value works for the suppression test).
+          const py = 0.5; // approx ground+door-mid; precise Y unimportant
+          const e0 = m.elements;
+          // Standard column-major mat4 application: cz = e02*x + e06*y + e10*z + e14
+          const cz = e0[2] * px + e0[6] * py + e0[10] * pz + e0[14];
+          return -cz; // depth in front of camera
+        };
+        let d = Infinity;
+        if (e) d = Math.min(d, _depth(e.x, e.z));
+        if (x) d = Math.min(d, _depth(x.x, x.z));
+        // Add a small buffer so meshes RIGHT AT the portal's plane
+        // (e.g. the portal frame itself, ground tile right at the
+        // portal base) still get outlined. Anything past the buffer is
+        // suppressed.
+        return d + 0.5;
+      } catch (_e) { return null; }
+    })();
+
     const hidden = [];
+    const _meshCamDepth = (obj) => {
+      // Compute camera-space depth of obj's world position.
+      const wp = obj.getWorldPosition(_outlineTmpVec3);
+      const m = this.camera.matrixWorldInverse;
+      const e0 = m.elements;
+      const cz = e0[2] * wp.x + e0[6] * wp.y + e0[10] * wp.z + e0[14];
+      return -cz;
+    };
     this.scene.traverse(obj => {
       // Check obj itself OR any ancestor that was already hidden
       const parentHidden = obj.parent && hidden.includes(obj.parent);
@@ -3592,6 +3635,16 @@ void main() {
         if (obj.userData.blocksOutlineDepth) return;
         hidden.push(obj);
         obj.visible = false;
+        return;
+      }
+      // v0.20y5: portal-zone outline suppression. Only test "real" meshes
+      // (have geometry — no point checking groups/empties). If beyond the
+      // cull threshold, hide for the depth pass = no outline drawn.
+      if (_portalCullDepth !== null && obj.visible && obj.isMesh) {
+        if (_meshCamDepth(obj) > _portalCullDepth) {
+          hidden.push(obj);
+          obj.visible = false;
+        }
       }
     });
 
@@ -3819,8 +3872,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.20y4';
-const CHANGE_NOTE = 'Portal Grenade: now displays as legendary rarity (red border, glow, badge) but keeps epic-tier weight (2) so it appears at the same rate. Special enough to deserve the legendary tag without being rare-of-rares unobtainable.';
+const GAME_VERSION = '0.20y5';
+const CHANGE_NOTE = 'Portal outline cleanup: when portals exist, OutlinePass now suppresses outlines on any mesh farther from the camera than the closer portal. Declutters the visual area around the portal so the RTT window content reads cleanly without competing world-space outlines.';
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
