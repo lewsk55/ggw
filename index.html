@@ -2197,6 +2197,86 @@ transition:all 0.15s;
 .elite-fail-toast-label { font-size:1.4rem; font-weight:700; color:#fff; letter-spacing:0.5px; }
 .elite-fail-toast-sub  { font-size:0.7rem; color:rgba(255,200,200,0.95); margin-top:4px; font-family:'Inter', sans-serif; letter-spacing:1px; text-transform:uppercase; }
 
+/* v0.21a: Endless post-game fork — appears after winning the final regular
+   hole. Uses a more triumphant gold/red palette than the elite fork to
+   signal "victory lap" energy rather than "you might die". */
+#endless-fork-overlay {
+  position:absolute; inset:0;
+  background:radial-gradient(ellipse at center, rgba(60,30,15,0.97) 0%, rgba(25,12,18,0.99) 100%);
+  flex-direction:column;
+  align-items:center; justify-content:center;
+  z-index:140;
+  padding:32px 18px 36px;
+  display:none;
+  opacity:0;
+  transition:opacity 0.4s;
+}
+#endless-fork-overlay.visible { display:flex; opacity:1; }
+.endless-banner {
+  font-size:0.6rem; letter-spacing:5px; text-transform:uppercase;
+  color:rgba(255,220,140,0.75); margin-bottom:6px;
+  animation:elite-pulse-text 2.4s ease-in-out infinite;
+}
+.endless-title {
+  font-family:'Playfair Display', serif;
+  font-size:clamp(2.4rem,9vw,3.8rem); font-weight:700;
+  color:#fff; line-height:1; letter-spacing:-0.5px;
+  text-align:center;
+  text-shadow:0 0 32px rgba(255,200,80,0.45);
+}
+.endless-sub {
+  font-size:0.78rem; letter-spacing:2px;
+  color:rgba(255,235,200,0.75); margin:10px 0 28px;
+  text-align:center; max-width:340px; line-height:1.45;
+}
+.endless-sub .endless-streak {
+  display:inline-block; margin-top:6px; font-size:0.7rem;
+  letter-spacing:3px; text-transform:uppercase;
+  color:rgba(255,200,90,0.85);
+}
+.endless-grid {
+  display:flex; flex-direction:column; gap:14px;
+  width:100%; max-width:380px;
+}
+@media (min-width: 720px) {
+  .endless-grid { flex-direction:row; max-width:780px; }
+}
+.endless-card {
+  position:relative;
+  border-radius:18px;
+  padding:20px 18px 22px;
+  cursor:pointer; transition:transform 0.18s, box-shadow 0.2s, background 0.2s;
+  display:flex; flex-direction:column; gap:8px;
+  flex:1; min-height:170px;
+  overflow:hidden;
+  text-align:center;
+}
+.endless-card:active { transform:scale(0.985); }
+.endless-card.end {
+  background:linear-gradient(165deg, rgba(60,200,135,0.13) 0%, rgba(40,140,200,0.10) 100%);
+  border:1.5px solid rgba(120,220,180,0.4);
+  box-shadow:0 4px 20px rgba(60,200,135,0.10), inset 0 1px 0 rgba(255,255,255,0.06);
+}
+.endless-card.end:hover {
+  background:linear-gradient(165deg, rgba(60,200,135,0.20) 0%, rgba(40,140,200,0.16) 100%);
+  border-color:rgba(120,220,180,0.6);
+  box-shadow:0 8px 28px rgba(60,200,135,0.20);
+}
+.endless-card.more {
+  background:linear-gradient(165deg, rgba(255,180,40,0.20) 0%, rgba(180,40,30,0.22) 100%);
+  border:1.5px solid rgba(255,200,90,0.7);
+  box-shadow:0 4px 22px rgba(255,150,40,0.18), inset 0 1px 0 rgba(255,255,255,0.08);
+  animation:elite-pulse-text 2.6s ease-in-out infinite;
+}
+.endless-card.more:hover {
+  background:linear-gradient(165deg, rgba(255,180,40,0.30) 0%, rgba(200,50,30,0.30) 100%);
+  border-color:rgba(255,220,120,0.95);
+  box-shadow:0 10px 32px rgba(255,150,40,0.32);
+}
+.endless-card-emoji { font-size:2.6rem; line-height:1; margin-bottom:2px; }
+.endless-card-title { font-family:'Playfair Display', serif; font-size:1.5rem; color:#fff; font-weight:700; }
+.endless-card-sub   { font-size:0.7rem; color:rgba(255,255,255,0.7); line-height:1.45; }
+
 /* Card removal overlay */
 #card-remove-overlay {
 position:fixed; inset:0;
@@ -3129,6 +3209,31 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
   <div class="elite-fail-toast-sub" id="elite-fail-toast-sub">Couldn't beat par</div>
 </div>
 
+<!-- v0.21a: Endless post-game fork — appears after the final regular hole
+     is won (HP > 0). Player picks End Run (cement the win) or One More Hole
+     (forced tier 2/3 elite, +1 difficulty per hole, prices inflate 1.7×). -->
+<div id="endless-fork-overlay">
+  <div class="endless-banner">⭐ Run Complete ⭐</div>
+  <div class="endless-title">Victory Lap?</div>
+  <div class="endless-sub">
+    The course is finished. The win is saved.<br>
+    Push your luck for one more elite hole?
+    <span class="endless-streak" id="endless-streak"></span>
+  </div>
+  <div class="endless-grid">
+    <div class="endless-card end" onclick="onEndlessFinish()">
+      <div class="endless-card-emoji">🏁</div>
+      <div class="endless-card-title">End Run</div>
+      <div class="endless-card-sub">Lock in your score.<br>Take the trophy and walk.</div>
+    </div>
+    <div class="endless-card more" onclick="onEndlessContinue()">
+      <div class="endless-card-emoji">⭐</div>
+      <div class="endless-card-title">One More Hole</div>
+      <div class="endless-card-sub">Forced elite. Difficulty climbs.<br>Prices inflate. HP carries over.</div>
+    </div>
+  </div>
+</div>
+
 <!-- Debug corner tap zone (bottom-right, 4 taps) -->
 <div id="card-remove-overlay">
   <div class="card-remove-title">✂️ Remove a Card</div>
@@ -3259,7 +3364,7 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
   <button class="play-btn" onclick="openAchievements()" style="margin-top:6px;background:rgba(245,200,66,0.18);border:1px solid rgba(245,200,66,0.5);color:#f5c842;font-size:0.85rem;padding:10px 28px">🏆 Achievements</button>
   <button class="play-btn" id="btn-import-save" style="margin-top:6px;background:rgba(120,120,120,0.6);font-size:0.7rem;padding:8px 20px" onclick="importSaveFile()">📂 Import Save</button>
   <input type="file" id="import-save-input" accept=".ggwsave,application/json" style="display:none">
-  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.20y5</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Portal: declutter — suppress outlines on geometry past the portal</div></div>
+  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.21a5</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Holes now roll a random 1.0–1.3× scale for layout variety</div></div>
 
   <!-- v0.19j: Inline profile picker — skip the separate slot-picks screen -->
   <div class="section-label" style="margin-top:14px">Save Slot</div>
@@ -3582,51 +3687,15 @@ void main() {
     // its depth in the buffer (so it occludes geometry behind it from
     // edge detection), but no edges are drawn AROUND its silhouette.
     // Used for portal doors — they need to occlude the world behind
-    // them so the player doesn't see outlines of stuff bleeding through
-    // the rendered RTT texture.
-    // v0.20y5: when active portals exist, ALSO suppress outlines on any
-    // mesh that's farther from the camera than the closer portal. This
-    // declutters the visual area around the portal so players can read
-    // the portal's RTT content clearly without competing world-space
-    // outlines stretching across the same screen region.
-    const _portalCullDepth = (() => {
-      try {
-        const e = G._portalEntry, x = G._portalExit;
-        if (!e && !x) return null;
-        // World→camera transform: read from current camera. Camera looks
-        // down -Z, so camera-space depth = -z_camera (positive in front).
-        const m = this.camera.matrixWorldInverse;
-        const _depth = (px, pz) => {
-          // Transform world point (px, anyY, pz) into camera space, take -z.
-          // We use ground-level Y (door's center isn't critical for the
-          // threshold; portals are tall enough that a single midpoint
-          // depth value works for the suppression test).
-          const py = 0.5; // approx ground+door-mid; precise Y unimportant
-          const e0 = m.elements;
-          // Standard column-major mat4 application: cz = e02*x + e06*y + e10*z + e14
-          const cz = e0[2] * px + e0[6] * py + e0[10] * pz + e0[14];
-          return -cz; // depth in front of camera
-        };
-        let d = Infinity;
-        if (e) d = Math.min(d, _depth(e.x, e.z));
-        if (x) d = Math.min(d, _depth(x.x, x.z));
-        // Add a small buffer so meshes RIGHT AT the portal's plane
-        // (e.g. the portal frame itself, ground tile right at the
-        // portal base) still get outlined. Anything past the buffer is
-        // suppressed.
-        return d + 0.5;
-      } catch (_e) { return null; }
-    })();
+    // v0.21a: Removed the v0.20y5 portal depth-suppression hack. The
+    // problem: when the player walked far from the portal, EVERYTHING past
+    // the portal lost its outline (entire course read as outline-free).
+    // Replacement: each portal now mounts a polished chrome backplate
+    // (mesh with blocksOutlineDepth userData) that occludes the depth
+    // behind the door, so RTT content reads cleanly without nuking
+    // world-space outlines anywhere else on screen.
 
     const hidden = [];
-    const _meshCamDepth = (obj) => {
-      // Compute camera-space depth of obj's world position.
-      const wp = obj.getWorldPosition(_outlineTmpVec3);
-      const m = this.camera.matrixWorldInverse;
-      const e0 = m.elements;
-      const cz = e0[2] * wp.x + e0[6] * wp.y + e0[10] * wp.z + e0[14];
-      return -cz;
-    };
     this.scene.traverse(obj => {
       // Check obj itself OR any ancestor that was already hidden
       const parentHidden = obj.parent && hidden.includes(obj.parent);
@@ -3636,15 +3705,6 @@ void main() {
         hidden.push(obj);
         obj.visible = false;
         return;
-      }
-      // v0.20y5: portal-zone outline suppression. Only test "real" meshes
-      // (have geometry — no point checking groups/empties). If beyond the
-      // cull threshold, hide for the depth pass = no outline drawn.
-      if (_portalCullDepth !== null && obj.visible && obj.isMesh) {
-        if (_meshCamDepth(obj) > _portalCullDepth) {
-          hidden.push(obj);
-          obj.visible = false;
-        }
       }
     });
 
@@ -3872,8 +3932,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.20y5';
-const CHANGE_NOTE = 'Portal outline cleanup: when portals exist, OutlinePass now suppresses outlines on any mesh farther from the camera than the closer portal. Declutters the visual area around the portal so the RTT window content reads cleanly without competing world-space outlines.';
+const GAME_VERSION = '0.21a5';
+const CHANGE_NOTE = 'Per-hole random size variation — non-elite, non-first holes now roll a 1.0–1.3× world scale (biased toward 1.0×) for layout variety. Holes scaled ≥1.2× get +1 par to compensate (shot power is in absolute meters, so bigger holes need more strokes). Hole 1 is always 1.0× to establish baseline. Giant Hole elite is unchanged (still 2.0×). Scale logged in scorecard for telemetry analysis.';
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
@@ -4030,11 +4090,20 @@ function getBallVisualScale() {
 }
 
 // Roll an archetype + reward for the upcoming hole.
-function rollEliteOffer(playerFacingHoleNum) {
+function rollEliteOffer(playerFacingHoleNum, opts) {
   // v0.20m: debug override — if _eliteForceTier is set (1..3), restrict the
   // candidate pool to that tier only. 0 = natural cadence-based selection.
+  // v0.21a: opts.tierWhitelist (array of tier ints) overrides everything —
+  // used by the final-hole-must-be-elite system to force tier 2/3 only.
   const forceTier = (typeof G !== 'undefined' && G._eliteForceTier) ? G._eliteForceTier : 0;
-  const tiers = forceTier ? [forceTier] : eliteTiersForHole(playerFacingHoleNum);
+  let tiers;
+  if(opts && Array.isArray(opts.tierWhitelist) && opts.tierWhitelist.length) {
+    tiers = opts.tierWhitelist;
+  } else if(forceTier) {
+    tiers = [forceTier];
+  } else {
+    tiers = eliteTiersForHole(playerFacingHoleNum);
+  }
   // Filter to enabled archetypes whose tier is in `tiers`
   const candidates = Object.values(ELITE_ARCHETYPES)
     .filter(a => a.enabled && tiers.includes(a.tier));
@@ -4075,6 +4144,16 @@ const G = {
   _activeElite: null,       // {archetype, reward, wager?} for the in-progress hole
   _eliteWager: 0,           // coins committed for double-or-nothing (0 if not chosen)
   _eliteHistory: [],        // {hole, archetype, reward, taken, success} per accepted/skipped fork
+  // ── v0.21a: Endless post-game mode ──────────────────
+  // After winning the final regular hole with HP > 0, the player can choose
+  // "One More Hole" instead of ending. Each subsequent hole is a forced
+  // elite (tier 2 first, tier 3+ after), difficulty climbs by +1 per hole
+  // (cap 10), and shop prices inflate 1.7× per bonus hole on top of normal
+  // per-hole inflation. Death triggers the existing showGameOver(true) path
+  // — the won run is already in run history from saveRunData('won').
+  _endlessMode: false,
+  _endlessHolesPlayed: 0,
+  _endlessTierWhitelist: null,
   // ── Economy ─────────────────────────────────────────
   coins: 0,               // current wallet
   hotStreak: 0,           // consecutive par-or-better holes
@@ -6032,6 +6111,15 @@ function generatePuttPuttCourse(holeNum) {
   const _activeElite = (typeof G !== 'undefined' && G._activeElite) ? G._activeElite : null;
   const _eliteIsObstacleBuffed = !!(_activeElite && _activeElite.archetype.flag !== 'eliteLapMode');
   const _eliteObsMul = _eliteIsObstacleBuffed ? 1.35 : 1.0;
+  // v0.21a: Speed Hole elite — bias the obstacle mix heavily toward MOVING
+  // obstacles (spinners, slide blocks, moving spikes). The whole point of the
+  // archetype is "everything is moving", so a Speed Hole with two static
+  // bumpers and one spinner reads broken. These multiplicatively stack with
+  // _eliteObsMul (so spinners on speed hole = 1.35 * 2.2 ≈ 3× normal count).
+  const _isSpeedHoleElite = !!(_activeElite && _activeElite.archetype.flag === 'eliteSpeedHole');
+  const _speedHoleSpinMul  = _isSpeedHoleElite ? 2.2 : 1.0;
+  const _speedHoleSlideMul = _isSpeedHoleElite ? 2.2 : 1.0;
+  const _speedHoleMovingSpikeMul = _isSpeedHoleElite ? 2.0 : 1.0;
 
   // ── 1. Build a right-angle path from segments ─────────
   // v0.18a: pathMult comes from difficulty table (0.70 at ★1 → 1.40 at ★6-10).
@@ -6332,7 +6420,7 @@ function generatePuttPuttCourse(holeNum) {
   // _totalHolesForRamp midHole/lateHole, which was correct.
   // v0.20t3: (diff>=4?1:0) cliff → Math.floor(Math.max(0, 0.5*(diff-2)))
   // diff 3:+0, 4:+1, 5:+1, 6:+2 ... 10:+4
-  const spinN = holeRamp<1?0:Math.floor((Math.floor(rng()*2)+Math.floor(diff*0.3)+Math.floor(Math.max(0, 0.5*(diff-2)))) * areaScale * _eliteObsMul);
+  const spinN = holeRamp<1?0:Math.floor((Math.floor(rng()*2)+Math.floor(diff*0.3)+Math.floor(Math.max(0, 0.5*(diff-2)))) * areaScale * _eliteObsMul * _speedHoleSpinMul);
   // Variant probabilities: before mid only plain; mid→late a chance of
   // spiked; late+ a chance of red-spiked (with spiked still possible).
   // v0.20f: keyed off holeRamp so 9-hole and 18-hole runs hit the SAME peak
@@ -6343,7 +6431,7 @@ function generatePuttPuttCourse(holeNum) {
   const spikedBarP    = holeRamp >= _rampMid  ? Math.min(0.50, 0.15 + (holeRamp - _rampMid)  * 0.08 + (diff - 2) * 0.05) : 0;
   const redSpikedBarP = holeRamp >= _rampLate ? Math.min(0.35, 0.10 + (holeRamp - _rampLate) * 0.08 + (diff - 2) * 0.04) : 0;
   const sbsh = [...fair].sort(()=>rng()-0.5);
-  for(let p=0,i=0; i<sbsh.length&&p<Math.min(spinN, Math.floor((2+Math.floor(diff/2)+Math.floor(Math.max(0, 0.5*(diff-2)))) * areaScale)); i++) {
+  for(let p=0,i=0; i<sbsh.length&&p<Math.min(spinN, Math.floor((2+Math.floor(diff/2)+Math.floor(Math.max(0, 0.5*(diff-2)))) * areaScale * _speedHoleSpinMul)); i++) {
     const c=sbsh[i];
     if(grid[c.y][c.x]!==CELL.FAIR) continue;
     if(teeDist(c)<minHazardDist+2||holeDist(c)<minHazardDist+2) continue;
@@ -6366,9 +6454,9 @@ function generatePuttPuttCourse(holeNum) {
   // Variable face length: full, three-quarter, or half of lane width.
   const slideBlockData = [];
   // v0.20t3: (diff>=4?1:0) cliff → Math.floor(Math.max(0, 0.5*(diff-2)))
-  const slideN = holeRamp<6?0:Math.floor((Math.floor(rng()*2)+Math.floor(diff*0.25)+Math.floor(Math.max(0, 0.5*(diff-2)))) * areaScale * _eliteObsMul);
+  const slideN = holeRamp<6?0:Math.floor((Math.floor(rng()*2)+Math.floor(diff*0.25)+Math.floor(Math.max(0, 0.5*(diff-2)))) * areaScale * _eliteObsMul * _speedHoleSlideMul);
   const slsh = [...fair].sort(()=>rng()-0.5);
-  for(let p=0,i=0; i<slsh.length&&p<Math.min(slideN, Math.floor((1+Math.floor(diff/3)+Math.floor(Math.max(0, 0.5*(diff-2)))) * areaScale)); i++) {
+  for(let p=0,i=0; i<slsh.length&&p<Math.min(slideN, Math.floor((1+Math.floor(diff/3)+Math.floor(Math.max(0, 0.5*(diff-2)))) * areaScale * _speedHoleSlideMul)); i++) {
     const c=slsh[i];
     if(grid[c.y][c.x]!==CELL.FAIR) continue;
     if(teeDist(c)<minHazardDist+2||holeDist(c)<minHazardDist+2) continue;
@@ -6655,9 +6743,14 @@ function generatePuttPuttCourse(holeNum) {
   // static spikes and never overlapping them.
   // v0.20f: introduction and count via holeRamp. Old "<3 of 9" = ~33% → ramp 6.
   // Old "holeNum>=6 of 9" = ~67% → ramp 12.
-  const slidingSpikeN = (holeRamp < 6 || diff < 2) ? 0
-    : Math.floor((Math.floor(rng() * 2) + Math.floor(diff * 0.3) + (holeRamp>=12?1:0)) * areaScale);
-  const slidingSpikeMax = Math.floor((2 + Math.floor(diff / 2)) * areaScale);
+  // v0.21a: Speed Hole bias also applies to moving spikes — the whole point
+  // of the archetype is "everything is moving"; static spikes shouldn't
+  // dominate. We also let Speed Hole introduce moving spikes earlier (ignore
+  // the holeRamp<6 gate — Speed Hole is itself an elite that won't fire on hole 1-2).
+  const _speedHoleEarlyGate = _isSpeedHoleElite ? false : (holeRamp < 6);
+  const slidingSpikeN = (_speedHoleEarlyGate || diff < 2) ? 0
+    : Math.floor((Math.floor(rng() * 2) + Math.floor(diff * 0.3) + (holeRamp>=12?1:0)) * areaScale * _speedHoleMovingSpikeMul);
+  const slidingSpikeMax = Math.floor((2 + Math.floor(diff / 2)) * areaScale * _speedHoleMovingSpikeMul);
   const slSpikeSh = [...fair].sort(() => rng() - 0.5);
   for(let sp = 0, si3 = 0; si3 < slSpikeSh.length && sp < Math.min(slidingSpikeN, slidingSpikeMax); si3++) {
     const c = slSpikeSh[si3];
@@ -6756,7 +6849,7 @@ function generatePuttPuttCourse(holeNum) {
       defenseP = Math.max(0.20, Math.min(0.85, base));
     }
 
-    if(rng() < defenseP) {
+    if(rng() < defenseP || _isSpeedHoleElite) {
       // Candidate pool marked with tier. `spike_ring` is the new rotating-
       // spike-ball ring defense (hard).
       const pool = [
@@ -6820,6 +6913,24 @@ function generatePuttPuttCourse(holeNum) {
         const w = weightOf(p);
         if(roll < w) { chosen = p; break; }
         roll -= w;
+      }
+
+      // v0.21a: Speed Hole REQUIRES a moving hole — the archetype promises
+      // "the hole, if it moves, sprints". A static cup on Speed Hole was
+      // missing the climactic obstacle. Pick from all moving_hole pool entries
+      // (line/circle/diamond/figure8) with weights from the original pool,
+      // ignoring tier gating since this is an elite override.
+      if(_isSpeedHoleElite) {
+        const movingPool = pool.filter(p => p.kind === 'moving_hole');
+        // For diff ≥ 4 prefer harder patterns; otherwise weight by base weight.
+        const movingTotalW = movingPool.reduce((s, p) => s + p.weight, 0);
+        let mRoll = rng() * movingTotalW;
+        let mChosen = movingPool[0];
+        for(const p of movingPool) {
+          if(mRoll < p.weight) { mChosen = p; break; }
+          mRoll -= p.weight;
+        }
+        chosen = mChosen;
       }
 
       const hd = { kind: chosen.kind };
@@ -9673,9 +9784,12 @@ function buildCourse(data) {
     } else if(hd.kind === 'force_field') {
       // FORCE FIELD — pulsing plasma bubble that phases on/off. Contains the
       // flag entirely (bubbleR large enough at 1.5m).
+      // v0.21a: switched palette from cyan to bright red — old field was too
+      // faint to read against most fairway colors. Red = "danger" reads
+      // instantly and the wireframe core pops against terrain.
       const bubbleMat = new THREE.MeshStandardMaterial({
-        color: 0x66ddff, transparent: true, opacity: 0.35,
-        emissive: 0x33bbff, emissiveIntensity: 1.2, roughness: 0.2,
+        color: 0xff5566, transparent: true, opacity: 0.30,
+        emissive: 0xff2233, emissiveIntensity: 1.4, roughness: 0.2,
         side: THREE.DoubleSide, depthWrite: false,
       });
       const bubble = new THREE.Mesh(new THREE.SphereGeometry(hd.bubbleR, 22, 16), bubbleMat);
@@ -9685,14 +9799,14 @@ function buildCourse(data) {
       bubble.position.set(cx, bubbleCenterY, cz);
       bubble.userData.noOutline = true;
       defGroup.add(bubble);
-      // Inner wireframe core for the "plasma" feel
-      const coreMat = new THREE.MeshBasicMaterial({ color: 0xaaeeff, wireframe: true, transparent: true, opacity: 0.55 });
-      const core = new THREE.Mesh(new THREE.SphereGeometry(hd.bubbleR * 1.01, 10, 8), coreMat);
+      // Inner wireframe core for the "plasma" feel — bright red wireframe.
+      const coreMat = new THREE.MeshBasicMaterial({ color: 0xff3344, wireframe: true, transparent: true, opacity: 0.85 });
+      const core = new THREE.Mesh(new THREE.SphereGeometry(hd.bubbleR * 1.01, 12, 10), coreMat);
       core.position.set(cx, bubbleCenterY, cz);
       core.userData.noOutline = true;
       defGroup.add(core);
       // Outer "glow" halo — bigger sphere, very transparent, makes the field read
-      const haloMat = new THREE.MeshBasicMaterial({ color: 0x99e5ff, transparent: true, opacity: 0.18, depthWrite: false });
+      const haloMat = new THREE.MeshBasicMaterial({ color: 0xff7788, transparent: true, opacity: 0.22, depthWrite: false });
       const halo = new THREE.Mesh(new THREE.SphereGeometry(hd.bubbleR * 1.4, 16, 12), haloMat);
       halo.position.set(cx, bubbleCenterY, cz);
       halo.userData.noOutline = true;
@@ -9722,9 +9836,9 @@ function buildCourse(data) {
         if(state.closed && hd.flicker) {
           alpha *= (0.7 + 0.3 * Math.random());
         }
-        bubble.material.opacity = 0.35 * alpha;
-        core.material.opacity   = 0.55 * alpha;
-        halo.material.opacity   = 0.30 * alpha;
+        bubble.material.opacity = 0.30 * alpha;
+        core.material.opacity   = 0.85 * alpha;
+        halo.material.opacity   = 0.32 * alpha;
         // Subtle breathing scale
         const breathe = 1.0 + Math.sin(totalT * 3) * 0.03;
         bubble.scale.setScalar(breathe);
@@ -11471,12 +11585,188 @@ function createAimArrow() {
 
 // ── Multi-bounce ray tracer (walls + angled walls) ────
 // Returns array of segments: [{sx,sz,ex,ez}, ...] representing the ball path
+// v0.21a3: Portal-aware aim helpers — give the player a clear visual read of
+// where their shot will end up if it crosses a portal entry. Without these,
+// the basic aim line, arc-dots preview, and Angler bounce predictor all
+// rendered straight through portal doors as if the portal weren't there,
+// which is misleading. Now the aim visuals fold through portals the same
+// way the ball does.
+//
+// Two helpers, both pure (no scene side-effects):
+//   _aimRayHitsPortal(ox, oz, dx, dz, maxT) — ray vs portal door plane test.
+//     Returns { t, portal } if a portal is hit within maxT, else null.
+//     Treats the door as a 2D segment in world XZ matching the teleport
+//     proximity volume in tryPortalTeleportXZ (door width along local X,
+//     ±0.6 on local normal). Only hits portals approached from the front
+//     (dot of dir onto outward normal must be < 0).
+//
+//   _portalTransformPoint(portal, partner, px, pz, dx, dz) — fold a world
+//     point + direction through the entry/exit pair using the same
+//     local-frame flip as tryPortalTeleportXZ. Returns
+//     { px, pz, dx, dz } at the partner's outward side.
+//
+// Both are intentionally portal-pair only (entry must teleport to exit and
+// vice-versa); they early-out if either portal is missing.
+function _aimRayHitsPortal(ox, oz, dx, dz, maxT) {
+  if(!G._portalEntry || !G._portalExit) return null;
+  const portals = [G._portalEntry, G._portalExit];
+  let bestT = maxT, hitPortal = null;
+  for(const p of portals) {
+    // Door plane: through (p.x, p.z), normal = (sin facing, cos facing).
+    // Solve dot(start + t*dir - portalCenter, normal) = 0.
+    const sf = Math.sin(p.facing), cf = Math.cos(p.facing);
+    const denom = dx * sf + dz * cf;
+    if(Math.abs(denom) < 0.001) continue;       // ray parallel to door plane
+    if(denom >= 0) continue;                    // approaching from the back — portal is one-sided
+    const num = (p.x - ox) * sf + (p.z - oz) * cf;
+    const t = num / denom;
+    if(t < 0.05 || t >= bestT) continue;        // behind ball or past current best
+    // Within door width? Project hit point onto the door's local X axis (length).
+    const hitX = ox + dx * t, hitZ = oz + dz * t;
+    const along = (hitX - p.x) * cf - (hitZ - p.z) * sf;
+    if(Math.abs(along) > _PORTAL_HALFW) continue;
+    bestT = t;
+    hitPortal = p;
+  }
+  return hitPortal ? { t: bestT, portal: hitPortal } : null;
+}
+
+function _portalTransformPoint(entered, partner, px, pz, dx, dz) {
+  // Mirror tryPortalTeleportXZ's local-frame flip exactly so the aim preview
+  // shows where the ball will actually emerge.
+  const cE = Math.cos(entered.facing), sE = Math.sin(entered.facing);
+  const cP = Math.cos(partner.facing), sP = Math.sin(partner.facing);
+  // Position offset relative to entry door, flipped to partner-local
+  const dxE = px - entered.x, dzE = pz - entered.z;
+  const aE = dxE * cE - dzE * sE;
+  const nE = dxE * sE + dzE * cE;
+  const aP = -aE, nP = -nE;
+  const partnerX = partner.x + aP * cP + nP * sP;
+  const partnerZ = partner.z - aP * sP + nP * cP;
+  // Velocity direction: same flip
+  let outDx = dx, outDz = dz;
+  if(typeof dx === 'number' && typeof dz === 'number') {
+    const vAE = dx * cE - dz * sE;
+    const vNE = dx * sE + dz * cE;
+    const vAP = -vAE, vNP = -vNE;
+    outDx = vAP * cP + vNP * sP;
+    outDz = -vAP * sP + vNP * cP;
+  }
+  // Push slightly out the partner so the visual emerges on the front face
+  const outNormX = Math.sin(partner.facing) * 0.05;
+  const outNormZ = Math.cos(partner.facing) * 0.05;
+  return { px: partnerX + outNormX, pz: partnerZ + outNormZ, dx: outDx, dz: outDz };
+}
+
+// Trace a straight ray, folding through portals. Returns array of
+// {sx, sz, ex, ez} segments — same shape as traceMultiBounce — so renderers
+// that already iterate that shape (Angler dots, etc.) work unchanged.
+// maxFolds caps recursive teleports (defensive against weird configs).
+function tracePortalAware(startX, startZ, dirX, dirZ, maxDist, maxFolds) {
+  const segments = [];
+  let ox = startX, oz = startZ, dx = dirX, dz = dirZ;
+  let remaining = maxDist;
+  const folds = (typeof maxFolds === 'number') ? maxFolds : 2;
+  for(let f = 0; f <= folds && remaining > 0.5; f++) {
+    const hit = _aimRayHitsPortal(ox, oz, dx, dz, remaining);
+    if(!hit) {
+      segments.push({ sx: ox, sz: oz, ex: ox + dx * remaining, ez: oz + dz * remaining });
+      break;
+    }
+    // Segment up to portal entrance
+    const ex = ox + dx * hit.t, ez = oz + dz * hit.t;
+    segments.push({ sx: ox, sz: oz, ex: ex, ez: ez });
+    // Teleport to partner
+    const partner = (hit.portal === G._portalEntry) ? G._portalExit : G._portalEntry;
+    if(!partner) break;
+    const tp = _portalTransformPoint(hit.portal, partner, ex, ez, dx, dz);
+    ox = tp.px; oz = tp.pz; dx = tp.dx; dz = tp.dz;
+    remaining -= hit.t;
+  }
+  return segments;
+}
+
+// v0.21a4: Single-bounce + single-fold combined trace. Used by Angler when
+// portals are present. Walks the ray forward; at each step considers BOTH
+// the nearest wall hit (returning the bounce direction) and the nearest
+// portal hit (returning the folded direction). Whichever is closer wins.
+// Each event type can fire at most once — so the predictor visualizes
+// at most three segments: the initial run, a single mutation, a final run.
+// (In edge cases — hit a wall first, then a portal in the new direction —
+// both events fire and you get three segments. That's intentional.)
+function traceWithBounceAndFold(startX, startZ, dirX, dirZ, maxDist) {
+  const WALL_THICK = 0.25 + BALL_R;
+  const segments = [];
+  let ox = startX, oz = startZ, dx = dirX, dz = dirZ;
+  let remaining = maxDist;
+  let usedBounce = false, usedFold = false;
+  // Up to 3 events guarantees termination even if both are still available
+  for(let step = 0; step < 3 && remaining > 0.5; step++) {
+    // ── 1. Nearest wall hit (only if bounce not yet used) ──
+    let wallT = Infinity, wallNX = 0, wallNZ = 0;
+    if(!usedBounce && G.wallPolylines) {
+      for(const poly of G.wallPolylines) {
+        for(let i = 0; i < poly.length - 1; i++) {
+          const ax = poly[i].x, az = poly[i].z, bx = poly[i+1].x, bz = poly[i+1].z;
+          const ex = bx - ax, ez = bz - az, sLen = Math.hypot(ex, ez);
+          if(sLen < 0.001) continue;
+          const enx = ex/sLen, enz = ez/sLen;
+          const nx2 = -enz, nz2 = enx;
+          const denom = dx * nx2 + dz * nz2;
+          if(Math.abs(denom) < 0.001) continue;
+          const ox2 = ax + nx2 * WALL_THICK, oz2 = az + nz2 * WALL_THICK;
+          const t = ((ox2 - ox) * nx2 + (oz2 - oz) * nz2) / denom;
+          if(t < 0.3 || t > remaining || t >= wallT) continue;
+          const hx2 = ox + dx * t, hz2 = oz + dz * t;
+          const pt = ((hx2 - ax) * ex + (hz2 - az) * ez) / (sLen * sLen);
+          if(pt < 0 || pt > 1) continue;
+          wallT = t; wallNX = nx2; wallNZ = nz2;
+        }
+      }
+    }
+    // ── 2. Nearest portal hit (only if fold not yet used) ──
+    let portalHit = null;
+    if(!usedFold) {
+      portalHit = _aimRayHitsPortal(ox, oz, dx, dz, Math.min(remaining, wallT));
+    }
+    // ── 3. Pick the closer event (or stop if neither) ──
+    if(portalHit && (wallT === Infinity || portalHit.t < wallT)) {
+      // Portal fold wins
+      const ex = ox + dx * portalHit.t, ez = oz + dz * portalHit.t;
+      segments.push({ sx: ox, sz: oz, ex, ez });
+      const partner = (portalHit.portal === G._portalEntry) ? G._portalExit : G._portalEntry;
+      if(!partner) break;
+      const tp = _portalTransformPoint(portalHit.portal, partner, ex, ez, dx, dz);
+      ox = tp.px; oz = tp.pz; dx = tp.dx; dz = tp.dz;
+      remaining -= portalHit.t;
+      usedFold = true;
+    } else if(wallT < Infinity) {
+      // Wall bounce wins
+      const ex = ox + dx * wallT, ez = oz + dz * wallT;
+      segments.push({ sx: ox, sz: oz, ex, ez });
+      // Reflect direction off wall normal
+      const dot2 = dx * wallNX + dz * wallNZ;
+      dx = dx - 2 * dot2 * wallNX;
+      dz = dz - 2 * dot2 * wallNZ;
+      const rLen = Math.hypot(dx, dz);
+      if(rLen > 0.001) { dx /= rLen; dz /= rLen; }
+      ox = ex; oz = ez;
+      remaining -= wallT;
+      usedBounce = true;
+    } else {
+      // Neither — line goes to max
+      segments.push({ sx: ox, sz: oz, ex: ox + dx * remaining, ez: oz + dz * remaining });
+      break;
+    }
+  }
+  return segments;
+}
+
 function traceMultiBounce(startX, startZ, dirX, dirZ, maxDist, maxBounces) {
   const WALL_THICK = 0.25 + BALL_R;
   const segments = [];
   let ox = startX, oz = startZ, dx = dirX, dz = dirZ;
   let remaining = maxDist;
-
   for(let bounce = 0; bounce <= maxBounces && remaining > 0.5; bounce++) {
     let hitDist = remaining, hitNX = 0, hitNZ = 0;
     let hitX = ox + dx * remaining, hitZ = oz + dz * remaining;
@@ -11581,7 +11871,9 @@ function updateAimArrow() {
   const totalT = (vy0 + Math.sqrt(vy0 * vy0)) / grav;
 
   // Drive one arrow group positioned at world (ox, oy, oz)
-  function driveGroup(grp, ox, oy, oz) {
+  // v0.21a4: isMain — only the main arrow group gets portal-aware arc dots;
+  // side balls (Three Balls perk) are kept simple to avoid visual clutter.
+  function driveGroup(grp, ox, oy, oz, isMain) {
     grp.position.set(ox, oy + 0.28, oz);
     grp.rotation.y = G.shotAngle || 0;
     const line = grp.children[0];
@@ -11590,12 +11882,42 @@ function updateAimArrow() {
       line.visible = false;
       const dotScale = hasCatapult ? 2.0 : 1.0;   // bigger dots for Catapult
       const dotCol = hasCatapult ? catC : c;
+      // v0.21a4: Portal-aware arc — detect if the parabola's XZ projection
+      // crosses an entry/exit portal between this ball position and the
+      // arc's end. If yes, compute the dot index (0..12) at which the
+      // crossing happens; dots up to that index render in local space; dots
+      // beyond it are hidden locally and (re-)rendered as world-space points
+      // at the partner side via a separate Points cloud built below.
+      let crossIdx = 13; // default = no crossing (everything renders local)
+      let foldOrigin = null; // {wx, wz, dx, dz} world-space partner emerge data
+      const tEnd = totalT * 1.1;
+      const arcRange = spd * tEnd; // total horizontal distance covered by visible arc
+      if(isMain && G._portalEntry && G._portalExit && G.shotDir) {
+        const hit = _aimRayHitsPortal(ox, oz, G.shotDir.x, G.shotDir.z, arcRange);
+        if(hit) {
+          // Time at which the ball's XZ crosses the portal
+          const tCross = hit.t / spd;
+          // Lowest dot index whose t-value exceeds the crossing → first hidden
+          crossIdx = Math.max(0, Math.ceil((tCross / tEnd) * 12));
+          if(crossIdx > 13) crossIdx = 13;
+          // Partner-side emerge point + folded direction
+          const partner = (hit.portal === G._portalEntry) ? G._portalExit : G._portalEntry;
+          if(partner) {
+            const exX = ox + G.shotDir.x * hit.t;
+            const exZ = oz + G.shotDir.z * hit.t;
+            const tp = _portalTransformPoint(hit.portal, partner, exX, exZ, G.shotDir.x, G.shotDir.z);
+            foldOrigin = { wx: tp.px, wz: tp.pz, dx: tp.dx, dz: tp.dz, tCross };
+          }
+        }
+      }
       for(let i = 1; i <= 12; i++) {
         const dot = grp.children[i];
         const t   = (i / 12) * totalT * 1.1;
         dot.position.set(0, vy0*t - 0.5*grav*t*t - 0.28, spd*t);
         dot.scale.setScalar(dotScale);
-        dot.visible = true;
+        // v0.21a4: dots past the portal-cross point are hidden locally;
+        // their continuation gets drawn world-space below.
+        dot.visible = (i < crossIdx);
         dot.material.color.copy(dotCol);
         // Brighter, more opaque dots for Catapult; emissive so they glow
         dot.material.opacity = hasCatapult ? (1.0 - (i/12)*0.2) : (0.9 - (i/12)*0.5);
@@ -11604,21 +11926,31 @@ function updateAimArrow() {
           dot.material.emissiveIntensity = 0.8;
         }
       }
-      const tEnd = totalT * 1.1;
-      cone.position.set(0, vy0*tEnd - 0.5*grav*tEnd*tEnd - 0.28, spd*tEnd);
-      cone.scale.setScalar(hasCatapult ? 1.6 : 1.0);
+      // Cone: hide locally if a portal fold is happening — its continuation
+      // sits at the partner-side end of the arc, drawn as the last world dot.
+      if(foldOrigin) {
+        cone.visible = false;
+      } else {
+        cone.visible = true;
+        cone.position.set(0, vy0*tEnd - 0.5*grav*tEnd*tEnd - 0.28, spd*tEnd);
+        cone.scale.setScalar(hasCatapult ? 1.6 : 1.0);
+      }
+      // Stash fold info so the post-driveGroup block can spawn world dots
+      if(isMain) G._aimArcFoldOrigin = foldOrigin;
     } else {
       line.visible = true;
       for(let i = 1; i <= 12; i++) { grp.children[i].visible = false; grp.children[i].scale.setScalar(1); }
       line.scale.z = 0.4 + power * 0.9;
+      cone.visible = true;
       cone.position.set(0, 0, (0.4 + power * 0.9) * 3 + 0.18);
       cone.scale.setScalar(1);
+      if(isMain) G._aimArcFoldOrigin = null;
     }
     cone.material.color.copy(hasCatapult && power > 0.01 ? catC : c);
   }
 
   // Main ball arrow
-  driveGroup(G.aimArrow, G.ballPos.x, G.ballPos.y, G.ballPos.z);
+  driveGroup(G.aimArrow, G.ballPos.x, G.ballPos.y, G.ballPos.z, true);
 
   // Side ball arrows
   if(G._aimSideBalls) {
@@ -11628,7 +11960,77 @@ function updateAimArrow() {
       const ox = G.ballPos.x + perpX * sb.side * sb.spread;
       const oz = G.ballPos.z + perpZ * sb.side * sb.spread;
       sb.mesh.position.set(ox, G.ballPos.y, oz);
-      driveGroup(sb.arrowGroup, ox, G.ballPos.y, oz);
+      driveGroup(sb.arrowGroup, ox, G.ballPos.y, oz, false);
+    }
+  }
+
+  // v0.21a4: Portal-aware arc continuation — when arc/catapult is active and
+  // the parabola crosses a portal, the dots past the crossing are hidden in
+  // the local arrow group (above) and re-spawned here as world-space points
+  // that emerge from the partner door and trace the continuation parabola.
+  // The Y curve continues from where it was at the moment of crossing — the
+  // parabola is in (vy0, grav, t) and only XZ gets folded by the portal.
+  if(G._aimArcContinuation) { scene.remove(G._aimArcContinuation); G._aimArcContinuation = null; }
+  if(G._aimArcCone) { scene.remove(G._aimArcCone); G._aimArcCone = null; }
+  if(G._aimArcFoldOrigin && (hasArc || hasCatapult) && power > 0.01) {
+    const fold = G._aimArcFoldOrigin;
+    const tEnd = totalT * 1.1;
+    const dotPts = [];
+    // Spawn dots from tCross onward at the same per-frame spacing the local
+    // group would have used — sample 12 indices total, but only emit the ones
+    // past the crossing. The Y of each dot mirrors the local-space y(t) so
+    // the parabola visually flows continuously through the portal.
+    const N_SAMPLES = 24; // denser than the 12 local dots — matches Angler's spacing
+    const ballGroundY = G.ballPos.y;
+    for(let k = 1; k <= N_SAMPLES; k++) {
+      const t = (k / N_SAMPLES) * tEnd;
+      if(t < fold.tCross) continue; // still in local-space part
+      const dt = t - fold.tCross;
+      // World XZ continues from fold origin in folded direction at speed spd
+      const wx = fold.wx + fold.dx * spd * dt;
+      const wz = fold.wz + fold.dz * spd * dt;
+      // Y: continue the original parabola — vy0*t - 0.5*g*t² + ball Y + offset
+      const yAbove = vy0*t - 0.5*grav*t*t - 0.28;
+      const wy = ballGroundY + 0.28 + yAbove;
+      dotPts.push(new THREE.Vector3(wx, wy, wz));
+    }
+    if(dotPts.length > 0) {
+      const arcCol = hasCatapult ? new THREE.Color(0xff3ba8) : c.clone();
+      const arcSize = hasCatapult ? 0.22 : 0.16;
+      const geoArc = new THREE.BufferGeometry().setFromPoints(dotPts);
+      const matArc = new THREE.PointsMaterial({
+        color: arcCol, size: arcSize, transparent: true, opacity: 0.85,
+        depthTest: false,
+      });
+      G._aimArcContinuation = new THREE.Points(geoArc, matArc);
+      G._aimArcContinuation.renderOrder = 999;
+      scene.add(G._aimArcContinuation);
+      // Cone replacement at the very end of the arc — points along the
+      // current XZ direction at the final dot.
+      const lastT = (N_SAMPLES / N_SAMPLES) * tEnd;
+      const lastDt = lastT - fold.tCross;
+      const lastX = fold.wx + fold.dx * spd * lastDt;
+      const lastZ = fold.wz + fold.dz * spd * lastDt;
+      const lastY = ballGroundY + 0.28 + (vy0*lastT - 0.5*grav*lastT*lastT - 0.28);
+      const coneGeo = new THREE.ConeGeometry(0.18 * (hasCatapult ? 1.6 : 1.0), 0.52 * (hasCatapult ? 1.6 : 1.0), 8);
+      const coneMat = new THREE.MeshStandardMaterial({
+        color: arcCol, roughness: 0.3,
+        emissive: arcCol, emissiveIntensity: 0.5,
+      });
+      const coneMesh = new THREE.Mesh(coneGeo, coneMat);
+      coneMesh.position.set(lastX, lastY, lastZ);
+      // Orient cone tip along world (fold.dx, 0, fold.dz). ConeGeometry's
+      // local +Y is the tip. We use lookAt to point toward a world-space
+      // target ahead in the fold direction; lookAt aligns the cone's local
+      // -Z to face the target, then we tilt by π/2 about X to swing -Z to
+      // -Y, putting the tip toward the target. Cleaner than Euler math
+      // and guarantees correct orientation regardless of which quadrant
+      // the fold direction is in.
+      coneMesh.lookAt(lastX + fold.dx, lastY, lastZ + fold.dz);
+      coneMesh.rotateX(-Math.PI / 2);
+      coneMesh.userData.noOutline = true;
+      G._aimArcCone = coneMesh;
+      scene.add(G._aimArcCone);
     }
   }
 
@@ -11642,7 +12044,22 @@ function updateAimArrow() {
   if(G._anglerDots) { scene.remove(G._anglerDots); G._anglerDots = null; }
   if(_anglerOn && power > 0.01 && G.wallPolylines && G.wallPolylines.length) {
     const RAY_LEN = spd * 1.0;
-    const bounceResult = traceMultiBounce(G.ballPos.x, G.ballPos.z, G.shotDir.x, G.shotDir.z, RAY_LEN, 4);
+    // v0.21a4: simplified trace — at most one wall bounce AND/OR one portal
+    // fold along the path. Whichever comes first along the ray wins; any
+    // second event of the same TYPE is ignored. So the predictor reads as:
+    //   - straight line (no walls/portals in path), or
+    //   - line + bounce (wall hit first), or
+    //   - line + fold (portal hit first), or
+    //   - line + bounce + fold (wall first then portal in the new direction), or
+    //   - line + fold + bounce (portal first then wall in partner space).
+    // The combinatorics are bounded — at most 3 segments — which keeps the
+    // visual readable instead of a chaotic multi-bounce zigzag.
+    let bounceResult;
+    if(G._portalEntry && G._portalExit) {
+      bounceResult = traceWithBounceAndFold(G.ballPos.x, G.ballPos.z, G.shotDir.x, G.shotDir.z, RAY_LEN);
+    } else {
+      bounceResult = traceMultiBounce(G.ballPos.x, G.ballPos.z, G.shotDir.x, G.shotDir.z, RAY_LEN, 1);
+    }
 
     // Build "ants marching" dashed line using Points
     const DOT_SPACING = 0.35;
@@ -11679,6 +12096,67 @@ function updateAimArrow() {
         G._anglerDots = new THREE.Points(geo2, mat2);
         G._anglerDots.renderOrder = 1000;
         scene.add(G._anglerDots);
+      }
+    }
+  }
+
+  // v0.21a3: Portal-aware aim continuation. Independent of the Angler perk —
+  // any time portals are placed and the aim ray would cross one, we render a
+  // dotted line emerging from the partner door so the player can see where
+  // their shot will end up. Built as a Points cloud on top of the existing
+  // arrow group so the local-coordinate arrow logic above stays untouched.
+  // Skipped when Angler is on (Angler's tracer already handles portal-pair
+  // segments via the same logic, kept separate to avoid double-rendering).
+  if(G._aimPortalLine) { scene.remove(G._aimPortalLine); G._aimPortalLine = null; }
+  if(G._aimPortalDots) { scene.remove(G._aimPortalDots); G._aimPortalDots = null; }
+  if(!_anglerOn && G._portalEntry && G._portalExit && power > 0.01 && G.shotDir) {
+    // Trace from the ball along shot direction; tracePortalAware folds through
+    // portals up to maxFolds times. Range scales with shot power so weak putts
+    // don't show distant predictions that won't actually happen.
+    const traceDist = Math.max(4, spd * 0.6);
+    const segs = tracePortalAware(G.ballPos.x, G.ballPos.z, G.shotDir.x, G.shotDir.z, traceDist, 2);
+    // Only render if we actually folded — i.e. there are 2+ segments. A single
+    // segment means the ray didn't cross a portal; the existing arrow already
+    // handles that case.
+    if(segs && segs.length > 1) {
+      // Skip the FIRST segment (already covered by the local arrow group)
+      // and only emit dots along the post-portal continuation segments.
+      const DOT_SPACING_P = 0.32;
+      const portalPts = [];
+      for(let si = 1; si < segs.length; si++) {
+        const seg = segs[si];
+        const segLen = Math.hypot(seg.ex - seg.sx, seg.ez - seg.sz);
+        const nDots = Math.max(2, Math.floor(segLen / DOT_SPACING_P));
+        for(let k = 0; k <= nDots; k++) {
+          const t = k / nDots;
+          const px = seg.sx + (seg.ex - seg.sx) * t;
+          const pz = seg.sz + (seg.ez - seg.sz) * t;
+          const py = (G.heightMap.length ? getTerrainHeight(px, pz) : 0) + FLOOR_H/2 + 0.28;
+          portalPts.push(new THREE.Vector3(px, py, pz));
+        }
+      }
+      if(portalPts.length > 1) {
+        // White dotted core — matches arrow color so the player reads it as
+        // continuation, not a separate UI element
+        const geoP = new THREE.BufferGeometry().setFromPoints(portalPts);
+        const matP = new THREE.PointsMaterial({ color:0xffffff, size:0.20, transparent:true, opacity:0.85, depthTest:false });
+        G._aimPortalLine = new THREE.Points(geoP, matP);
+        G._aimPortalLine.renderOrder = 999;
+        scene.add(G._aimPortalLine);
+        // Marching highlight dots in the entry portal's color so the player
+        // visually links the continuation back to the door they're aiming at
+        const offsetP = ((performance.now() * 0.003) % 1);
+        const accentP = [];
+        for(let k = 0; k < portalPts.length; k++) {
+          if(((k / portalPts.length + offsetP) % 1) < 0.45) accentP.push(portalPts[k]);
+        }
+        if(accentP.length) {
+          const geoPA = new THREE.BufferGeometry().setFromPoints(accentP);
+          const matPA = new THREE.PointsMaterial({ color:0x33ff66, size:0.26, transparent:true, opacity:1.0, depthTest:false });
+          G._aimPortalDots = new THREE.Points(geoPA, matPA);
+          G._aimPortalDots.renderOrder = 1000;
+          scene.add(G._aimPortalDots);
+        }
       }
     }
   }
@@ -12562,23 +13040,30 @@ function updatePhysics(dt) {
           G.ballPos.z += nz * overlap;
           const dot = G.ballVel.x*nx + G.ballVel.z*nz;
           if(dot < 0) {
-            // v0.19x: STICKY card — on first wall contact, freeze the ball in
-            // place instead of reflecting. Big juicy squash visual + gross
-            // squish SFX. Treat the stick as a valid hole-end state.
+            // v0.19x → v0.21a3 redesign: STICKY card now ARMS a free re-aim.
+            // On first wall contact, the ball freezes against the wall AND
+            // enters _stickyAttached state. The current shot finalizes (no
+            // change there), but the player gets to take ANOTHER swing from
+            // this stuck position that DOES NOT count as a stroke (see
+            // fireShot's stroke-increment skip when _stickyFreeSwing is set).
+            // Re-tapping the Sticky card while attached drops the ball.
             if(G._stickyCardActive && !G._stickyCardTriggered) {
               G._stickyCardTriggered = true;
               G.ballVel.x = 0; G.ballVel.y = 0; G.ballVel.z = 0;
               // Squash scale animation on the ball along the wall normal.
-              // The ball flattens against the wall (perpendicular to normal)
-              // and stretches parallel to the wall. We apply this by marking
-              // a timer; the per-frame ball-visual update reads it.
               G._stickyCardSquash = {
                 timer: 0, duration: 0.55,
                 nx, nz, // wall normal the ball is stuck against
               };
-              // Immediately freeze the aim/slow state so the usual "rolling
-              // slow timer" finishes and finalizes this shot.
-              G.rollingSlowTimer = 999; // force immediate stop
+              // v0.21a3: Enter stuck state. enterStickyAttached freezes the
+              // ball, transitions to aim mode after the squash, and arms the
+              // free-swing flag so the next fireShot doesn't increment strokes.
+              if(typeof enterStickyAttached === 'function') {
+                enterStickyAttached({ kind: 'wall', nx, nz });
+              } else {
+                // Defensive fallback — old behavior if helper isn't loaded
+                G.rollingSlowTimer = 999;
+              }
               // v0.19z: treble-y cartoon squish (was a bassy thud).
               // - Downward pitch-bend SINE starting high (900Hz → 320Hz) gives
               //   the "boioioi" wobble of something squishing.
@@ -12635,7 +13120,7 @@ function updatePhysics(dt) {
               }
               triggerShake('med');  // v0.19z: 'heavy' was too much for a splat
               spawnHitParticles(G.ballPos);
-              showToast('🟢 SPLAT!', 1200);
+              showToast('🟢 SPLAT! Free re-aim →', 1500);
               // Skip the normal reflection — ball is stuck.
               pushed = true;
             } else {
@@ -12699,13 +13184,17 @@ function updatePhysics(dt) {
             // Pinball perk's immunity is honored automatically by applyDamage().
             if(G._barbedWireActive && G._lastBarbedDamageStroke !== G.strokes) {
               G._lastBarbedDamageStroke = G.strokes;
-              const dealt = applyDamage(1, 'barbed_wire');
-              if(dealt > 0) {
-                spawnHpDamagePopup(dealt);
-                showToast('🪤 BARBED WIRE!', 900);
-                triggerShake('med');
-                // Spurt of red sparks at the contact point
-                spawnBarbedWireSparks(cx, G.ballPos.y, cz, nx, nz);
+              // v0.21a: Mighty Egg absorbs the barbed-wire tick (parity with spikes).
+              const _bwAbsorbed = consumeMightyEgg();
+              if(!_bwAbsorbed) {
+                const dealt = applyDamage(1, 'barbed_wire');
+                if(dealt > 0) {
+                  spawnHpDamagePopup(dealt);
+                  showToast('🪤 BARBED WIRE!', 900);
+                  triggerShake('med');
+                  // Spurt of red sparks at the contact point
+                  spawnBarbedWireSparks(cx, G.ballPos.y, cz, nx, nz);
+                }
               }
             }
             if(G._allBounceTarget > 0) G._allBounceCount = (G._allBounceCount||0) + 1;
@@ -13318,6 +13807,45 @@ function updatePhysics(dt) {
           G.ballPos.x += nx2 * (minDist - dist);
           G.ballPos.z += nz2 * (minDist - dist);
 
+          // v0.21a3: Sticky card — stick to spinner instead of bouncing.
+          // Compute polar attachment relative to bar pivot so we can track
+          // the ball as the bar rotates. distFromPivot = current XZ distance;
+          // angleOffset = relative to bar.angle so the ball follows along.
+          if(G._stickyCardActive && !G._stickyCardTriggered && !hasIronBall) {
+            G._stickyCardTriggered = true;
+            const _dx = G.ballPos.x - bar.wx, _dz = G.ballPos.z - bar.wz;
+            const _r = Math.hypot(_dx, _dz);
+            // In the spinner's frame, ball world (cosA*r, -sinA*r). Solve for
+            // angleOffset such that bar.angle + angleOffset gives current pos.
+            // X = cos(theta)*r, Z = -sin(theta)*r → theta = atan2(-_dz, _dx)
+            const _theta = Math.atan2(-_dz, _dx);
+            const _angleOffset = _theta - bar.angle;
+            G._stickyCardSquash = { timer: 0, duration: 0.55, nx: nx2, nz: nz2 };
+            enterStickyAttached({
+              kind: 'spinner',
+              ref: bar,
+              distFromPivot: _r,
+              angleOffset: _angleOffset,
+            });
+            spawnHitParticles(G.ballPos);
+            showToast('🟢 SPLAT on spinner! Free re-aim →', 1500);
+            triggerShake('med');
+            if(AC) {
+              try {
+                const ac = getAC(), t = ac.currentTime;
+                const o = ac.createOscillator(); o.type = 'sine';
+                o.frequency.setValueAtTime(900, t);
+                o.frequency.exponentialRampToValueAtTime(320, t + 0.22);
+                const g = ac.createGain();
+                g.gain.setValueAtTime(0.22, t);
+                g.gain.exponentialRampToValueAtTime(0.001, t + 0.28);
+                o.connect(g); g.connect(getACDest());
+                o.start(t); o.stop(t + 0.3);
+              } catch(e){}
+            }
+            continue; // skip reflection + rest of bar code
+          }
+
           if(hasIronBall) {
             G.ballVel.multiplyScalar(0.85);
             const ironHits = [{wx:bar.wx, wz:bar.wz, type:'spinBar', physRef:bar, meshes:bar.barGroup?[bar.barGroup]:[]}];
@@ -13433,6 +13961,47 @@ function updatePhysics(dt) {
       const dB = (G.ballPos.z+BALL_R) - (bz+hd);
 
       if(dL<=0 && dR<=0 && dF<=0 && dB<=0) continue; // not actually overlapping
+
+      // v0.21a3: Sticky card — stick to slide block instead of bouncing off.
+      // Track local offset (ball position relative to block's CURRENT center)
+      // so we can recompute ball position each frame as the block slides.
+      if(G._stickyCardActive && !G._stickyCardTriggered && !hasIronBall) {
+        G._stickyCardTriggered = true;
+        const _localX = G.ballPos.x - bx;
+        const _localZ = G.ballPos.z - bz;
+        // Pick a contact normal from the shallowest-axis penetration (same
+        // logic the regular reflection uses) so the squash visual orients
+        // toward the block face the ball touched.
+        const overlapX = Math.min(dL>0?dL:Infinity, dR>0?dR:Infinity);
+        const overlapZ = Math.min(dF>0?dF:Infinity, dB>0?dB:Infinity);
+        let nxS = 0, nzS = 0;
+        if(overlapX < overlapZ) nxS = (dL > dR) ? -1 : 1;
+        else                    nzS = (dF > dB) ? -1 : 1;
+        G._stickyCardSquash = { timer: 0, duration: 0.55, nx: nxS, nz: nzS };
+        enterStickyAttached({
+          kind: 'slideBlock',
+          ref: sb,
+          localOffsetX: _localX,
+          localOffsetZ: _localZ,
+        });
+        spawnHitParticles(G.ballPos);
+        showToast('🟢 SPLAT on slider! Free re-aim →', 1500);
+        triggerShake('med');
+        if(AC) {
+          try {
+            const ac = getAC(), t = ac.currentTime;
+            const o = ac.createOscillator(); o.type = 'sine';
+            o.frequency.setValueAtTime(900, t);
+            o.frequency.exponentialRampToValueAtTime(320, t + 0.22);
+            const g = ac.createGain();
+            g.gain.setValueAtTime(0.22, t);
+            g.gain.exponentialRampToValueAtTime(0.001, t + 0.28);
+            o.connect(g); g.connect(getACDest());
+            o.start(t); o.stop(t + 0.3);
+          } catch(e){}
+        }
+        continue; // skip the regular bounce code below
+      }
 
       if(hasIronBall) {
         G.ballVel.multiplyScalar(0.85);
@@ -13845,11 +14414,11 @@ function updatePhysics(dt) {
       showToast('👻 Ghost faded!', 1000);
       ghostHud.style.opacity = '0';
       setTimeout(() => { if(ghostHud.parentNode) ghostHud.remove(); }, 300);
-      // v0.20c: if timer expired while user was still holding the card button,
-      // discard the card now so the next press of the SAME card doesn't act
-      // on a stale ghostCardInstanceId reference. Previously the card stayed
-      // in hand and could be "double-played" giving inconsistent results.
-      if(G._ghostHolding && G._ghostCardInstanceId != null) {
+      // v0.21a: Ghost toggle — when the 4s timer naturally expires, ALWAYS
+      // discard the card. Activation was committed; whether the player got
+      // value out of it is up to them. Refund is reserved for the explicit
+      // pre-swing cancel path (toggleGhostCard tap-off).
+      if(G._ghostCardInstanceId != null) {
         const _gIdx = G.hand.findIndex(c => c.instanceId === G._ghostCardInstanceId);
         if(_gIdx !== -1) {
           G.discard.push(G.hand[_gIdx].id);
@@ -13859,9 +14428,9 @@ function updatePhysics(dt) {
           }
           assignCardsToSlots();
         }
-        G._ghostHolding = false;
         G._ghostCardInstanceId = null;
       }
+      G._ghostCardWasUsed = false;
       updateHandUI();
     }
   } else {
@@ -14644,10 +15213,22 @@ let _tickUpTimers = []; // track all tick-up timeouts so we can cancel on shop o
 function sfxCoinPickup(index = 0, opts = {}) {
   if(!AC) return;
   const dest = opts.dest || getSFXDest();
-  const cappedIdx = Math.min(index, 25);
-  // Bright chime: sine + higher harmonic, rising pitch per coin
-  const baseFreq = (opts.baseFreq || 1200) * Math.pow(1.04, cappedIdx);
-  const vol = Math.min(0.14, 0.08 + cappedIdx * 0.003);
+  // v0.21a: replace the old min(index,25) ceiling — coin runs of 100-200 hit
+  // that cap almost immediately and every later coin played at identical pitch,
+  // killing the drama of long combo summary tickers. New curve uses log(1+i)
+  // for a smooth, decelerating climb that keeps rising all the way through
+  // 200+ pickups. Tuned so:
+  //   coin 0   → 1.000× base   (≈ 1200 Hz)
+  //   coin 10  → 1.18×         (≈ 1413 Hz)
+  //   coin 25  → 1.32×         (≈ 1581 Hz)   ← old cap landed here
+  //   coin 50  → 1.45×         (≈ 1742 Hz)
+  //   coin 100 → 1.59×         (≈ 1908 Hz)
+  //   coin 200 → 1.73×         (≈ 2080 Hz)
+  // Top capped at 2.4× absolute so a 500-coin freak combo doesn't go ultrasonic.
+  const pitchMul = Math.min(2.4, 1.0 + Math.log(1 + index * 0.15) * 0.36);
+  const baseFreq = (opts.baseFreq || 1200) * pitchMul;
+  // Volume gentle ramp, capped low so summary doesn't blow ears out
+  const vol = Math.min(0.13, 0.075 + Math.log(1 + index * 0.1) * 0.012);
   const t = AC.currentTime;
 
   // Primary chime tone
@@ -14955,6 +15536,13 @@ function computeLiveShotScore() {
   // Combo Multiplier perk: each unique type adds 1.5x instead of 1x
   if(G.modifiers.some(m=>m.id==='combo_multiplier') && mult > 1) {
     mult = Math.round(1 + (mult - 1) * 1.5);
+  }
+  // v0.21a3: Slow Mo gives a +25% combo bonus while active. Composes
+  // multiplicatively with the combo_multiplier perk for the rare moment
+  // both are running. Applied to the multiplier (not the base) so the
+  // bonus scales with how chaotic the shot already is.
+  if(G._slowMoPerkActive && mult > 1) {
+    mult = Math.max(2, Math.round(mult * 1.25));
   }
   return { base, mult, total: base * mult };
 }
@@ -15473,7 +16061,15 @@ function showHoleIntroBanner({hole, par, challenge, elite}) {
   if(!l1 || !l2 || !lE) return;
   clearTimeout(G._holeIntroSettleTimer);
   clearTimeout(G._holeIntroHideTimer);
-  l1.textContent = `Hole ${hole} · Par ${par}`;
+  // v0.21a: in endless post-game mode, show "Bonus Hole N · Par X" instead of
+  // the regular hole number. Anchored on _endlessHolesPlayed (the running tally
+  // of bonus holes played so far) rather than G.hole, since G.hole keeps
+  // climbing past the original totalHoles.
+  if(G._endlessMode && (G._endlessHolesPlayed | 0) > 0) {
+    l1.textContent = `Bonus Hole ${G._endlessHolesPlayed} · Par ${par}`;
+  } else {
+    l1.textContent = `Hole ${hole} · Par ${par}`;
+  }
   l2.textContent = challenge ? `🎯 ${challenge}` : '';
   l2.style.display = challenge ? '' : 'none';
   if(elite) {
@@ -15621,6 +16217,11 @@ function buildScorecardEntry(earnings, coinsPickedUp, wallCoins) {
     ballTravelDistance: Math.round((G._holeBallDistance || 0) * 100) / 100,
     swingCount: G._holeSwingCount || 0,
     timeTaken,
+    // v0.21a5: per-hole world scale (1.0–1.3× random for non-elite holes,
+    // 2.0 for Giant Hole, 1.0 for other elites/hole 1). Logged for telemetry
+    // analysis — lets us filter/control for scale variance when comparing
+    // per-hole stats across runs.
+    holeScale: Math.round((G._holeScale || 1.0) * 1000) / 1000,
   };
 }
 
@@ -15736,6 +16337,21 @@ function calcHoleEarnings(strokes, par, coinsPickedUp, wallCoins = 0) {
     rows.push({ label:`🏆 ${G._holeChallenge.label}`, amount: G._holeChallenge.reward });
     total += G._holeChallenge.reward;
     coinsChallengeBonus = G._holeChallenge.reward;
+  }
+
+  // v0.21a: Elite reward (coin-type) — deferred from deliverEliteReward so it
+  // appears as a dramatic earnings row instead of being silently credited
+  // mid-celebration. Sits below challenge so it reads as the climactic line.
+  // Cleared here so subsequent holes don't re-show stale state.
+  if(G._pendingEliteCoins && G._pendingEliteCoins > 0) {
+    const _eliteAmt = G._pendingEliteCoins;
+    const _eliteEmoji = G._pendingEliteRewardEmoji || '🌶';
+    const _eliteLabel = G._pendingEliteRewardLabel || `Elite reward`;
+    rows.push({ label: `${_eliteEmoji} ${_eliteLabel}`, amount: _eliteAmt });
+    total += _eliteAmt;
+    G._pendingEliteCoins = 0;
+    G._pendingEliteRewardEmoji = null;
+    G._pendingEliteRewardLabel = null;
   }
 
   // Multiplayer: double bonus earnings (pickups already doubled at collection time)
@@ -16358,17 +16974,18 @@ function onHoled() {
   const _totalCoinsPickedUp = G._holeCoinsPickedUp || 0;
   const wallCoins = G.wallCoinsThisHole || 0;
   const coinsPickedUp = Math.max(0, _totalCoinsPickedUp - wallCoins);
-  const earnings = calcHoleEarnings(G.strokes, G.par, coinsPickedUp, wallCoins);
-  // Analytics: expanded scorecard entry (solo path)
-  G.scorecard.push(buildScorecardEntry(earnings, coinsPickedUp, wallCoins));
-
-  // v0.20j: Elite Hole resolution — deliver reward (or punish wager) based on
-  // whether the player beat par on this hole. Must run AFTER coin earnings
-  // are credited so double-or-nothing wager math reads the right balance,
-  // and BEFORE the summary screen renders so the toast lands first.
+  // v0.21a: Resolve elite BEFORE earnings calc. The 'coins' reward type now
+  // sets G._pendingEliteCoins (instead of crediting G.coins immediately) so
+  // calcHoleEarnings can pick it up as a summary row. Other reward types
+  // (restore_hp, free_card, double_or_nothing, copy_card) still resolve
+  // instantly — only flat-coin elites are deferred. double_or_nothing's
+  // wager math is unaffected because that reward type is unchanged.
   if(G._activeElite) {
     resolveEliteHoleResult(G.strokes, G.par);
   }
+  const earnings = calcHoleEarnings(G.strokes, G.par, coinsPickedUp, wallCoins);
+  // Analytics: expanded scorecard entry (solo path)
+  G.scorecard.push(buildScorecardEntry(earnings, coinsPickedUp, wallCoins));
 
   const isLast = G.hole >= G.totalHoles - 1;
   const outOfLives = G.hp <= 0;
@@ -16399,7 +17016,7 @@ function onHoled() {
         G.coins += earnings.total - coinsPickedUp;
         updateCoinHUD();
         updateUI(); updateScorePips();
-        setTimeout(() => showGameOver(false), 600);
+        setTimeout(() => maybeOfferEndless(), 600);
       } else {
         updateUI(); updateScorePips();
         setTimeout(() => showHoleSummary(earnings, false, _epoch), 300);
@@ -16415,7 +17032,7 @@ function onHoled() {
     } else if(isLast) {
       G.coins += earnings.total - coinsPickedUp;
       updateCoinHUD();
-      setTimeout(() => showGameOver(false), 1600);
+      setTimeout(() => maybeOfferEndless(), 1600);
     } else {
       setTimeout(() => showHoleSummary(earnings, false, _epoch), 900);
     }
@@ -16426,7 +17043,7 @@ function onHoled() {
     if(isLast) {
       G.coins += earnings.total - coinsPickedUp;
       updateCoinHUD();
-      setTimeout(() => showGameOver(false), Math.max(celebDelay, 1600));
+      setTimeout(() => maybeOfferEndless(), Math.max(celebDelay, 1600));
     } else {
       setTimeout(() => showHoleSummary(earnings, false, _epoch), celebDelay);
     }
@@ -16452,7 +17069,13 @@ function showHoleSummary(earnings, bustedBudget, _epoch) {
     d ===  2 ? 'Double Bogey' : `+${d}`;
 
   const hs = document.getElementById('hole-summary');
-  document.getElementById('hs-hole-label').textContent = `Hole ${G.hole+1} of ${G.totalHoles}`;
+  // v0.21a: in endless mode, label as "Bonus Hole N Complete" instead of
+  // "Hole X of Y". The "of Y" framing is meaningless once totalHoles is being
+  // bumped per bonus hole.
+  document.getElementById('hs-hole-label').textContent =
+    (G._endlessMode && (G._endlessHolesPlayed | 0) > 0)
+      ? `Bonus Hole ${G._endlessHolesPlayed} Complete`
+      : `Hole ${G.hole+1} of ${G.totalHoles}`;
   const scoreWordEl = document.getElementById('hs-score-word');
   scoreWordEl.textContent = scoreWord;
   scoreWordEl.style.color = d > 0 ? '#e07050' : '#fff';
@@ -16514,7 +17137,10 @@ function showHoleSummary(earnings, bustedBudget, _epoch) {
 
       function tick() {
         current = Math.min(current + skipAmt, total);
-        const coinIdx = capturedGci + Math.min(current - 1, 20);
+        // v0.21a: pass the raw running index so the new log-curve pitch ramp
+        // can climb through 100+ coin combos without flatlining. Old code
+        // clamped at +20 within a row, defeating the point.
+        const coinIdx = capturedGci + (current - 1);
         const progress = current / total;
         const fontSize = 1.0 + progress * 0.6;
         if(current < total) {
@@ -16580,7 +17206,8 @@ function showHoleSummary(earnings, bustedBudget, _epoch) {
       totalEl.classList.remove('pop');
       void totalEl.offsetWidth;
       totalEl.classList.add('pop');
-      if(AC) sfxCoinPickup(capturedGlobalIdx + Math.min(cur-1, 15));
+      // v0.21a: uncapped index for full pitch climb across the grand total tick.
+      if(AC) sfxCoinPickup(capturedGlobalIdx + (cur - 1));
       if(cur < grandTotal) { const t = setTimeout(tickTotal, stepMs); _tickUpTimers.push(t); }
     }
     tickTotal();
@@ -16691,6 +17318,86 @@ function onSummaryDismiss() {
   }
 }
 window.onSummaryDismiss = onSummaryDismiss;
+
+// ── v0.21a: Endless post-game mode ────────────────────
+// Three entry points called from onHoled's three winning-final-hole branches.
+// The win has already been saved by saveRunData('won') in onHoled (line ~16417),
+// so endless content is purely bonus on top — death just triggers showGameOver(true)
+// and the saved 'won' record stays intact in run history.
+function maybeOfferEndless() {
+  // Re-guard: must still be a fresh win state (not multiplayer, not busted, HP > 0).
+  // If anything's off, fall through to the original showGameOver path.
+  if(isMultiplayer())          { showGameOver(false); return; }
+  if(G._summaryBusted)         { showGameOver(true);  return; }
+  if(G.hp <= 0)                { showGameOver(true);  return; }
+  // Only offer the fork at the *natural* end of a run — if we're already in
+  // endless mode and the loop somehow re-fires here, just keep going.
+  if(G._endlessMode) { showGameOver(false); return; }
+  const ov = document.getElementById('endless-fork-overlay');
+  if(!ov) { showGameOver(false); return; } // safety — overlay missing
+  // Hide other overlays that might still be visible from final-hole celebration
+  document.getElementById('hole-summary').classList.remove('visible');
+  document.getElementById('shop-overlay').classList.remove('visible');
+  // Fill the streak line — for the very first offer, no streak yet
+  const streakEl = document.getElementById('endless-streak');
+  if(streakEl) streakEl.textContent = '';
+  ov.classList.add('visible');
+  G.state = 'choosing'; // existing JSDoc state — pauses input handling
+  // Soft confirmation tone — gentle ascending two-note
+  if(AC) {
+    try {
+      const ac = getAC(), t = ac.currentTime;
+      const o = ac.createOscillator(); o.type='sine';
+      o.frequency.setValueAtTime(440, t);
+      o.frequency.setValueAtTime(660, t+0.16);
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(0.18, t+0.04);
+      g.gain.setValueAtTime(0.18, t+0.30);
+      g.gain.exponentialRampToValueAtTime(0.001, t+0.55);
+      o.connect(g); g.connect(getACDest());
+      o.start(t); o.stop(t+0.6);
+    } catch(e) {}
+  }
+}
+window.maybeOfferEndless = maybeOfferEndless;
+
+function onEndlessFinish() {
+  const ov = document.getElementById('endless-fork-overlay');
+  if(ov) ov.classList.remove('visible');
+  showGameOver(false);
+}
+window.onEndlessFinish = onEndlessFinish;
+
+function onEndlessContinue() {
+  const ov = document.getElementById('endless-fork-overlay');
+  if(ov) ov.classList.remove('visible');
+  // Enter endless mode. _endlessHolesPlayed will increment when nextHole() actually
+  // loads the new hole; the *upcoming* hole counter is _endlessHolesPlayed + 1,
+  // and the tier ramp uses that:
+  //   bonus hole 1 → tier [2]
+  //   bonus hole 2+ → tier [3]
+  G._endlessMode = true;
+  G._endlessHolesPlayed = (G._endlessHolesPlayed | 0) + 1;
+  G._endlessTierWhitelist = (G._endlessHolesPlayed === 1) ? [2] : [3];
+  // Difficulty +1 per bonus hole, capped at 10. Refresh _diffMods so HP ramps,
+  // shop rates, damage, and course scaling all read the new value.
+  G.difficulty = Math.min(10, (G.difficulty | 0) + 1);
+  G._diffMods = getDifficultyMods(G.difficulty);
+  // Bump totalHoles so the bounds check in nextHole() (G.hole >= G.totalHoles)
+  // doesn't immediately fire showGameOver again. Endless holes are bonus content
+  // ON TOP of the original total — the display string special-cases via _endlessMode.
+  G.totalHoles = (G.totalHoles | 0) + 1;
+  // Toast the milestone
+  const tier = G._endlessTierWhitelist[0];
+  showToast(`⭐ BONUS HOLE ${G._endlessHolesPlayed} — TIER ${tier}`, 1500);
+  // Loose state cleanup mirroring onSummaryDismiss → nextHole flow
+  G._summaryBusted = false;
+  // Drive into the elite fork pipeline
+  nextHole();
+}
+window.onEndlessContinue = onEndlessContinue;
+
 
 // ── Pro Shop ──────────────────────────────────────────
 // v0.18a: "hard" perks — perks that change the fundamental run experience in
@@ -16851,9 +17558,13 @@ function weightedCardPicks(count) {
 function getScaledCardPrice(card) {
   // v0.18a: shop rate from difficulty mods (0.10 at ★1 → 0.30 at ★6+)
   // v0.20a2: priceBaseMult from difficulty (1.20 at ★1, 1.35 at ★2, 1.50 at ★3+)
+  // v0.21a: in endless post-game mode, prices inflate 1.7× per bonus hole on
+  // top of normal per-hole inflation. Pow because each bonus hole compounds
+  // the price ceiling — the deeper you push, the more you pay.
   const rate = (G._diffMods && G._diffMods.shopRate) || 0.15;
   const baseMult = (G._diffMods && G._diffMods.priceBaseMult) || 1.5;
-  return Math.max(1, Math.round(card.price * baseMult * (1 + G.hole * rate) * PRICE_MULTIPLIER));
+  const endlessMult = G._endlessMode ? Math.pow(1.7, G._endlessHolesPlayed | 0) : 1.0;
+  return Math.max(1, Math.round(card.price * baseMult * (1 + G.hole * rate) * PRICE_MULTIPLIER * endlessMult));
 }
 
 function closeShop() {
@@ -16972,13 +17683,16 @@ function getScaledPrice(perk) {
   // v0.20e: per-perk stack-price overrides. If a perk defines `stackPrice` and
   // the player already owns >=1 copy, use stackPrice instead of perk.price for
   // the base. Used by Regeneration: 30 coins for first, 50 for each additional.
+  // v0.21a: endless post-game mode adds Math.pow(1.7, _endlessHolesPlayed)
+  // multiplier so the cost of pushing the run keeps climbing.
   let basePrice = perk.price;
   if(perk.stackPrice && G.modifiers && G.modifiers.some(m => m.id === perk.id)) {
     basePrice = perk.stackPrice;
   }
   const rate = (G._diffMods && G._diffMods.shopRate) || 0.15;
   const baseMult = (G._diffMods && G._diffMods.priceBaseMult) || 1.5;
-  const base = Math.max(1, Math.round(basePrice * baseMult * (1 + G.hole * rate) * PRICE_MULTIPLIER));
+  const endlessMult = G._endlessMode ? Math.pow(1.7, G._endlessHolesPlayed | 0) : 1.0;
+  const base = Math.max(1, Math.round(basePrice * baseMult * (1 + G.hole * rate) * PRICE_MULTIPLIER * endlessMult));
   // Multiplayer: 50% off — coins are split across players
   return isMultiplayer() ? Math.max(1, Math.round(base * 0.5)) : base;
 }
@@ -17935,6 +18649,13 @@ function fireProjectile({ blastRadius = 4.0, travelSpeed = 22, color = 0xff4400,
       missileGroup.position.x = corePos.x + offX;
       missileGroup.position.z = corePos.z + offZ;
       const px = missileGroup.position.x, pz = missileGroup.position.z;
+      // v0.21a: Hunter stagger — projectiles knock the Hunter back. Missile
+      // doesn't bounce (it explodes on impact via the standard wall/blast
+      // path below), so we pass null for the bounce arg and treat the stagger
+      // as a wall hit so the explosion logic fires.
+      if(tryProjectileStaggerHunter(px, pz, dir.x * curSpeed, dir.z * curSpeed, effectiveHitR, null)) {
+        sweptWallHit = true; break;
+      }
       // Obstacle hit check with parameterized radius
       const h = missileInFlightHitCheck(px, pz, effectiveHitR);
       if(h) { sweptHit = h; break; }
@@ -18108,7 +18829,7 @@ const CARD_DEFS = {
   boulder:      { id:'boulder',      emoji:'🪨', name:'Boulder',         desc:'Summon an unstoppable boulder that smashes everything.',          rarity:'epic',      price:32,  context:'pre',    holdable:false, weight:2 },
   dodgeball:    { id:'dodgeball',    emoji:'🔴', name:'Dodgeball',       desc:'Fire a super-bouncy red ball that ricochets off everything.',     rarity:'epic',      price:42,  context:'pre',    holdable:false, weight:2 },
   explosivo:    { id:'explosivo',    emoji:'💥', name:'Explosivo',       desc:'Detonate a huge explosion at the ball\'s position.',              rarity:'epic',      price:21,  context:'any',    holdable:false },
-  ghost_ball:   { id:'ghost_ball',   emoji:'👻', name:'Ghost Ball',      desc:'Hold to pass through walls, rocks and obstacles. 4s.',            rarity:'epic',      price:21,  context:'any',    holdable:true },
+  ghost_ball:   { id:'ghost_ball',   emoji:'👻', name:'Ghost Ball',      desc:'Tap to phase through walls, rocks and obstacles for 4s. Tap again to end early.', rarity:'epic',      price:21,  context:'any',    holdable:false },
   backspin:     { id:'backspin',     emoji:'🔄', name:'Backspin',        desc:'Slam the brakes mid-roll for precise placement.',                rarity:'common',    price:8,   context:'during', holdable:false, weight:4 },
   jumper:       { id:'jumper',       emoji:'🦘', name:'Jumper',          desc:'Jump over obstacles mid-roll — OR pre-load before your swing to launch on fire.', rarity:'common',    price:12,  context:'any',    holdable:false },
   slow_mo:      { id:'slow_mo',      emoji:'🐌', name:'Slow Mo',         desc:'25% speed for 6 seconds. See the chaos in detail.',              rarity:'rare',      price:20,  context:'any',    holdable:false },
@@ -18147,7 +18868,7 @@ const CARD_DEFS = {
   wall_magnet:  { id:'wall_magnet',  emoji:'🧲', name:'Wall Magnet',     desc:'This swing: ball curves toward the nearest wall. Bounce synergy!', rarity:'rare',      price:15,  context:'pre',    holdable:false },
   catapult:     { id:'catapult',     emoji:'🪤', name:'Catapult',         desc:'This swing: launch in a huge arc with bouncy landings. Skip walls!', rarity:'common',  price:12,  context:'pre',    holdable:false, weight:5 },
   mighty_egg:   { id:'mighty_egg',   emoji:'🥚', name:'Mighty Egg',        desc:'Encase your ball in a protective egg. Absorbs one 1-HP hit from spikes or other damage obstacles. Cracks on impact.', rarity:'common', price:10, context:'any', holdable:false, weight:2 },
-  sticky:       { id:'sticky',       emoji:'🟢', name:'Sticky',           desc:'This swing: ball sticks to the first wall it hits with a big juicy squish.', rarity:'common', price:15, context:'pre', holdable:false, weight:4 },
+  sticky:       { id:'sticky',       emoji:'🟢', name:'Sticky',           desc:'Ball sticks to first wall, spinner, or slide block on contact. Take a FREE re-aim shot from the stuck position. Tap card again to unstick.', rarity:'common', price:15, context:'pre', holdable:false, weight:4 },
   parkour:      { id:'parkour',      emoji:'🤸', name:'Parkour',          desc:'This swing: automatically vault the first obstacle in your path with a slow-mo cartwheel.', rarity:'rare', price:20, context:'pre', holdable:false, weight:3 },
   vacuum:       { id:'vacuum',       emoji:'🌪️', name:'Vacuum',            desc:'Suck up all coins and obstacles in a V-shaped cone in front of you. Play anytime — mid-roll briefly slows time.', rarity:'rare', price:30, context:'any', holdable:false, weight:2 },
   goal_oriented:{ id:'goal_oriented',emoji:'🎯', name:'Goal Oriented',    desc:'Instantly redirect your ball toward the hole mid-swing.', rarity:'epic', price:25, context:'during', holdable:false, weight:3 },
@@ -18654,6 +19375,14 @@ function playCard(instanceId) {
   const card = G.hand[idx];
   const def = CARD_DEFS[card.id];
   if (!def) return false;
+  // v0.21a: Ghost is a toggle. If ANY caller routes a ghost tap through
+  // playCard, hand it off to the toggle. Prevents accidentally running
+  // ghost through the normal arm/discard path which would lose the
+  // refund-vs-discard semantics.
+  if(card.id === 'ghost_ball') {
+    toggleGhostCard(instanceId);
+    return false;
+  }
   if (!canPlayCard(card.id)) return false;
   // v0.20i: re-tapping an armed card UNARMS it (refund). Was a no-op in
   // v0.20g — meant well, but accidental taps on Power Shot / Iron Ball /
@@ -18953,6 +19682,7 @@ function isCardArmedPreSwing(cardId) {
     case 'slow_mo':      return !!G._slowMoPerkActive;
     case 'perpetual_motion': return !!G._perpetualMotionActive;
     case 'pinball':      return !!G._pinballArmed;
+    case 'sticky':       return !!G._stickyCardActive;
   }
   return false;
 }
@@ -19036,7 +19766,17 @@ function updateHandUI() {
     const capturedInstanceId = card.instanceId;
     const capturedCardId = card.id;
     if(usable || isGhostActive) {
-      if(def.holdable) {
+      // v0.21a: Ghost is now a toggle, not a hold. Route ghost taps to
+      // toggleGhostCard (handles activate / deactivate / discard / refund).
+      // All other cards keep the standard tap-to-play binding.
+      if(capturedCardId === 'ghost_ball') {
+        el.ontouchstart = (e) => { e.preventDefault(); toggleGhostCard(capturedInstanceId); };
+        el.ontouchend = null;
+        el.onmousedown = (e) => { e.preventDefault(); toggleGhostCard(capturedInstanceId); };
+        el.onmouseup = null;
+      } else if(def.holdable) {
+        // Reserved for future hold-style cards. (No card uses holdable=true
+        // currently — Ghost was the only one and it moved to toggle.)
         el.ontouchstart = (e) => { e.preventDefault(); startGhostHoldCard(capturedInstanceId); };
         el.ontouchend = (e) => { e.preventDefault(); stopGhostHold(); };
         el.onmousedown = (e) => { e.preventDefault(); startGhostHoldCard(capturedInstanceId); };
@@ -19070,8 +19810,14 @@ function updateHandUI() {
     btn.innerHTML = def.emoji;
     btn.title = def.name + ': ' + def.desc;
     const cid = card.instanceId;
-    if(usable) {
-      if(def.holdable) {
+    // Ghost active should still be tappable to toggle off, even if not "usable" here
+    const ghostActiveOnThis = card.id === 'ghost_ball' && G.ghostBallActive;
+    if(usable || ghostActiveOnThis) {
+      // v0.21a: Ghost is a toggle.
+      if(card.id === 'ghost_ball') {
+        btn.ontouchstart = (e) => { e.preventDefault(); toggleGhostCard(cid); };
+        btn.onmousedown = (e) => { e.preventDefault(); toggleGhostCard(cid); };
+      } else if(def.holdable) {
         btn.ontouchstart = (e) => { e.preventDefault(); startGhostHoldCard(cid); };
         btn.ontouchend = (e) => { e.preventDefault(); stopGhostHold(); };
         btn.onmousedown = (e) => { e.preventDefault(); startGhostHoldCard(cid); };
@@ -19093,18 +19839,25 @@ function handleCardKey(keyCode, isDown) {
     if(CARD_SLOT_CODES[k] !== keyCode) continue;
     const card = G.cardSlots[i];
     if(!card) return false;
-    // Space during aim mode: only capture if the card is playable right now
+    // Space during aim mode: only capture if the card is playable right now,
+    // OR ghost is currently active (so player can tap-off to refund/discard).
+    const ghostActiveOnThis = card.id === 'ghost_ball' && G.ghostBallActive;
     if(keyCode === ' ' && G.aimMode && !G.rolling) {
-      if(!canPlayCard(card.id)) return false; // let space fire the shot instead
+      if(!canPlayCard(card.id) && !ghostActiveOnThis) return false; // let space fire the shot instead
     }
     if(isDown) {
-      if(CARD_DEFS[card.id]?.holdable) {
+      // v0.21a: Ghost is a toggle, fires on keydown only.
+      if(card.id === 'ghost_ball') {
+        toggleGhostCard(card.instanceId);
+      } else if(CARD_DEFS[card.id]?.holdable) {
         startGhostHoldCard(card.instanceId);
       } else {
         playCard(card.instanceId);
       }
     } else {
-      if(CARD_DEFS[card.id]?.holdable) {
+      // v0.21a: ghost no longer cares about keyup. Other holdable cards
+      // (none today) would still fire stopGhostHold here.
+      if(CARD_DEFS[card.id]?.holdable && card.id !== 'ghost_ball') {
         stopGhostHold();
       }
     }
@@ -19113,16 +19866,69 @@ function handleCardKey(keyCode, isDown) {
   return false;
 }
 
-// Ghost ball hold mechanics (card version)
-function startGhostHoldCard(instanceId) {
-  if(G.ghostBallActive) return;
-  // Find the card and play it
+// v0.21a: Ghost Ball is now a TOGGLE, not a hold.
+// First tap  → activate. Card is held in a "consumed-pending" state (still
+//              shown lit/active in UI). 4s timer auto-deactivates if not
+//              tapped again.
+// Second tap WHILE ROLLING (ghost was used during a swing)
+//          → deactivate, DISCARD the card. The phase-through actually
+//             helped the shot, so the card is consumed.
+// Second tap BEFORE A SWING (ball at rest, ghost activated for safety
+//   / cancelled mistap)
+//          → deactivate, REFUND the card (return to hand untouched).
+//
+// Replaces the old hold-to-pass-through model. Adam's bugs around stuck
+// cards / instant-off-on-press were all artifacts of the hold timing race
+// between mousedown→activate→mouseup; a toggle has none of that fragility.
+function toggleGhostCard(instanceId) {
   const card = G.hand.find(c => c.instanceId === instanceId);
   if(!card || card.id !== 'ghost_ball') return;
-  // Don't discard yet — discard on release
-  activateGhostBall();
-  G._ghostHolding = true;
-  G._ghostCardInstanceId = instanceId;
+
+  // ── First tap: activate ────────────────────────────
+  if(!G.ghostBallActive) {
+    if(G.inHole || G.state !== 'playing') return;
+    activateGhostBall();
+    G._ghostCardInstanceId = instanceId;
+    // _ghostCardWasUsed: did the player swing while ghost was active?
+    // Determines whether second-tap-deactivate refunds vs discards.
+    G._ghostCardWasUsed = !!G.rolling; // rare: activated mid-roll
+    return;
+  }
+
+  // ── Second tap: deactivate ─────────────────────────
+  // Use _ghostCardWasUsed flag (set true the moment the player swings
+  // while ghost is active — see activateGhostBall + onShotFired hooks below).
+  // If the flag is set, we DISCARD; otherwise REFUND.
+  const wasUsed = !!G._ghostCardWasUsed;
+  deactivateGhostBall();
+  if(wasUsed) {
+    // Discard (used during a swing)
+    if(G._ghostCardInstanceId != null) {
+      const idx = G.hand.findIndex(c => c.instanceId === G._ghostCardInstanceId);
+      if(idx !== -1) {
+        G.discard.push(G.hand[idx].id);
+        G.hand.splice(idx, 1);
+        for(let i = 0; i < G.cardSlots.length; i++) {
+          if(G.cardSlots[i] && G.cardSlots[i].instanceId === G._ghostCardInstanceId) G.cardSlots[i] = null;
+        }
+        assignCardsToSlots();
+      }
+    }
+    showToast('👻 Ghost discarded', 700);
+  } else {
+    // Refund (cancelled before any swing)
+    showToast('↩ Ghost refunded', 700);
+  }
+  G._ghostCardInstanceId = null;
+  G._ghostCardWasUsed = false;
+  updateHandUI();
+}
+window.toggleGhostCard = toggleGhostCard;
+
+// Legacy hold entry point — kept as alias so older binding paths still work
+// during the refactor. Now just routes to the toggle.
+function startGhostHoldCard(instanceId) {
+  toggleGhostCard(instanceId);
 }
 
 function startGhostHold() {
@@ -19130,30 +19936,8 @@ function startGhostHold() {
 }
 
 function stopGhostHold() {
-  // v0.20c: discard if EITHER (a) ghost is currently active OR (b) we were
-  // mid-hold when the 4s ghost timer expired (then the player is releasing
-  // a button that already auto-deactivated). Previously the discard branch
-  // required ghostBallActive=true, so a timer expiry mid-hold left the card
-  // permanently stuck in hand — Adam's "ghost remained in hand after several
-  // uses on one swing" bug.
-  const shouldDiscard = G._ghostHolding && (G.ghostBallActive || G._ghostCardInstanceId != null);
-  if(G._ghostHolding && G.ghostBallActive) {
-    deactivateGhostBall();
-  }
-  if(shouldDiscard && G._ghostCardInstanceId != null) {
-    const idx = G.hand.findIndex(c => c.instanceId === G._ghostCardInstanceId);
-    if(idx !== -1) {
-      G.discard.push(G.hand[idx].id);
-      G.hand.splice(idx, 1);
-      for(let i = 0; i < G.cardSlots.length; i++) {
-        if(G.cardSlots[i] && G.cardSlots[i].instanceId === G._ghostCardInstanceId) G.cardSlots[i] = null;
-      }
-      assignCardsToSlots();
-      updateHandUI();
-    }
-  }
-  G._ghostHolding = false;
-  G._ghostCardInstanceId = null;
+  // v0.21a: no-op. Ghost is a toggle now; release events do nothing.
+  // Kept as a stub so any straggling event bindings can call it harmlessly.
 }
 
 function deactivateGhostBall() {
@@ -19623,6 +20407,19 @@ function activateDodgeball() {
       if(curSpd > capSpd) { const sc = capSpd/curSpd; dx*=sc; dz*=sc; }
     } // end substeps
 
+    // v0.21a: Hunter stagger — dodgeballs bounce off the Hunter. Pass a
+    // bounce object so the helper reflects dx/dz; squash + bounce count
+    // bump locally if we connected.
+    {
+      const _b = { vx: dx, vz: dz };
+      if(tryProjectileStaggerHunter(px, pz, dx, dz, 0.25, _b)) {
+        dx = _b.vx; dz = _b.vz;
+        squashTimer = 0.15;
+        bounces++;
+        recordStyleEvent('wall_bounce');
+      }
+    }
+
     // Obstacle collision — destroy on contact (once per frame, not per substep)
     const hits = collectObstaclesInRadius(px, pz, 1.2);
     const newHits = hits.filter(h => !hitObstacles.has(h.physRef));
@@ -19837,11 +20634,31 @@ function crackMightyEgg() {
   showToast('💥 Egg cracked! Hit absorbed.', 1400);
 }
 
-// ── Sticky (v0.19x) ───────────────────────────────────
-// Armed as a per-swing buff. The actual "stick" fires in updatePhysics wall
-// code when the ball first touches a wall. See block there for the squish
-// visuals + SFX.
+// ── Sticky (v0.19x → v0.21a3 redesign) ────────────────
+// Original behavior: stick to first wall, finalize as if holed, lose the
+// shot's value. Boring — the card was a waste of a swing.
+// New behavior: stick to first wall / spinner / slide block. The shot
+// finalizes (1 stroke counted), but the player gets a FREE re-aim shot from
+// the stuck position. While stuck, the card can be re-tapped to drop the
+// ball normally instead of taking the free swing. The free swing also
+// auto-detaches; subsequent shots count strokes as usual.
+// Implementation surface area:
+//   activateSticky          — arm the card, OR detach if already stuck
+//   enterStickyAttached     — called from physics-side stick triggers
+//   unstickBall             — drop the ball from its current attachment
+//   tickStickyAttachment    — per-frame ball position tracking for moving
+//                             attachments (spinner / slide block)
+//   clearStickyState        — full reset (per-swing + per-hole cleanup)
 function activateSticky() {
+  // v0.21a3: re-tap = unstick. If the ball is already stuck and the player
+  // taps the card a second time, drop it back to normal physics instead of
+  // taking the free re-aim. This gives the player an explicit cancel path
+  // when they realize the stuck position isn't actually useful.
+  if(G._stickyAttached) {
+    unstickBall();
+    showToast('🟢 Unstuck — drops to ground', 1000);
+    return;
+  }
   if(G._stickyCardActive) { showToast('🟢 Sticky already armed!', 800); return; }
   G._stickyCardActive = true;
   G._stickyCardTriggered = false;
@@ -19854,7 +20671,7 @@ function activateSticky() {
       G.ballMesh.material.emissiveIntensity = 0.7;
     }
   }
-  showToast('🟢 Sticky armed — sticks on first wall!', 1200);
+  showToast('🟢 Sticky armed — sticks on first wall/spinner/slider!', 1400);
   if(AC) {
     try {
       const ac = getAC(), t = ac.currentTime;
@@ -19866,11 +20683,117 @@ function activateSticky() {
   }
 }
 
+// v0.21a3: Called from physics when the ball makes contact with a stickable
+// surface while sticky is armed. attachment is one of:
+//   { kind:'wall', nx, nz }
+//   { kind:'spinner', ref:bar, distFromPivot, angleOffset }
+//   { kind:'slideBlock', ref:sb, localOffsetX, localOffsetZ }
+// localOffset for slide blocks is measured relative to the block's CURRENT
+// world position at attachment time, so we can recompute ball position from
+// the block's offset each frame. For spinners, distFromPivot + angleOffset
+// (relative to bar.angle) describe a polar attachment.
+function enterStickyAttached(attachment) {
+  if(!attachment) return;
+  // Snapshot the ball's last-seen ball position as the lastShotPos so the
+  // existing undo / OOB-reset machinery doesn't reset to BEFORE this shot.
+  // The stuck position IS the new firing position.
+  G._stickyAttached = attachment;
+  G.ballVel.set(0, 0, 0);
+  G.rolling = false;
+  // Force the rolling-slow timer past finalize threshold so finalizeShot
+  // closes out the current shot's combo/style/score before we re-enter aim.
+  G.rollingSlowTimer = 999;
+  // After a brief pause for the squash visual to read, re-enter aim mode
+  // and arm the free-swing flag. The 700ms delay lets the SPLAT! land first.
+  setTimeout(() => {
+    if(!G._stickyAttached) return; // canceled mid-delay
+    if(G.inHole) return; // ball holed in the meantime — bail
+    G._stickyFreeSwing = true;
+    G.aimMode = true;
+    G.shotPower = 0;
+    if(typeof createAimArrow === 'function' && !G.aimArrow) createAimArrow();
+    if(typeof updateAimArrow === 'function') updateAimArrow();
+    showToast('🎯 Free swing — your stroke does NOT count', 1600);
+  }, 700);
+}
+window.enterStickyAttached = enterStickyAttached;
+
+// v0.21a3: Detach the ball from its current attachment without firing.
+// Used by re-tap-to-cancel. Drops the ball into normal physics with a
+// small downward velocity so it falls to the floor naturally.
+function unstickBall() {
+  if(!G._stickyAttached) return;
+  G._stickyAttached = null;
+  G._stickyFreeSwing = false;
+  // Hide the aim arrow if we're showing it — the ball is about to fall
+  if(G.aimArrow) { scene.remove(G.aimArrow); G.aimArrow = null; }
+  G.aimMode = false;
+  // Tiny detach pop so the ball doesn't stick at exactly zero velocity
+  G.ballVel.set(0, -1.5, 0);
+  G.rolling = true;
+  G.rollingSlowTimer = 0;
+  // Clear the squash visual
+  G._stickyCardSquash = null;
+  if(G.ball) G.ball.scale.set(1, 1, 1);
+  if(AC) {
+    try {
+      const ac = getAC(), t = ac.currentTime;
+      const o = ac.createOscillator(); o.type = 'sine';
+      o.frequency.setValueAtTime(360, t); o.frequency.exponentialRampToValueAtTime(120, t + 0.18);
+      const g = ac.createGain(); g.gain.setValueAtTime(0.10, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+      o.connect(g); g.connect(getACDest()); o.start(t); o.stop(t + 0.25);
+    } catch(e){}
+  }
+}
+window.unstickBall = unstickBall;
+
+// v0.21a3: Per-frame tracking for moving attachments. Wall sticks are static
+// so this is a no-op for them. Spinner sticks rotate the ball with the bar;
+// slide-block sticks translate with the block. Called from animate().
+function tickStickyAttachment() {
+  const a = G._stickyAttached;
+  if(!a) return;
+  if(a.kind === 'spinner') {
+    const bar = a.ref;
+    if(!bar || bar._destroyed) { unstickBall(); return; }
+    const ang = bar.angle + (a.angleOffset || 0);
+    const cosA = Math.cos(ang), sinA = Math.sin(ang);
+    // Bar local arm at +(len, 0, 0) → world (wx + cos*r, wz - sin*r)
+    G.ballPos.x = bar.wx + cosA * a.distFromPivot;
+    G.ballPos.z = bar.wz - sinA * a.distFromPivot;
+    if(G.ball) G.ball.position.set(G.ballPos.x, G.ballPos.y, G.ballPos.z);
+    if(G.ballShadow) G.ballShadow.position.set(G.ballPos.x, 0.05, G.ballPos.z);
+    // Re-aim arrow tracks the ball
+    if(G.aimMode && G.aimArrow && typeof updateAimArrow === 'function') updateAimArrow();
+  } else if(a.kind === 'slideBlock') {
+    const sb = a.ref;
+    if(!sb || sb._destroyed) { unstickBall(); return; }
+    const offset = Math.sin(sb.phase) * sb.range;
+    const blockX = sb.wx + (sb.axis === 'X' ? offset : 0);
+    const blockZ = sb.wz + (sb.axis === 'Z' ? offset : 0);
+    G.ballPos.x = blockX + (a.localOffsetX || 0);
+    G.ballPos.z = blockZ + (a.localOffsetZ || 0);
+    if(G.ball) G.ball.position.set(G.ballPos.x, G.ballPos.y, G.ballPos.z);
+    if(G.ballShadow) G.ballShadow.position.set(G.ballPos.x, 0.05, G.ballPos.z);
+    if(G.aimMode && G.aimArrow && typeof updateAimArrow === 'function') updateAimArrow();
+  }
+}
+window.tickStickyAttachment = tickStickyAttachment;
+
 // Helper used from per-swing reset to clear sticky state and restore visuals
 function clearStickyState() {
+  // v0.21a3: if the ball is currently attached (stuck on a wall/spinner/
+  // slide block), the sticky card is still doing its job and must not be
+  // cleared. The per-swing reset triggers `clearStickyState` whenever the
+  // ball comes to rest — including the moment the ball sticks, where state
+  // must persist so the free-swing aim works. The state will be cleared
+  // properly when fireShot fires the free swing or unstickBall() runs.
+  if(G._stickyAttached) return;
   G._stickyCardActive = false;
   G._stickyCardTriggered = false;
   G._stickyCardSquash = null;
+  G._stickyAttached = null;
+  G._stickyFreeSwing = false;
   if(G.ball && G.ballMesh && G.ballMesh.material && G.ballMesh.material.emissive) {
     if(G._stickyOrigEmissive !== undefined) {
       G.ballMesh.material.emissive.setHex(G._stickyOrigEmissive);
@@ -21409,6 +22332,8 @@ function _resizePortalRTTs() {
     if (!p || !p.renderTarget) return;
     if (p.renderTarget.width === sz.w && p.renderTarget.height === sz.h) return;
     p.renderTarget.setSize(sz.w, sz.h);
+    // v0.21a2: keep the ping-pong buddy buffer in sync with the main RT.
+    if (p.renderTargetB) p.renderTargetB.setSize(sz.w, sz.h);
   });
 }
 const _PORTAL_ENTRY_COLOR = 0x33ff66;   // green
@@ -21673,6 +22598,52 @@ function _buildPortal(role, x, z, facing) {
   group.position.set(x, 0, z);
   group.rotation.y = facing;
   group.userData.noOutline = true;
+  // v0.21a1: Bug fix — without blocksOutlineDepth on the GROUP, OutlinePass's
+  // traversal hides the group entirely during depth capture. Three.js culls
+  // children of an invisible parent at render time, so the chrome backplate's
+  // own blocksOutlineDepth flag gets bypassed — the depth buffer at the door's
+  // screen region falls through to the local course geometry behind the portal,
+  // which is exactly the bleed-through Adam was seeing. Tagging the group as
+  // blocksOutlineDepth keeps it visible during depth capture; the door + chrome
+  // write depth normally; frame strips and glow plane have depthWrite:false so
+  // they contribute nothing to the depth buffer regardless.
+  group.userData.blocksOutlineDepth = true;
+  // v0.21a: spawn animation timer — drives squash/stretch springiness on portal land.
+  group.userData._spawnT = 0;
+  group.userData._spawnDur = 0.42;
+
+  // v0.21a2: Polished chrome backplate, now OPTIONAL.
+  //
+  // Background: in v0.21a1 the bleed-through was fixed by tagging the portal
+  // group with blocksOutlineDepth. With THAT in place, the door itself
+  // (depthWrite:true) writes correct depth, which means the OutlinePass's
+  // Sobel filter no longer detects bogus depth jumps inside the door. The
+  // chrome backplate's load-bearing job (plugging the depth gap) is now
+  // done by the door directly — the backplate is decorative.
+  //
+  // Default OFF for v0.21a2 to validate the simpler architecture. If outlines
+  // look wrong around the door silhouette in any biome — e.g. the door's
+  // own edges read funny against grass — flip _PORTAL_USE_BACKPLATE to true
+  // to restore the chrome wrap. The visual feel is otherwise identical;
+  // gameplay-affecting code is unchanged.
+  const _PORTAL_USE_BACKPLATE = false;
+  if (_PORTAL_USE_BACKPLATE) {
+    const backW = _PORTAL_DOOR_W * 1.18;
+    const backH = _PORTAL_DOOR_H * 1.10;
+    const backGeo = new THREE.PlaneGeometry(backW, backH);
+    const backMat = new THREE.MeshStandardMaterial({
+      color: 0xdcdee2, metalness: 1.0, roughness: 0.18,
+      emissive: 0x222428, emissiveIntensity: 0.3,
+      side: THREE.DoubleSide,
+    });
+    const back = new THREE.Mesh(backGeo, backMat);
+    back.position.y = _PORTAL_HALFH;
+    back.position.z = -0.04; // sit just behind the door plane
+    back.userData.blocksOutlineDepth = true;
+    back.userData.noOutline = true;
+    back.userData._isPortalBackplate = true;
+    group.add(back);
+  }
 
   // v0.20y: RTT sized to match screen aspect (Option A — full Portal-style
   // window). The door material is a custom ShaderMaterial that samples
@@ -21680,7 +22651,20 @@ function _buildPortal(role, x, z, facing) {
   // exactly what would be visible at that pixel if the door were a
   // physical window into the partner's space.
   const rtSize = _computePortalRttSize();
+  // v0.21a2: TWO render targets per portal for ping-pong outline application.
+  //   rt   — receives the raw scene render (color, no outlines)
+  //   rtB  — receives the outline-composited result that the door samples
+  // The door material's tPortal pointer is swapped to rtB after each render.
+  // We keep both because OutlinePass reads from one buffer and writes to
+  // another; trying to use a single buffer for both would sample undefined.
   const rt = new THREE.WebGLRenderTarget(rtSize.w, rtSize.h, {
+    minFilter: THREE.LinearFilter,
+    magFilter: THREE.LinearFilter,
+    format: THREE.RGBAFormat,
+    depthBuffer: true,
+    stencilBuffer: false,
+  });
+  const rtB = new THREE.WebGLRenderTarget(rtSize.w, rtSize.h, {
     minFilter: THREE.LinearFilter,
     magFilter: THREE.LinearFilter,
     format: THREE.RGBAFormat,
@@ -21696,7 +22680,10 @@ function _buildPortal(role, x, z, facing) {
   const doorGeo = new THREE.PlaneGeometry(_PORTAL_DOOR_W, _PORTAL_DOOR_H);
   const doorMat = new THREE.ShaderMaterial({
     uniforms: {
-      tPortal: { value: rt.texture },
+      // v0.21a2: door samples rtB by default — that's the outlined output.
+      // Until the first portal-render runs, rtB is blank → door reads black,
+      // which is fine for one-frame; it gets overwritten next tick.
+      tPortal: { value: rtB.texture },
     },
     vertexShader: `
       varying vec4 vScreenPos;
@@ -21778,9 +22765,52 @@ function _buildPortal(role, x, z, facing) {
   return {
     role, x, z, facing,
     group, doorMesh: door, doorMat,
-    renderTarget: rt, camera: cam,
+    renderTarget: rt, renderTargetB: rtB, camera: cam,
     openedAt: performance.now(),
   };
+}
+
+// v0.21a: Per-frame spring/squash animation for newly-spawned portals.
+// Both the entry portal (placed by player tap) and the exit portal (lands
+// where the grenade lobs to) play this when their .group is created.
+// Easing: overshoot then settle — a quick squash on land followed by a
+// slight bulge, then settling to 1.0. Targets group.scale.
+function tickPortalSpawnAnims(dt) {
+  const _animatePortal = (portal) => {
+    if(!portal || !portal.group) return;
+    const ud = portal.group.userData;
+    if(!ud || ud._spawnDur == null) return;
+    if(ud._spawnT >= ud._spawnDur) {
+      // Already done — make sure scale is settled at 1.
+      if(portal.group.scale.x !== 1) portal.group.scale.set(1,1,1);
+      return;
+    }
+    ud._spawnT = Math.min(ud._spawnDur, ud._spawnT + dt);
+    const t = ud._spawnT / ud._spawnDur;
+    // Squash & stretch curve: starts as wide-flat (Y=0.2, X=1.4), bulges
+    // through (Y=1.15, X=0.9) at midpoint, settles to (1,1) at t=1.
+    // Bezier-style ease so the overshoot feels springy.
+    let sx, sy;
+    if(t < 0.45) {
+      // Squash phase — flat against ground, wide (door slamming up).
+      const u = t / 0.45;
+      sy = 0.20 + (1.15 - 0.20) * u;
+      sx = 1.40 + (0.90 - 1.40) * u;
+    } else {
+      // Settle phase — overshoot ringdown to (1,1).
+      const u = (t - 0.45) / 0.55;
+      // Damped sine ringdown
+      const ring = Math.cos(u * Math.PI * 1.6) * (1 - u);
+      sy = 1.0 + 0.15 * ring;
+      sx = 1.0 - 0.10 * ring;
+    }
+    portal.group.scale.set(sx, sy, sx);
+    // Reset to identity at completion so the door doesn't sit at sub-pixel
+    // off-1.0 forever from accumulated float.
+    if(ud._spawnT >= ud._spawnDur) portal.group.scale.set(1,1,1);
+  };
+  _animatePortal(G._portalEntry);
+  _animatePortal(G._portalExit);
 }
 
 // Particle burst for portal-open. Standalone (doesn't hook into hit FX).
@@ -22094,9 +23124,69 @@ function tickPortalRTT() {
   partner.group.visible = false;
   const prevTarget = renderer.getRenderTarget();
   try {
+    // Pass A: scene → portal RT (color, no outlines yet)
     renderer.setRenderTarget(updateMe.renderTarget);
     renderer.clear();
     renderer.render(scene, cam);
+
+    // v0.21a2: Pass B — apply outlines to the portal view by running our
+    // OutlinePass with the portal camera, reading from rt and writing to
+    // rtB. The door material's tPortal points at rtB, so the outlined
+    // result is what the player sees through the door. This makes the
+    // destination world look visually consistent with the rest of the
+    // game (every other surface gets toon outlines; without this pass,
+    // through-portal views looked uncannily flat by comparison).
+    //
+    // The portal groups stay hidden through this pass too — the OutlinePass
+    // does its own depth render, and we don't want the door's plane writing
+    // depth into that buffer (it'd false-trigger the Sobel filter at the
+    // door silhouette). Reusing the main outlinePass instance is safe — we
+    // swap its camera to `cam` for the portal call, then restore. Same scene
+    // reference is fine; OutlinePass doesn't mutate scene state.
+    if (typeof outlinePass !== 'undefined' && outlinePass && updateMe.renderTargetB) {
+      const _origCam = outlinePass.camera;
+      outlinePass.camera = cam;
+      // The portal RTs may be a different size than the main outline depth
+      // RT. setSize keeps the depth buffer aligned with the read/write
+      // targets, so Sobel sample offsets are pixel-correct.
+      const _rtw = updateMe.renderTarget.width;
+      const _rth = updateMe.renderTarget.height;
+      const _origResX = outlinePass.resolution.x;
+      const _origResY = outlinePass.resolution.y;
+      if (typeof outlinePass.setSize === 'function' &&
+          (_origResX !== _rtw || _origResY !== _rth)) {
+        outlinePass.setSize(_rtw, _rth);
+      }
+      try {
+        outlinePass.render(renderer, updateMe.renderTargetB, updateMe.renderTarget);
+      } catch (e) {
+        // If anything blows up, fall back to the un-outlined render.
+        // The door material will continue to read from rtB (now empty
+        // for this frame) — we re-point at rt so this frame still draws.
+        if (updateMe.doorMat && updateMe.doorMat.uniforms && updateMe.doorMat.uniforms.tPortal) {
+          updateMe.doorMat.uniforms.tPortal.value = updateMe.renderTarget.texture;
+        }
+        console.warn('[portal] outline pass failed, falling back to plain RT', e);
+      } finally {
+        outlinePass.camera = _origCam;
+        // Restore main-screen resolution so the next main-pass call reads
+        // its depth at the correct size.
+        if (typeof outlinePass.setSize === 'function' &&
+            (_origResX !== _rtw || _origResY !== _rth)) {
+          outlinePass.setSize(_origResX, _origResY);
+        }
+      }
+      // Point the door at the freshly outlined buffer.
+      if (updateMe.doorMat && updateMe.doorMat.uniforms && updateMe.doorMat.uniforms.tPortal) {
+        updateMe.doorMat.uniforms.tPortal.value = updateMe.renderTargetB.texture;
+      }
+    } else {
+      // No outlinePass available (e.g. composer init order race) — door
+      // continues sampling rt directly. Keeps gameplay visible.
+      if (updateMe.doorMat && updateMe.doorMat.uniforms && updateMe.doorMat.uniforms.tPortal) {
+        updateMe.doorMat.uniforms.tPortal.value = updateMe.renderTarget.texture;
+      }
+    }
   } finally {
     renderer.setRenderTarget(prevTarget);
     updateMe.group.visible = true;
@@ -22250,7 +23340,8 @@ function _throwExitPortalGrenade(power, dir) {
   if(_dir.length() < 0.01) _dir.set(-Math.sin(G.camTheta), 0, -Math.cos(G.camTheta));
   _dir.normalize();
   // 4-36m wide power range so Portal Grenade can cover long fairways.
-  const lobDist = 4 + _power * 32;
+  // v0.21a: Strengthen Swing extends portal throw too — match preview math.
+  const lobDist = (4 + _power * 32) * (G.swingMult || 1.0);
   const lobTime = 0.8;
   const startPos = G.ballPos.clone();
   startPos.y += 0.3;
@@ -22517,7 +23608,10 @@ function rebuildGrenadePreview() {
   // door color. Keeps regular grenade math untouched for everything else.
   const isPortal = !!G._portalThrowMode;
   const power = Math.max(0.1, Math.min(1.0, G._grenadePower || 0.5));
-  const lobDist = isPortal ? (4 + power * 32) : (4 + power * 16);
+  // v0.21a: Strengthen Swing extends throwables (grenade/HHG/portal) range.
+  // Aligns with existing swingMult behavior on regular shots and arc preview.
+  const _swMul = G.swingMult || 1.0;
+  const lobDist = (isPortal ? (4 + power * 32) : (4 + power * 16)) * _swMul;
   const lobTime = 0.8;
   const dir = G.shotDir.clone().normalize();
   const startX = G.ballPos.x, startZ = G.ballPos.z, startY = G.ballPos.y + 0.3;
@@ -22603,7 +23697,8 @@ function throwGrenadeAt(power, dir, opts) {
   // v0.20i: bumped 2× → 3× per Adam — HHG should feel meaningfully bigger
   // than a regular grenade so it earns its legendary slot.
   const BLAST_R = BALL_R * 8 * 2 * getBoomScale() * (isHoly ? 3.0 : 1.0); // 8 ball lengths, 3× for HHG
-  const lobDist = 4 + _power * 16; // v0.20d: 4-20m driven by player power (was random 12-18)
+  // v0.21a: throwables (grenade/HHG) extend with Strengthen Swing — match preview math.
+  const lobDist = (4 + _power * 16) * (G.swingMult || 1.0); // v0.20d range × swing buff
   const lobTime = 0.8;
   const startPos = G.ballPos.clone();
   startPos.y += 0.3;
@@ -22703,6 +23798,19 @@ function throwGrenadeAt(power, dir, opts) {
       const GRENADE_R = 0.2;
       const G_WALL_THICK = (G.biome === 'puttputt' ? 0.25 : 0.32) + GRENADE_R;
       const GRENADE_FLY_OVER = gy > 1.4;
+      // v0.21a: Hunter stagger — grenades (and HHG, which shares this code
+      // path) bounce off the Hunter and stagger it. Skip while flying over
+      // walls — keeps high arcs from clipping the Hunter mid-flight when
+      // the design intent is "land near it, then go boom".
+      if(!GRENADE_FLY_OVER) {
+        const _b = { vx: gvx, vz: gvz };
+        if(tryProjectileStaggerHunter(gx, gz, gvx, gvz, GRENADE_R, _b)) {
+          gvx = _b.vx; gvz = _b.vz;
+          // Tiny pop-up so the grenade visibly bounces off rather than
+          // sliding along the Hunter's contact surface
+          gvy = Math.max(gvy, 4.0);
+        }
+      }
       if(!GRENADE_FLY_OVER) for(const poly of G.wallPolylines) {
         for(let wi=0; wi<poly.length-1; wi++) {
           const wax=poly[wi].x, waz=poly[wi].z, wbx=poly[wi+1].x, wbz=poly[wi+1].z;
@@ -23073,6 +24181,10 @@ function activateBoulder() {
 
     // Check for obstacles in path — use a sweep radius
     const bx = boulderMesh.position.x, bz = boulderMesh.position.z, by = boulderMesh.position.y;
+    // v0.21a: Hunter stagger — boulder plows through, doesn't bounce (no
+    // bounce arg). Use BOULDER_R as collision radius for a clean stagger
+    // when the rolling rock makes contact.
+    tryProjectileStaggerHunter(bx, bz, dir.x * BOULDER_SPEED, dir.z * BOULDER_SPEED, BOULDER_R, null);
     const hits = collectObstaclesInRadius(bx, bz, BOULDER_R + 1.0);
     const newHits = hits.filter(h => !hitSet.has(h.physRef));
     if(newHits.length > 0) {
@@ -23134,9 +24246,11 @@ window.activateBoulder = activateBoulder;
 // the per-stroke ramp-up). Base 3.0 → 1.8, per-stroke 0.69 → 0.41,
 // max 7.5 → 4.5. Stagger duration also bumped (see HUNTER_STAGGER_T).
 const HUNTER_R = 1.10;          // physical radius (was 0.55) — 2× the ball
-const HUNTER_BASE_SPEED = 1.8;  // u/s — v0.20t2: was 3.0, −40%
-const HUNTER_SPEED_PER_STROKE = 0.41; // v0.20t2: was 0.69, −40%
-const HUNTER_MAX_SPEED = 4.5;   // v0.20t2: was 7.5, −40%
+// v0.21a: −20% across all Hunter speeds for more reactive counter-play.
+// Was 1.8/0.41/4.5; now 1.44/0.328/3.6.
+const HUNTER_BASE_SPEED = 1.44;  // u/s — v0.21a: was 1.8, −20%
+const HUNTER_SPEED_PER_STROKE = 0.328; // v0.21a: was 0.41, −20%
+const HUNTER_MAX_SPEED = 3.6;   // v0.21a: was 4.5, −20%
 const HUNTER_DAMAGE_COOLDOWN = 1.0; // seconds between damage ticks
 const HUNTER_KNOCKBACK_SPEED = 14.0; // ball impulse magnitude on hit
 
@@ -23295,6 +24409,36 @@ function updateHunter(dt) {
   // Iris glows angry-bright when active
   if(h.iris && h.iris.material) {
     h.iris.material.emissiveIntensity = 1.4;
+  }
+
+  // v0.21a: Jaws-style ominous proximity rumble. Schedules a sub-bass pulse
+  // on a per-Hunter timer that re-arms based on ball-to-Hunter distance:
+  //   FAR (>= 30 ball-lengths) → 2.0s between pulses (the slow Jaws tell)
+  //   CLOSE (touching)         → 0.35s between pulses (panic state)
+  // Linear interpolation between. Pauses during stagger (returned above) and
+  // freeze-frame (returned at top), so the player gets sonic breathing room
+  // when they successfully counter-hit. Volume also scales lightly inversely
+  // with distance so close pulses feel a bit louder than far ones.
+  if(typeof h._rumbleNextT !== 'number') h._rumbleNextT = 0;
+  h._rumbleNextT -= dt;
+  if(h._rumbleNextT <= 0 && AC) {
+    const _rumD = Math.hypot(G.ballPos.x - h.pos.x, G.ballPos.z - h.pos.z);
+    const _rumFar = (BALL_R * 2) * 30; // same threshold as the speed ramp
+    const _rumF = Math.min(1, Math.max(0, _rumD / _rumFar)); // 0 close, 1 far
+    h._rumbleNextT = 0.35 + (2.0 - 0.35) * _rumF;
+    try {
+      const ac = getAC(), t = ac.currentTime;
+      const o = ac.createOscillator(); o.type = 'sine';
+      o.frequency.setValueAtTime(45, t);
+      o.frequency.exponentialRampToValueAtTime(28, t + 0.18);
+      const g = ac.createGain();
+      const peakVol = 0.16 * (1 - _rumF * 0.5); // close = 0.16, far = 0.08
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(peakVol, t + 0.04);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+      o.connect(g); g.connect(getACDest());
+      o.start(t); o.stop(t + 0.24);
+    } catch(e) {}
   }
 
   // v0.20t3: Distance-based speed ramp. When the Hunter is FAR from the
@@ -23459,6 +24603,75 @@ function updateHunter(dt) {
 }
 window.spawnHunter = spawnHunter;
 window.updateHunter = updateHunter;
+
+// v0.21a: Shared helper — any projectile (missile, dodgeball, grenade, HHG,
+// boulder) can stagger the Hunter on contact. Mirrors the BALL counter-play
+// in updateHunter (knockback + immobilization + reflect-style ricochet for the
+// projectile itself), but with bigger numbers because per spec, projectile
+// hits should bounce the Hunter back "considerably" — more reliable than the
+// ball case which depends on >COUNTERPLAY_SPEED.
+//
+// Returns true if the projectile staggered the Hunter (so callers that bounce
+// can decide to redirect their projectile / kill it / continue). Returns false
+// if no Hunter is active or out of range.
+//
+// Args:
+//   px, pz       — projectile XZ position
+//   vx, vz       — projectile XZ velocity (used for knockback direction)
+//   projR        — projectile collision radius (default 0.25)
+//   bounce       — if truthy, mutates the velocity object to reflect off the
+//                  Hunter. Pass `null` for projectiles that just despawn (e.g.
+//                  missiles already explode on impact, so no reflection needed).
+function tryProjectileStaggerHunter(px, pz, vx, vz, projR, bounce) {
+  const h = G._hunter;
+  if(!G._hunterActive || !h || !h.mesh) return false;
+  if(G.inHole) return false;
+  if(h.immobileT > 0) return false; // already staggered, no double-tap
+  const _projR = (typeof projR === 'number') ? projR : 0.25;
+  const dx = px - h.pos.x, dz = pz - h.pos.z;
+  const dist = Math.hypot(dx, dz);
+  if(dist >= (HUNTER_R + _projR + 0.05)) return false;
+  // ── Stagger! ──
+  // Knock direction = projectile travel direction (or radial if it's stationary).
+  const vMag = Math.hypot(vx || 0, vz || 0);
+  let knockDx, knockDz;
+  if(vMag > 0.01) { knockDx = vx / vMag; knockDz = vz / vMag; }
+  else            { const d = dist || 0.0001; knockDx = -dx / d; knockDz = -dz / d; }
+  const KNOCK_DIST = 6.0;  // bigger than ball's 4.0 — projectiles hit hard
+  h.pos.x += knockDx * KNOCK_DIST;
+  h.pos.z += knockDz * KNOCK_DIST;
+  h.vel.x = 0; h.vel.z = 0;
+  h.immobileT = 8.0; // matches ball counter-play immob duration
+  // Optional: bounce the projectile off the Hunter. Used by dodgeballs/grenades;
+  // missiles/boulders ignore this (they explode/destroy on impact).
+  if(bounce && typeof bounce === 'object' && 'vx' in bounce && 'vz' in bounce) {
+    const nx2 = -knockDx, nz2 = -knockDz; // contact normal points back into Hunter
+    const vDotN = (bounce.vx || 0) * nx2 + (bounce.vz || 0) * nz2;
+    bounce.vx = ((bounce.vx || 0) - 2 * vDotN * nx2) * 0.9;
+    bounce.vz = ((bounce.vz || 0) - 2 * vDotN * nz2) * 0.9;
+  }
+  // Juice: same package as ball counter-play
+  if(typeof showToast === 'function') showToast('💥 HUNTER STAGGERED!', 1500);
+  if(typeof triggerShake === 'function') triggerShake('heavy');
+  if(typeof spawnHitParticles === 'function') spawnHitParticles(h.pos);
+  if(AC) {
+    try {
+      const ac = getAC(), t = ac.currentTime;
+      const o = ac.createOscillator(); o.type = 'square';
+      o.frequency.setValueAtTime(900, t);
+      o.frequency.exponentialRampToValueAtTime(220, t + 0.25);
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(0.18, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.30);
+      o.connect(g); g.connect(getACDest());
+      o.start(t); o.stop(t + 0.32);
+    } catch(e) {}
+  }
+  return true;
+}
+window.tryProjectileStaggerHunter = tryProjectileStaggerHunter;
+
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Lap Mode runtime — v0.20r
@@ -25238,8 +26451,15 @@ function fireShot() {
   // Iron Ball, Catapult, etc.) stayed in their slots lifted + glowing while
   // the player aimed; now that the swing is firing, retire them to discard
   // so the slots free up for the next shot.
+  // v0.21a3: Sticky redesign — defer sticky card drain across the initial
+  // wall-hit swing so the player can re-tap it to unstick. The drain happens
+  // on the FREE swing instead (when _stickyFreeSwing is set). This keeps
+  // the card visible + tappable in its slot while the ball is stuck.
   if(Array.isArray(G._armedCards) && G._armedCards.length) {
+    const _stickyKeep = !!(G._stickyCardActive && !G._stickyFreeSwing);
     for(const a of G._armedCards) {
+      // Skip sticky on the initial swing — don't drain yet.
+      if(_stickyKeep && a.cardId === 'sticky') continue;
       // Remove from hand by instanceId; push card id to discard
       const hi = G.hand.findIndex(c => c.instanceId === a.instanceId);
       if(hi !== -1) {
@@ -25254,7 +26474,8 @@ function fireShot() {
         }
       }
     }
-    G._armedCards = [];
+    // v0.21a3: filter out drained entries; preserve sticky if kept.
+    G._armedCards = G._armedCards.filter(a => _stickyKeep && a.cardId === 'sticky');
   }
   // v0.20a: Speedball timer starts on FIRST swing of a hole. From then on it
   // runs through planning/aiming/OOB — no pausing. Reset to 60s in initHole.
@@ -25426,6 +26647,13 @@ function fireShot() {
   }
   fadeChallengDesc(); // hide challenge description after first swing
   G._swingCoinCount = 0; // reset Balatro coin pitch counter
+  // v0.21a: Ghost toggle — if ghost is active when a shot fires, the card
+  // counts as "used"; toggling it off later (or its 4s timer expiring)
+  // discards the card rather than refunding. Refund is reserved for
+  // pre-swing cancel only.
+  if(G.ghostBallActive && G._ghostCardInstanceId != null) {
+    G._ghostCardWasUsed = true;
+  }
   // Hide DoN wager button once play begins
   const donBtnFS = document.getElementById('hs-don-btn');
   if(donBtnFS) donBtnFS.style.display = 'none';
@@ -25442,8 +26670,31 @@ function fireShot() {
   }
   G.jumpsLeft = G.jumpsMax || 0;
   // Ghost ball is now manually activated via ability button, not auto-fired
-  G.strokes++;
-  G._holeSwingCount = (G._holeSwingCount||0) + 1;
+  // v0.21a3: Sticky free-swing — when the player fires from a stuck state,
+  // this swing does NOT count as a stroke (the ORIGINAL swing into the wall
+  // already counted). Clear all sticky state on the way out so the ball
+  // detaches naturally from spinners/slide-blocks and subsequent shots
+  // count strokes as usual.
+  const _stickyFreeSwing = !!G._stickyFreeSwing;
+  if(_stickyFreeSwing) {
+    G._stickyFreeSwing = false;
+    G._stickyAttached = null;
+    // Don't increment strokes — that's the whole point of the free re-aim.
+    if(typeof clearStickyState === 'function') {
+      // Don't fully clearStickyState — that resets the green tint we still
+      // want on the ball as it flies. The triggered flag stays so a SECOND
+      // contact this swing doesn't re-stick. Just nuke attachment + free
+      // flag (already done above) and clear the squash visual.
+      G._stickyCardSquash = null;
+      if(G.ball) G.ball.scale.set(1, 1, 1);
+    }
+    G._holeSwingCount = (G._holeSwingCount||0) + 1;
+    // Toast so the player understands what just happened
+    showToast('🎯 Free swing fired — no stroke!', 1300);
+  } else {
+    G.strokes++;
+    G._holeSwingCount = (G._holeSwingCount||0) + 1;
+  }
   // v0.20t: Reset triggered flag on course-placed (oscillating) speed hoops
   // so each stroke can use them again. Perk-spawned hoops stay one-shot per
   // hole (their behavior is unchanged).
@@ -25471,6 +26722,10 @@ function fireShot() {
   if(G.aimArrow){ scene.remove(G.aimArrow); G.aimArrow=null; }
   if(G._anglerLine){ scene.remove(G._anglerLine); G._anglerLine=null; }
   if(G._anglerDots){ scene.remove(G._anglerDots); G._anglerDots=null; }
+  if(G._aimPortalLine){ scene.remove(G._aimPortalLine); G._aimPortalLine=null; }
+  if(G._aimPortalDots){ scene.remove(G._aimPortalDots); G._aimPortalDots=null; }
+  if(G._aimArcContinuation){ scene.remove(G._aimArcContinuation); G._aimArcContinuation=null; }
+  if(G._aimArcCone){ scene.remove(G._aimArcCone); G._aimArcCone=null; }
   if(G._aimSideBalls){ G._aimSideBalls.forEach(sb=>{scene.remove(sb.mesh);if(sb.arrowGroup)scene.remove(sb.arrowGroup);}); G._aimSideBalls=null; }
   updateUI();
   updateHint('');
@@ -26755,6 +28010,11 @@ function computeSoloAwards() {
 }
 
 function showGameOver(bustedBudget=false){
+  // v0.21a: snapshot endless state BEFORE clearing it below — we need to render
+  // a "⭐ Bonus Holes" section in the run summary if any post-game holes were
+  // played. The scorecard's last N entries are the bonus holes (one entry
+  // pushed per hole completion, including endless ones).
+  const _endlessHolesPlayedSnapshot = (G._endlessHolesPlayed | 0);
   // v0.20j: clear elite UI state so game-over screen doesn't show stale pip / commit timer
   if(typeof hideEliteStakesPip === 'function') hideEliteStakesPip();
   if(G._eliteCommitInterval) { clearInterval(G._eliteCommitInterval); G._eliteCommitInterval = null; }
@@ -26764,10 +28024,17 @@ function showGameOver(bustedBudget=false){
   if(_eliteCommit) _eliteCommit.classList.remove('visible');
   G._activeElite = null;
   G._eliteOffer = null;
+  // v0.21a: Endless post-game mode — clear so next run starts with a clean
+  // bounded run again.
+  G._endlessMode = false;
+  G._endlessHolesPlayed = 0;
+  G._endlessTierWhitelist = null;
   // v0.20q: Restore TILE_SIZE in case a Giant Hole was active when the
   // run ended. Otherwise the menu camera + next run's first hole inherit
   // the bumped scale until the next initHole() sets it explicitly.
   TILE_SIZE = TILE_SIZE_BASE;
+  // v0.21a5: clear per-hole scale state so menu/next run start clean
+  G._holeScale = 1.0;
   // v0.20r: Lap Mode HUD + state cleanup
   G._lapModeActive = false;
   G._lapModeCfg = null;
@@ -26851,6 +28118,33 @@ function showGameOver(bustedBudget=false){
       <div class="cp-xp" id="go-cp-xp">0 / 0 XP</div>
     </div>`;
 
+  // v0.21a: Bonus Holes section — populated only if endless holes were played.
+  // The last _endlessHolesPlayedSnapshot entries of G.scorecard are the bonus
+  // holes; render each as a one-line score row. Built defensively in case the
+  // scorecard length is somehow shorter than the snapshot count.
+  let bonusHolesBlock = '';
+  if(_endlessHolesPlayedSnapshot > 0 && G.scorecard && G.scorecard.length > 0) {
+    const startIdx = Math.max(0, G.scorecard.length - _endlessHolesPlayedSnapshot);
+    const bonusEntries = G.scorecard.slice(startIdx);
+    if(bonusEntries.length > 0) {
+      const rows = bonusEntries.map((s, i) => {
+        const bDiff = (s.strokes | 0) - (s.par | 0);
+        const bDiffStr = bDiff === 0 ? 'Even' : (bDiff < 0 ? `${bDiff}` : `+${bDiff}`);
+        const bDiffColor = bDiff < 0 ? '#7ee87e' : bDiff === 0 ? '#ffd750' : '#ff8866';
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 12px;border-radius:8px;background:rgba(255,200,90,0.06);font-size:0.78rem;color:rgba(255,255,255,0.92);margin:3px 0">
+          <span>Bonus Hole ${i + 1}</span>
+          <span style="color:rgba(255,255,255,0.55);font-size:0.7rem">${s.strokes} strokes · Par ${s.par}</span>
+          <span style="color:${bDiffColor};font-weight:700;min-width:42px;text-align:right">${bDiffStr}</span>
+        </div>`;
+      }).join('');
+      bonusHolesBlock = `
+        <div style="margin:14px auto 8px;max-width:340px;padding:10px 8px 12px;border-radius:14px;background:linear-gradient(165deg, rgba(255,180,40,0.12), rgba(120,40,30,0.10));border:1px solid rgba(255,200,90,0.35)">
+          <div style="font-size:0.7rem;letter-spacing:3px;color:rgba(255,220,140,0.95);text-transform:uppercase;text-align:center;margin-bottom:6px;font-weight:700">⭐ Bonus Holes</div>
+          ${rows}
+        </div>`;
+    }
+  }
+
   const ov=document.getElementById('overlay');
   if(bustedBudget) {
     ov.innerHTML=`
@@ -26862,6 +28156,7 @@ function showGameOver(bustedBudget=false){
       ${xpLine}
       ${cosmoProgressBlock}
       ${styleLine}${soloAwards}${coinsLine}${seedLine}
+      ${bonusHolesBlock}
       <button class="play-btn" onclick="startGame()">Try Again</button>
       <button class="play-btn" onclick="escMainMenu()" style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,0.4);margin-top:-8px;font-size:0.9rem;padding:12px 36px">🏠 Main Menu</button>
       <div class="section-label">Leaderboard</div>
@@ -26875,6 +28170,7 @@ function showGameOver(bustedBudget=false){
       ${xpLine}
       ${cosmoProgressBlock}
       ${styleLine}${soloAwards}${coinsLine}${seedLine}
+      ${bonusHolesBlock}
       <button class="play-btn" onclick="startGame()">Play Again</button>
       <button class="play-btn" onclick="escMainMenu()" style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,0.4);margin-top:-8px;font-size:0.9rem;padding:12px 36px">🏠 Main Menu</button>
       <div class="section-label">Leaderboard</div>
@@ -27382,15 +28678,37 @@ window.importSaveFile = importSaveFile;
 
 // ── Game flow ─────────────────────────────────────────
 function initHole() {
-  // v0.20q: Giant Hole elite — bump TILE_SIZE to 4× normal so the entire
-  // generated world is 4× bigger. Ball physics, ball size, gravity, friction
+  // v0.20q: Giant Hole elite — bump TILE_SIZE to 2× normal so the entire
+  // generated world is 2× bigger. Ball physics, ball size, gravity, friction
   // are all unchanged — the course just stretches out. Restored at hole-end.
   // MUST run before generatePuttPuttCourse so the generator emits scaled
   // world-coords from the start.
+  // v0.21a5: For NON-elite holes after hole 1, roll a random 1.0–1.3× world
+  // scale to add variety. Biased toward 1.0× via pow(rng, 1.5) so most holes
+  // feel "normal" and bigger ones are a noticeable change of pace. Hole 1 is
+  // always 1.0× to establish baseline. Giant Hole takes precedence (still 2×).
+  // Stored on G._holeScale for telemetry + downstream par adjustment.
   if(G._activeElite && G._activeElite.archetype.flag === 'eliteGiantHole') {
     TILE_SIZE = TILE_SIZE_BASE * 2.0;
-  } else {
+    G._holeScale = 2.0;
+  } else if(G._activeElite) {
+    // Other elites: keep base scale so elite difficulty isn't compounded
+    // by random scale variance (e.g. No Walls × 1.3× would be brutal).
     TILE_SIZE = TILE_SIZE_BASE;
+    G._holeScale = 1.0;
+  } else if((G.hole || 0) === 0) {
+    // First hole of the run: always 1.0× so the player learns the baseline
+    // before scale variance kicks in.
+    TILE_SIZE = TILE_SIZE_BASE;
+    G._holeScale = 1.0;
+  } else {
+    // Random 1.0–1.3× with bias toward 1.0×.
+    // pow(rng, 1.5) skews most rolls toward 0, so most holes are near 1.0×
+    // and ~1.3× rolls are rare but meaningful.
+    const r = Math.pow(Math.random(), 1.5);
+    const scale = 1.0 + r * 0.3;
+    G._holeScale = scale;
+    TILE_SIZE = TILE_SIZE_BASE * scale;
   }
   // ── Per-hole perk state reset ───────────────────────
   G._slowMoUsedThisHole = false;
@@ -27463,13 +28781,16 @@ function initHole() {
     data = generatePuttPuttCourse(G.hole);
   }
 
-  // v0.20r: Giant Hole — scale obstacle sizes (visual + physics) by 4×.
-  // Positions are already 4× via TILE_SIZE; radii aren't, so a course of
-  // tiny obstacles spaced super far apart felt empty. Scaling radii here
-  // before buildCourse runs means both visual meshes AND physics use the
-  // bumped values without touching any of the construction sites.
-  if(data.eliteGiantHole) {
-    const S = TILE_SIZE / TILE_SIZE_BASE; // 2× when Giant Hole active
+  // v0.20r: Giant Hole — scale obstacle sizes (visual + physics) by 2×.
+  // v0.21a5: Generalized to ANY non-1.0 scale (Giant Hole 2.0× OR random
+  // 1.0–1.3× per-hole variation). Positions are already scaled via TILE_SIZE;
+  // radii aren't, so a course of tiny obstacles spaced super far apart felt
+  // empty. Scaling radii here before buildCourse runs means both visual meshes
+  // AND physics use the bumped values without touching any of the construction
+  // sites.
+  const _scaleS = TILE_SIZE / TILE_SIZE_BASE;
+  if(_scaleS !== 1.0) {
+    const S = _scaleS;
     // Bumpers carry `radius` (used for both mesh geo + collision)
     if(data.bumperData) for(const b of data.bumperData) b.radius *= S;
     // Rocks carry `radius` (collision + visual sphere)
@@ -27504,12 +28825,22 @@ function initHole() {
       if(p.height    != null) p.height    *= S;
       if(p.width     != null) p.width     *= S;
     }
-    // Angled walls: triangle extent + 2× bounce on Giant Hole (v0.20t)
+    // Angled walls: triangle extent only (the bounce buff is Giant-Hole only)
     if(data.angledWallData) for(const a of data.angledWallData) {
       if(a.size != null) a.size *= S;
       // ax/az/bx/bz/wx/wz are already in world coords (auto-scaled via TILE_SIZE)
-      // Bounce buff: every corner triangle on a Giant Hole hits 2× harder so
-      // the player can use them to cover the bigger course distances faster.
+    }
+    // Coins + hearts: pickup mesh size scaled at build time via worldScale
+    // (read from TILE_SIZE in buildCourse, see the coin/heart blocks).
+  }
+  // v0.20t: Giant-Hole-only enhancements — angled wall bounce buff + spline
+  // speed hoops. These are NOT applied for random 1.0–1.3× scaling because
+  // they're flavor-specific to the elite (the player chose Giant Hole and
+  // expects help traversing the bigger course).
+  if(data.eliteGiantHole) {
+    // Angled walls: 2× bounce on Giant Hole so corner triangles can carry the
+    // ball further across the bigger course.
+    if(data.angledWallData) for(const a of data.angledWallData) {
       a.bounceMul = (a.bounceMul || 1.0) * 2.0;
     }
     // v0.20t: Giant Hole speed hoops — sprinkle 2-3 oscillating hoops along
@@ -27544,8 +28875,6 @@ function initHole() {
         placed.push({ wx: pt.x, wz: pt.z });
       }
     }
-    // Coins + hearts: pickup mesh size scaled at build time via worldScale
-    // (read from TILE_SIZE in buildCourse, see the coin/heart blocks).
   }
   G.grid = data.grid;
   G.gridW = data.W;
@@ -27567,6 +28896,12 @@ function initHole() {
   if(data.eliteGiantHole)  G.par += 2;
   if(data.eliteBarbedWire) G.par += 2;
   if(data.eliteNoWalls)    G.par += 1;
+  // v0.21a5: random scale par compensation. Shot power is in absolute world
+  // meters (`power * 32`), so a 1.3× course needs ~1.3× more strokes to
+  // traverse. Add +1 par when scale ≥ 1.2 to keep the 1-HP-per-over-par rule
+  // honest. Only applies to non-elite holes (elites already have their own
+  // par adjustments above; G._holeScale is forced to 1.0 for non-Giant elites).
+  if(!G._activeElite && (G._holeScale || 1.0) >= 1.2) G.par += 1;
   // v0.20a1: Speedball timer scales with par — par × 7 seconds per hole.
   // A par-3 = 21s, par-5 = 35s, par-8 = 56s. Resets on every new hole;
   // active flag clears so the timer doesn't tick until the first swing.
@@ -27616,6 +28951,9 @@ function initHole() {
   G.boulderAvail  = G.modifiers.some(m => m.id === 'boulder');
   G.ghostBallAvail = G.modifiers.some(m => m.id === 'ghost_ball');
   G.ghostBallActive = false;
+  // v0.21a: Ghost toggle state — clear card tracking so a new hole starts fresh.
+  G._ghostCardInstanceId = null;
+  G._ghostCardWasUsed = false;
   G.snowballCount = 0;
   G.explosivoArmed = G.modifiers.some(m => m.id === 'explosivo');
   G.explosivoUsed  = false;
@@ -27693,6 +29031,10 @@ function initHole() {
   if(G._aimSideBalls){ G._aimSideBalls.forEach(sb=>{scene.remove(sb.mesh);if(sb.arrowGroup)scene.remove(sb.arrowGroup);}); G._aimSideBalls=null; }
   if(G._anglerLine){ scene.remove(G._anglerLine); G._anglerLine=null; }
   if(G._anglerDots){ scene.remove(G._anglerDots); G._anglerDots=null; }
+  if(G._aimPortalLine){ scene.remove(G._aimPortalLine); G._aimPortalLine=null; }
+  if(G._aimPortalDots){ scene.remove(G._aimPortalDots); G._aimPortalDots=null; }
+  if(G._aimArcContinuation){ scene.remove(G._aimArcContinuation); G._aimArcContinuation=null; }
+  if(G._aimArcCone){ scene.remove(G._aimArcCone); G._aimArcCone=null; }
   aimManualOverride = false;
   // Always reset input state — prevents stuck ballDragging from previous hole
   input.ballDragging = false;
@@ -29295,6 +30637,10 @@ function startGame(){
   G._activeElite = null;
   G._eliteWager = 0;
   G._eliteHistory = [];
+  // v0.21a: Endless post-game mode — reset per run.
+  G._endlessMode = false;
+  G._endlessHolesPlayed = 0;
+  G._endlessTierWhitelist = null;
   G._freeCardVouchers = [];  // v0.20q: cleared per-run; pending elite-card claims
   TILE_SIZE = TILE_SIZE_BASE;  // v0.20q: defensive reset; Giant Hole sets it on hole-init
   // v0.20n: Chasm runtime state — reset alongside other elite state.
@@ -29525,13 +30871,29 @@ function nextHole(){
 
   // v0.20j: Elite fork check — every 3rd hole, offer Safe vs Elite.
   // Skipped in multiplayer for now (interplay with mp turn-order is non-trivial).
+  // v0.20z: the final regular hole of a run is ALWAYS a tier 2/3 elite — no
+  // safe option. The boss fight.
+  // v0.21a: in endless post-game mode, EVERY hole is forced elite, with a
+  // run-controlled tier whitelist (tier 2 first, tier 3+ thereafter).
   const playerFacing = G.hole + 1;
-  const eliteForced = !!G._eliteForceNext;
+  const isFinalRegularHole = (G.hole === G.totalHoles - 1);
+  const isEndless = !!G._endlessMode;
+  const eliteForced = !!G._eliteForceNext || isFinalRegularHole || isEndless;
   G._eliteForceNext = false;
   if(!isMultiplayer() && (eliteForced || shouldShowEliteFork(playerFacing))) {
-    const offer = rollEliteOffer(playerFacing);
+    // Tier whitelist priority:
+    //   1. Endless mode → use G._endlessTierWhitelist (already set by onEndlessContinue)
+    //   2. Final regular hole → tier 2/3
+    //   3. Otherwise → null (rollEliteOffer falls back to natural cadence)
+    const tierWhitelist = isEndless
+      ? (G._endlessTierWhitelist || [3])
+      : (isFinalRegularHole ? [2, 3] : null);
+    const offer = rollEliteOffer(playerFacing, tierWhitelist ? { tierWhitelist } : null);
     if(offer) {
       G._eliteOffer = offer;
+      // v0.20z: Forced-elite holes show the fork in single-card mode (no safe option).
+      // v0.21a: endless holes are also single-card — no opt-out once you've chosen "one more".
+      G._eliteForkForcedNoSafe = !!(isFinalRegularHole || isEndless);
       showEliteFork(playerFacing, offer);
       return; // initHole fires from the fork picker handlers
     }
@@ -29551,7 +30913,18 @@ function showEliteFork(playerFacingHole, offer) {
 
   // Subtitle with hole number
   const sub = document.getElementById('elite-fork-subtitle');
-  if(sub) sub.textContent = `Hole ${playerFacingHole} of ${G.totalHoles} — Take the safe road, or risk it all`;
+  // v0.20z: forced-elite holes (final regular hole) hide the safe card and
+  // rephrase the subtitle. There's only one path forward.
+  const noSafe = !!G._eliteForkForcedNoSafe;
+  const safeCard = document.getElementById('elite-safe-card');
+  if(safeCard) safeCard.style.display = noSafe ? 'none' : '';
+  if(sub) {
+    if(noSafe) {
+      sub.textContent = `Hole ${playerFacingHole} of ${G.totalHoles} — Final hole. There is no safe option.`;
+    } else {
+      sub.textContent = `Hole ${playerFacingHole} of ${G.totalHoles} — Take the safe road, or risk it all`;
+    }
+  }
 
   // Archetype card content
   document.getElementById('elite-arch-emoji').textContent   = archetype.emoji;
@@ -29583,6 +30956,10 @@ function hideEliteFork() {
   if(ov) ov.classList.remove('visible');
   const co = document.getElementById('elite-commit-overlay');
   if(co) co.classList.remove('visible');
+  // v0.21a: restore safe-card visibility for next time (forced-elite holes hide it).
+  const safeCard = document.getElementById('elite-safe-card');
+  if(safeCard) safeCard.style.display = '';
+  G._eliteForkForcedNoSafe = false;
   // Cancel any in-flight commit timer
   if(G._eliteCommitInterval) { clearInterval(G._eliteCommitInterval); G._eliteCommitInterval = null; }
 }
@@ -29719,8 +31096,15 @@ function deliverEliteReward(reward, wager) {
   let emoji = reward.emoji;
   switch(reward.type) {
     case 'coins':
-      G.coins += reward.amount;
-      sub = `+${reward.amount} coins`;
+      // v0.21a: Defer the coin grant to the summary screen so it appears
+      // as its own dramatic earnings row (with the new uncapped pitch ramp,
+      // a +50 elite reward gets its own crescendo). G.coins is updated by
+      // the summary's existing "bonusCoins = earnings.total - alreadyCounted"
+      // path — calcHoleEarnings reads _pendingEliteCoins and pushes a row.
+      G._pendingEliteCoins = (G._pendingEliteCoins || 0) + reward.amount;
+      G._pendingEliteRewardEmoji = reward.emoji || '🌶';
+      G._pendingEliteRewardLabel = reward.label || `+${reward.amount} Elite Bonus`;
+      sub = `+${reward.amount} coins (added to summary)`;
       break;
     case 'restore_hp':
       G.hp = G.hpMax;
@@ -30638,6 +32022,11 @@ function initWebAudioFont() {
 }
 
 function playPianoNote(midi, vol=0.05, delayS=0, sustainMult=1.0) {
+  // v0.21a: Elite-hole music drops an octave for menace. Hooked at the funnel
+  // so it applies to chord stacks, sparse fills, melodic embellishments —
+  // every musical note path. Gameplay SFX are unaffected (they don't route
+  // through here). Skips when no elite is active so regular holes stay bright.
+  if(typeof G !== 'undefined' && G._activeElite) midi -= 12;
   const ac = getAC();
   // Try loading WebAudioFont on first note
   if(!_wafLoading && !_wafReady && typeof WebAudioFontPlayer !== 'undefined') {
@@ -30770,6 +32159,14 @@ function pickMusicMood() {
 function pickKeyForMood(mood) {
   const roots = [48,50,51,53,55,56,58,60];
   const root = roots[Math.floor(Math.random() * roots.length)];
+  // v0.21a: Hunter holes — force pure minor regardless of mood/HP. Tags the
+  // mood as 'tense' so downstream sustain/volume calls in playJazzChord +
+  // playChordPhrase pick the tense settings (shorter, slightly quieter).
+  // Combined with the playPianoNote octave drop, this gives Hunter holes
+  // their distinct "everything is wrong" sonic signature.
+  if(typeof G !== 'undefined' && G._hunterActive) {
+    return { root, scale: SCALE_MINOR, mood: 'tense' };
+  }
   let scale;
   if(mood === 'bright') scale = Math.random() < 0.35 ? SCALE_LYDIAN : SCALE_MAJOR;
   else if(mood === 'chill') scale = Math.random() < 0.5 ? SCALE_MIXO : SCALE_MAJOR;
@@ -30778,6 +32175,13 @@ function pickKeyForMood(mood) {
 }
 
 function pickProgression(mood) {
+  // v0.21a: Hunter holes — force the tense progression pool regardless of
+  // mood arg. PROG_TENSE entries are i9-iv7-VI7 / i7-iv-VII style — every
+  // chord rooted on minor degrees, no resolving V-I cadences. Pairs with
+  // the SCALE_MINOR override above.
+  if(typeof G !== 'undefined' && G._hunterActive) {
+    return PROG_TENSE[Math.floor(Math.random() * PROG_TENSE.length)];
+  }
   const pool = mood === 'bright' ? PROG_BRIGHT : mood === 'chill' ? PROG_CHILL : PROG_TENSE;
   return pool[Math.floor(Math.random() * pool.length)];
 }
@@ -30795,14 +32199,28 @@ function triggerKeyChange(immediate) {
 function checkKeyChange() {
   const holesSinceChange = G.hole - _lastKeyChangeHole;
   const moodNow = pickMusicMood();
+  // v0.21a: If the Hunter just appeared or just left, force a key change so
+  // the SCALE_MINOR / PROG_TENSE override (or its lifting) takes effect on
+  // the very next note rather than waiting 2-4 holes for the natural cadence.
+  // Track Hunter-active state across calls; mismatch → immediate change.
+  const _hunterNow = !!(typeof G !== 'undefined' && G._hunterActive);
+  const _hunterWas = _musicKey && _musicKey._hunter;
+  if(_hunterNow !== !!_hunterWas) {
+    _lastKeyChangeHole = G.hole;
+    triggerKeyChange(true);
+    if(_musicKey) _musicKey._hunter = _hunterNow; // remember for next compare
+    return;
+  }
   if(moodNow !== _musicKey.mood) {
     _lastKeyChangeHole = G.hole;
     triggerKeyChange(true);
+    if(_musicKey) _musicKey._hunter = _hunterNow;
     return;
   }
   if(holesSinceChange >= 2 + Math.floor(Math.random() * 3)) {
     _lastKeyChangeHole = G.hole;
     triggerKeyChange(false);
+    if(_musicKey) _musicKey._hunter = _hunterNow;
   }
 }
 
@@ -32124,6 +33542,14 @@ function animate(now) {
       }
     }
 
+    // v0.21a3: Hoisted from the spin-bar block below — sliding spikes need
+    // these too, and previously they were declared AFTER the spike block,
+    // tripping a Temporal Dead Zone ReferenceError every frame any hole
+    // had a sliding spike. Single declaration, used by every animated
+    // obstacle in this section.
+    const _freezeMult = G._freezeFrameActive ? 0 : 1; // 0 = frozen
+    const _speedMul = G._speedHoleMul || 1; // v0.20u: Speed Hole elite
+
     // ── Spike cooldown timer + slide animation (v0.19r) ────
     if(G.spikes) {
       for(const spike of G.spikes) {
@@ -32132,8 +33558,9 @@ function animate(now) {
         // and the hitbox anchor (wx/wz) so physics collision tracks the
         // moving ball. Frozen by Freeze Frame perk like other obstacles.
         if(spike.slide && !spike._destroyed) {
-          const _freezeMult = G._freezeFrameActive ? 0 : 1;
-          spike.slide.phase += spike.slide.speed * dt * _freezeMult;
+          // v0.21a: sliding spikes now honor Speed Hole elite (parity with
+          // spinners, slide blocks, popup walls, pendulums).
+          spike.slide.phase += spike.slide.speed * dt * _freezeMult * _speedMul;
           const offset = Math.sin(spike.slide.phase) * spike.slide.range;
           const newWx = spike.baseWx + (spike.slide.axis === 'X' ? offset : 0);
           const newWz = spike.baseWz + (spike.slide.axis === 'Z' ? offset : 0);
@@ -32147,8 +33574,6 @@ function animate(now) {
     // ── Spin bar animation ──────────────────────────────
     // Angle is advanced inside updatePhysics substep loop.
     // When not rolling (menu, aiming, holed), advance angle here for visual.
-    const _freezeMult = G._freezeFrameActive ? 0 : 1; // 0 = frozen
-    const _speedMul = G._speedHoleMul || 1; // v0.20u: Speed Hole elite
     if(G.spinBars) {
       for(const bar of G.spinBars) {
         if(!G.rolling) bar.angle += bar.speed * dt * _freezeMult * _speedMul;
@@ -32289,6 +33714,12 @@ function animate(now) {
   // v0.20p: Hunter pursuer — runs after floombas (analogous AI). dt is
   // already slow-mo scaled at the top of animate.
   if(G.state === 'playing') updateHunter(dt);
+  // v0.21a3: Sticky attachment — track ball position on rotating spinners
+  // or sliding blocks while the player aims their free re-shot. No-op for
+  // wall sticks (static) or when not attached.
+  if(G.state === 'playing' && G._stickyAttached && typeof tickStickyAttachment === 'function') {
+    tickStickyAttachment();
+  }
   // v0.20r: Lap Mode tick — checkpoint detection, lap counting, timer,
   // OOB respawn. Only runs when active (gated inside).
   if(G.state === 'playing') updateLapMode(dt);
@@ -32307,6 +33738,10 @@ function animate(now) {
   if(G.state === 'playing') tickPortalPreview();
   updateCamera(dt);
   if(G.state === 'playing') tickPortalRTT();
+  // v0.21a: spring/squash on portal-just-landed (entry door + exit door).
+  // Runs regardless of game state so the bounce completes even if the
+  // player pauses. Skips when portal is null or animation is done.
+  tickPortalSpawnAnims(dt);
   composer.render();
 }
 initComposer();
