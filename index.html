@@ -1557,6 +1557,24 @@ padding:1px 3px; border-radius:4px;
 letter-spacing:0.5px; line-height:1.1;
 font-family:'Lato',sans-serif;
 }
+/* v0.21b — arm-order badge: shown only on armed cards, top-left, indicates
+   the order in which cards were tapped this swing. Cyan glow matches the
+   .card-armed pulse so it reads as part of the armed state. */
+.card-slot .arm-order-badge {
+position:absolute; top:3px; left:3px;
+min-width:14px; height:14px; padding:0 3px;
+font-size:0.62rem; font-weight:800;
+background:linear-gradient(135deg, #2cd8ff, #0099cc);
+color:#001624; border-radius:50%;
+display:flex; align-items:center; justify-content:center;
+box-shadow:0 0 8px rgba(80,220,255,0.85);
+font-family:'Lato',sans-serif;
+line-height:1;
+text-shadow:0 1px 0 rgba(255,255,255,0.4);
+border:1.5px solid rgba(255,255,255,0.7);
+z-index:2;
+pointer-events:none;
+}
 @keyframes card-pulse {
   0%,100% { box-shadow:0 2px 12px rgba(255,180,0,0.4); }
   50% { box-shadow:0 2px 22px rgba(255,120,0,0.8); }
@@ -3364,7 +3382,7 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
   <button class="play-btn" onclick="openAchievements()" style="margin-top:6px;background:rgba(245,200,66,0.18);border:1px solid rgba(245,200,66,0.5);color:#f5c842;font-size:0.85rem;padding:10px 28px">🏆 Achievements</button>
   <button class="play-btn" id="btn-import-save" style="margin-top:6px;background:rgba(120,120,120,0.6);font-size:0.7rem;padding:8px 20px" onclick="importSaveFile()">📂 Import Save</button>
   <input type="file" id="import-save-input" accept=".ggwsave,application/json" style="display:none">
-  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.21a5</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Holes now roll a random 1.0–1.3× scale for layout variety</div></div>
+  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.21c4</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Chain Lightning: fat mesh tubes, screen flash, 9m radius</div></div>
 
   <!-- v0.19j: Inline profile picker — skip the separate slot-picks screen -->
   <div class="section-label" style="margin-top:14px">Save Slot</div>
@@ -3932,8 +3950,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.21a5';
-const CHANGE_NOTE = 'Per-hole random size variation — non-elite, non-first holes now roll a 1.0–1.3× world scale (biased toward 1.0×) for layout variety. Holes scaled ≥1.2× get +1 par to compensate (shot power is in absolute meters, so bigger holes need more strokes). Hole 1 is always 1.0× to establish baseline. Giant Hole elite is unchanged (still 2.0×). Scale logged in scorecard for telemetry analysis.';
+const GAME_VERSION = '0.21c4';
+const CHANGE_NOTE = 'Chain Lightning visibility overhaul: mesh-cylinder tubes (real thickness — THREE.Line was clamping to 1px on most browsers), 3-layer fat bolt geometry, every-frame re-jitter for crackle, big endpoint flares, fullscreen DOM screen-flash on each zap. Radius bumped 5m → 9m for more generous chaining. Punchier SFX (louder + longer).';
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
@@ -11839,6 +11857,13 @@ function traceMultiBounce(startX, startZ, dirX, dirZ, maxDist, maxBounces) {
 
 function updateAimArrow() {
   if(!G.aimArrow||!G.aimMode) return;
+  // v0.21b: during airstrike aim, hide the regular aim arrow — the pill
+  // targeter is the visual reference, the arrow is just visual noise.
+  if(G._airstrikeAiming || G._airstrikeStrike) {
+    if(G.aimArrow) G.aimArrow.visible = false;
+    return;
+  }
+  if(G.aimArrow && !G.aimArrow.visible) G.aimArrow.visible = true;
 
   const power  = G.shotPower;
   const hasArc = G._arcShotActive;
@@ -11854,19 +11879,28 @@ function updateAimArrow() {
   const ironWeight = G._ironBallActive ? 0.85 : 1.0;                              // Iron Ball drag
   const powerMult  = (G._powerShotStacks || 0) > 0 ? Math.pow(2.0, G._powerShotStacks) : 1.0; // Power Shot 2× per stack
   const catapultSoloDamp = (hasCatapult && (G._powerShotStacks || 0) === 0) ? 0.7 : 1.0;        // Solo catapult damp
-  const spd    = power * 32 * boost * ironWeight * powerMult * catapultSoloDamp;
+  // v0.21c2: Frisbee — 0.75× horizontal range (nerfed from 1.5×).
+  // Mirror in the preview so the arc lands where the disc will actually land.
+  const frisbeeBoost = G._frisbeeArmed ? 0.75 : 1.0;
+  const spd    = power * 32 * boost * ironWeight * powerMult * catapultSoloDamp * frisbeeBoost;
   const c      = new THREE.Color();
   c.setHSL(0.33 - power * 0.33, 0.9, 0.52);
   // Catapult: bold magenta arc for max readability, overriding the power-color ramp
   const catC = new THREE.Color(0xff3ba8);
+  // v0.21c2: Frisbee — bold orange-yellow arc (thematic, distinct from Catapult).
+  // Same treatment as Catapult: bigger glowing dots, ignore the power-color ramp.
+  const frisC = new THREE.Color(0xffaa22);
+  const hasFrisbee = !!G._frisbeeArmed;
 
   // Shared arc params — vy0 matches the actual fireShot launch velocity so the
   // preview lands where the ball will actually land.
   //   Normal Arc Shot: 2.5 + 4.5 = 7.0
   //   Catapult:        2.5 + 6.5 = 9.0
+  //   Frisbee:         2.5 + 5.5 = 8.0  (v0.21c)
   const vy0Default = 2.5 + 4.5;
   const vy0Cat     = 2.5 + 6.5;
-  const vy0    = hasCatapult ? vy0Cat : vy0Default;
+  const vy0Fris    = 2.5 + 5.5;
+  const vy0    = hasCatapult ? vy0Cat : (G._frisbeeArmed ? vy0Fris : vy0Default);
   const grav   = 12;
   const totalT = (vy0 + Math.sqrt(vy0 * vy0)) / grav;
 
@@ -11880,8 +11914,9 @@ function updateAimArrow() {
     const cone = grp.children[13];
     if((hasArc || hasCatapult) && power > 0.01) {
       line.visible = false;
-      const dotScale = hasCatapult ? 2.0 : 1.0;   // bigger dots for Catapult
-      const dotCol = hasCatapult ? catC : c;
+      // v0.21c2: bigger, glowing dots for both Catapult and Frisbee
+      const dotScale = (hasCatapult || hasFrisbee) ? 2.0 : 1.0;
+      const dotCol = hasCatapult ? catC : (hasFrisbee ? frisC : c);
       // v0.21a4: Portal-aware arc — detect if the parabola's XZ projection
       // crosses an entry/exit portal between this ball position and the
       // arc's end. If yes, compute the dot index (0..12) at which the
@@ -11919,10 +11954,10 @@ function updateAimArrow() {
         // their continuation gets drawn world-space below.
         dot.visible = (i < crossIdx);
         dot.material.color.copy(dotCol);
-        // Brighter, more opaque dots for Catapult; emissive so they glow
-        dot.material.opacity = hasCatapult ? (1.0 - (i/12)*0.2) : (0.9 - (i/12)*0.5);
+        // Brighter, more opaque dots for Catapult/Frisbee; emissive so they glow
+        dot.material.opacity = (hasCatapult || hasFrisbee) ? (1.0 - (i/12)*0.2) : (0.9 - (i/12)*0.5);
         if(dot.material.emissive) dot.material.emissive.copy(dotCol);
-        if(hasCatapult && dot.material.emissiveIntensity !== undefined) {
+        if((hasCatapult || hasFrisbee) && dot.material.emissiveIntensity !== undefined) {
           dot.material.emissiveIntensity = 0.8;
         }
       }
@@ -11933,7 +11968,7 @@ function updateAimArrow() {
       } else {
         cone.visible = true;
         cone.position.set(0, vy0*tEnd - 0.5*grav*tEnd*tEnd - 0.28, spd*tEnd);
-        cone.scale.setScalar(hasCatapult ? 1.6 : 1.0);
+        cone.scale.setScalar((hasCatapult || hasFrisbee) ? 1.6 : 1.0);
       }
       // Stash fold info so the post-driveGroup block can spawn world dots
       if(isMain) G._aimArcFoldOrigin = foldOrigin;
@@ -11946,7 +11981,7 @@ function updateAimArrow() {
       cone.scale.setScalar(1);
       if(isMain) G._aimArcFoldOrigin = null;
     }
-    cone.material.color.copy(hasCatapult && power > 0.01 ? catC : c);
+    cone.material.color.copy(hasCatapult && power > 0.01 ? catC : (hasFrisbee && power > 0.01 ? frisC : c));
   }
 
   // Main ball arrow
@@ -11995,8 +12030,9 @@ function updateAimArrow() {
       dotPts.push(new THREE.Vector3(wx, wy, wz));
     }
     if(dotPts.length > 0) {
-      const arcCol = hasCatapult ? new THREE.Color(0xff3ba8) : c.clone();
-      const arcSize = hasCatapult ? 0.22 : 0.16;
+      // v0.21c2: Frisbee gets the same bold treatment as Catapult on portal-cross arcs
+      const arcCol = hasCatapult ? new THREE.Color(0xff3ba8) : (hasFrisbee ? new THREE.Color(0xffaa22) : c.clone());
+      const arcSize = (hasCatapult || hasFrisbee) ? 0.22 : 0.16;
       const geoArc = new THREE.BufferGeometry().setFromPoints(dotPts);
       const matArc = new THREE.PointsMaterial({
         color: arcCol, size: arcSize, transparent: true, opacity: 0.85,
@@ -12012,7 +12048,7 @@ function updateAimArrow() {
       const lastX = fold.wx + fold.dx * spd * lastDt;
       const lastZ = fold.wz + fold.dz * spd * lastDt;
       const lastY = ballGroundY + 0.28 + (vy0*lastT - 0.5*grav*lastT*lastT - 0.28);
-      const coneGeo = new THREE.ConeGeometry(0.18 * (hasCatapult ? 1.6 : 1.0), 0.52 * (hasCatapult ? 1.6 : 1.0), 8);
+      const coneGeo = new THREE.ConeGeometry(0.18 * ((hasCatapult || hasFrisbee) ? 1.6 : 1.0), 0.52 * ((hasCatapult || hasFrisbee) ? 1.6 : 1.0), 8);
       const coneMat = new THREE.MeshStandardMaterial({
         color: arcCol, roughness: 0.3,
         emissive: arcCol, emissiveIntensity: 0.5,
@@ -12160,6 +12196,57 @@ function updateAimArrow() {
       }
     }
   }
+  // v0.21c: Curve Ball — render a curved ground spline that previews the
+  // committed path. Sample 24 segments across the 1.5s curve duration using
+  // the same speed/rate the actual physics will use. Updates live as the
+  // player drags (curveBallStrength is captured in onPointerMove).
+  if(G._curveBallArmed && G.shotPower > 0.05) {
+    const previewRate = (G._curveBallStrength || 0) * 1.0; // matches startCurveBallFlight
+    const previewDur = 1.5;
+    const _boost = G.swingMult || 1.0;
+    const _ironW = G._ironBallActive ? 0.85 : 1.0;
+    const _pmult = (G._powerShotStacks || 0) > 0 ? Math.pow(2.0, G._powerShotStacks) : 1.0;
+    const baseSpd = G.shotPower * 32 * _boost * _ironW * _pmult;
+    // Step parameters; exponential friction loss approximated with FRICTION
+    const N = 24;
+    const dt = previewDur / N;
+    let vx = G.shotDir.x * baseSpd;
+    let vz = G.shotDir.z * baseSpd;
+    let px = G.ballPos.x, pz = G.ballPos.z;
+    const py = G.ballPos.y - BALL_R + 0.05;
+    const pts = [new THREE.Vector3(px, py, pz)];
+    const fricPerStep = Math.pow(FRICTION, 60 * dt); // FRICTION is per-frame at ~60fps
+    for(let i = 0; i < N; i++) {
+      // Rotate velocity by previewRate * dt
+      const ang = previewRate * dt;
+      const ca = Math.cos(ang), sa = Math.sin(ang);
+      const nvx = vx * ca - vz * sa;
+      const nvz = vx * sa + vz * ca;
+      vx = nvx; vz = nvz;
+      // Apply friction
+      vx *= fricPerStep; vz *= fricPerStep;
+      // Step
+      px += vx * dt;
+      pz += vz * dt;
+      pts.push(new THREE.Vector3(px, py, pz));
+    }
+    // Build/replace the preview line
+    if(!G._curveBallPreviewLine) {
+      const geo = new THREE.BufferGeometry().setFromPoints(pts);
+      const mat = new THREE.LineBasicMaterial({ color: 0x66ddff, transparent: true, opacity: 0.85 });
+      G._curveBallPreviewLine = new THREE.Line(geo, mat);
+      G._curveBallPreviewLine.userData.noOutline = true;
+      G._curveBallPreviewLine.renderOrder = 998;
+      scene.add(G._curveBallPreviewLine);
+    } else {
+      G._curveBallPreviewLine.geometry.dispose();
+      G._curveBallPreviewLine.geometry = new THREE.BufferGeometry().setFromPoints(pts);
+      G._curveBallPreviewLine.visible = true;
+    }
+  } else if(G._curveBallPreviewLine) {
+    // Card not armed (or no drag) — hide the preview.
+    G._curveBallPreviewLine.visible = false;
+  }
 }
 
 // ── Terrain height helpers ─────────────────────────────
@@ -12276,14 +12363,25 @@ function updatePhysics(dt) {
   // hole length) which looked like the ball vanishes and reappears. Now
   // fires at ~0.25m of empty space between ball edge and obstacle edge,
   // so the vault begins the moment the ball would otherwise collide.
-  if(G._parkourCardActive && !G._parkourCardUsed && G.rolling && !G.inHole) {
+  // v0.21a8 reliability fix: CONTACT_MARGIN bumped 0.25 → 0.55 so a single
+  // 60fps frame-tick can't skip past the trigger zone at typical shot
+  // speeds (22m/s = 0.37m per frame — old 0.25 margin meant the ball
+  // could clear the entire trigger window in a single tick). Also: the
+  // pure airborne skip is replaced with "skip when ASCENDING", so a ball
+  // bouncing off bumper-A and falling onto bumper-B can still vault on
+  // the descent.
+  if((G._parkourCharges > 0) && !G._parkourArcing && G.rolling && !G.inHole) {
     // v0.20c: parkour must only trigger from the ground. Previously could fire
     // mid-jump when ball was already airborne above an obstacle, wasting the
     // vault on something the ball was clearly going to clear anyway.
+    // v0.21a8: refined — only skip while the ball is RISING. A descending
+    // airborne ball on a clear collision course with the next obstacle still
+    // gets the vault (the obstacle is going to slap it anyway).
     const _terrAtBall = G.heightMap.length ? getTerrainHeight(G.ballPos.x, G.ballPos.z) : 0;
     const _ballGroundY = _terrAtBall + FLOOR_H/2 + BALL_R;
     const _isAirborne = G.ballPos.y > _ballGroundY + 0.25;
-    if(_isAirborne) { /* skip parkour while airborne */ }
+    const _isAscending = G.ballVel.y > 0.5; // rising fast → on its way up
+    if(_isAirborne && _isAscending) { /* skip parkour while flying upward */ }
     else {
     const pvx = G.ballVel.x, pvz = G.ballVel.z;
     const pspd = Math.hypot(pvx, pvz);
@@ -12294,7 +12392,7 @@ function updatePhysics(dt) {
       // distance (center-to-center minus BALL_R and obstacle R) drops below
       // CONTACT_MARGIN, vault.
       const OBST_R = { rock: 0.65, bumper: 0.55, spin_bar: 0.8, slide_block: 0.7, spike: 0.55, spike_ring_ball: 0.32 };
-      const CONTACT_MARGIN = 0.25; // meters of clear air before triggering
+      const CONTACT_MARGIN = 0.55; // v0.21a8: was 0.25 — wider trigger window
       // Must also be moving toward the obstacle: dot(ballDir, center-ball) > 0.7
       // (∼45° cone tolerance so an obstacle sideswipe still triggers).
       const DIR_DOT_MIN = 0.7;
@@ -12432,7 +12530,7 @@ function updatePhysics(dt) {
         parkourLeap(bestTarget.wx, bestTarget.wz, bestTarget.tag);
       }
     }
-    } // end !_isAirborne
+    } // end !(_isAirborne && _isAscending)
   }
 
   // ── Jump-over obstacle detection (trigger-volume architecture) ──
@@ -12905,6 +13003,15 @@ function updatePhysics(dt) {
     G.ballPos.y = floorY;
     // Reflect downward velocity only; preserve upward motion
     if(G.ballVel.y < 0) {
+      // v0.21c: Frisbee — first meaningful ground contact triggers re-inflation
+      // and switches on the brake. We check BEFORE the bounce reflect so the
+      // disc settles cleanly (instead of bouncing once like a frisbee skipping
+      // off the ground — that happens with bounce_boom anyway).
+      if(G._frisbeeActive && !G._frisbeeSettled && G.ballVel.y < -1.0) {
+        settleFrisbee();
+        // Soft landing — kill bounce; ball just lands and rolls.
+        G.ballVel.y = 0;
+      } else
       // Catapult: one-shot super-bounce on first meaningful landing (velY < -4)
       if(G._catapultGroundBounce && G.ballVel.y < -4) {
         // v0.19z8: bounce restitution 0.7 -> 0.2. The post-landing super-bounce
@@ -12952,9 +13059,35 @@ function updatePhysics(dt) {
     // In slow-mo, dt is scaled down, so we also scale friction exponent by slowMoScale
     // to prevent friction compounding more often than intended.
     const slowAdj = (G._slowMoScale && G._slowMoScale < 1.0) ? G._slowMoScale : 1.0;
-    const subFr = Math.pow(slipperyFr, slowAdj / SUB_STEPS);
+    let subFr = Math.pow(slipperyFr, slowAdj / SUB_STEPS);
+    // v0.21c: Frisbee brake — multiply effective friction loss by 4× while
+    // the brake flag is on. (1 - subFr) is the per-substep speed loss; we
+    // amplify it 4× and re-derive subFr.
+    if(G._frisbeeBrakeActive) {
+      const lossPerStep = (1 - subFr) * 4;
+      subFr = Math.max(0, 1 - lossPerStep);
+    }
     G.ballVel.x *= subFr;
     G.ballVel.z *= subFr;
+    }
+
+    // v0.21c: Curve Ball — rotate horizontal velocity by curveRate per second
+    // for the curve-active window (~1.5s). subDt-aware. After timer expires,
+    // velocity stays as-is and normal physics resume.
+    if(G._curveBallActive && G._curveBallTimer > 0) {
+      const slowAdj2 = (G._slowMoScale && G._slowMoScale < 1.0) ? G._slowMoScale : 1.0;
+      const dtSub = (subDt || 0) * 1.0;
+      const rate = G._curveBallRate || 0;
+      const ang = rate * dtSub;
+      const ca = Math.cos(ang), sa = Math.sin(ang);
+      const vx = G.ballVel.x, vz = G.ballVel.z;
+      G.ballVel.x = vx * ca - vz * sa;
+      G.ballVel.z = vx * sa + vz * ca;
+      G._curveBallTimer -= dtSub * slowAdj2;
+      if(G._curveBallTimer <= 0) {
+        G._curveBallActive = false;
+        G._curveBallRate = 0;
+      }
     }
 
     const { dX, dZ } = getTerrainSlope(G.ballPos.x, G.ballPos.z);
@@ -12980,9 +13113,13 @@ function updatePhysics(dt) {
     const launchGrace = G._shotJustFired
       && (performance.now() - G._shotJustFired) < 200
       && (G._catapultLaunchGrace || G._jumpPreloadLaunchGrace);
+    // v0.21c: Curve Ball — no wall collision during the curve phase. The ball
+    // bends around walls and obstacles instead of bouncing off them. Once the
+    // ~1.5s curve timer expires, normal wall physics resume.
+    const curveBallSkipWalls = !!G._curveBallActive;
     let pushed = false;
 
-    if(!ballAboveWall && !ghostActive && !launchGrace) {
+    if(!ballAboveWall && !ghostActive && !launchGrace && !curveBallSkipWalls) {
     for(const poly of G.wallPolylines) {
       for(let i=0; i<poly.length-1; i++) {
         const ax=poly[i].x,   az=poly[i].z;
@@ -13120,7 +13257,7 @@ function updatePhysics(dt) {
               }
               triggerShake('med');  // v0.19z: 'heavy' was too much for a splat
               spawnHitParticles(G.ballPos);
-              showToast('🟢 SPLAT! Free re-aim →', 1500);
+              showToast('🟢 SPLAT on wall! Free re-aim →', 1500);
               // Skip the normal reflection — ball is stuck.
               pushed = true;
             } else {
@@ -13320,6 +13457,16 @@ function updatePhysics(dt) {
 
         G.ballPos.x += nx * pen;
         G.ballPos.z += nz * pen;
+        // v0.21a6: Sticky on corner triangle (inside-triangle collision).
+        // Use the resolved hypotenuse-outward normal as the wall normal.
+        if(G._stickyCardActive && !G._stickyCardTriggered) {
+          G._stickyCardTriggered = true;
+          G._stickyCardSquash = { timer: 0, duration: 0.55, nx, nz };
+          enterStickyAttached({ kind: 'wall', nx, nz });
+          aw.squashT = 0.18;
+          _stickyShared('corner');
+          continue; // handled — skip bounce + edge tests
+        }
         const dot = G.ballVel.x*nx + G.ballVel.z*nz;
         if(dot < 0) {
           // v0.20h: Pinball forces full energy preservation on triangle deflects
@@ -13371,6 +13518,15 @@ function updatePhysics(dt) {
       if(bestPen > 0) {
         G.ballPos.x += bestNx * bestPen;
         G.ballPos.z += bestNz * bestPen;
+        // v0.21a6: Sticky on corner triangle (edge collision path).
+        if(G._stickyCardActive && !G._stickyCardTriggered) {
+          G._stickyCardTriggered = true;
+          G._stickyCardSquash = { timer: 0, duration: 0.55, nx: bestNx, nz: bestNz };
+          enterStickyAttached({ kind: 'wall', nx: bestNx, nz: bestNz });
+          aw.squashT = 0.18;
+          _stickyShared('corner');
+          continue; // skip the regular bounce
+        }
         const dot = G.ballVel.x*bestNx + G.ballVel.z*bestNz;
         if(dot < 0) {
           // v0.20h: Pinball forces full energy preservation on edge deflects
@@ -13446,6 +13602,15 @@ function updatePhysics(dt) {
         const nx = dx/dist, nz = dz/dist;
         G.ballPos.x += nx*(minDist-dist);
         G.ballPos.z += nz*(minDist-dist);
+        // v0.21a6: Sticky card — stick to rock instead of bouncing. Iron
+        // ball still wins (smashes through).
+        if(G._stickyCardActive && !G._stickyCardTriggered && !hasIronBall) {
+          G._stickyCardTriggered = true;
+          G._stickyCardSquash = { timer: 0, duration: 0.55, nx, nz };
+          enterStickyAttached({ kind: 'wall', nx, nz });
+          _stickyShared('rock');
+          continue; // skip reflection
+        }
         if(hasIronBall) {
           // Iron Ball: plow through, destroy obstacle with missile-style fling
           G.ballVel.multiplyScalar(0.85);
@@ -13506,6 +13671,55 @@ function updatePhysics(dt) {
         const nxS = dxS/distS, nzS = dzS/distS;
         G.ballPos.x += nxS*(minDistS-distS);
         G.ballPos.z += nzS*(minDistS-distS);
+        // v0.21a6: Sticky card on spike. Player still takes HP damage + the
+        // spike still destructs — but the ball stops at the contact point
+        // rather than ricocheting off. The free re-aim from a stuck-on-spike
+        // position is a meaningful tactical use: trade an HP for an extra
+        // shot from a position the spike was guarding.
+        if(G._stickyCardActive && !G._stickyCardTriggered) {
+          G._stickyCardTriggered = true;
+          // Apply spike damage (mirrors the regular-bounce path below).
+          if(spike.squashT <= 0) {
+            spike.squashT = 1.0;
+            const _baseDmg = (G._diffMods && G._diffMods.spikeDmg) || 1;
+            const _spikeDmg = spike.variant === 'red' ? Math.max(2, _baseDmg) : _baseDmg;
+            const _absorbed = consumeMightyEgg();
+            if(!_absorbed) {
+              applyDamage(_spikeDmg, 'spike');
+              spawnHpDamagePopup(_spikeDmg);
+              const _label = spike.variant === 'red' ? '🟥 OUCH!' : '🔺 OUCH!';
+              showToast(`${_label} -${_spikeDmg} HP`, 1200);
+            }
+            G._holeHazardsTouched.spikes = (G._holeHazardsTouched.spikes||0) + 1;
+            spike._destroyed = true;
+            spawnExplosion(spike.wx, spike.baseH + 0.3, spike.wz);
+            if(spike.mesh) { spike.mesh.visible = false; }
+            // Mid-air spike-stick after a fatal hit: defer to game-over flow
+            // BEFORE entering sticky — sticking a dead ball would soft-lock.
+            if(G.hp <= 0) {
+              G._spikeGameOver = true;
+              setTimeout(() => {
+                if(G.state !== 'playing' || G.inHole) return;
+                G.rolling = false;
+                G.ballVel.set(0,0,0);
+                G._spikeGameOver = false;
+                const _totCp3 = G._holeCoinsPickedUp || 0;
+                const wc = G.wallCoinsThisHole || 0;
+                const cp = Math.max(0, _totCp3 - wc);
+                const earn = calcHoleEarnings(G.strokes, G.par, cp, wc);
+                G.coins += Math.max(0, earn.total - cp);
+                updateCoinHUD();
+                showGameOver(true);
+              }, 2000);
+              // Skip the sticky entry — game over is taking over.
+              continue;
+            }
+          }
+          G._stickyCardSquash = { timer: 0, duration: 0.55, nx: nxS, nz: nzS };
+          enterStickyAttached({ kind: 'wall', nx: nxS, nz: nzS });
+          _stickyShared('spike');
+          continue; // skip the regular bounce/damage block below
+        }
         const dotS = G.ballVel.x*nxS + G.ballVel.z*nzS;
         if(dotS < 0) {
           G.ballVel.x -= (1+BOUNCE*1.8)*dotS*nxS;
@@ -13667,6 +13881,16 @@ function updatePhysics(dt) {
         const nx3 = dx3/dist3, nz3 = dz3/dist3;
         G.ballPos.x += nx3*(minD3-dist3);
         G.ballPos.z += nz3*(minD3-dist3);
+        // v0.21a6: Sticky card — stick to bumper instead of bouncing. Iron
+        // ball still wins (smashes through). Power bumpers stick the same
+        // as regular bumpers — the glitter hides behind the SPLAT.
+        if(G._stickyCardActive && !G._stickyCardTriggered && !hasIronBall) {
+          G._stickyCardTriggered = true;
+          G._stickyCardSquash = { timer: 0, duration: 0.55, nx: nx3, nz: nz3 };
+          enterStickyAttached({ kind: 'wall', nx: nx3, nz: nz3 });
+          _stickyShared('bumper');
+          continue; // skip reflection
+        }
         if(hasIronBall) {
           G.ballVel.multiplyScalar(0.85);
           const ironHits = [{wx:bmp.wx, wz:bmp.wz, type:'bumper', physRef:bmp, meshes:[bmp.bodyM, bmp.capM].filter(Boolean)}];
@@ -14089,6 +14313,49 @@ function updatePhysics(dt) {
     } // end _cvGrounded
   }
 
+  // ── Hole defense: FORCE FIELD bubble collision (substep) ───
+  // v0.21b: moved INSIDE the substep loop (was post-substep). At high speeds
+  // (200+ m/s with Power Shot stacks + Snowball) the ball could traverse the
+  // entire bubble in a single frame, making the once-per-frame check miss
+  // the bubble entirely — Adam reported "I clipped through it." Inside
+  // substeps, the check fires up to 16× per frame and catches every
+  // sub-step transit. Other hole-defense paths (magnet field velocity nudge,
+  // slat/spike rings) stay post-substep — they aren't tunneling-prone.
+  if(G._holeDefense && G._holeDefenseState
+     && G._holeDefense.kind === 'force_field' && G._holeDefenseState.closed) {
+    const _hd_ff = G._holeDefense;
+    const _hds_ff = G._holeDefenseState;
+    const _hwF = G.holePos.x * TILE_SIZE + (G._holeWorldOffset?.x || 0);
+    const _hzF = G.holePos.y * TILE_SIZE + (G._holeWorldOffset?.z || 0);
+    const _bdy_ff  = _hds_ff.bubbleY - G.ballPos.y;
+    const _bdxz_ff = Math.hypot(G.ballPos.x - _hwF, G.ballPos.z - _hzF);
+    const _d3_ff   = Math.hypot(_bdxz_ff, _bdy_ff);
+    const _minD_ff = _hd_ff.bubbleR + BALL_R;
+    if(_d3_ff < _minD_ff && _d3_ff > 0.001) {
+      const _nx_ff = (G.ballPos.x - _hwF) / _d3_ff;
+      const _nz_ff = (G.ballPos.z - _hzF) / _d3_ff;
+      const _ny_ff = -(_bdy_ff) / _d3_ff;
+      const _pen_ff = _minD_ff - _d3_ff;
+      G.ballPos.x += _nx_ff * _pen_ff;
+      G.ballPos.z += _nz_ff * _pen_ff;
+      G.ballPos.y += _ny_ff * _pen_ff;
+      const _dot_ff = G.ballVel.x * _nx_ff + G.ballVel.y * _ny_ff + G.ballVel.z * _nz_ff;
+      if(_dot_ff < 0) {
+        const REST_FF = 0.6;
+        G.ballVel.x -= (1 + REST_FF) * _dot_ff * _nx_ff;
+        G.ballVel.y -= (1 + REST_FF) * _dot_ff * _ny_ff;
+        G.ballVel.z -= (1 + REST_FF) * _dot_ff * _nz_ff;
+        if(_sub === 0) {
+          // Only one SFX per frame — multiple substep contacts shouldn't
+          // pile up multiple bounce sounds for a single bubble interaction.
+          if(AC) sfxBounce(Math.max(4, Math.hypot(G.ballVel.x, G.ballVel.z) * 0.6));
+          spawnHitParticles(G.ballPos);
+          triggerShake('light');
+        }
+      }
+    }
+  }
+
   // ── Pop-up wall collision ─────────────────────────────
   // v0.20i: ghost ball passes through pop-up walls (up-down walls).
   if(G.popupWalls && G.popupWalls.length && !ghostActive) {
@@ -14124,13 +14391,34 @@ function updatePhysics(dt) {
       const overlapX = Math.min(dL, dR);
       const overlapZ = Math.min(dF, dB);
       if(overlapX > 0 && overlapZ > 0) {
+        // Determine the contact face normal (used by both sticky and bounce).
+        let _nxPW = 0, _nzPW = 0, _overlapPW = 0;
         if(overlapX < overlapZ) {
-          const nx4 = dL < dR ? -1 : 1;
+          _nxPW = dL < dR ? -1 : 1;
+          _overlapPW = overlapX;
+        } else {
+          _nzPW = dF < dB ? -1 : 1;
+          _overlapPW = overlapZ;
+        }
+        // v0.21a6: Sticky on popup wall. Use 'popupWall' kind so the per-
+        // frame guard can unstick if the wall retracts below the ball.
+        if(G._stickyCardActive && !G._stickyCardTriggered) {
+          G._stickyCardTriggered = true;
+          // Push out before sticking so the ball isn't embedded.
+          G.ballPos.x += _nxPW * _overlapPW;
+          G.ballPos.z += _nzPW * _overlapPW;
+          G._stickyCardSquash = { timer: 0, duration: 0.55, nx: _nxPW, nz: _nzPW };
+          enterStickyAttached({ kind: 'popupWall', ref: pw, nx: _nxPW, nz: _nzPW });
+          _stickyShared('pop-up wall');
+          continue; // skip the regular bounce
+        }
+        if(overlapX < overlapZ) {
+          const nx4 = _nxPW;
           G.ballPos.x += nx4 * overlapX;
           const dot4 = G.ballVel.x * nx4;
           if(dot4 < 0) { G.ballVel.x -= (1+BOUNCE)*dot4*nx4; }
         } else {
-          const nz4 = dF < dB ? -1 : 1;
+          const nz4 = _nzPW;
           G.ballPos.z += nz4 * overlapZ;
           const dot4 = G.ballVel.z * nz4;
           if(dot4 < 0) { G.ballVel.z -= (1+BOUNCE)*dot4*nz4; }
@@ -14607,40 +14895,9 @@ function updatePhysics(dt) {
     }
 
     // --- (b) FORCE FIELD — bubble bounce while closed. -------------
-    if(hd.kind === 'force_field' && hds.closed) {
-      // 3D sphere collision vs bubble centered at (hw, bubbleY, hz).
-      const bdy = hds.bubbleY - G.ballPos.y;
-      const bdxz = Math.hypot(G.ballPos.x - hw, G.ballPos.z - hz);
-      const d3 = Math.hypot(bdxz, bdy);
-      const minD = hd.bubbleR + BALL_R;
-      if(d3 < minD && d3 > 0.001) {
-        // Normal points from bubble center to ball.
-        const nx = (G.ballPos.x - hw) / d3;
-        const nz = (G.ballPos.z - hz) / d3;
-        const ny = -(bdy) / d3;
-        // Push the ball out of the bubble.
-        const pen = minD - d3;
-        G.ballPos.x += nx * pen;
-        G.ballPos.z += nz * pen;
-        G.ballPos.y += ny * pen;
-        const dot = G.ballVel.x * nx + G.ballVel.y * ny + G.ballVel.z * nz;
-        if(dot < 0) {
-          // v0.19y: restitution dropped from 1.6 → 0.6. Previously the bubble
-          // punted the ball back harder than it arrived (1.6 = 60% amplified
-          // reflection), which made hitting a closed bubble feel like hitting
-          // a trampoline wall. 0.6 gives a clear "blocked" feel without
-          // rocketing the ball away.
-          const REST = 0.6;
-          G.ballVel.x -= (1 + REST) * dot * nx;
-          G.ballVel.y -= (1 + REST) * dot * ny;
-          G.ballVel.z -= (1 + REST) * dot * nz;
-          // SFX + small spawn particles
-          if(AC) sfxBounce(Math.max(4, Math.hypot(G.ballVel.x, G.ballVel.z) * 0.6));
-          spawnHitParticles(G.ballPos);
-          triggerShake('light');
-        }
-      }
-    }
+    // v0.21b: moved into the substep loop above to prevent tunneling at
+    // high speeds. This block is intentionally left as a no-op stub so
+    // the surrounding (a)/(c) labelling reads consistently.
 
     // --- (c) SLAT RING — pillar cylinder reflection. ---------------
     // Each pillar is a thin box in local space oriented to face the center.
@@ -14933,9 +15190,28 @@ function updatePhysics(dt) {
         G._powerShotStacks = 0;
         G._powerShotTensionActive = false;
         G._cannonballActive = false;
+        // v0.21c: clear new pre-swing/during card flags on natural stop
+        G._frisbeeActive = false;
+        G._frisbeeArmed = false;
+        G._frisbeeSettled = false;
+        G._frisbeeBrakeActive = false;
+        if(G._frisbeeMesh) {
+          if(G._frisbeeMesh.parent) G._frisbeeMesh.parent.remove(G._frisbeeMesh);
+          G._frisbeeMesh = null;
+        }
+        if(G.ballMesh) G.ballMesh.visible = true;
+        G._curveBallActive = false;
+        G._curveBallArmed = false;
+        G._curveBallTimer = 0;
+        G._curveBallRate = 0;
+        if(typeof destroyBeatEmUpRing === 'function') destroyBeatEmUpRing();
+  if(typeof disposeCurveBallPreviewLine === 'function') disposeCurveBallPreviewLine();
         // v0.19x: clear sticky + parkour state if armed but not triggered
         if(typeof clearStickyState === 'function') clearStickyState();
         if(typeof clearParkourState === 'function') clearParkourState();
+        // v0.21b: same for airstrike — tear down any half-aimed pill or
+        // in-flight strike if the swing ended without firing.
+        if(typeof clearAirStrikeState === 'function') clearAirStrikeState();
         G._vacuumImmunity = false; // v0.19z2: safety — clear in case animation was mid-flight
         // Draw 1 card to refill an empty slot (if any) — but not before first swing.
         // Quick Draw perk: draw 2 per swing (respects hand space — drawCards handles clamping).
@@ -15031,6 +15307,30 @@ function updatePhysics(dt) {
   }
 
   G.ball.position.copy(G.ballPos);
+  // v0.21c: Frisbee disc mesh follows the ball (with spin). Only while
+  // mid-flight — settleFrisbee() removes the mesh on first ground contact.
+  if(G._frisbeeMesh) {
+    G._frisbeeMesh.position.set(G.ballPos.x, G.ballPos.y + 0.05, G.ballPos.z);
+    G._frisbeeSpinPhase = (G._frisbeeSpinPhase || 0) + 0.4;
+    G._frisbeeMesh.rotation.y = G._frisbeeSpinPhase;
+    // Tilt slightly into direction of travel
+    const sp = Math.hypot(G.ballVel.x, G.ballVel.z);
+    if(sp > 0.1) {
+      const fx = G.ballVel.x / sp, fz = G.ballVel.z / sp;
+      G._frisbeeMesh.rotation.x = -Math.atan2(G.ballVel.y, sp) * 0.15;
+      G._frisbeeMesh.rotation.z = -fx * 0.18;
+    }
+  }
+  // v0.21c: Beat 'Em Up ring tracks the ball at ground level with a gentle pulse.
+  if(G._beatEmUpRing) {
+    G._beatEmUpRingPhase = (G._beatEmUpRingPhase || 0) + 0.06;
+    G._beatEmUpRing.position.set(G.ballPos.x, terrainY + 0.05, G.ballPos.z);
+    const pulse = 1 + Math.sin(G._beatEmUpRingPhase) * 0.04;
+    G._beatEmUpRing.scale.set(pulse, pulse, 1);
+    if(G._beatEmUpRing.material) {
+      G._beatEmUpRing.material.opacity = 0.55 + Math.sin(G._beatEmUpRingPhase * 1.4) * 0.15;
+    }
+  }
   // Shadow always projects down to terrain surface regardless of airborne state
   G.ballShadow.position.set(G.ballPos.x, terrainY + 0.02, G.ballPos.z);
   // Scale shadow down when airborne to hint at height
@@ -15048,6 +15348,22 @@ function resetToLastShot() {
   }
   G._oobGraceTimer = 0;
   G._oobComboTimer = 0;  // v0.19j — reset combo timer on penalty reset too
+  // v0.21a6: clear sticky state on any OOB / penalty reset. If the player
+  // went OOB during a sticky free-swing, leaving _stickyCardActive and
+  // _stickyCardTriggered true would block re-arming sticky later in the
+  // same hole. The card has already been spent at the original wall hit;
+  // resetting to lastShotPos doesn't refund it.
+  if(typeof clearStickyState === 'function') {
+    G._stickyAttached = null; // bypass the in-function early-out
+    clearStickyState();
+  }
+  // v0.21a8: same for parkour. If the swing went OOB before the vault
+  // detection fired, _parkourCardActive stays true into the respawn
+  // ("already armed" silent dead-tap on next attempt). And if the vault
+  // was already used, _parkourCardUsed=true persists, blocking re-arms.
+  if(typeof clearParkourState === 'function') clearParkourState();
+  // v0.21b: airstrike — clear any aim/strike state on OOB respawn.
+  if(typeof clearAirStrikeState === 'function') clearAirStrikeState();
   if(G._threeBalls) {
     for(const tb of G._threeBalls) if(tb.mesh) scene.remove(tb.mesh);
     G._threeBalls = null;
@@ -15141,6 +15457,22 @@ function resetToLastShot() {
   G._catapultGroundBounce = false;
   G._catapultLaunchGrace = false;
   G._jumpPreloadLaunchGrace = false;
+  // v0.21c: clear new pre-swing card flags
+  G._frisbeeActive = false;
+  G._frisbeeArmed = false;
+  G._frisbeeSettled = false;
+  G._frisbeeBrakeActive = false;
+  if(G._frisbeeMesh) {
+    if(G._frisbeeMesh.parent) G._frisbeeMesh.parent.remove(G._frisbeeMesh);
+    G._frisbeeMesh = null;
+  }
+  if(G.ballMesh) G.ballMesh.visible = true;
+  G._curveBallActive = false;
+  G._curveBallArmed = false;
+  G._curveBallTimer = 0;
+  G._curveBallRate = 0;
+  if(typeof destroyBeatEmUpRing === 'function') destroyBeatEmUpRing();
+  if(typeof disposeCurveBallPreviewLine === 'function') disposeCurveBallPreviewLine();
   // Restore normal ball visual if iron ball was active
   if(G.ballMesh && G.ballMesh._origMat) {
     G.ballMesh.material = G.ballMesh._origMat;
@@ -18353,6 +18685,13 @@ function destroyObstacles(hits, epicentreX, epicentreY, epicentreZ) {
       G._chainReactDepth = depth; // restore prior depth (so sibling destroyObstacles calls work)
     }
   }
+  // v0.21c: Chain Lightning — single-bolt zaps from any destruction. Distinct
+  // from Chain Reaction (AOE explosion). Recursion-capped at depth 3 inside
+  // applyChainLightning (chained kills count as destructions, but the depth
+  // counter caps cascades). Stacks add bolts per kill.
+  if(G.modifiers.some(m=>m.id==='chain_lightning') && hits.length > 0) {
+    applyChainLightning(hits, epicentreY);
+  }
   return coinsEarned;
 }
 
@@ -18649,6 +18988,24 @@ function fireProjectile({ blastRadius = 4.0, travelSpeed = 22, color = 0xff4400,
       missileGroup.position.x = corePos.x + offX;
       missileGroup.position.z = corePos.z + offZ;
       const px = missileGroup.position.x, pz = missileGroup.position.z;
+      // v0.21a7: Directional approach gate. The missile spawns AT the ball
+      // position, but the ball-rest position can be inside the missile's own
+      // collision radius of nearby obstacles (the ball's collision radius is
+      // smaller than the missile's). Without this gate, firing with the back
+      // to a wall, bumper, rock, or spike causes an immediate self-detonation
+      // because the spawn point itself overlaps the back-wall's hit envelope.
+      //
+      // Gate: a candidate hit point only counts if the missile is approaching
+      // it — i.e., the vector from missile to target has a non-trivial
+      // positive component along the flight direction. -0.1m of tolerance
+      // accommodates near-grazing walls along the flight path (parallel
+      // walls at the missile's exact Y get to register as a hit if they're
+      // close enough).
+      const _approachThresh = -0.1;
+      const _approaching = (tx, tz) => {
+        const ddot = (tx - px) * dir.x + (tz - pz) * dir.z;
+        return ddot > _approachThresh;
+      };
       // v0.21a: Hunter stagger — projectiles knock the Hunter back. Missile
       // doesn't bounce (it explodes on impact via the standard wall/blast
       // path below), so we pass null for the bounce arg and treat the stagger
@@ -18656,9 +19013,10 @@ function fireProjectile({ blastRadius = 4.0, travelSpeed = 22, color = 0xff4400,
       if(tryProjectileStaggerHunter(px, pz, dir.x * curSpeed, dir.z * curSpeed, effectiveHitR, null)) {
         sweptWallHit = true; break;
       }
-      // Obstacle hit check with parameterized radius
+      // Obstacle hit check with parameterized radius. Filter out hits behind
+      // the missile (back-to-obstacle launch case).
       const h = missileInFlightHitCheck(px, pz, effectiveHitR);
-      if(h) { sweptHit = h; break; }
+      if(h && _approaching(h.wx, h.wz)) { sweptHit = h; break; }
       // Wall hit check at this sub-step (uses effective radius, not hard-coded 0.35)
       const MISSILE_WALL_THICK = (G.biome === 'puttputt' ? 0.25 : 0.32) + wallExtra;
       if(G.wallPolylines) {
@@ -18673,7 +19031,8 @@ function fireProjectile({ blastRadius = 4.0, travelSpeed = 22, color = 0xff4400,
             const t = Math.max(0, Math.min(1, ((px-ax)*ex+(pz-az)*ez)/segLenSq));
             const nearX = ax+t*ex, nearZ = az+t*ez;
             const dist = Math.hypot(px-nearX, pz-nearZ);
-            if(dist < MISSILE_WALL_THICK) { wh = true; break; }
+            // v0.21a7: skip walls behind the missile (back-to-wall launch).
+            if(dist < MISSILE_WALL_THICK && _approaching(nearX, nearZ)) { wh = true; break; }
           }
           if(wh) break;
         }
@@ -18691,7 +19050,8 @@ function fireProjectile({ blastRadius = 4.0, travelSpeed = 22, color = 0xff4400,
             const et=Math.max(0,Math.min(1,((px-eax)*eex+(pz-eaz)*eez)/eLSq));
             const ecx=eax+et*eex,ecz=eaz+et*eez;
             const eDist=Math.hypot(px-ecx,pz-ecz);
-            if(eDist<MISSILE_WALL_THICK){awHit=true;break;}
+            // v0.21a7: skip corner edges behind the missile.
+            if(eDist<MISSILE_WALL_THICK && _approaching(ecx, ecz)){awHit=true;break;}
           }
           if(awHit) break;
         }
@@ -18816,8 +19176,12 @@ function triggerCheckeredFlag() {
 // Perks/cards marked 'no' in the Active column are filtered out at load time
 // v0.20g: three_balls, bowling_ball deactivated (bowling_ball was already
 // hidden via weight=0; now formally inactive via the same path).
+// v0.21b: airstrike removed from inactive list — now functional. wall_magnet
+// and slow_mo also have working impls so they could be reactivated; left
+// inactive here for now per existing tuning intent (wall_magnet too gimmicky;
+// slow_mo card duplicates the perk).
 const INACTIVE_PERKS = new Set(['double_or_nothing', 'thin_ice', 'coin_bouncer', 'three_balls', 'bowling_ball']);
-const INACTIVE_CARDS = new Set(['airstrike', 'wrecking_ball', 'wall_magnet', 'arc_shot', 'golden_path', 'slow_mo']);
+const INACTIVE_CARDS = new Set(['wrecking_ball', 'wall_magnet', 'arc_shot', 'golden_path', 'slow_mo', 'curve_ball']);
 
 const CARD_DEFS = {
   lil_scootch:  { id:'lil_scootch',  emoji:'🧤', name:"Lil' Scootch",    desc:'Cartoon glove gives the ball a nudge.',                        rarity:'common',    price:10,   context:'any',    holdable:false },
@@ -18855,6 +19219,7 @@ const CARD_DEFS = {
     desc:'Lob a grenade — wherever it lands becomes a purple exit portal. A green entry portal auto-places in front of your ball, facing the exit. Ball + missiles + dodgeballs + grenades + boulders all teleport through. Stays open until hole-out.',
     rarity:'legendary', price:30, context:'pre', holdable:false, weight:2 },
   holy_hand_grenade: { id:'holy_hand_grenade', emoji:'⛪', name:'Holy Hand Grenade', desc:'And the Lord did grin. Lob a sanctified grenade — 2× blast radius. Spares corner walls (the Lord is merciful).', rarity:'legendary', price:25, context:'pre', holdable:false, weight:1 },
+  airstrike:    { id:'airstrike',    emoji:'✈️', name:'Air Strike',       desc:'Call in a Top Gun-style bombing run. A pill-shaped target oscillates near→far in front of you — tap to lock distance. A jet drops 8 bombs across the strike zone, destroying everything inside.', rarity:'epic', price:35, context:'pre', holdable:false, weight:2 },
   pinball:      { id:'pinball',      emoji:'🎰', name:'Pinball',         desc:'12 seconds of invulnerable, frictionless, perfectly bouncy ball. The walls cannot hurt you. The walls cannot hold you.', rarity:'legendary', price:32, context:'pre', holdable:false, weight:1 },
   freeze_frame: { id:'freeze_frame', emoji:'🧊', name:'Freeze Frame',    desc:'All moving obstacles freeze for 10 seconds.',                    rarity:'rare',      price:11,  context:'any',    holdable:false, weight:3 },
   coin_shower:  { id:'coin_shower',  emoji:'🌧️', name:'Coin Shower',     desc:'Drop 20 coins in a line ahead of your ball. Clean line = bonus 5× coin!', rarity:'rare',      price:18,  context:'pre',    holdable:false },
@@ -18868,10 +19233,23 @@ const CARD_DEFS = {
   wall_magnet:  { id:'wall_magnet',  emoji:'🧲', name:'Wall Magnet',     desc:'This swing: ball curves toward the nearest wall. Bounce synergy!', rarity:'rare',      price:15,  context:'pre',    holdable:false },
   catapult:     { id:'catapult',     emoji:'🪤', name:'Catapult',         desc:'This swing: launch in a huge arc with bouncy landings. Skip walls!', rarity:'common',  price:12,  context:'pre',    holdable:false, weight:5 },
   mighty_egg:   { id:'mighty_egg',   emoji:'🥚', name:'Mighty Egg',        desc:'Encase your ball in a protective egg. Absorbs one 1-HP hit from spikes or other damage obstacles. Cracks on impact.', rarity:'common', price:10, context:'any', holdable:false, weight:2 },
-  sticky:       { id:'sticky',       emoji:'🟢', name:'Sticky',           desc:'Ball sticks to first wall, spinner, or slide block on contact. Take a FREE re-aim shot from the stuck position. Tap card again to unstick.', rarity:'common', price:15, context:'pre', holdable:false, weight:4 },
+  sticky:       { id:'sticky',       emoji:'🟢', name:'Sticky',           desc:'Ball sticks to the first surface it hits — wall, bumper, spinner, slide block, rock, corner, spike (still costs HP), or pop-up wall. Take a FREE re-aim shot from the stuck position. Tap card again to unstick.', rarity:'common', price:15, context:'pre', holdable:false, weight:4 },
   parkour:      { id:'parkour',      emoji:'🤸', name:'Parkour',          desc:'This swing: automatically vault the first obstacle in your path with a slow-mo cartwheel.', rarity:'rare', price:20, context:'pre', holdable:false, weight:3 },
   vacuum:       { id:'vacuum',       emoji:'🌪️', name:'Vacuum',            desc:'Suck up all coins and obstacles in a V-shaped cone in front of you. Play anytime — mid-roll briefly slows time.', rarity:'rare', price:30, context:'any', holdable:false, weight:2 },
   goal_oriented:{ id:'goal_oriented',emoji:'🎯', name:'Goal Oriented',    desc:'Instantly redirect your ball toward the hole mid-swing.', rarity:'epic', price:25, context:'during', holdable:false, weight:3 },
+  // v0.21c: Frisbee — arc fly-over, then snaps to a hard stop. Pull-distance still
+  // controls power; horizontal range is 1.5× normal max but ground friction is 4×
+  // normal so it stops in roughly half the post-landing distance. Visual: ball
+  // squashes flat into a frisbee disc, re-inflates on first ground contact.
+  frisbee:      { id:'frisbee',      emoji:'🥏', name:'Frisbee',          desc:"Turn your ball into a frisbee for one swing — high arc, 1.5× range, brakes hard on landing.", rarity:'rare', price:25, context:'pre', holdable:false, weight:3 },
+  // v0.21c: Curve Ball — pull-direction left/right offset from the vertical pull
+  // axis controls horizontal curve. Curves on the ground for ~1.5s (no wall
+  // bounces during curve). Pull back-and-LEFT = curve goes RIGHT and vice versa.
+  curve_ball:   { id:'curve_ball',   emoji:'🌀', name:'Curve Ball',        desc:'This swing: curve around obstacles. Pull sideways to bend your shot — left pull curves right, right pull curves left.', rarity:'common', price:20, context:'pre', holdable:false, weight:5 },
+  // v0.21c: Beat 'Em Up — during-roll. Cyan ring around the ball; tap card to
+  // throw a giant anime fist that punches the closest in-circle obstacle. Up
+  // to 3 punches per swing. Each punch destroys + knockback + style bonus.
+  beat_em_up:   { id:'beat_em_up',   emoji:'🥊', name:"Beat 'Em Up",       desc:'Cyan ring follows your ball. Tap to PUNCH the closest obstacle inside. Up to 3 punches per swing. BEATDOWN bonus if all 3 land!', rarity:'epic', price:40, context:'during', holdable:false, weight:2 },
 };
 
 // Starter deck definitions
@@ -19355,6 +19733,26 @@ function unarmCardByInstance(instanceId, cardId) {
     case 'wall_magnet':      G._wallMagnetActive = false; break;
     case 'jumper':           G._jumpPreloaded = false; G._jumpPending = false; break;
     case 'pinball':          G._pinballArmed = false; break;
+    case 'parkour':          // v0.21b: decrement charges on un-arm; clear all flags if last
+      G._parkourCharges = Math.max(0, (G._parkourCharges || 0) - 1);
+      if(G._parkourCharges === 0) G._parkourCardActive = false;
+      break;
+    // v0.21c: new pre-swing cards
+    case 'frisbee':
+      G._frisbeeArmed = false;
+      G._arcShotActive = false;
+      // Tear down the disc and restore the ball mesh visibility/scale.
+      if(G._frisbeeMesh) {
+        if(G._frisbeeMesh.parent) G._frisbeeMesh.parent.remove(G._frisbeeMesh);
+        G._frisbeeMesh = null;
+      }
+      if(G.ballMesh) {
+        G.ballMesh.visible = true;
+        const _bs = (typeof getBallVisualScale === 'function') ? getBallVisualScale() : 1.0;
+        G.ballMesh.scale.setScalar(_bs);
+      }
+      break;
+    case 'curve_ball':       G._curveBallArmed = false; G._curveBallStrength = 0; break;
     // freeze_frame / slow_mo / perpetual_motion intentionally NOT here — see
     // note above. If those land in _armedCards somehow, the cleanup still
     // removes them from the queue but the timer/effect keeps running.
@@ -19397,9 +19795,17 @@ function playCard(instanceId) {
   // like a free preview, so we no-op those instead.
   const _UNDOABLE_ARMED = new Set([
     'power_shot','iron_ball','cannonball','arc_shot','catapult',
-    'wall_magnet','jumper','pinball'
+    'wall_magnet','jumper','pinball','parkour','frisbee'
   ]);
   if(Array.isArray(G._armedCards) && G._armedCards.some(a => a.instanceId === instanceId)) {
+    // v0.21c: Beat 'Em Up is a special "armed" card — re-taps THROW PUNCHES,
+    // they don't unarm. Route directly to the activator and bypass the
+    // unarm/no-op logic.
+    if(card.id === 'beat_em_up') {
+      try { _executeCardAbilityInner('beat_em_up'); }
+      catch(e) { console.warn('beat_em_up retap activator failed', e); }
+      return false;
+    }
     if(_UNDOABLE_ARMED.has(card.id)) {
       unarmCardByInstance(instanceId, card.id);
     }
@@ -19426,6 +19832,12 @@ function playCard(instanceId) {
   if(G._portalArming && card.id !== 'portal_grenade') {
     _cancelPortalArming();
   }
+  // v0.21b: cancel airstrike aim if a non-airstrike card is played mid-aim.
+  // Mirrors grenade pattern — refunds the airstrike card via the existing
+  // cancellable-card flow.
+  if(G._airstrikeAiming && card.id !== 'airstrike') {
+    cancelAirStrike();
+  }
 
   // Find which slot this card was in (for animation)
   let playedSlotIdx = -1;
@@ -19444,7 +19856,7 @@ function playCard(instanceId) {
   // v0.20d: grenade joins the cancellable list — tapping it arms aim mode,
   // and the player can cancel by re-tapping the card before throwing.
   // v0.20h: holy_hand_grenade also cancellable (uses same aim flow).
-  if(card.id === 'sniper' || card.id === 'sharpshooter' || card.id === 'grenade' || card.id === 'holy_hand_grenade' || card.id === 'portal_grenade') {
+  if(card.id === 'sniper' || card.id === 'sharpshooter' || card.id === 'grenade' || card.id === 'holy_hand_grenade' || card.id === 'portal_grenade' || card.id === 'airstrike') {
     G._pendingCancellableCard = { id: card.id, instanceId, slotIdx: playedSlotIdx };
   } else {
     G._pendingCancellableCard = null;
@@ -19607,7 +20019,58 @@ function discardHand() {
   updateHandUI();
 }
 
+// v0.21c: Double Ammo — projectile cards fire twice. We classify each card:
+//   INSTANT_FIRE: the activator fires immediately. Scheduling another call
+//     ~300ms later gives the back-to-back 2× effect.
+//   AIM_REENTER: the activator enters an aim mode that fires on release.
+//     We mark _doubleAmmoPendingId so when the first shot's aim release lands,
+//     the relevant fire-completion path re-arms the same card.
+//   EXCLUDED: airstrike (carve-out), and anything not on the spec list.
+const DOUBLE_AMMO_INSTANT_FIRE = new Set(['shooter', 'dodgeball', 'boulder', 'explosivo', 'floomba']);
+const DOUBLE_AMMO_AIM_REENTER  = new Set(['grenade', 'holy_hand_grenade', 'portal_grenade', 'sniper', 'sharpshooter']);
+
+function isDoubleAmmoEligibleCard(cardId) {
+  return DOUBLE_AMMO_INSTANT_FIRE.has(cardId) || DOUBLE_AMMO_AIM_REENTER.has(cardId);
+}
+
+function hasDoubleAmmo() {
+  return G.modifiers && G.modifiers.some(m => m.id === 'double_ammo');
+}
+
 function executeCardAbility(id) {
+  // v0.21c: Double Ammo intercept — only fire on the FIRST execution per
+  // play. The 2nd shot is scheduled below (instant) or re-armed (aim-mode).
+  // _doubleAmmoSecondShot guards against infinite recursion.
+  const isDoubleAmmoFirstShot =
+    hasDoubleAmmo()
+    && isDoubleAmmoEligibleCard(id)
+    && !G._doubleAmmoSecondShot
+    && !G._doubleAmmoPendingId;
+
+  // Run the actual card ability switch.
+  _executeCardAbilityInner(id);
+
+  if(isDoubleAmmoFirstShot) {
+    if(DOUBLE_AMMO_INSTANT_FIRE.has(id)) {
+      // Schedule the second shot 300ms later, in the same direction.
+      G._doubleAmmoSecondShot = true;
+      showToast('🎯×2 Double Ammo: shot 2 incoming…', 700);
+      setTimeout(() => {
+        try {
+          _executeCardAbilityInner(id);
+        } catch(e) { console.warn('double_ammo second shot failed', e); }
+        G._doubleAmmoSecondShot = false;
+      }, 300);
+    } else if(DOUBLE_AMMO_AIM_REENTER.has(id)) {
+      // Mark pending — the card's release/throw site checks this and
+      // re-arms aim mode for shot 2.
+      G._doubleAmmoPendingId = id;
+      showToast('🎯×2 Double Ammo: aim shot 1, then shot 2!', 1100);
+    }
+  }
+}
+
+function _executeCardAbilityInner(id) {
   switch(id) {
     case 'jumper':       triggerJump(); break;
     case 'explosivo':    triggerExplosivo(); break;
@@ -19617,6 +20080,7 @@ function executeCardAbility(id) {
     case 'catapult':     activateCatapult(); break;
     case 'grenade':      activateGrenade(); break;
     case 'holy_hand_grenade': activateHolyHandGrenade(); break;
+    case 'airstrike':    activateAirStrike(); break;
     case 'boulder':      activateBoulder(); break;
     case 'ghost_ball':   activateGhostBall(); break;
     case 'backspin':     activateBackspin(); break;
@@ -19644,7 +20108,6 @@ function executeCardAbility(id) {
     // visualization directly.
     case 'angler':       break;
     // Placeholder for future cards:
-    case 'airstrike':    showToast('🎯 Airstrike coming soon!', 1000); break;
     case 'cannonball':   G._cannonballActive = true; showToast('💣 Cannonball armed — smash through walls!', 1000); break;
     case 'wrecking_ball': showToast('⛓️ Wrecking Ball coming soon!', 1000); break;
     case 'portal_grenade': armPortalGrenade(); break;
@@ -19657,6 +20120,10 @@ function executeCardAbility(id) {
     case 'vacuum':       activateVacuum(); break;
     case 'goal_oriented':activateGoalOriented(); break;
     case 'pinball':      activatePinball(); break;
+    // v0.21c: new cards
+    case 'frisbee':      activateFrisbee(); break;
+    case 'curve_ball':   activateCurveBall(); break;
+    case 'beat_em_up':   activateBeatEmUp(); break;
   }
 }
 
@@ -19683,6 +20150,11 @@ function isCardArmedPreSwing(cardId) {
     case 'perpetual_motion': return !!G._perpetualMotionActive;
     case 'pinball':      return !!G._pinballArmed;
     case 'sticky':       return !!G._stickyCardActive;
+    case 'parkour':      return (G._parkourCharges || 0) > 0; // v0.21b
+    // v0.21c: new cards
+    case 'frisbee':      return !!G._frisbeeArmed;
+    case 'curve_ball':   return !!G._curveBallArmed;
+    case 'beat_em_up':   return !!G._beatEmUpActive;
   }
   return false;
 }
@@ -19743,6 +20215,13 @@ function updateHandUI() {
     // queue is the single source of truth for "this card is queued."
     const armedQueue = Array.isArray(G._armedCards) ? G._armedCards : [];
     const isArmed = armedQueue.some(a => a.instanceId === card.instanceId);
+    // v0.21b: arm-order badge — show 1, 2, 3 etc. on armed cards based on
+    // the order they were tapped. This tells the player "what did I arm
+    // first?" at a glance, useful when stacking multiple cards (parkour×2,
+    // power_shot×2 + iron_ball, etc.).
+    const armOrder = isArmed
+      ? (armedQueue.findIndex(a => a.instanceId === card.instanceId) + 1)
+      : 0;
 
     let cls = 'card-slot card-filled';
     if(isGhostActive) cls = 'card-slot card-active';
@@ -19761,7 +20240,8 @@ function updateHandUI() {
 
     el.innerHTML = `<span class="card-emoji">${def.emoji}</span>` +
       `<span class="card-label">${def.name}</span>` +
-      `<span class="slot-key">${CARD_SLOT_LABELS[k]}</span>`;
+      `<span class="slot-key">${CARD_SLOT_LABELS[k]}</span>` +
+      (armOrder > 0 ? `<span class="arm-order-badge">${armOrder}</span>` : '');
 
     const capturedInstanceId = card.instanceId;
     const capturedCardId = card.id;
@@ -20267,6 +20747,899 @@ function spawnPinballSpark() {
   animSpark();
 }
 
+// ─────────────────────────────────────────────────────
+// v0.21c: Frisbee — high arc, 1.5× horizontal range, hard brake on landing.
+// Visual: ball squashes flat into a frisbee disc when ARMED (so the player
+// sees the transition during aim), re-inflates back into a ball on first
+// ground contact. Wall collision uses the existing arc fly-over.
+// ─────────────────────────────────────────────────────
+function activateFrisbee() {
+  if(G.inHole || G.state !== 'playing' || G.rolling) return;
+  if(G._frisbeeArmed) return;
+  G._frisbeeArmed = true;
+  // Re-use arc preview render path so the player sees the lobbed trajectory.
+  G._arcShotActive = true;
+  // v0.21c2: squash-poof transition runs NOW (at arming time), not on fire.
+  // The player sees the ball flatten into a disc during aim.
+  buildFrisbeeDisc();
+  showToast('🥏 Frisbee armed — fling it!', 1200);
+  triggerShake('light');
+  if(AC) {
+    const ac = getAC(), t = ac.currentTime;
+    // Whoosh up — short ascending sweep
+    const o = ac.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(220, t);
+    o.frequency.exponentialRampToValueAtTime(660, t + 0.18);
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0.10, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.20);
+    o.connect(g); g.connect(getACDest()); o.start(t); o.stop(t + 0.22);
+  }
+}
+window.activateFrisbee = activateFrisbee;
+
+// v0.21c2: Build the disc + run the squash transition. Called from
+// activateFrisbee at arming time (so the player sees the ball flatten into a
+// frisbee while still aiming). The disc starts at ball-scale 0 and grows in
+// while the ball mesh squashes flat then disappears.
+function buildFrisbeeDisc() {
+  // Already built? Don't double up.
+  if(G._frisbeeMesh) return;
+  // Ball color (frisbee matches the player's ball color)
+  let frisbeeColor = 0xffffff;
+  try {
+    if(isMultiplayer() && G.players && G.players[G.currentPlayer]) {
+      frisbeeColor = G.players[G.currentPlayer].color;
+    } else if(G.ballMesh && G.ballMesh.material && G.ballMesh.material.color) {
+      frisbeeColor = G.ballMesh.material.color.getHex();
+    }
+  } catch(e) {}
+  // Build the disc: flattened cylinder + emissive ring
+  const disc = new THREE.Group();
+  const discGeo = new THREE.CylinderGeometry(BALL_R * 1.6, BALL_R * 1.6, BALL_R * 0.35, 18);
+  const discMat = new THREE.MeshStandardMaterial({
+    color: frisbeeColor,
+    roughness: 0.5,
+    metalness: 0.1,
+    emissive: frisbeeColor,
+    emissiveIntensity: 0.18,
+  });
+  const discMesh = new THREE.Mesh(discGeo, discMat);
+  discMesh.castShadow = true;
+  disc.add(discMesh);
+  // Inset ring (tiny hint of the rim)
+  const rimGeo = new THREE.TorusGeometry(BALL_R * 1.55, BALL_R * 0.10, 6, 18);
+  const rimMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 });
+  const rim = new THREE.Mesh(rimGeo, rimMat);
+  rim.rotation.x = Math.PI / 2;
+  disc.add(rim);
+  disc.position.copy(G.ballPos);
+  disc.userData.noOutline = true;
+  // Start invisible — animated in over the squash transition
+  disc.scale.set(0.05, 0.05, 0.05);
+  scene.add(disc);
+  G._frisbeeMesh = disc;
+  G._frisbeeSpinPhase = 0;
+  // Squash-poof at the moment of transformation
+  spawnFrisbeePoof(G.ballPos.x, G.ballPos.y, G.ballPos.z, frisbeeColor);
+  // Animate the squash transition: ball flattens (Y scale → 0), disc grows in
+  const ballMesh = G.ballMesh;
+  const startT = performance.now();
+  const dur = 220;
+  const baseScale = (typeof getBallVisualScale === 'function') ? getBallVisualScale() : 1.0;
+  const animSquash = () => {
+    if(!G._frisbeeMesh) return;
+    const t = Math.min(1, (performance.now() - startT) / dur);
+    const ease = 1 - Math.pow(1 - t, 3);
+    // Disc scales 0.05 → 1.0
+    const ds = 0.05 + 0.95 * ease;
+    G._frisbeeMesh.scale.set(ds, ds, ds);
+    // Ball flattens (Y squash) and stretches wider in X/Z so it looks like
+    // it's getting smushed into a disc
+    if(ballMesh && ballMesh.scale) {
+      const ySquash = baseScale * (1 - 0.95 * ease);
+      const xzStretch = baseScale * (1 + 0.5 * ease);
+      ballMesh.scale.set(xzStretch, Math.max(0.02, ySquash), xzStretch);
+    }
+    if(t >= 1) {
+      // Hide the squashed ball; the disc owns the visual now.
+      if(ballMesh) {
+        ballMesh.visible = false;
+        ballMesh.scale.setScalar(baseScale); // restore for later
+      }
+      // Second poof at completion for extra juice
+      spawnFrisbeePoof(G.ballPos.x, G.ballPos.y + 0.05, G.ballPos.z, frisbeeColor);
+      return;
+    }
+    requestAnimationFrame(animSquash);
+  };
+  animSquash();
+  // Squash SFX — short rubbery "thwip"
+  if(AC) {
+    try {
+      const ac = getAC(), t = ac.currentTime;
+      const o = ac.createOscillator(); o.type = 'sawtooth';
+      o.frequency.setValueAtTime(180, t);
+      o.frequency.exponentialRampToValueAtTime(420, t + 0.12);
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.16, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+      const lp = ac.createBiquadFilter();
+      lp.type = 'lowpass'; lp.frequency.value = 900;
+      o.connect(lp); lp.connect(g); g.connect(getACDest());
+      o.start(t); o.stop(t + 0.20);
+    } catch(e){}
+  }
+}
+
+// Called from fireShot once a Frisbee-armed swing fires. The disc was already
+// built at arming time; this just toggles flags so the rest of the system
+// (friction brake, settle on contact) takes over.
+function startFrisbeeFlight() {
+  G._frisbeeArmed = false;
+  G._frisbeeActive = true;
+  G._frisbeeSettled = false;   // becomes true on first ground contact
+  if(AC) {
+    try {
+      const ac = getAC(), t = ac.currentTime;
+      const o = ac.createOscillator(); o.type = 'triangle';
+      o.frequency.setValueAtTime(330, t);
+      o.frequency.exponentialRampToValueAtTime(880, t + 0.12);
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.18, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+      o.connect(g); g.connect(getACDest()); o.start(t); o.stop(t + 0.20);
+    } catch(e){}
+  }
+}
+window.startFrisbeeFlight = startFrisbeeFlight;
+
+// Called when the frisbee makes its first ground contact — re-inflate to ball
+// and switch on hard ground friction (4× normal).
+function settleFrisbee() {
+  if(!G._frisbeeActive || G._frisbeeSettled) return;
+  G._frisbeeSettled = true;
+  G._frisbeeBrakeActive = true;   // physics step multiplies friction by 4×
+  // Color for the poof should match the disc
+  let poofColor = 0xffffff;
+  if(G._frisbeeMesh && G._frisbeeMesh.children && G._frisbeeMesh.children[0]
+     && G._frisbeeMesh.children[0].material && G._frisbeeMesh.children[0].material.color) {
+    poofColor = G._frisbeeMesh.children[0].material.color.getHex();
+  }
+  // Re-poof and unhide the ball
+  spawnFrisbeePoof(G.ballPos.x, G.ballPos.y, G.ballPos.z, poofColor);
+  if(G.ballMesh) G.ballMesh.visible = true;
+  if(G._frisbeeMesh) {
+    if(G._frisbeeMesh.parent) G._frisbeeMesh.parent.remove(G._frisbeeMesh);
+    G._frisbeeMesh = null;
+  }
+  G._frisbeeActive = false;   // visual transformation done; brake flag persists until ball stops
+  if(AC) {
+    try {
+      const ac = getAC(), t = ac.currentTime;
+      const o = ac.createOscillator(); o.type = 'sine';
+      o.frequency.setValueAtTime(660, t);
+      o.frequency.exponentialRampToValueAtTime(180, t + 0.15);
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.14, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+      o.connect(g); g.connect(getACDest()); o.start(t); o.stop(t + 0.20);
+    } catch(e){}
+  }
+  triggerShake('light');
+}
+
+function spawnFrisbeePoof(x, y, z, hex) {
+  // Quick puff of light particles in a ring
+  const N = 14;
+  for(let i = 0; i < N; i++) {
+    const ang = (i / N) * Math.PI * 2 + Math.random() * 0.4;
+    const r = 0.35 + Math.random() * 0.18;
+    const g = new THREE.SphereGeometry(0.07 + Math.random() * 0.05, 4, 4);
+    const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({
+      color: hex || 0xffffff, roughness: 0.7, transparent: true, opacity: 0.95,
+    }));
+    m.userData.noOutline = true;
+    m.position.set(x + Math.cos(ang) * r, y + 0.05, z + Math.sin(ang) * r);
+    scene.add(m);
+    const v = new THREE.Vector3(Math.cos(ang) * 1.8, 1.2 + Math.random() * 0.6, Math.sin(ang) * 1.8);
+    G.particles.push({ mesh: m, vel: v, spin: new THREE.Vector3(0, 0, 0), life: 0.45, maxLife: 0.45 });
+  }
+}
+
+// ─────────────────────────────────────────────────────
+// v0.21c: Curve Ball — ground-locked curve. Pull-direction left/right offset
+// from the vertical pull axis controls curve sign + magnitude. Curves for
+// ~1.5s after firing, then physics returns to normal. NO wall bouncing during
+// the curve phase — the ball just curves through the world (to keep the
+// "curve around obstacles" promise legible).
+// ─────────────────────────────────────────────────────
+function activateCurveBall() {
+  if(G.inHole || G.state !== 'playing' || G.rolling) return;
+  if(G._curveBallArmed) return;
+  G._curveBallArmed = true;
+  G._curveBallStrength = 0;       // updated live in onPointerMove drag handler
+  showToast('🌀 Curve Ball armed — pull SIDEWAYS to curve!', 1500);
+  if(AC) {
+    try {
+      const ac = getAC(), t = ac.currentTime;
+      const o = ac.createOscillator(); o.type = 'sine';
+      o.frequency.setValueAtTime(440, t);
+      o.frequency.linearRampToValueAtTime(880, t + 0.15);
+      o.frequency.linearRampToValueAtTime(440, t + 0.30);
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.10, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.32);
+      o.connect(g); g.connect(getACDest()); o.start(t); o.stop(t + 0.34);
+    } catch(e){}
+  }
+}
+window.activateCurveBall = activateCurveBall;
+
+function startCurveBallFlight() {
+  G._curveBallArmed = false;
+  G._curveBallActive = true;
+  G._curveBallTimer = 1.5;       // seconds of curve
+  // Strength was captured during pull → -1..+1. Convert to a per-second
+  // angular rate on the horizontal velocity. ~1.0 rad/s at full strength
+  // produces a visible 90°-of-curve over the full 1.5s flight.
+  G._curveBallRate = (G._curveBallStrength || 0) * 1.0;
+  G._curveBallStrength = 0;
+  // Tiny VFX: a swirling ring trail follows the ball during curve. Lightweight.
+  G._curveBallTrailNext = 0;
+  if(AC) {
+    try {
+      const ac = getAC(), t = ac.currentTime;
+      const o = ac.createOscillator(); o.type = 'triangle';
+      o.frequency.setValueAtTime(220, t);
+      o.frequency.exponentialRampToValueAtTime(110, t + 0.4);
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.08, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
+      o.connect(g); g.connect(getACDest()); o.start(t); o.stop(t + 0.48);
+    } catch(e){}
+  }
+}
+window.startCurveBallFlight = startCurveBallFlight;
+
+// ─────────────────────────────────────────────────────
+// v0.21c: Beat 'Em Up — during-roll. A cyan ring sits around the ball.
+// Re-tapping the card throws an anime fist that punches the closest in-circle
+// obstacle. Up to 3 punches; card ends at swing end.
+// ─────────────────────────────────────────────────────
+const BEAT_EM_UP_RADIUS = 5.0;   // 1.5× grenade AOE-ish (grenade is ~3.3m)
+
+function activateBeatEmUp() {
+  // v0.21c2: pre-swing arming supported. Ring spawns immediately on arm so
+  // the player sees the punch radius around the ball during aim. Punches
+  // require G.rolling — re-taps before swing show a "wait" hint instead.
+  if(G.inHole || G.state !== 'playing') return;
+  // FIRST tap (no active beat-em-up state) → arm.
+  if(!G._beatEmUpActive) {
+    G._beatEmUpActive = true;
+    G._beatEmUpPunchesLeft = 3;
+    G._beatEmUpPunchesLanded = 0;
+    buildBeatEmUpRing();   // ring appears immediately, regardless of rolling state
+    if(G.rolling) {
+      showToast("🥊 Beat 'Em Up — tap to PUNCH!", 1000);
+    } else {
+      showToast("🥊 Armed — punch on the swing!", 1100);
+    }
+    if(AC) {
+      try {
+        const ac = getAC(), t = ac.currentTime;
+        const o = ac.createOscillator(); o.type = 'square';
+        o.frequency.setValueAtTime(165, t);
+        o.frequency.exponentialRampToValueAtTime(55, t + 0.2);
+        const g = ac.createGain();
+        g.gain.setValueAtTime(0.12, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+        o.connect(g); g.connect(getACDest()); o.start(t); o.stop(t + 0.24);
+      } catch(e){}
+    }
+    return;
+  }
+  // Already armed/active. Re-tap behavior depends on rolling state.
+  if(!G.rolling) {
+    // Pre-roll re-tap → no-op with a hint. Don't consume a punch.
+    showToast('🥊 Wait for the swing!', 700);
+    return;
+  }
+  // Mid-roll re-tap → punch logic.
+  if(G._beatEmUpPunchesLeft <= 0) {
+    showToast('🥊 No punches left!', 700);
+    return;
+  }
+  // Find closest in-circle obstacle, with bias toward forward direction.
+  const cx = G.ballPos.x, cz = G.ballPos.z;
+  let dirX = 0, dirZ = -1;
+  if(G.ballVel) {
+    const sp = Math.hypot(G.ballVel.x, G.ballVel.z);
+    if(sp > 0.4) { dirX = G.ballVel.x / sp; dirZ = G.ballVel.z / sp; }
+    else if(G.shotDir && G.shotDir.length() > 0.01) { dirX = G.shotDir.x; dirZ = G.shotDir.z; }
+  }
+  const candidates = collectObstaclesInRadius(cx, cz, BEAT_EM_UP_RADIUS);
+  if(candidates.length === 0) {
+    // No obstacles in range — small "swish" feedback, no punch consumed.
+    showToast('🥊 No targets in range', 700);
+    if(AC) sfxBounce(2);
+    return;
+  }
+  // Score each: closer is better; in forward cone is much better.
+  let best = null, bestScore = -Infinity;
+  for(const h of candidates) {
+    const odx = h.wx - cx, odz = h.wz - cz;
+    const d = Math.hypot(odx, odz) || 0.01;
+    const ndx = odx / d, ndz = odz / d;
+    const fwdDot = ndx * dirX + ndz * dirZ;   // +1 = directly forward, -1 = directly behind
+    // Score: closeness (negative distance) + forward bias. Forward-cone gets +2 at full alignment.
+    const score = (BEAT_EM_UP_RADIUS - d) + 2.0 * Math.max(0, fwdDot);
+    if(score > bestScore) { bestScore = score; best = h; }
+  }
+  if(!best) return;
+  punchObstacle(best, dirX, dirZ);
+  G._beatEmUpPunchesLeft--;
+  G._beatEmUpPunchesLanded++;
+  // BEATDOWN bonus on the third successful punch in one swing.
+  if(G._beatEmUpPunchesLanded === 3) {
+    if(typeof recordStyleEvent === 'function') recordStyleEvent('beatdown');
+    G._holeStyleScore = (G._holeStyleScore || 0) + 500;
+    showToast('🥊 BEATDOWN! +500', 1400);
+    triggerShake('med');
+  }
+}
+window.activateBeatEmUp = activateBeatEmUp;
+
+function buildBeatEmUpRing() {
+  if(G._beatEmUpRing) return;
+  // Cyan flat ring on the ground, follows the ball.
+  const ringGeo = new THREE.RingGeometry(BEAT_EM_UP_RADIUS - 0.10, BEAT_EM_UP_RADIUS, 48);
+  const ringMat = new THREE.MeshBasicMaterial({
+    color: 0x00e6ff,
+    transparent: true,
+    opacity: 0.7,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+  });
+  const ring = new THREE.Mesh(ringGeo, ringMat);
+  ring.rotation.x = -Math.PI / 2;
+  ring.userData.noOutline = true;
+  ring.renderOrder = 999;
+  scene.add(ring);
+  G._beatEmUpRing = ring;
+  G._beatEmUpRingPhase = 0;
+}
+
+function destroyBeatEmUpRing() {
+  if(G._beatEmUpRing) {
+    if(G._beatEmUpRing.parent) G._beatEmUpRing.parent.remove(G._beatEmUpRing);
+    G._beatEmUpRing = null;
+  }
+  G._beatEmUpActive = false;
+  G._beatEmUpArmed = false;
+  G._beatEmUpPunchesLeft = 0;
+  G._beatEmUpPunchesLanded = 0;
+  // v0.21c: Beat 'Em Up was a "stays in slot during play" card. Now that the
+  // swing ended, drain it: remove from hand, drop from slot, push to discard,
+  // remove from _armedCards. Without this it would re-trigger the armed-card
+  // tap-routing on the NEXT swing without any ring being live.
+  if(Array.isArray(G._armedCards)) {
+    const idx = G._armedCards.findIndex(a => a.cardId === 'beat_em_up');
+    if(idx !== -1) {
+      const inst = G._armedCards[idx].instanceId;
+      G._armedCards.splice(idx, 1);
+      // Find in hand
+      if(G.hand) {
+        const hi = G.hand.findIndex(c => c.instanceId === inst);
+        if(hi !== -1) {
+          const _c = G.hand[hi];
+          G.hand.splice(hi, 1);
+          if(G.discard) G.discard.push(_c.id);
+        }
+      }
+      // Clear slot
+      if(G.cardSlots) {
+        for(let i = 0; i < G.cardSlots.length; i++) {
+          if(G.cardSlots[i] && G.cardSlots[i].instanceId === inst) G.cardSlots[i] = null;
+        }
+      }
+      if(typeof updateHandUI === 'function') updateHandUI();
+    }
+  }
+}
+
+// v0.21c: dispose the curve-ball preview spline. Safe to call when there's
+// nothing to dispose. Used by all the curve-state cleanup sites.
+function disposeCurveBallPreviewLine() {
+  if(G._curveBallPreviewLine) {
+    if(G._curveBallPreviewLine.parent) G._curveBallPreviewLine.parent.remove(G._curveBallPreviewLine);
+    if(G._curveBallPreviewLine.geometry) G._curveBallPreviewLine.geometry.dispose();
+    if(G._curveBallPreviewLine.material) G._curveBallPreviewLine.material.dispose();
+    G._curveBallPreviewLine = null;
+  }
+}
+
+// Anime-style fist punch VFX + destroy + extra knockback debris
+function punchObstacle(hit, dirX, dirZ) {
+  const cx = G.ballPos.x, cy = G.ballPos.y + 0.4, cz = G.ballPos.z;
+  const ox = hit.wx, oz = hit.wz;
+  const odx = ox - cx, odz = oz - cz;
+  const d = Math.hypot(odx, odz) || 0.01;
+  const punchDirX = odx / d, punchDirZ = odz / d;
+  // Build a big yellow fist mesh
+  const fistGroup = new THREE.Group();
+  const fistMat = new THREE.MeshStandardMaterial({
+    color: 0xffd23a,
+    emissive: 0xffaa00,
+    emissiveIntensity: 0.55,
+    roughness: 0.3,
+  });
+  // Knuckle ball
+  const knuckle = new THREE.Mesh(new THREE.SphereGeometry(0.6, 12, 8), fistMat);
+  fistGroup.add(knuckle);
+  // 4 finger knuckles
+  for(let i = 0; i < 4; i++) {
+    const k = new THREE.Mesh(new THREE.SphereGeometry(0.18, 6, 4), fistMat);
+    k.position.set(0.32, 0.18 - i * 0.16, 0.42);
+    fistGroup.add(k);
+  }
+  // Thumb
+  const thumb = new THREE.Mesh(new THREE.SphereGeometry(0.16, 6, 4), fistMat);
+  thumb.position.set(-0.2, 0.05, 0.40);
+  fistGroup.add(thumb);
+  // Wrist (cylinder behind knuckle)
+  const wrist = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.42, 0.5, 0.7, 10),
+    new THREE.MeshStandardMaterial({ color: 0xee8800, roughness: 0.4 })
+  );
+  wrist.rotation.x = Math.PI / 2;
+  wrist.position.z = -0.45;
+  fistGroup.add(wrist);
+  // Position: start at ball, oriented toward target
+  fistGroup.position.set(cx - punchDirX * 1.2, cy, cz - punchDirZ * 1.2);
+  fistGroup.rotation.y = Math.atan2(punchDirX, punchDirZ);
+  fistGroup.userData.noOutline = true;
+  // Squash-fly into the obstacle
+  scene.add(fistGroup);
+  const startT = performance.now();
+  const punchDur = 200;
+  const startX = fistGroup.position.x, startZ = fistGroup.position.z;
+  const endX = ox, endZ = oz;
+  const animFist = () => {
+    const t = (performance.now() - startT) / punchDur;
+    if(t >= 1) {
+      // Big impact frame — hold for 70ms then fade out.
+      fistGroup.position.set(endX, cy, endZ);
+      fistGroup.scale.set(1.4, 1.4, 1.4);
+      setTimeout(() => {
+        const fadeStart = performance.now();
+        const animFade = () => {
+          const ft = (performance.now() - fadeStart) / 180;
+          if(ft >= 1) {
+            if(fistGroup.parent) fistGroup.parent.remove(fistGroup);
+            return;
+          }
+          fistGroup.traverse(obj => {
+            if(obj.isMesh && obj.material) {
+              if(!obj.material.transparent) {
+                obj.material = obj.material.clone();
+                obj.material.transparent = true;
+              }
+              obj.material.opacity = 1 - ft;
+            }
+          });
+          requestAnimationFrame(animFade);
+        };
+        animFade();
+      }, 70);
+      return;
+    }
+    const ease = 1 - Math.pow(1 - t, 3);
+    fistGroup.position.x = startX + (endX - startX) * ease;
+    fistGroup.position.z = startZ + (endZ - startZ) * ease;
+    // Subtle scale stretch
+    const stretch = 1 + 0.4 * Math.sin(t * Math.PI);
+    fistGroup.scale.set(1.2, 1.2, stretch * 1.3);
+    requestAnimationFrame(animFist);
+  };
+  animFist();
+  // Impact shake + SFX (anime thwack — punchy, slightly pitched-up)
+  triggerShake('med');
+  if(AC) {
+    try {
+      const ac = getAC(), t = ac.currentTime;
+      // Sub thump
+      const o = ac.createOscillator(); o.type = 'sine';
+      o.frequency.setValueAtTime(110, t);
+      o.frequency.exponentialRampToValueAtTime(40, t + 0.22);
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.5, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+      o.connect(g); g.connect(getACDest()); o.start(t); o.stop(t + 0.27);
+      // High crack
+      const buf = makeNoiseBuffer(0.05, true);
+      const src = ac.createBufferSource(); src.buffer = buf;
+      const g2 = ac.createGain();
+      g2.gain.setValueAtTime(0.7, t); g2.gain.exponentialRampToValueAtTime(0.001, t + 0.10);
+      src.connect(g2); g2.connect(getACDest()); src.start(t); src.stop(t + 0.10);
+    } catch(e){}
+  }
+  // Destroy the obstacle and apply extra knockback to its debris by passing
+  // an epicentre BEHIND it (so debris fling away in the punch direction).
+  const epicX = ox - punchDirX * 0.5;
+  const epicZ = oz - punchDirZ * 0.5;
+  destroyObstacles([hit], epicX, G.ballPos.y, epicZ);
+  // Style points
+  if(typeof recordStyleEvent === 'function') recordStyleEvent('punch');
+  G._holeStyleScore = (G._holeStyleScore || 0) + 200;
+  // Floating "+200" popup
+  if(typeof spawnFloatingScore === 'function') {
+    spawnFloatingScore(ox, G.ballPos.y + 0.8, oz, '+200');
+  }
+}
+
+// ─────────────────────────────────────────────────────
+// v0.21c: Chain Lightning — every destruction zaps a nearby obstacle.
+// Stacks for additional bolts per kill. Recursion-capped at depth 3.
+// Hooked into destroyObstacles tail.
+// ─────────────────────────────────────────────────────
+// v0.21c3: radius bumped 5 → 9 for much more generous chaining. Most obstacle
+// clusters spawn at 3-5m spacing; 9m comfortably covers cross-cluster jumps so
+// a single kill can chain through multiple groups for the visible cascade
+// effect Adam wants.
+const CHAIN_LIGHTNING_RADIUS = 9.0;
+const CHAIN_LIGHTNING_MAX_DEPTH = 3;
+
+function applyChainLightning(hits, epicY) {
+  const stacks = G.modifiers ? G.modifiers.filter(m => m.id === 'chain_lightning').length : 0;
+  if(stacks <= 0) return;
+  if(!hits || hits.length === 0) return;
+  const depth = G._chainLightningDepth || 0;
+  if(depth >= CHAIN_LIGHTNING_MAX_DEPTH) return;
+  G._chainLightningDepth = depth + 1;
+  // For each destroyed hit, fire `stacks` bolts to nearby fresh obstacles.
+  for(const h of hits) {
+    const sourceX = h.wx, sourceZ = h.wz;
+    for(let s = 0; s < stacks; s++) {
+      const nearby = collectObstaclesInRadius(sourceX, sourceZ, CHAIN_LIGHTNING_RADIUS);
+      // Pick the closest non-destroyed candidate
+      let target = null, bestD = Infinity;
+      for(const cand of nearby) {
+        if(cand.physRef && cand.physRef._destroyed) continue;
+        // Don't re-target the source (its physRef is already _destroyed=true,
+        // but defensively skip same coords).
+        const dx = cand.wx - sourceX, dz = cand.wz - sourceZ;
+        const dd = Math.hypot(dx, dz);
+        if(dd < 0.05) continue;
+        if(dd < bestD) { bestD = dd; target = cand; }
+      }
+      if(!target) break;   // no more eligible neighbours; stop chaining for this source
+      // VFX: lightning bolt from source → target
+      spawnLightningBolt(sourceX, epicY + 0.2, sourceZ, target.wx, epicY + 0.2, target.wz);
+      // Destroy the target (recursive — counts as a destruction → can re-trigger).
+      destroyObstacles([target], target.wx, epicY, target.wz);
+    }
+  }
+  G._chainLightningDepth = depth;   // restore prior depth
+}
+
+function spawnLightningBolt(x1, y1, z1, x2, y2, z2) {
+  // v0.21c3: BIG BOLDLY VISIBLE bolts — cylinder tubes (real thickness) instead
+  // of THREE.Line (capped at 1px on most browsers, which is why Adam couldn't
+  // see anything). Plus a fullscreen flash, big endpoint flares, and the bolt
+  // re-jitters every frame for the duration so it visibly crackles.
+  //
+  // Architecture:
+  //   - Bolt path = 8 segments, perpendicular jitter biased to peak in middle
+  //   - 3 nested tube layers per segment: outer glow (fat, semi-transparent)
+  //     + core (medium, bright cyan) + inner (thin, white-hot)
+  //   - Each frame for ~280ms: regenerate path, dispose old tubes, build new
+  //     tubes. ~17 jitter rerolls in the lifetime — actively crackles.
+  //   - Endpoint flares: big bright spheres at source AND target.
+  //   - Screen flash: brief white DOM overlay so the bolt registers even if
+  //     the player's eye is elsewhere on screen.
+  const segments = 8;
+  const dx = x2 - x1, dz = z2 - z1, dy = y2 - y1;
+  const len3 = Math.hypot(dx, dy, dz) || 1;
+  const ux = dx / len3, uy = dy / len3, uz = dz / len3;
+  // Two perpendicular bases for jitter
+  const upX = 0, upY = 1, upZ = 0;
+  let p1x = uy*upZ - uz*upY;
+  let p1y = uz*upX - ux*upZ;
+  let p1z = ux*upY - uy*upX;
+  let p1Len = Math.hypot(p1x, p1y, p1z) || 1;
+  p1x /= p1Len; p1y /= p1Len; p1z /= p1Len;
+  let p2x = uy*p1z - uz*p1y;
+  let p2y = uz*p1x - ux*p1z;
+  let p2z = ux*p1y - uy*p1x;
+
+  // Tube radii — these are world-units, so tubes will read as proper geometry
+  // at any zoom level (unlike Lines which clamp to 1 screen pixel).
+  const R_OUTER = 0.32;   // soft glow shell
+  const R_CORE  = 0.16;   // bright cyan
+  const R_INNER = 0.07;   // white-hot
+
+  // Generate a jagged path. Returns array of THREE.Vector3 of length segments+1.
+  function genPath() {
+    const pts = [];
+    pts.push(new THREE.Vector3(x1, y1, z1));
+    for(let i = 1; i < segments; i++) {
+      const t = i / segments;
+      const bx = x1 + dx * t;
+      const by = y1 + dy * t;
+      const bz = z1 + dz * t;
+      const taper = Math.sin(t * Math.PI);
+      const amp = 0.7 * taper;   // generous lateral displacement
+      const j1 = (Math.random() - 0.5) * amp;
+      const j2 = (Math.random() - 0.5) * amp;
+      pts.push(new THREE.Vector3(
+        bx + p1x * j1 + p2x * j2,
+        by + p1y * j1 + p2y * j2,
+        bz + p1z * j1 + p2z * j2
+      ));
+    }
+    pts.push(new THREE.Vector3(x2, y2, z2));
+    return pts;
+  }
+
+  // Build a chain of cylinder segments along a path. Returns the THREE.Group.
+  function buildTubeChain(pts, radius, color, opacity, emissiveBoost) {
+    const grp = new THREE.Group();
+    grp.userData.noOutline = true;
+    grp.renderOrder = 999;
+    const mat = new THREE.MeshBasicMaterial({
+      color: color,
+      transparent: true,
+      opacity: opacity,
+      depthWrite: false,
+      depthTest: true,
+    });
+    for(let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i], b = pts[i+1];
+      const segDx = b.x - a.x, segDy = b.y - a.y, segDz = b.z - a.z;
+      const segLen = Math.hypot(segDx, segDy, segDz);
+      if(segLen < 0.001) continue;
+      const cyl = new THREE.Mesh(
+        new THREE.CylinderGeometry(radius, radius, segLen, 6, 1, true),
+        mat
+      );
+      // Position at midpoint
+      cyl.position.set((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2);
+      // Orient: cylinder default axis is +Y. Rotate so +Y aligns with segment dir.
+      const segNorm = new THREE.Vector3(segDx / segLen, segDy / segLen, segDz / segLen);
+      cyl.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), segNorm);
+      cyl.userData.noOutline = true;
+      grp.add(cyl);
+    }
+    return grp;
+  }
+
+  // Build/rebuild all 3 tube layers from a path. Layers are stored on G so we
+  // can dispose them on rejitter.
+  let outerGrp = null, coreGrp = null, innerGrp = null;
+  let branchGrps = [];
+
+  function disposeGroup(g) {
+    if(!g) return;
+    g.traverse(o => {
+      if(o.geometry) o.geometry.dispose();
+      if(o.material) o.material.dispose();
+    });
+    if(g.parent) g.parent.remove(g);
+  }
+
+  function rebuildBolt() {
+    disposeGroup(outerGrp); disposeGroup(coreGrp); disposeGroup(innerGrp);
+    for(const bg of branchGrps) disposeGroup(bg);
+    branchGrps = [];
+    const pts = genPath();
+    outerGrp = buildTubeChain(pts, R_OUTER, 0x66bbff, 0.45, 0);
+    coreGrp  = buildTubeChain(pts, R_CORE,  0xaaeeff, 0.92, 0);
+    innerGrp = buildTubeChain(pts, R_INNER, 0xffffff, 1.0,  0);
+    scene.add(outerGrp);
+    scene.add(coreGrp);
+    scene.add(innerGrp);
+    // 3 fork branches off random mid-points
+    const branchCount = 3;
+    for(let b = 0; b < branchCount; b++) {
+      const startIdx = 2 + Math.floor(Math.random() * (pts.length - 4));
+      const base = pts[startIdx];
+      const fdJ1 = (Math.random() - 0.5);
+      const fdJ2 = (Math.random() - 0.5);
+      const reach = 0.9 + Math.random() * 0.7;
+      const tipX = base.x + (p1x * fdJ1 + p2x * fdJ2) * reach;
+      const tipY = base.y + (p1y * fdJ1 + p2y * fdJ2) * reach + Math.random() * 0.3;
+      const tipZ = base.z + (p1z * fdJ1 + p2z * fdJ2) * reach;
+      // 2-segment jagged fork
+      const forkPts = [
+        base.clone(),
+        new THREE.Vector3(
+          base.x + (tipX - base.x) * 0.5 + (Math.random() - 0.5) * 0.3,
+          base.y + (tipY - base.y) * 0.5 + (Math.random() - 0.5) * 0.3,
+          base.z + (tipZ - base.z) * 0.5 + (Math.random() - 0.5) * 0.3
+        ),
+        new THREE.Vector3(tipX, tipY, tipZ),
+      ];
+      const fOuter = buildTubeChain(forkPts, R_OUTER * 0.7, 0x66bbff, 0.4, 0);
+      const fCore  = buildTubeChain(forkPts, R_CORE  * 0.7, 0xaaeeff, 0.85, 0);
+      scene.add(fOuter);
+      scene.add(fCore);
+      branchGrps.push(fOuter, fCore);
+    }
+  }
+
+  rebuildBolt();
+
+  // ── Endpoint flares: big bright spheres at source + target ──
+  const flares = [];
+  for(const [fx, fy, fz, isTarget] of [[x1, y1, z1, false], [x2, y2, z2, true]]) {
+    // Outer hot glow
+    const flGeo = new THREE.SphereGeometry(0.7, 12, 8);
+    const flMat = new THREE.MeshBasicMaterial({
+      color: 0xaaeeff,
+      transparent: true,
+      opacity: 0.85,
+      depthWrite: false,
+    });
+    const fl = new THREE.Mesh(flGeo, flMat);
+    fl.position.set(fx, fy, fz);
+    fl.userData.noOutline = true;
+    fl.renderOrder = 999;
+    scene.add(fl);
+    flares.push(fl);
+    // Inner white-hot core
+    const coreGeo = new THREE.SphereGeometry(0.35, 10, 8);
+    const coreMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 1.0,
+      depthWrite: false,
+    });
+    const cor = new THREE.Mesh(coreGeo, coreMat);
+    cor.position.set(fx, fy, fz);
+    cor.userData.noOutline = true;
+    cor.renderOrder = 999;
+    scene.add(cor);
+    flares.push(cor);
+  }
+
+  // ── Screen-flash DOM overlay — registers the bolt even if eye is elsewhere ──
+  let flashEl = null;
+  try {
+    flashEl = document.createElement('div');
+    flashEl.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:100vh;'
+      + 'background:radial-gradient(ellipse at center, rgba(170,238,255,0.35) 0%, rgba(170,238,255,0.0) 60%);'
+      + 'pointer-events:none;z-index:8000;mix-blend-mode:screen;'
+      + 'transition:opacity 0.18s ease-out;opacity:1;';
+    document.body.appendChild(flashEl);
+    // Fade out
+    requestAnimationFrame(() => { if(flashEl) flashEl.style.opacity = '0'; });
+    setTimeout(() => { if(flashEl && flashEl.parentNode) flashEl.parentNode.removeChild(flashEl); }, 200);
+  } catch(e) {}
+
+  // ── Animate: re-jitter every frame for crackle, fade over lifetime ──
+  const startT = performance.now();
+  const dur = 280;   // total bolt lifetime
+  const animate = () => {
+    const now = performance.now();
+    const t = (now - startT) / dur;
+    if(t >= 1) {
+      disposeGroup(outerGrp); disposeGroup(coreGrp); disposeGroup(innerGrp);
+      for(const bg of branchGrps) disposeGroup(bg);
+      for(const fl of flares) {
+        if(fl.geometry) fl.geometry.dispose();
+        if(fl.material) fl.material.dispose();
+        if(fl.parent) fl.parent.remove(fl);
+      }
+      return;
+    }
+    // Re-jitter every frame for the first 70% of lifetime; then hold + fade.
+    if(t < 0.70) rebuildBolt();
+    // Flicker fade
+    const flicker = 0.85 + Math.random() * 0.15;
+    const fadeNow = (1 - t) * flicker;
+    const setLayerOpacity = (grp, baseOpacity) => {
+      if(!grp) return;
+      grp.traverse(o => {
+        if(o.material) o.material.opacity = baseOpacity * fadeNow;
+      });
+    };
+    setLayerOpacity(outerGrp, 0.45);
+    setLayerOpacity(coreGrp,  0.92);
+    setLayerOpacity(innerGrp, 1.0);
+    for(const bg of branchGrps) setLayerOpacity(bg, 0.7);
+    // Endpoint flares: scale up + fade out
+    const flareS = 1.0 + t * 1.4;
+    for(let i = 0; i < flares.length; i++) {
+      flares[i].scale.setScalar(flareS);
+      const baseOp = (i % 2 === 0) ? 0.85 : 1.0;
+      flares[i].material.opacity = baseOp * (1 - t);
+    }
+    requestAnimationFrame(animate);
+  };
+  animate();
+
+  // ── SFX: sustained tesla-coil sizzle (unchanged from v0.21c2) ──
+  if(AC) {
+    try {
+      const ac = getAC(), t = ac.currentTime;
+      const dur_s = 0.28;
+      const masterG = ac.createGain();
+      masterG.gain.setValueAtTime(0.0, t);
+      masterG.gain.linearRampToValueAtTime(0.7, t + 0.005);
+      masterG.gain.setValueAtTime(0.7, t + dur_s - 0.04);
+      masterG.gain.exponentialRampToValueAtTime(0.001, t + dur_s);
+      masterG.connect(getACDest());
+
+      // (1) Buzzy oscillator with vibrato
+      const o1 = ac.createOscillator();
+      o1.type = 'sawtooth';
+      o1.frequency.setValueAtTime(1800, t);
+      o1.frequency.linearRampToValueAtTime(2400, t + dur_s * 0.5);
+      o1.frequency.linearRampToValueAtTime(1500, t + dur_s);
+      const lfo = ac.createOscillator();
+      lfo.type = 'sine';
+      lfo.frequency.setValueAtTime(30, t);
+      const lfoGain = ac.createGain();
+      lfoGain.gain.setValueAtTime(60, t);
+      lfo.connect(lfoGain).connect(o1.frequency);
+      const bp1 = ac.createBiquadFilter();
+      bp1.type = 'bandpass';
+      bp1.frequency.value = 2200;
+      bp1.Q.value = 4;
+      const g1 = ac.createGain();
+      g1.gain.setValueAtTime(0.30, t);
+      g1.gain.linearRampToValueAtTime(0.001, t + dur_s);
+      o1.connect(bp1).connect(g1).connect(masterG);
+      o1.start(t); o1.stop(t + dur_s);
+      lfo.start(t); lfo.stop(t + dur_s);
+
+      // (2) High-frequency sizzle
+      const buf = makeNoiseBuffer(dur_s + 0.02, true);
+      const src = ac.createBufferSource(); src.buffer = buf;
+      const bp2 = ac.createBiquadFilter();
+      bp2.type = 'bandpass';
+      bp2.frequency.setValueAtTime(4500, t);
+      bp2.frequency.linearRampToValueAtTime(6000, t + dur_s);
+      bp2.Q.value = 2.5;
+      const g2 = ac.createGain();
+      g2.gain.setValueAtTime(0.40, t);
+      g2.gain.linearRampToValueAtTime(0.05, t + dur_s);
+      src.connect(bp2).connect(g2).connect(masterG);
+      src.start(t); src.stop(t + dur_s + 0.02);
+
+      // (3) Low-end zap
+      const o3 = ac.createOscillator();
+      o3.type = 'sine';
+      o3.frequency.setValueAtTime(140, t);
+      o3.frequency.exponentialRampToValueAtTime(50, t + 0.10);
+      const g3 = ac.createGain();
+      g3.gain.setValueAtTime(0.50, t);
+      g3.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+      o3.connect(g3).connect(masterG);
+      o3.start(t); o3.stop(t + 0.14);
+    } catch(e){}
+  }
+}
+
+// Floating "+N" score popup (used by Beat 'Em Up). Falls back to a no-op if
+// other code already defines it.
+if(typeof window.spawnFloatingScore !== 'function') {
+  window.spawnFloatingScore = function(wx, wy, wz, text) {
+    // Project to screen and overlay a brief DOM element.
+    try {
+      const v = new THREE.Vector3(wx, wy, wz).project(camera);
+      const sx = (v.x + 1) * window.innerWidth / 2;
+      const sy = (-v.y + 1) * window.innerHeight / 2;
+      const el = document.createElement('div');
+      el.textContent = text;
+      el.setAttribute('data-style-flyer', '1');
+      el.style.cssText = 'position:fixed;left:'+sx+'px;top:'+sy+'px;'
+        + 'transform:translate(-50%,-50%);font-weight:900;font-size:1.6rem;color:#ffd23a;'
+        + 'text-shadow:0 2px 0 #b56a00, 0 0 12px rgba(255,170,0,0.7);'
+        + 'pointer-events:none;z-index:9999;transition:transform 0.7s ease-out, opacity 0.7s ease-out;';
+      document.body.appendChild(el);
+      requestAnimationFrame(() => {
+        el.style.transform = 'translate(-50%, -150%) scale(1.3)';
+        el.style.opacity = '0';
+      });
+      setTimeout(() => { if(el.parentNode) el.parentNode.removeChild(el); }, 720);
+    } catch(e){}
+  };
+}
+
 // ── Dodgeball — super-bouncy red projectile ───────────
 function activateDodgeball() {
   if(G.rolling || G.inHole) return;
@@ -20671,7 +22044,7 @@ function activateSticky() {
       G.ballMesh.material.emissiveIntensity = 0.7;
     }
   }
-  showToast('🟢 Sticky armed — sticks on first wall/spinner/slider!', 1400);
+  showToast('🟢 Sticky armed — sticks on first surface!', 1400);
   if(AC) {
     try {
       const ac = getAC(), t = ac.currentTime;
@@ -20683,11 +22056,40 @@ function activateSticky() {
   }
 }
 
+// v0.21a6: Shared SFX / VFX / toast for any sticky-stick event. Pulled out
+// of the per-obstacle blocks so adding a new stickable surface is one line.
+// Pass a label like 'wall', 'spinner', 'bumper' to customize the toast.
+function _stickyShared(label) {
+  spawnHitParticles(G.ballPos);
+  showToast(`🟢 SPLAT on ${label}! Free re-aim →`, 1500);
+  triggerShake('med');
+  if(AC) {
+    try {
+      const ac = getAC(), t = ac.currentTime;
+      const o = ac.createOscillator(); o.type = 'sine';
+      o.frequency.setValueAtTime(900, t);
+      o.frequency.exponentialRampToValueAtTime(320, t + 0.22);
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.22, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.28);
+      o.connect(g); g.connect(getACDest());
+      o.start(t); o.stop(t + 0.3);
+    } catch(e){}
+  }
+}
+
 // v0.21a3: Called from physics when the ball makes contact with a stickable
 // surface while sticky is armed. attachment is one of:
-//   { kind:'wall', nx, nz }
+//   { kind:'wall', nx, nz }                              — wall, bumper, spike,
+//                                                          rock, angled wall,
+//                                                          popup wall (any
+//                                                          static/normal-based
+//                                                          surface)
 //   { kind:'spinner', ref:bar, distFromPivot, angleOffset }
 //   { kind:'slideBlock', ref:sb, localOffsetX, localOffsetZ }
+//   { kind:'popupWall', ref:pw, nx, nz }                 — like wall but
+//                                                          unsticks if the
+//                                                          wall retracts
 // localOffset for slide blocks is measured relative to the block's CURRENT
 // world position at attachment time, so we can recompute ball position from
 // the block's offset each frame. For spinners, distFromPivot + angleOffset
@@ -20725,6 +22127,13 @@ function unstickBall() {
   if(!G._stickyAttached) return;
   G._stickyAttached = null;
   G._stickyFreeSwing = false;
+  // v0.21a6: also clear card-active and triggered flags so the player can
+  // re-arm sticky later in the same hole if they have another sticky card
+  // in hand. Previously these stayed true until the next per-swing reset's
+  // clearStickyState call — which sometimes never ran cleanly, leaving
+  // sticky in a "armed but already triggered" zombie state.
+  G._stickyCardActive = false;
+  G._stickyCardTriggered = false;
   // Hide the aim arrow if we're showing it — the ball is about to fall
   if(G.aimArrow) { scene.remove(G.aimArrow); G.aimArrow = null; }
   G.aimMode = false;
@@ -20735,6 +22144,18 @@ function unstickBall() {
   // Clear the squash visual
   G._stickyCardSquash = null;
   if(G.ball) G.ball.scale.set(1, 1, 1);
+  // v0.21a6: restore the ball's original emissive (green tint) since we're
+  // no longer relying on clearStickyState to do so.
+  if(G.ball && G.ballMesh && G.ballMesh.material && G.ballMesh.material.emissive) {
+    if(G._stickyOrigEmissive !== undefined) {
+      G.ballMesh.material.emissive.setHex(G._stickyOrigEmissive);
+      G._stickyOrigEmissive = undefined;
+    }
+    if(G._stickyOrigEmissiveIntensity !== undefined && G.ballMesh.material.emissiveIntensity !== undefined) {
+      G.ballMesh.material.emissiveIntensity = G._stickyOrigEmissiveIntensity;
+      G._stickyOrigEmissiveIntensity = undefined;
+    }
+  }
   if(AC) {
     try {
       const ac = getAC(), t = ac.currentTime;
@@ -20750,6 +22171,7 @@ window.unstickBall = unstickBall;
 // v0.21a3: Per-frame tracking for moving attachments. Wall sticks are static
 // so this is a no-op for them. Spinner sticks rotate the ball with the bar;
 // slide-block sticks translate with the block. Called from animate().
+// v0.21a6: 'popupWall' kind unsticks if the wall retracts below the ball.
 function tickStickyAttachment() {
   const a = G._stickyAttached;
   if(!a) return;
@@ -20776,6 +22198,19 @@ function tickStickyAttachment() {
     if(G.ball) G.ball.position.set(G.ballPos.x, G.ballPos.y, G.ballPos.z);
     if(G.ballShadow) G.ballShadow.position.set(G.ballPos.x, 0.05, G.ballPos.z);
     if(G.aimMode && G.aimArrow && typeof updateAimArrow === 'function') updateAimArrow();
+  } else if(a.kind === 'popupWall') {
+    // v0.21a6: popup walls retract over time. If the wall has dropped below
+    // the ball's height (i.e. the wall is fully retracted or the ball is
+    // riding above the wall top), the stick can't be maintained — drop the
+    // ball into normal physics so it falls naturally.
+    const pw = a.ref;
+    if(!pw || pw._destroyed) { unstickBall(); return; }
+    if(!pw.currentTopY || pw.currentTopY < G.ballPos.y - BALL_R) {
+      unstickBall();
+      return;
+    }
+    // Static-position stick; nothing to track. Ball stays put at its initial
+    // contact point until the wall retracts or the player fires.
   }
 }
 window.tickStickyAttachment = tickStickyAttachment;
@@ -20808,24 +22243,36 @@ function clearStickyState() {
   if(G.ball) G.ball.scale.set(1, 1, 1);
 }
 
-// ── Parkour (v0.19x) ──────────────────────────────────
+// ── Parkour (v0.19x; multi-charge in v0.21b) ──────────
 // Armed as a per-swing buff. When the ball first approaches an obstacle mid-
 // flight, we engage slow-mo, spawn walkies legs/arms on the ball, arc the
 // ball up and over with a spinning cartwheel, then resume the shot.
-// Implementation: set a flag + "scan radius" on activation. The physics loop
-// checks each frame whether the ball is within scan range of any obstacle
-// and flying toward it; if so, hands off to parkourLeap() which runs a
-// scripted 0.6s slow-mo vault.
+// Implementation: G._parkourCharges counts available leaps. Each Parkour
+// card armed adds one charge; each successful leap consumes one charge.
+// Multiple parkour cards in the slot tray = leap multiple obstacles in
+// the same swing. Cards stay slot-armed (lifted, glowing) until swing fire
+// drains all armed cards (matches Power Shot stacking pattern).
+// _parkourArcing locks the trigger during the active leap arc so the next
+// scan tick doesn't immediately fire on the SAME obstacle.
 function activateParkour() {
-  if(G._parkourCardActive) { showToast('🤸 Parkour already armed!', 800); return; }
+  // v0.21b: each tap of a parkour card adds a charge instead of dead-tapping
+  // when one is already armed. Visual lift/glow handled via isCardArmedPreSwing.
+  G._parkourCharges = (G._parkourCharges || 0) + 1;
+  // Keep _parkourCardActive as a derived flag for back-compat — anything
+  // reading it via legacy code still gets the right truthy answer.
   G._parkourCardActive = true;
-  G._parkourCardUsed = false; // fires only once per swing
-  showToast('🤸 Parkour armed — leap the first obstacle!', 1200);
+  G._parkourArcing = false; // not currently mid-arc on first arm
+  const _n = G._parkourCharges;
+  if(_n > 1) showToast(`🤸 Parkour ×${_n} — leap ${_n} obstacles!`, 1200);
+  else        showToast('🤸 Parkour armed — leap the next obstacle!', 1200);
   if(AC) {
     try {
       const ac = getAC(), t = ac.currentTime;
       const o = ac.createOscillator(); o.type = 'sine';
-      o.frequency.setValueAtTime(520, t); o.frequency.exponentialRampToValueAtTime(980, t + 0.14);
+      // Pitch climbs with charge count for audible stacking feedback
+      const _baseFreq = 520 + (_n - 1) * 80;
+      o.frequency.setValueAtTime(_baseFreq, t);
+      o.frequency.exponentialRampToValueAtTime(_baseFreq * 1.9, t + 0.14);
       const g = ac.createGain(); g.gain.setValueAtTime(0.10, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
       o.connect(g); g.connect(getACDest()); o.start(t); o.stop(t + 0.2);
     } catch(e){}
@@ -20838,15 +22285,19 @@ function activateParkour() {
 // ball through the air, then restores normal time.
 // v0.19z: immunity flag prevents obstacle collisions from firing during the
 // leap so tall bumpers can't knock the ball backwards mid-vault.
+// v0.21b: multi-charge — each call decrements _parkourCharges; gate uses
+// _parkourArcing for "currently mid-leap" lockout (was _parkourCardUsed).
 function parkourLeap(obstacleWX, obstacleWZ, obstacleTag) {
-  if(G._parkourCardUsed || !G.ball) return;
-  G._parkourCardUsed = true;
-  G._parkourCardActive = false;
+  if(G._parkourArcing || !G.ball) return;
+  if(!(G._parkourCharges > 0)) return;
+  G._parkourCharges -= 1;
+  if(G._parkourCharges <= 0) G._parkourCardActive = false;
+  G._parkourArcing = true;
 
   // Preserve current velocity direction + magnitude for arc + landing.
   const vx = G.ballVel.x, vz = G.ballVel.z;
   const spd = Math.hypot(vx, vz);
-  if(spd < 0.1) return;
+  if(spd < 0.1) { G._parkourArcing = false; return; }
   const dirX = vx/spd, dirZ = vz/spd;
 
   // v0.19z: IMMUNITY — suppress obstacle collisions for the whole leap so no
@@ -20918,6 +22369,8 @@ function parkourLeap(obstacleWX, obstacleWZ, obstacleTag) {
   // End slow-mo + immunity after the scripted duration (real-time ms).
   // Note: the arc itself finishes inside updatePhysics when elapsed >= duration.
   // v0.19z2: 700ms → 420ms to match the tighter arc.
+  // v0.21b: clear _parkourArcing so the next leap (if charges remain) can
+  // trigger on the next obstacle the ball approaches.
   setTimeout(() => {
     G._slowMoScale = G._parkourOrigSlowMo || 1.0;
     G._parkourOrigSlowMo = null;
@@ -20928,6 +22381,7 @@ function parkourLeap(obstacleWX, obstacleWZ, obstacleTag) {
     G._parkourSpinTimer = null;
     G._parkourSpinDuration = 0;
     G._parkourImmunity = false;  // collisions re-enabled
+    G._parkourArcing = false;    // v0.21b: re-arm trigger if charges remain
   }, 420);
 }
 
@@ -20960,7 +22414,9 @@ function spawnParkourLimbs() {
 // Helper used from per-swing reset to clear parkour state
 function clearParkourState() {
   G._parkourCardActive = false;
-  G._parkourCardUsed = false;
+  G._parkourCardUsed = false;     // legacy field, keep cleared for safety
+  G._parkourCharges = 0;          // v0.21b: multi-charge counter
+  G._parkourArcing = false;       // v0.21b: per-leap mid-arc lock
   G._parkourSpinTimer = null;
   G._parkourSpinDuration = 0;
   G._parkourImmunity = false;  // v0.19z: ensure immunity can't leak across shots
@@ -23143,7 +24599,18 @@ function tickPortalRTT() {
     // door silhouette). Reusing the main outlinePass instance is safe — we
     // swap its camera to `cam` for the portal call, then restore. Same scene
     // reference is fine; OutlinePass doesn't mutate scene state.
-    if (typeof outlinePass !== 'undefined' && outlinePass && updateMe.renderTargetB) {
+    // v0.21c2 mobile fix: skip the OutlinePass for portal RT on mobile.
+    // The pass requires resizing its internal depth texture between the
+    // main-screen resolution and the portal RT resolution every frame; on
+    // iOS Safari (and some Android browsers) this resize-thrash leaves the
+    // depth texture in an inconsistent state, and the Sobel filter then
+    // sees "edges" everywhere — which is what produced the giant black
+    // diagonal-stripe rectangle filling the portal door on mobile. The
+    // un-outlined fallback path is below — it just points the door at rt
+    // directly. Visually: portal contents render without cartoon outlines
+    // on mobile only. Far better than the broken-window bug.
+    const _skipOutlineOnPortal = !!_GGW_isMobile;
+    if (!_skipOutlineOnPortal && typeof outlinePass !== 'undefined' && outlinePass && updateMe.renderTargetB) {
       const _origCam = outlinePass.camera;
       outlinePass.camera = cam;
       // The portal RTs may be a different size than the main outline depth
@@ -23181,8 +24648,9 @@ function tickPortalRTT() {
         updateMe.doorMat.uniforms.tPortal.value = updateMe.renderTargetB.texture;
       }
     } else {
-      // No outlinePass available (e.g. composer init order race) — door
-      // continues sampling rt directly. Keeps gameplay visible.
+      // Mobile, OR no outlinePass available — door samples rt directly.
+      // Portal contents will lack cartoon outlines but the rest of the
+      // shading is intact. Far better than the broken-stripe rendering.
       if (updateMe.doorMat && updateMe.doorMat.uniforms && updateMe.doorMat.uniforms.tPortal) {
         updateMe.doorMat.uniforms.tPortal.value = updateMe.renderTarget.texture;
       }
@@ -24099,6 +25567,544 @@ function sfxHolyHallelujah() {
     o.start(t); o.stop(t + 1.55);
   });
 }
+
+// ── Air Strike (v0.21b) ───────────────────────────────
+// Epic 35¢ card. Workflow:
+//   1. Tap card → enter aim mode. Pill-shaped AOE preview appears in the
+//      direction the camera is facing, oscillating near→far→near every
+//      ~1.4s. Player can rotate to aim but can't adjust distance directly —
+//      the distance is whatever the pill is at when they tap to lock.
+//   2. Tap canvas → lock pill, dispose targeter, spawn jet flyby cinematic.
+//      Camera rises and rotates to follow the jet for ~1.5s.
+//   3. Jet drops 8 bombs sequentially along the locked pill axis. Each
+//      bomb explodes with grenade-sized AOE, destroying obstacles + walls.
+//   4. After last bomb lands, camera returns and aim mode exits.
+// The pill's geometry: ~3 grenade radii wide × ~7 grenade radii long,
+// starting ~3m from ball and oscillating up to ~28m out.
+const AIRSTRIKE = {
+  // v0.21b3: pill 30% larger across the board — wider AOE, longer corridor.
+  PILL_HALF_WIDTH: 4.55,   // was 3.5 (×1.3)
+  PILL_LENGTH: 28.6,       // was 22.0 (×1.3)
+  NEAR_DIST: 3.5,          // closest the pill's near edge gets to ball
+  // v0.21b2: extended reach +30% (was 28). Lets the strike threaten the
+  // entire length of typical holes.
+  FAR_DIST: 36.4,          // farthest the pill's near edge gets from ball
+  // v0.21b2: oscillation 50% faster (period was 1.4s → 0.93s). Combined with
+  // the rotation-around-center jitter below, locking a precise angle is
+  // genuinely tricky — players have to read both phase AND rotation.
+  OSCILLATION_PERIOD: 0.93,
+  // v0.21b2: pill rotates around its CENTER as it oscillates. Player must
+  // time the lock so the pill is pointed at their target.
+  // v0.21b4: rotation period detuned to GOLDEN RATIO squared multiple of
+  // the oscillation period (0.93 × φ² ≈ 2.435s). The golden ratio is
+  // provably the most irrational number — meaning no simple rational
+  // approximation, so the pill's angle/distance combo NEVER repeats and
+  // never settles into a learnable rhythm. Compare to the previous 3.6s
+  // (ratio 3.87) which was close enough to 4 that players could roughly
+  // pre-time their lock to a "every-4-oscillations" pseudo-cycle. With
+  // φ² the pattern visibly drifts every cycle — each near-end visit
+  // shows the pill at a meaningfully different angle (~95° offset per
+  // oscillation), so the player has to read the live state and react,
+  // not memorize.
+  ROTATION_RATE: (Math.PI * 2) / (0.93 * 2.6180339887), // ≈ rotation period 2.435s
+  BOMB_COUNT: 8,
+  BOMB_DROP_INTERVAL: 0.10,// seconds between consecutive bomb drops
+  // v0.21b3: bomb blast radius scaled with pill size (×1.3). Keeps the
+  // bomb-pattern coverage consistent — a wider/longer pill needs wider
+  // individual blasts to actually clear obstacles within it.
+  BOMB_BLAST_R: 4.55,
+  // v0.21b3: jet flyby duration extended to match the longer travel path
+  // (1.6s → 2.4s) so it doesn't have to fly impossibly fast across the
+  // doubled lead-in/lead-out plus the longer pill.
+  JET_FLYBY_DURATION: 2.4,
+  // v0.21b2: jet drops to 6m so it's actually visible above the course
+  // (was 14m — too high, players couldn't track the run). The bombs still
+  // fall from this height so they take a bit less time to hit.
+  JET_HEIGHT: 6.0,
+  // v0.21b3: jet now overshoots the pill ends by 2× this offset on entry
+  // and exit. Was visibly freezing at endpoints because the jet stopped
+  // exactly at the pill end with no follow-through; now it streaks past
+  // (and the cleanup tear-down catches the offscreen position).
+  JET_PASS_OFFSET: 36.0,   // was 18.0 — doubled
+};
+
+function activateAirStrike() {
+  if(G.inHole || G.state !== 'playing' || G.rolling) return;
+  // v0.21b: re-tapping airstrike while aim is active toggles cancel.
+  if(G._airstrikeAiming) { cancelAirStrike(); return; }
+  if(G._airstrikeStrike) return; // strike already locked + executing
+  // Establish a default shotDir if the player hasn't aimed yet
+  if(!G.shotDir || G.shotDir.length() < 0.01) {
+    G.shotDir.set(-Math.sin(G.camTheta), 0, -Math.cos(G.camTheta)).normalize();
+    G.shotAngle = G.camTheta + Math.PI;
+  }
+  G._airstrikeAiming = true;
+  G._airstrikePill = {
+    oscT: 0,                // accumulator for oscillation
+    locked: false,
+    nearDist: AIRSTRIKE.NEAR_DIST,
+  };
+  // Build pill targeter mesh: two end caps + a thick central rectangle.
+  // We render as a single group so position/rotation moves it as a unit.
+  const pillGroup = new THREE.Group();
+  const pillMat = new THREE.MeshBasicMaterial({
+    color: 0xff3344, transparent: true, opacity: 0.30,
+    side: THREE.DoubleSide, depthWrite: false,
+  });
+  const pillEdgeMat = new THREE.MeshBasicMaterial({
+    color: 0xff7788, transparent: true, opacity: 0.55,
+    side: THREE.DoubleSide, depthWrite: false,
+  });
+  // Body: rectangle from -length/2 to +length/2 along local +Z
+  const bodyGeo = new THREE.PlaneGeometry(AIRSTRIKE.PILL_HALF_WIDTH * 2, AIRSTRIKE.PILL_LENGTH);
+  const body = new THREE.Mesh(bodyGeo, pillMat);
+  body.rotation.x = -Math.PI / 2;
+  body.position.y = 0.04;
+  body.userData.noOutline = true;
+  pillGroup.add(body);
+  // End caps: half-disks at each end. Use full disks rotated; they overlap
+  // the body slightly which reads cleanly with the transparent material.
+  for(const sign of [-1, 1]) {
+    const capGeo = new THREE.CircleGeometry(AIRSTRIKE.PILL_HALF_WIDTH, 24);
+    const cap = new THREE.Mesh(capGeo, pillMat);
+    cap.rotation.x = -Math.PI / 2;
+    cap.position.set(0, 0.04, sign * AIRSTRIKE.PILL_LENGTH / 2);
+    cap.userData.noOutline = true;
+    pillGroup.add(cap);
+  }
+  // Outline ring: 1) two long-edge lines, 2) two end-cap arcs. Together they
+  // form the full pill outline so the player can see the AOE clearly.
+  // Long edges:
+  for(const xSign of [-1, 1]) {
+    const edgeGeo = new THREE.PlaneGeometry(0.12, AIRSTRIKE.PILL_LENGTH);
+    const edge = new THREE.Mesh(edgeGeo, pillEdgeMat);
+    edge.rotation.x = -Math.PI / 2;
+    edge.position.set(xSign * AIRSTRIKE.PILL_HALF_WIDTH, 0.06, 0);
+    edge.userData.noOutline = true;
+    pillGroup.add(edge);
+  }
+  // End-cap rings (full circle outlines — overlap with body but reads as a torus)
+  for(const sign of [-1, 1]) {
+    const ringGeo = new THREE.TorusGeometry(AIRSTRIKE.PILL_HALF_WIDTH, 0.06, 6, 28);
+    const ring = new THREE.Mesh(ringGeo, pillEdgeMat);
+    ring.rotation.x = Math.PI / 2;
+    ring.position.set(0, 0.06, sign * AIRSTRIKE.PILL_LENGTH / 2);
+    ring.userData.noOutline = true;
+    pillGroup.add(ring);
+  }
+  scene.add(pillGroup);
+  G._airstrikePill.group = pillGroup;
+  G._airstrikePill.body = body;
+  G._airstrikePill.matBody = pillMat;
+  G._airstrikePill.matEdge = pillEdgeMat;
+  showToast('✈️ Air Strike — turn to aim, tap to drop!', 1700);
+  if(AC) {
+    try {
+      const ac = getAC(), t = ac.currentTime;
+      // Radio chatter "blip" — quick beep
+      const o = ac.createOscillator(); o.type = 'sine';
+      o.frequency.setValueAtTime(740, t);
+      o.frequency.linearRampToValueAtTime(880, t + 0.08);
+      const g = ac.createGain(); g.gain.setValueAtTime(0.18, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+      o.connect(g); g.connect(getACDest()); o.start(t); o.stop(t + 0.16);
+    } catch(e){}
+  }
+}
+window.activateAirStrike = activateAirStrike;
+
+// Per-frame update of the pill targeter while aiming. Called from the
+// animate loop. Updates pill position/rotation based on shotAngle + the
+// current oscillation timer.
+// v0.21b2: pill now ROTATES around its center as it oscillates — the center
+// still slides near→far along shotDir, but the pill's long axis spins
+// independently. Player has to time the lock so the pill is BOTH at the
+// right distance AND pointed in the right direction. Rotation rate is
+// non-resonant with the oscillation period, so the pill arrives at the
+// same distance with a different angle each cycle (no exploitable sync).
+// dt comes from animate() which already incorporates G._slowMoScale, so
+// slow-mo perks naturally slow the pill — making the lock easier.
+function updateAirStrikeTargeter(dt) {
+  if(!G._airstrikeAiming || !G._airstrikePill || G._airstrikePill.locked) return;
+  const pill = G._airstrikePill;
+  pill.oscT += dt;
+  pill.rotT = (pill.rotT || 0) + dt;
+  // Oscillate the CENTER's distance from ball between NEAR_DIST and FAR_DIST
+  // (using sine wave for smooth ease at the endpoints).
+  const phase = (pill.oscT / AIRSTRIKE.OSCILLATION_PERIOD) * Math.PI * 2;
+  const wave = (Math.sin(phase) + 1) / 2; // 0..1
+  const nearDist = AIRSTRIKE.NEAR_DIST + (AIRSTRIKE.FAR_DIST - AIRSTRIKE.NEAR_DIST) * wave;
+  pill.nearDist = nearDist;
+  // Pill CENTER lies along shotDir at nearDist + length/2.
+  const dir = G.shotDir.clone().normalize();
+  const centerDist = nearDist + AIRSTRIKE.PILL_LENGTH / 2;
+  const cx = G.ballPos.x + dir.x * centerDist;
+  const cz = G.ballPos.z + dir.z * centerDist;
+  // Sample terrain Y at center for ground hugging
+  const ty = G.heightMap.length ? getTerrainHeight(cx, cz) : 0;
+  pill.group.position.set(cx, ty + FLOOR_H/2 + 0.01, cz);
+  // Body rotation: shotDir base angle + accumulated rotation drift. Local
+  // +Z is the pill's long axis; rotating about Y spins the long axis on
+  // the ground plane.
+  const baseAngle = Math.atan2(dir.x, dir.z);
+  const rotAngle = pill.rotT * AIRSTRIKE.ROTATION_RATE;
+  pill.group.rotation.y = baseAngle + rotAngle;
+  // Stash the current world orientation of the pill's long axis for use at
+  // lock time. The long axis is the local +Z direction transformed by the
+  // pill's Y rotation: (sin(angle), 0, cos(angle)).
+  pill.currentAngle = baseAngle + rotAngle;
+  pill.currentCenterX = cx;
+  pill.currentCenterZ = cz;
+  // Pulse alpha for "live targeting" feel
+  const breathe = 0.30 + 0.10 * Math.sin(pill.oscT * 8);
+  pill.matBody.opacity = breathe;
+  pill.matEdge.opacity = 0.55 + 0.20 * Math.sin(pill.oscT * 8);
+}
+window.updateAirStrikeTargeter = updateAirStrikeTargeter;
+
+// Called when the player taps to lock the pill position. Captures the pill's
+// current world placement, hides the targeter, and starts the jet flyby +
+// bomb-drop sequence.
+function lockAirStrike() {
+  if(!G._airstrikeAiming || !G._airstrikePill || G._airstrikePill.locked) return;
+  const pill = G._airstrikePill;
+  pill.locked = true;
+  // v0.21b2: capture the pill's CURRENT (rotated) angle and center —
+  // the pill's long axis has drifted off shotDir during oscillation, so
+  // we can't recompute from shotDir alone. The targeter stashed these
+  // values each frame as currentAngle/currentCenterX/currentCenterZ.
+  const cx = pill.currentCenterX !== undefined ? pill.currentCenterX
+           : G.ballPos.x + G.shotDir.x * (pill.nearDist + AIRSTRIKE.PILL_LENGTH/2);
+  const cz = pill.currentCenterZ !== undefined ? pill.currentCenterZ
+           : G.ballPos.z + G.shotDir.z * (pill.nearDist + AIRSTRIKE.PILL_LENGTH/2);
+  // Pill's long-axis direction in world space. Local +Z is the long axis;
+  // rotated about Y by `currentAngle` gives world (sin(angle), cos(angle)).
+  const ang = pill.currentAngle !== undefined ? pill.currentAngle
+            : Math.atan2(G.shotDir.x, G.shotDir.z);
+  const longDirX = Math.sin(ang);
+  const longDirZ = Math.cos(ang);
+  // Strip off targeter visual
+  if(pill.group && pill.group.parent) pill.group.parent.remove(pill.group);
+  pill.group.traverse(o => {
+    if(o.geometry) o.geometry.dispose();
+    if(o.material) o.material.dispose();
+  });
+  G._airstrikeAiming = false;
+  G._airstrikePill = null;
+  // v0.21b2: jet flies ALONG the pill's long axis (was perpendicular).
+  // Strafing run from one end of the pill to the other — bombs drop
+  // sequentially along the corridor below the jet's path.
+  const jetStartX = cx - longDirX * (AIRSTRIKE.PILL_LENGTH/2 + AIRSTRIKE.JET_PASS_OFFSET);
+  const jetStartZ = cz - longDirZ * (AIRSTRIKE.PILL_LENGTH/2 + AIRSTRIKE.JET_PASS_OFFSET);
+  const jetEndX   = cx + longDirX * (AIRSTRIKE.PILL_LENGTH/2 + AIRSTRIKE.JET_PASS_OFFSET);
+  const jetEndZ   = cz + longDirZ * (AIRSTRIKE.PILL_LENGTH/2 + AIRSTRIKE.JET_PASS_OFFSET);
+  const terrY = G.heightMap.length ? getTerrainHeight(cx, cz) : 0;
+  const jetY  = terrY + AIRSTRIKE.JET_HEIGHT;
+  // Build jet mesh: stylized fighter — fuselage + wings + tail.
+  const jetGroup = new THREE.Group();
+  const fusMat = new THREE.MeshToonMaterial({ color: 0x556677, gradientMap: MAT.treeLeaf?.gradientMap });
+  const accentMat = new THREE.MeshToonMaterial({ color: 0xff3344, gradientMap: MAT.treeLeaf?.gradientMap });
+  const cockpitMat = new THREE.MeshBasicMaterial({ color: 0x223344, transparent: true, opacity: 0.7 });
+  // Fuselage: long thin tapered cylinder (capsule-like)
+  const fusGeo = new THREE.CylinderGeometry(0.3, 0.5, 4.5, 8);
+  const fus = new THREE.Mesh(fusGeo, fusMat);
+  fus.rotation.z = Math.PI / 2;
+  jetGroup.add(fus);
+  // Nose cone
+  const noseGeo = new THREE.ConeGeometry(0.3, 1.2, 8);
+  const nose = new THREE.Mesh(noseGeo, fusMat);
+  nose.rotation.z = -Math.PI / 2;
+  nose.position.x = 2.85;
+  jetGroup.add(nose);
+  // Wings
+  const wingGeo = new THREE.BoxGeometry(2.5, 0.12, 3.0);
+  const wings = new THREE.Mesh(wingGeo, fusMat);
+  wings.position.x = -0.2;
+  jetGroup.add(wings);
+  // Tail wing
+  const tailGeo = new THREE.BoxGeometry(0.9, 0.10, 1.2);
+  const tailW = new THREE.Mesh(tailGeo, fusMat);
+  tailW.position.x = -2.0;
+  jetGroup.add(tailW);
+  // Vertical stabilizer
+  const vsGeo = new THREE.BoxGeometry(0.7, 0.9, 0.10);
+  const vs = new THREE.Mesh(vsGeo, fusMat);
+  vs.position.set(-1.9, 0.5, 0);
+  jetGroup.add(vs);
+  // Cockpit canopy
+  const cockGeo = new THREE.SphereGeometry(0.32, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2);
+  const cock = new THREE.Mesh(cockGeo, cockpitMat);
+  cock.position.set(1.0, 0.18, 0);
+  cock.scale.set(1.4, 1.0, 0.7);
+  jetGroup.add(cock);
+  // Red accent stripes
+  const stripeGeo = new THREE.BoxGeometry(2.0, 0.06, 0.08);
+  const stripeL = new THREE.Mesh(stripeGeo, accentMat);
+  stripeL.position.set(0, 0.07, 1.4);
+  jetGroup.add(stripeL);
+  const stripeR = new THREE.Mesh(stripeGeo, accentMat);
+  stripeR.position.set(0, 0.07, -1.4);
+  jetGroup.add(stripeR);
+  // Engine glow: a small bright cone behind nose-opposite
+  const glowMat = new THREE.MeshBasicMaterial({ color: 0xff8833, transparent: true, opacity: 0.85 });
+  const glow = new THREE.Mesh(new THREE.ConeGeometry(0.35, 1.4, 8), glowMat);
+  glow.rotation.z = Math.PI / 2;
+  glow.position.x = -2.9;
+  jetGroup.add(glow);
+  // No outline on cockpit/glow
+  jetGroup.traverse(o => { if(o) o.userData.noOutline = true; });
+  // v0.21b2: jet faces along the pill's long axis (its direction of travel).
+  jetGroup.position.set(jetStartX, jetY, jetStartZ);
+  jetGroup.rotation.y = Math.atan2(longDirX, longDirZ) - Math.PI / 2; // jet's nose forward = long-axis dir
+  // Slight bank as it crosses the field
+  scene.add(jetGroup);
+  // Initialize strike state machine — pillDir now stores the LONG-AXIS
+  // direction (which drifted from shotDir due to rotation). Bombs are
+  // placed along this axis below.
+  G._airstrikeStrike = {
+    phase: 'flyby',
+    elapsed: 0,
+    bombsDropped: 0,
+    bombs: [],
+    pillCenterX: cx, pillCenterZ: cz,
+    pillDirX: longDirX, pillDirZ: longDirZ,
+    jetStartX, jetStartZ, jetEndX, jetEndZ, jetY,
+    jetGroup, glow,
+  };
+  showToast('✈️ AIR STRIKE INCOMING', 1500);
+  // Jet engine roar
+  if(AC) {
+    try {
+      const ac = getAC(), t = ac.currentTime;
+      // Low frequency roar — sawtooth + noise blend
+      const o = ac.createOscillator(); o.type = 'sawtooth';
+      o.frequency.setValueAtTime(80, t);
+      o.frequency.linearRampToValueAtTime(160, t + AIRSTRIKE.JET_FLYBY_DURATION);
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.001, t);
+      g.gain.exponentialRampToValueAtTime(0.32, t + 0.15);
+      g.gain.setValueAtTime(0.32, t + AIRSTRIKE.JET_FLYBY_DURATION * 0.7);
+      g.gain.exponentialRampToValueAtTime(0.001, t + AIRSTRIKE.JET_FLYBY_DURATION + 0.4);
+      o.connect(g); g.connect(getACDest());
+      o.start(t); o.stop(t + AIRSTRIKE.JET_FLYBY_DURATION + 0.5);
+    } catch(e){}
+  }
+}
+window.lockAirStrike = lockAirStrike;
+
+// Per-frame update of the strike sequence (jet flyby + bomb drops). Called
+// from the animate loop. Returns when sequence completes.
+function updateAirStrikeSequence(dt) {
+  if(!G._airstrikeStrike) return;
+  const s = G._airstrikeStrike;
+  s.elapsed += dt;
+  // v0.21b3: jet path no longer clamps at jetT=1. After reaching the end of
+  // its scripted travel, the jet keeps flying at the same speed past the
+  // exit point — so it streaks off-camera instead of freezing in place
+  // while the last bombs explode + the tail-wait timer ticks down.
+  const jetT = s.elapsed / AIRSTRIKE.JET_FLYBY_DURATION;
+  if(s.jetGroup) {
+    s.jetGroup.position.x = s.jetStartX + (s.jetEndX - s.jetStartX) * jetT;
+    s.jetGroup.position.z = s.jetStartZ + (s.jetEndZ - s.jetStartZ) * jetT;
+    // Subtle bob/bank for character
+    s.jetGroup.position.y = s.jetY + Math.sin(s.elapsed * 12) * 0.15;
+    s.jetGroup.rotation.x = Math.sin(s.elapsed * 6) * 0.03;
+    if(s.glow) s.glow.material.opacity = 0.7 + 0.3 * Math.random();
+  }
+  // v0.21b3: bomb drop window is derived from the actual jet path geometry
+  // — the jet starts JET_PASS_OFFSET past the pill's near end and exits
+  // JET_PASS_OFFSET past the pill's far end. Bombs should only drop while
+  // the jet is OVER the pill corridor itself. Old hardcoded 25-75% window
+  // assumed pill+offsets each took 25%, which broke when JET_PASS_OFFSET
+  // doubled — bombs dropped before the jet even reached the pill.
+  const _totalLen = AIRSTRIKE.PILL_LENGTH + 2 * AIRSTRIKE.JET_PASS_OFFSET;
+  const bombStartT = AIRSTRIKE.JET_FLYBY_DURATION * (AIRSTRIKE.JET_PASS_OFFSET / _totalLen);
+  const bombEndT   = AIRSTRIKE.JET_FLYBY_DURATION * ((AIRSTRIKE.JET_PASS_OFFSET + AIRSTRIKE.PILL_LENGTH) / _totalLen);
+  const bombSpan   = bombEndT - bombStartT;
+  // Drop the next bomb when timing matches
+  while(s.bombsDropped < AIRSTRIKE.BOMB_COUNT) {
+    const idx = s.bombsDropped;
+    const dropT = bombStartT + (idx / Math.max(1, AIRSTRIKE.BOMB_COUNT - 1)) * bombSpan;
+    if(s.elapsed < dropT) break;
+    // Bomb's ground target along the pill's long axis. idx 0 = far end of
+    // pill (so bombs drop from far→near as the jet passes), but we want
+    // the player to see destruction roll across the whole pill regardless
+    // of jet direction. Use a centered distribution: idx 0 at -L/2, last
+    // at +L/2 along pillDir.
+    const tBomb = idx / Math.max(1, AIRSTRIKE.BOMB_COUNT - 1); // 0..1
+    const along = -AIRSTRIKE.PILL_LENGTH / 2 + tBomb * AIRSTRIKE.PILL_LENGTH;
+    const bx = s.pillCenterX + s.pillDirX * along;
+    const bz = s.pillCenterZ + s.pillDirZ * along;
+    // Spawn a small falling bomb mesh that hits the ground in ~0.18s,
+    // then explodes.
+    _airstrikeSpawnBomb(bx, bz, idx);
+    s.bombsDropped++;
+  }
+  // Cleanup when jet has flown off + all bombs landed
+  if(jetT >= 1 && s.bombsDropped >= AIRSTRIKE.BOMB_COUNT) {
+    // Allow a little tail time for the last bomb's explosion to play
+    s.tailWaitT = (s.tailWaitT || 0) + dt;
+    if(s.tailWaitT > 0.6) {
+      // Tear down jet mesh
+      if(s.jetGroup && s.jetGroup.parent) s.jetGroup.parent.remove(s.jetGroup);
+      if(s.jetGroup) s.jetGroup.traverse(o => {
+        if(o.geometry) o.geometry.dispose();
+        if(o.material) o.material.dispose();
+      });
+      G._airstrikeStrike = null;
+    }
+  }
+}
+window.updateAirStrikeSequence = updateAirStrikeSequence;
+
+// Spawn one falling bomb mesh + schedule its explosion.
+function _airstrikeSpawnBomb(targetX, targetZ, idx) {
+  const terrY = G.heightMap.length ? getTerrainHeight(targetX, targetZ) : 0;
+  const groundY = terrY + FLOOR_H / 2;
+  // Bomb mesh: small dark cylinder with fins
+  const bombGroup = new THREE.Group();
+  const bMat = new THREE.MeshToonMaterial({ color: 0x222222, gradientMap: MAT.treeLeaf?.gradientMap });
+  const bGeo = new THREE.CylinderGeometry(0.18, 0.22, 0.9, 8);
+  const body = new THREE.Mesh(bGeo, bMat);
+  bombGroup.add(body);
+  // Tail fins
+  for(const sign of [-1, 1]) {
+    const fin = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.4, 0.32), bMat);
+    fin.position.set(sign * 0.18, -0.5, 0);
+    bombGroup.add(fin);
+    const fin2 = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.4, 0.04), bMat);
+    fin2.position.set(0, -0.5, sign * 0.18);
+    bombGroup.add(fin2);
+  }
+  bombGroup.traverse(o => { if(o) o.userData.noOutline = true; });
+  // Start ~14m above target, fall to ground
+  const startY = groundY + AIRSTRIKE.JET_HEIGHT;
+  bombGroup.position.set(targetX, startY, targetZ);
+  scene.add(bombGroup);
+  const startT = performance.now();
+  const fallDuration = 220; // ms — bombs fall fast
+  function animBomb() {
+    const t = (performance.now() - startT) / fallDuration;
+    if(t >= 1) {
+      // Detonate: AOE destruction
+      const blastR = AIRSTRIKE.BOMB_BLAST_R * getBoomScale();
+      spawnExplosion(targetX, groundY + 0.2, targetZ, 1.1);
+      const hits = collectObstaclesInRadius(targetX, targetZ, blastR);
+      const coinsEarned = destroyObstacles(hits, targetX, groundY + 0.2, targetZ);
+      destroyWallChunksInRadius(targetX, targetZ, blastR);
+      blastIdleBalls(targetX, targetZ, blastR, 18);
+      for(let k = 0; k < coinsEarned; k++) { G.coins++; updateCoinHUD(); }
+      // Mild shake per bomb (heavy would get nauseating with 8 in a row)
+      triggerShake('light');
+      if(AC) {
+        try {
+          const ac = getAC(), tA = ac.currentTime;
+          // Sub-bass thud
+          const sub = ac.createOscillator(); sub.type = 'sine';
+          sub.frequency.setValueAtTime(110, tA);
+          sub.frequency.exponentialRampToValueAtTime(35, tA + 0.35);
+          const sg = ac.createGain();
+          sg.gain.setValueAtTime(0.55, tA);
+          sg.gain.exponentialRampToValueAtTime(0.001, tA + 0.4);
+          sub.connect(sg); sg.connect(getACDest());
+          sub.start(tA); sub.stop(tA + 0.42);
+        } catch(e){}
+      }
+      // Final bomb gets a "DESTROYED" toast with the total
+      if(idx === AIRSTRIKE.BOMB_COUNT - 1) {
+        // Small delay so the toast lands after the last boom is felt
+        setTimeout(() => {
+          const totalDestroyed = G._airstrikeRunDestroyCount || 0;
+          if(totalDestroyed > 0) {
+            showToast(`✈️ ${totalDestroyed} destroyed!`, 1800);
+          }
+          G._airstrikeRunDestroyCount = 0;
+        }, 350);
+      }
+      // Track running destruction count across this strike's bombs
+      G._airstrikeRunDestroyCount = (G._airstrikeRunDestroyCount || 0) + hits.length;
+      // Tear down bomb mesh
+      if(bombGroup.parent) bombGroup.parent.remove(bombGroup);
+      bombGroup.traverse(o => {
+        if(o.geometry) o.geometry.dispose();
+        if(o.material) o.material.dispose();
+      });
+      return;
+    }
+    // Linear fall — bombs are heavy, no significant arc
+    bombGroup.position.y = startY + (groundY - startY) * t;
+    // Slight tumble
+    bombGroup.rotation.x += 0.05;
+    requestAnimationFrame(animBomb);
+  }
+  animBomb();
+}
+
+// Cancel/cleanup helper if the player taps the card again to abort (or
+// changes hole / runs out of state during aim).
+function cancelAirStrike() {
+  if(G._airstrikePill && G._airstrikePill.group) {
+    if(G._airstrikePill.group.parent) G._airstrikePill.group.parent.remove(G._airstrikePill.group);
+    G._airstrikePill.group.traverse(o => {
+      if(o.geometry) o.geometry.dispose();
+      if(o.material) o.material.dispose();
+    });
+  }
+  G._airstrikePill = null;
+  G._airstrikeAiming = false;
+  // Refund the card if a pending cancellable airstrike is on file
+  const pending = G._pendingCancellableCard;
+  if(pending && pending.id === 'airstrike') {
+    const discardIdx = G.discard.lastIndexOf('airstrike');
+    if(discardIdx !== -1) G.discard.splice(discardIdx, 1);
+    const refundedCard = { id: 'airstrike', instanceId: 'c_' + Math.random().toString(36).slice(2, 10) };
+    const slots = G.cardSlots || [];
+    let placed = false;
+    if(pending.slotIdx >= 0 && pending.slotIdx < slots.length && !slots[pending.slotIdx]) {
+      slots[pending.slotIdx] = refundedCard; placed = true;
+    } else {
+      for(let i = 0; i < slots.length; i++) {
+        if(!slots[i]) { slots[i] = refundedCard; placed = true; break; }
+      }
+    }
+    G.hand.push(refundedCard);
+    G._pendingCancellableCard = null;
+    if(typeof updateHandUI === 'function') updateHandUI();
+    showToast('↩️ Air Strike refunded', 800);
+  } else {
+    showToast('✈️ Air Strike cancelled', 700);
+  }
+}
+window.cancelAirStrike = cancelAirStrike;
+
+// v0.21b: full cleanup of airstrike state for hole transitions / OOB resets.
+// Differs from cancelAirStrike by NOT refunding the card — used in contexts
+// where the card is already lost (e.g. hole-out mid-aim). Also tears down
+// any in-progress strike (jet + bombs).
+function clearAirStrikeState() {
+  if(G._airstrikePill) {
+    if(G._airstrikePill.group && G._airstrikePill.group.parent) {
+      G._airstrikePill.group.parent.remove(G._airstrikePill.group);
+    }
+    if(G._airstrikePill.group) G._airstrikePill.group.traverse(o => {
+      if(o.geometry) o.geometry.dispose();
+      if(o.material) o.material.dispose();
+    });
+    G._airstrikePill = null;
+  }
+  if(G._airstrikeStrike) {
+    const s = G._airstrikeStrike;
+    if(s.jetGroup && s.jetGroup.parent) s.jetGroup.parent.remove(s.jetGroup);
+    if(s.jetGroup) s.jetGroup.traverse(o => {
+      if(o.geometry) o.geometry.dispose();
+      if(o.material) o.material.dispose();
+    });
+    G._airstrikeStrike = null;
+  }
+  G._airstrikeAiming = false;
+  G._airstrikeRunDestroyCount = 0;
+}
+window.clearAirStrikeState = clearAirStrikeState;
 
 // ── Boulder — unstoppable rolling boulder from behind camera ──
 function activateBoulder() {
@@ -25274,6 +27280,9 @@ function applyPerkEffect(id) {
     case 'combo_multiplier': /* applied in computeLiveShotScore */ break;
     case 'inbounds':         /* adds boundary walls in buildCourse */ break;
     case 'speed_ball':       /* adds timer per hole */ break;
+    // v0.21c: new perks
+    case 'chain_lightning':  /* applied in destroyObstacles tail (zaps nearest obstacle within radius) */ break;
+    case 'double_ammo':      /* applied in executeCardAbility for projectile cards */ break;
   }
 }
 
@@ -26229,6 +28238,15 @@ function onPointerDown(x, y, id) {
     }
     return;
   }
+  // v0.21b: Air Strike — during aim, tap-WITHOUT-drag locks the pill.
+  // We don't lock on pointerdown because that would prevent camera-rotate
+  // drags (player needs to spin to aim the pill). Instead, mark a pending
+  // lock; if the pointer goes up with negligible movement, lock. Otherwise
+  // the drag rotates the camera as normal.
+  if(G._airstrikeAiming && !G.inHole) {
+    G._airstrikeTapPending = { x, y };
+    // Allow camera-drag to proceed below — fall through to the drag path.
+  }
   // Active perks only fire from ability buttons/hotkeys, not canvas taps
   // Allow aiming while ball is nearly stopped (speed < 1.5) — enables speedrunning
   // and escaping spin-trap situations. Ball gets snapped to rest on tap.
@@ -26290,6 +28308,22 @@ function onPointerDown(x, y, id) {
     }
     G._powerShotActive = false;
     G._cannonballActive = false;
+    // v0.21c: clear new card flags on manual-stop too
+    G._frisbeeActive = false;
+    G._frisbeeArmed = false;
+    G._frisbeeSettled = false;
+    G._frisbeeBrakeActive = false;
+    if(G._frisbeeMesh) {
+      if(G._frisbeeMesh.parent) G._frisbeeMesh.parent.remove(G._frisbeeMesh);
+      G._frisbeeMesh = null;
+    }
+    if(G.ballMesh) G.ballMesh.visible = true;
+    G._curveBallActive = false;
+    G._curveBallArmed = false;
+    G._curveBallTimer = 0;
+    G._curveBallRate = 0;
+    if(typeof destroyBeatEmUpRing === 'function') destroyBeatEmUpRing();
+  if(typeof disposeCurveBallPreviewLine === 'function') disposeCurveBallPreviewLine();
     const hasEmptySlot2 = G.cardSlots.some(s => s === null);
     const qdN2 = G.modifiers.some(m=>m.id==='quick_draw') ? 2 : 1;
     if(hasEmptySlot2 && G._drawPerSwing > 0) drawCards(qdN2);
@@ -26318,12 +28352,35 @@ function onPointerDown(x, y, id) {
 }
 
 function onPointerMove(x, y) {
+  // v0.21b: airstrike pending-tap — if the pointer has moved more than a
+  // small threshold from the original tap, treat as a camera-rotate drag
+  // and cancel the pending lock. Without this, players who try to spin
+  // the camera would accidentally lock the pill.
+  if(G._airstrikeTapPending) {
+    const _dx = x - G._airstrikeTapPending.x;
+    const _dy = y - G._airstrikeTapPending.y;
+    if(Math.hypot(_dx, _dy) > 8) {
+      G._airstrikeTapPending = null;
+    }
+  }
   if(input.ballDragging) {
     G.pullCurrent = {x,y};
     const dx = x - input.ballStartX;
     const dy = y - input.ballStartY;
     const pullDist = Math.hypot(dx,dy);
     G.shotPower = Math.min(pullDist / 120, 1);
+
+    // v0.21c: Curve Ball — sample lateral component of pull (perpendicular to
+    // the camera's vertical-pull axis) into a -1..+1 strength. dx>0 means the
+    // player pulled to the RIGHT of the ball on screen, which fires the ball
+    // toward the LEFT. Per spec, that should curve LEFT (i.e., the ball
+    // continues rotating leftward), so curveRate sign = -dx normalized.
+    // Pull-back-and-RIGHT (dx>0) → curve LEFT  → rate < 0
+    // Pull-back-and-LEFT  (dx<0) → curve RIGHT → rate > 0
+    if(G._curveBallArmed && pullDist > 5) {
+      const lateral = dx / pullDist;     // -1..+1 (sin of pull angle)
+      G._curveBallStrength = -Math.max(-1, Math.min(1, lateral));
+    }
 
     const camRight = new THREE.Vector3();
     const camFwd = new THREE.Vector3();
@@ -26381,6 +28438,18 @@ function onPointerMove(x, y) {
 }
 
 function onPointerUp() {
+  // v0.21b: airstrike pending-tap fires here. If a tap landed during aim
+  // and the pointer didn't move enough to cancel it (see onPointerMove),
+  // lock the pill and start the strike sequence.
+  if(G._airstrikeTapPending && G._airstrikeAiming && !G.inHole) {
+    G._airstrikeTapPending = null;
+    lockAirStrike();
+    if(G._pendingCancellableCard && G._pendingCancellableCard.id === 'airstrike') {
+      G._pendingCancellableCard = null;
+    }
+    return;
+  }
+  G._airstrikeTapPending = null;
   // v0.20d: grenade aim mode hijacks ball-fire on release. Drag set both
   // shotPower and grenadePower (mirrored in onPointerMove). On release with
   // grenade aim on, throw the grenade and consume aim mode — DO NOT fire the
@@ -26408,6 +28477,21 @@ function onPointerUp() {
       }
       G.shotPower = 0;
       updateAimArrow();
+      // v0.21c: Double Ammo — re-enter aim mode for shot 2 if pending.
+      // _doubleAmmoPendingId holds the original card id (grenade /
+      // holy_hand_grenade / portal_grenade). The 2nd activation sets
+      // _doubleAmmoSecondShot so the wrapper doesn't loop.
+      if(G._doubleAmmoPendingId && (G._doubleAmmoPendingId === 'grenade' || G._doubleAmmoPendingId === 'holy_hand_grenade' || G._doubleAmmoPendingId === 'portal_grenade')) {
+        const _pid = G._doubleAmmoPendingId;
+        G._doubleAmmoPendingId = null;
+        G._doubleAmmoSecondShot = true;
+        showToast('🎯×2 Shot 2 — aim again!', 900);
+        setTimeout(() => {
+          try { _executeCardAbilityInner(_pid); }
+          catch(e) { console.warn('double_ammo grenade re-arm failed', e); }
+          G._doubleAmmoSecondShot = false;
+        }, 220);
+      }
     } else {
       // Tiny tap → cancel grenade aim (refund the card, give player the easy out)
       cancelGrenadeAim();
@@ -26447,6 +28531,10 @@ function onPointerUp() {
 
 function fireShot() {
   if(!G.aimMode || G.rolling || G.inHole) return;
+  // v0.21b: airstrike takes over input — pull-to-shoot is hidden during aim
+  // (pill targeter is the only thing the player should be able to interact
+  // with) and during the strike sequence (jet flying + bombs dropping).
+  if(G._airstrikeAiming || G._airstrikeStrike) return;
   // v0.20g: drain queued armed cards. Cards that "arm pre-swing" (Power Shot,
   // Iron Ball, Catapult, etc.) stayed in their slots lifted + glowing while
   // the player aimed; now that the swing is firing, retire them to discard
@@ -26552,7 +28640,12 @@ function fireShot() {
   const boost = G.swingMult || 1.0;
   const ironWeight = G._ironBallActive ? 0.85 : 1.0;
   // Catapult: bigger arc pop than Arc Shot (+6.5 vs +4.5). Catapult implies arc.
-  const arcExtra = G._catapultActive ? 6.5 : (G._arcShotActive ? 4.5 : 0);
+  // v0.21c: Frisbee uses an even higher arc (+5.5) and a 1.5× horizontal range
+  // multiplier. The arc piggybacks on _arcShotActive (which Frisbee sets in
+  // its activator), so when frisbee fires, the regular arcExtra of +4.5 is
+  // already in play; we add a small extra here for an even loftier flight.
+  const frisbeeArc = G._frisbeeArmed ? 1.0 : 0;
+  const arcExtra = G._catapultActive ? 6.5 : (G._arcShotActive ? 4.5 + frisbeeArc : 0);
   const powerMult = G._powerShotStacks > 0 ? Math.pow(2.0, G._powerShotStacks) : 1.0;
   // v0.20c: catapult on its own travels too far for what's a chaos card —
   // every shot ended up halfway across the course. Damp horizontal speed by
@@ -26560,7 +28653,11 @@ function fireShot() {
   // (the powerMult already multiplies in below). Net: catapult+PS reads as
   // an intentional combo; bare catapult is a more controllable arc tool.
   const catapultSoloDamp = (G._catapultActive && G._powerShotStacks === 0) ? 0.7 : 1.0;
-  const speed = G.shotPower * 32 * boost * ironWeight * powerMult * catapultSoloDamp;
+  // v0.21c: Frisbee gets 0.75× horizontal range (cut from 1.5× — was OP).
+  // The 4× brake on landing still makes it stop fast; with 0.75× pre-brake
+  // distance, the disc covers about half of what it used to.
+  const frisbeeBoost = G._frisbeeArmed ? 0.75 : 1.0;
+  const speed = G.shotPower * 32 * boost * ironWeight * powerMult * catapultSoloDamp * frisbeeBoost;
   const firedPower = G.shotPower;
   G.ballVel.set(G.shotDir.x * speed, 2.5 + arcExtra, G.shotDir.z * speed);
   // Screen shake on shot — proportional to power
@@ -26629,6 +28726,16 @@ function fireShot() {
   if(G._pinballArmed) {
     startPinballActive();
   }
+  // v0.21c: Frisbee armed -> active. Switches in disc visual + flags ground brake.
+  if(G._frisbeeArmed) {
+    startFrisbeeFlight();
+  }
+  // v0.21c: Curve Ball armed -> active. Begins curve timer; rotation rate
+  // captured from drag lateral offset.
+  if(G._curveBallArmed) {
+    startCurveBallFlight();
+    if(typeof disposeCurveBallPreviewLine === 'function') disposeCurveBallPreviewLine();
+  }
   // Launch-grace flags: enable 200ms wall pass-through only for Catapult / pre-loaded Jumper.
   // These trigger airborne launches where colliding with a nearby wall at tee is annoying.
   G._catapultLaunchGrace = !!G._catapultActive;
@@ -26679,14 +28786,29 @@ function fireShot() {
   if(_stickyFreeSwing) {
     G._stickyFreeSwing = false;
     G._stickyAttached = null;
+    // v0.21a6: fully clear card-active + triggered flags here. Previously
+    // these were left true and we depended on the per-swing clearStickyState
+    // call to clean them up — but if the ball goes OOB, holes out, or the
+    // shot ends in any non-rest path, that cleanup never runs and the next
+    // sticky arm becomes a no-op. Free swing fully consumes the card.
+    G._stickyCardActive = false;
+    G._stickyCardTriggered = false;
     // Don't increment strokes — that's the whole point of the free re-aim.
-    if(typeof clearStickyState === 'function') {
-      // Don't fully clearStickyState — that resets the green tint we still
-      // want on the ball as it flies. The triggered flag stays so a SECOND
-      // contact this swing doesn't re-stick. Just nuke attachment + free
-      // flag (already done above) and clear the squash visual.
-      G._stickyCardSquash = null;
-      if(G.ball) G.ball.scale.set(1, 1, 1);
+    // Clear the squash visual + restore ball scale so the free swing flies
+    // cleanly without a leftover squash transform.
+    G._stickyCardSquash = null;
+    if(G.ball) G.ball.scale.set(1, 1, 1);
+    // Restore ball emissive (green tint) so the free swing visually returns
+    // to a normal ball — matches the "card consumed" state.
+    if(G.ball && G.ballMesh && G.ballMesh.material && G.ballMesh.material.emissive) {
+      if(G._stickyOrigEmissive !== undefined) {
+        G.ballMesh.material.emissive.setHex(G._stickyOrigEmissive);
+        G._stickyOrigEmissive = undefined;
+      }
+      if(G._stickyOrigEmissiveIntensity !== undefined && G.ballMesh.material.emissiveIntensity !== undefined) {
+        G.ballMesh.material.emissiveIntensity = G._stickyOrigEmissiveIntensity;
+        G._stickyOrigEmissiveIntensity = undefined;
+      }
     }
     G._holeSwingCount = (G._holeSwingCount||0) + 1;
     // Toast so the player understands what just happened
@@ -27231,6 +29353,18 @@ window.addEventListener('keydown', e => {
         }
         G.shotPower = 0;
         updateAimArrow();
+        // v0.21c: Double Ammo re-arm — same logic as the pointer release path.
+        if(G._doubleAmmoPendingId && (G._doubleAmmoPendingId === 'grenade' || G._doubleAmmoPendingId === 'holy_hand_grenade' || G._doubleAmmoPendingId === 'portal_grenade')) {
+          const _pid = G._doubleAmmoPendingId;
+          G._doubleAmmoPendingId = null;
+          G._doubleAmmoSecondShot = true;
+          showToast('🎯×2 Shot 2 — aim again!', 900);
+          setTimeout(() => {
+            try { _executeCardAbilityInner(_pid); }
+            catch(e) { console.warn('double_ammo grenade re-arm failed', e); }
+            G._doubleAmmoSecondShot = false;
+          }, 220);
+        }
       } else {
         fireShot();
       }
@@ -27600,7 +29734,12 @@ function updateKeyboardCamera(dt) {
       // behavior that felt twitchy on mobile.
       // v0.20i: convert _walkTarget into a sustained _walkDir on first frame,
       // then keep stepping in that direction.
-      if(G._walkTarget && !G._walkDir) {
+      // v0.21a8 fix: a NEW tap always overrides the current direction. Old
+      // gate `!G._walkDir` meant once you'd tapped once, every subsequent
+      // tap was silently dropped — you couldn't redirect on mobile and the
+      // ball would just keep going whichever way you started. Now any
+      // new _walkTarget refreshes _walkDir.
+      if(G._walkTarget) {
         const tdx = G._walkTarget.x - G.ballPos.x;
         const tdz = G._walkTarget.z - G.ballPos.z;
         const td = Math.hypot(tdx, tdz);
@@ -27674,14 +29813,21 @@ function updateKeyboardCamera(dt) {
   }
 
   if(G.aimMode && !G.rolling && !G.inHole) {
-    if(keys['ArrowLeft'] || keys['ArrowRight']) {
-      aimManualOverride = true;
-      const delta = (keys['ArrowLeft'] ? -1 : 1) * AIM_ROT_SPEED * dt;
-      G.shotAngle = (G.shotAngle || 0) + delta;
-      G.shotDir.set(Math.sin(G.shotAngle), 0, Math.cos(G.shotAngle)).normalize();
-      updateAimArrow();
+    // v0.21b: during airstrike aim, always sync the pill direction to the
+    // camera regardless of any prior manual aim override. The pill turns
+    // with the camera; there's no separate aim-arrow input in this mode.
+    if(G._airstrikeAiming) {
+      syncAimToCamera();
+    } else {
+      if(keys['ArrowLeft'] || keys['ArrowRight']) {
+        aimManualOverride = true;
+        const delta = (keys['ArrowLeft'] ? -1 : 1) * AIM_ROT_SPEED * dt;
+        G.shotAngle = (G.shotAngle || 0) + delta;
+        G.shotDir.set(Math.sin(G.shotAngle), 0, Math.cos(G.shotAngle)).normalize();
+        updateAimArrow();
+      }
+      if(!aimManualOverride) { syncAimToCamera(); updateAimArrow(); }
     }
-    if(!aimManualOverride) { syncAimToCamera(); updateAimArrow(); }
   }
 
   if(keys['KeyA']) G.camTheta -= CAM_ROT_SPEED * dt;
@@ -27957,6 +30103,11 @@ const ALL_PERKS = [
     desc:'+1 coin per obstacle destroyed, +2 per wall chunk destroyed. Stacks!' },
   { id:'combo_multiplier',name:'Combo Multiplier',      emoji:'✨', rarity:'epic',     price:20, stackable:false, weight:2,
     desc:'Each unique trick type in a shot adds 1.5× multiplier to style score.' },
+  // v0.21c: Chain Lightning — every destruction zaps a nearby obstacle. Stacks
+  // for additional bolts per kill. Distinct from Chain Reaction (which uses an
+  // AOE explosion radius); this is single-target chains, recursion-capped at 3.
+  { id:'chain_lightning', name:'Chain Lightning',       emoji:'⚡', rarity:'epic',     price:35, stackable:true,  weight:2,
+    desc:'Any destruction zaps +1 nearby obstacle per stack with lightning. Recursion-capped. Stacks with Chain Reaction!' },
   // LEGENDARY — base weight 1
   { id:'double_or_nothing',name:'Double or Nothing',   emoji:'🎰', rarity:'legendary', price:27, stackable:false, weight:1,
     desc:'Once per run, wager all your coins on birdie-or-better. Hit it: 2×. Miss: zero.' },
@@ -27964,6 +30115,12 @@ const ALL_PERKS = [
     desc:"The first card you play each hole sparkles a duplicate into your hand. Free. Compounding." },
   { id:'dealers_choice',   name:"Dealer's Choice",      emoji:'🃏', rarity:'legendary', price:25, stackable:false, weight:1,
     desc:"Pick a card from your deck. It always sparkles into your opening hand, leftmost slot." },
+  // v0.21c: Double Ammo — every projectile card fires twice. The 2-stage flow
+  // re-enters aim mode after shot 1 lands the trigger; instant-fire cards (Boulder,
+  // Explosivo, Floomba) just fire 2× back-to-back. Air Strike excluded (carve-out
+  // — already devastating). Counts as 1 swing total.
+  { id:'double_ammo',     name:'Double Ammo',           emoji:'🎯', rarity:'legendary', price:60, stackable:false, weight:1,
+    desc:'Projectile cards fire TWICE. Aim each shot separately. Missile, Sniper, Sharpshooter, Grenade, Holy Hand Grenade, Dodgeball, Portal Grenade — all double. Counts as 1 swing.' },
 ];
 
 // Filter ALL_PERKS to only include active entries
@@ -28715,6 +30872,24 @@ function initHole() {
   G._slowMoPerkActive = false;
   G._slowMoScale = 1.0;
   G._slowMoPerkTimer = 0;
+  // v0.21a6: full sticky-card state reset on every initHole. Without this,
+  // a free-swing that ends with hole-out (or any path that skips the per-
+  // swing clearStickyState call) leaves _stickyCardActive=true and
+  // _stickyCardTriggered=true on the next hole — making the next sticky
+  // arm a no-op ("already armed!" toast) and blocking the stick check.
+  if(typeof clearStickyState === 'function') {
+    G._stickyAttached = null; // bypass the in-function early-out
+    clearStickyState();
+  }
+  // v0.21a8: same hygiene for parkour. _parkourCardActive=true left over
+  // from a prior hole's hole-out / OOB / interrupted swing makes the next
+  // tap of the parkour card a no-op "already armed!" toast — and worse,
+  // _parkourCardUsed=true also leaks, so the card silently does nothing
+  // for the entire hole until clearParkourState eventually fires (which
+  // it might not, depending on whether the swing rests cleanly).
+  if(typeof clearParkourState === 'function') clearParkourState();
+  // v0.21b: airstrike — clear any aim/strike state on hole transition.
+  if(typeof clearAirStrikeState === 'function') clearAirStrikeState();
   // Speedball timer reset moved below — deferred until G.par is known for
   // this hole so the timer can scale with par (par × 7 seconds).
   // ── Auto-save at hole start ─────────────────────────
@@ -29234,6 +31409,22 @@ function initHole() {
   G._catapultGroundBounce = false;
   G._catapultLaunchGrace = false;
   G._jumpPreloadLaunchGrace = false;
+  // v0.21c: clear new pre-swing/during card flags at hole start
+  G._frisbeeActive = false;
+  G._frisbeeArmed = false;
+  G._frisbeeSettled = false;
+  G._frisbeeBrakeActive = false;
+  if(G._frisbeeMesh) {
+    if(G._frisbeeMesh.parent) G._frisbeeMesh.parent.remove(G._frisbeeMesh);
+    G._frisbeeMesh = null;
+  }
+  if(G.ballMesh) G.ballMesh.visible = true;
+  G._curveBallActive = false;
+  G._curveBallArmed = false;
+  G._curveBallTimer = 0;
+  G._curveBallRate = 0;
+  if(typeof destroyBeatEmUpRing === 'function') destroyBeatEmUpRing();
+  if(typeof disposeCurveBallPreviewLine === 'function') disposeCurveBallPreviewLine();
   // v0.19s: clear Mighty Egg shell if it somehow carried over. Egg is hole-
   // scoped — it discards with the rest of the hand on hole end, so there
   // shouldn't be a visual to remove, but if the flag is set, clear it.
@@ -32863,7 +35054,7 @@ function animate(now) {
         }
       }
     }
-    if(G.rolling || G.inHole) focusCameraOnBall();
+    if(G.rolling || G.inHole || G._stickyAttached) focusCameraOnBall();
     else if(G._camTransitionFrames && G._camTransitionFrames > 0) {
       // v0.17v: keep lerping for N frames after Three Balls winner resolves
       // (or any other resolution that warps the ball without rolling).
@@ -33719,6 +35910,16 @@ function animate(now) {
   // wall sticks (static) or when not attached.
   if(G.state === 'playing' && G._stickyAttached && typeof tickStickyAttachment === 'function') {
     tickStickyAttachment();
+  }
+  // v0.21b: Air Strike updates — pill targeter oscillation while aiming;
+  // jet flyby + bomb drops once locked. Both gated on their own flags.
+  if(G.state === 'playing') {
+    if(G._airstrikeAiming && typeof updateAirStrikeTargeter === 'function') {
+      updateAirStrikeTargeter(dt);
+    }
+    if(G._airstrikeStrike && typeof updateAirStrikeSequence === 'function') {
+      updateAirStrikeSequence(dt);
+    }
   }
   // v0.20r: Lap Mode tick — checkpoint detection, lap counting, timer,
   // OOB respawn. Only runs when active (gated inside).
