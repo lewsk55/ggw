@@ -1495,6 +1495,47 @@ animation: card-sparkle-pulse 1.8s ease-in-out infinite;
 isolation:isolate;
 pointer-events:all;
 }
+/* v0.21e: Upgraded cards (Mega Power, Big Scootch, etc.) get shiny gold
+   edges that animate slowly so they catch the eye in the hand without
+   competing with the armed-card pulse or the cloned/tutored sparkle.
+   Stacks cleanly with .card-armed and .card-cloned via specificity. */
+.card-slot.card-upgraded {
+border-color:#ffd750;
+border-width:2px;
+box-shadow:
+  0 6px 22px rgba(255,200,80,0.55),
+  0 0 14px 3px rgba(255,215,80,0.55),
+  inset 0 0 12px rgba(255,215,80,0.20);
+animation: card-gold-pulse 2.4s ease-in-out infinite;
+isolation:isolate;
+position:relative;
+}
+.card-slot.card-upgraded::before {
+content:'★';
+position:absolute;
+top:3px;
+right:5px;
+color:#ffd750;
+font-size:0.78rem;
+font-weight:900;
+text-shadow:0 0 6px rgba(255,215,80,0.9), 0 0 2px rgba(60,40,0,0.8);
+z-index:4;
+pointer-events:none;
+}
+@keyframes card-gold-pulse {
+0%,100% {
+  box-shadow:
+    0 6px 22px rgba(255,200,80,0.55),
+    0 0 14px 3px rgba(255,215,80,0.55),
+    inset 0 0 12px rgba(255,215,80,0.20);
+}
+50% {
+  box-shadow:
+    0 6px 28px rgba(255,220,120,0.75),
+    0 0 22px 5px rgba(255,230,140,0.65),
+    inset 0 0 16px rgba(255,230,140,0.30);
+}
+}
 .card-slot.card-cloned .card-emoji,
 .card-slot.card-tutored .card-emoji {
 color:#000;
@@ -3150,6 +3191,30 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
   <button class="shop-skip-btn" onclick="closeShop()">Next Hole →</button>
 </div>
 
+<!-- v0.21d: Upgrade picker overlay. Sits on top of the shop (z-index 160 vs
+     shop's 130) so the shop stays open underneath. Two views: list view
+     (pick a source) and branch view (pick branch A or B). -->
+<div id="upgrade-overlay" style="
+  position:fixed;inset:0;background:rgba(8,4,12,0.94);backdrop-filter:blur(6px);
+  z-index:160;opacity:0;pointer-events:none;transition:opacity 200ms ease;
+  display:flex;flex-direction:column;align-items:center;padding:24px 14px 14px;
+  overflow-y:auto;color:#fff;font-family:'Inter',sans-serif;">
+  <div style="font-size:0.65rem;letter-spacing:3px;color:#ffd750;font-weight:700;margin-bottom:6px">PRO SHOP UPGRADES</div>
+  <div id="upgrade-overlay-title" style="font-size:1.4rem;font-weight:800;margin-bottom:4px">Pick a card or perk to evolve</div>
+  <div id="upgrade-overlay-subtitle" style="font-size:0.72rem;color:rgba(255,255,255,0.55);margin-bottom:14px">Choose one — locked in for the rest of the run</div>
+  <div id="upgrade-overlay-budget" style="display:inline-flex;align-items:center;gap:6px;background:rgba(255,215,80,0.12);border:1px solid rgba(255,215,80,0.35);padding:6px 14px;border-radius:14px;font-weight:700;font-size:0.85rem;color:#ffe580;margin-bottom:18px">
+    🪙 <span id="upgrade-overlay-coins">0</span>
+  </div>
+  <div id="upgrade-overlay-list" style="
+    width:100%;max-width:480px;display:grid;grid-template-columns:1fr;gap:8px;"></div>
+  <button id="upgrade-overlay-back" onclick="closeUpgradePicker()" style="
+    margin-top:18px;padding:11px 28px;border-radius:22px;border:1px solid rgba(255,255,255,0.25);
+    background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.85);
+    font-family:'Inter',sans-serif;font-size:0.78rem;font-weight:700;letter-spacing:1.5px;cursor:pointer">
+    ← Back to Shop
+  </button>
+</div>
+
 <!-- v0.20j: Elite Hole Fork — fires every 3rd hole (3,6,9,12...) -->
 <div id="elite-fork-overlay">
   <div class="elite-fork-banner">⚠ FORK IN THE COURSE ⚠</div>
@@ -3950,8 +4015,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.21c4';
-const CHANGE_NOTE = 'Chain Lightning visibility overhaul: mesh-cylinder tubes (real thickness — THREE.Line was clamping to 1px on most browsers), 3-layer fat bolt geometry, every-frame re-jitter for crackle, big endpoint flares, fullscreen DOM screen-flash on each zap. Radius bumped 5m → 9m for more generous chaining. Punchier SFX (louder + longer).';
+const GAME_VERSION = '0.21e';
+const CHANGE_NOTE = 'Upgrade tweaks based on playtest feedback: (1) Big Scootch bumped 2× → 3× nudge force. (2) Upgrade pricing simplified — same base price as the source card/perk, then standard inflation. No more rarity or stack multipliers; upgrading a 4-stack Stronger Swing now costs the same as a fresh one. (3) Cards in your hand show shiny gold edges + ★ when running an upgraded version (Mega Power, Big Scootch, etc.) — slow gold-pulse animation, stacks cleanly with armed/cloned/tutored states. (4) Upgrade slot chance bumped 25% → 55% per shop, so upgrades surface on more than half of regular shops, not just post-elite. (5) New tier-2/3 elite reward: Free Upgrade voucher. Lets you upgrade any card or perk free at the next shop. Vouchers stack; upgrade slot is always offered when one is queued.';
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
@@ -4061,6 +4126,9 @@ const ELITE_REWARDS = {
   coins_200:    { id:'coins_200',    type:'coins',         amount:200,        emoji:'💰', label:'+200 Coins',       desc:'A real haul.' },
   restore_hp:   { id:'restore_hp',   type:'restore_hp',                        emoji:'❤️', label:'Restore All HP',    desc:'Heal back to full. Worth more than gold.' },
   free_rare:    { id:'free_rare',    type:'free_card',     rarity:'rare',     emoji:'🃏', label:'Free Rare',         desc:'Pick a rare card OR perk free at the next shop.' },
+  // v0.21e: Free Upgrade voucher — claim a free card/perk upgrade at the next
+  // shop visit. Bypasses the cost; player still picks the source + branch.
+  free_upgrade: { id:'free_upgrade', type:'free_upgrade',                      emoji:'⭐', label:'Free Upgrade',      desc:'Upgrade any card or perk free at the next shop.' },
   // Tier 3 — hellish
   free_epic:    { id:'free_epic',    type:'free_card',     rarity:'epic',     emoji:'🃏', label:'Free Epic',         desc:'Pick an epic card OR perk free at the next shop.' },
   free_legendary:{id:'free_legendary',type:'free_card',    rarity:'legendary',emoji:'🌟', label:'Free Legendary',    desc:'Pick a legendary card OR perk free at the next shop.' },
@@ -4075,8 +4143,8 @@ const ELITE_TIER_REWARD_POOLS = {
   // anything in the shop. 'free_uncommon' is preserved with rarity:'rare'
   // for backward compatibility but new pools use 'free_rare'.
   1: ['coins_50', 'free_rare'],
-  2: ['coins_200', 'restore_hp', 'free_rare'],
-  3: ['free_epic', 'free_legendary', 'double_or_nothing', 'copy_card'],
+  2: ['coins_200', 'restore_hp', 'free_rare', 'free_upgrade'],
+  3: ['free_epic', 'free_legendary', 'double_or_nothing', 'copy_card', 'free_upgrade'],
 };
 
 // Which tiers are eligible at which player-facing hole numbers.
@@ -11877,12 +11945,18 @@ function updateAimArrow() {
   // were active. Now all five factors mirror exactly.
   const boost      = G.swingMult || 1.0;                                         // Strengthen Swing stacks
   const ironWeight = G._ironBallActive ? 0.85 : 1.0;                              // Iron Ball drag
-  const powerMult  = (G._powerShotStacks || 0) > 0 ? Math.pow(2.0, G._powerShotStacks) : 1.0; // Power Shot 2× per stack
+  // v0.21d: Wrecking Ball upgrade (iron_ball branch A) reads powerMult to add
+  // a +50% bump on top of the existing iron-ball drag. Default 1.0 keeps base.
+  const _ironPwrMul = (G._ironBallActive && typeof getCardField === 'function')
+    ? getCardField('iron_ball','powerMult',1.0) : 1.0;
+  // v0.21d: Mega Power upgrade reads CARD_DEFS.power_shot.powerMult (3× vs 2×).
+  const _psMul     = (typeof getPowerShotPerStackMul === 'function') ? getPowerShotPerStackMul() : 2.0;
+  const powerMult  = (G._powerShotStacks || 0) > 0 ? Math.pow(_psMul, G._powerShotStacks) : 1.0; // Power Shot per-stack mul
   const catapultSoloDamp = (hasCatapult && (G._powerShotStacks || 0) === 0) ? 0.7 : 1.0;        // Solo catapult damp
   // v0.21c2: Frisbee — 0.75× horizontal range (nerfed from 1.5×).
   // Mirror in the preview so the arc lands where the disc will actually land.
   const frisbeeBoost = G._frisbeeArmed ? 0.75 : 1.0;
-  const spd    = power * 32 * boost * ironWeight * powerMult * catapultSoloDamp * frisbeeBoost;
+  const spd    = power * 32 * boost * ironWeight * _ironPwrMul * powerMult * catapultSoloDamp * frisbeeBoost;
   const c      = new THREE.Color();
   c.setHSL(0.33 - power * 0.33, 0.9, 0.52);
   // Catapult: bold magenta arc for max readability, overriding the power-color ramp
@@ -12205,8 +12279,13 @@ function updateAimArrow() {
     const previewDur = 1.5;
     const _boost = G.swingMult || 1.0;
     const _ironW = G._ironBallActive ? 0.85 : 1.0;
-    const _pmult = (G._powerShotStacks || 0) > 0 ? Math.pow(2.0, G._powerShotStacks) : 1.0;
-    const baseSpd = G.shotPower * 32 * _boost * _ironW * _pmult;
+    // v0.21d: Wrecking Ball upgrade — match aim calc.
+    const _ironPwr = (G._ironBallActive && typeof getCardField === 'function')
+      ? getCardField('iron_ball','powerMult',1.0) : 1.0;
+    // v0.21d: Mega Power upgrade — match aim calc.
+    const _psMulPv = (typeof getPowerShotPerStackMul === 'function') ? getPowerShotPerStackMul() : 2.0;
+    const _pmult = (G._powerShotStacks || 0) > 0 ? Math.pow(_psMulPv, G._powerShotStacks) : 1.0;
+    const baseSpd = G.shotPower * 32 * _boost * _ironW * _ironPwr * _pmult;
     // Step parameters; exponential friction loss approximated with FRICTION
     const N = 24;
     const dt = previewDur / N;
@@ -12300,13 +12379,18 @@ function updatePhysics(dt) {
   // ── Jump — process before rolling guard so grace-window taps always fire ──
   if(G._jumpPending && !G.inHole) {
     G._jumpPending = false;
-  G._jumpPreloaded = false;
-  if(G.ball && G._jumpPreloadOrigEmissive && G.ballMesh.material && G.ballMesh.material.emissive) { G.ballMesh.material.emissive.copy(G._jumpPreloadOrigEmissive); G._jumpPreloadOrigEmissive = null; }
+    // v0.21d: Double Jump — only clear preloaded if we've spent all charges.
+    // Decrement the charge counter and let the player re-trigger up to N times.
+    G._jumpChargesRemaining = Math.max(0, (G._jumpChargesRemaining|0) - 1);
+    if(G._jumpChargesRemaining <= 0) {
+      G._jumpPreloaded = false;
+      if(G.ball && G._jumpPreloadOrigEmissive && G.ballMesh.material && G.ballMesh.material.emissive) { G.ballMesh.material.emissive.copy(G._jumpPreloadOrigEmissive); G._jumpPreloadOrigEmissive = null; }
+    }
     G.ballVel.y = 6.38;
     G.rolling = true;
     G.rollingSlowTimer = 0;
     if(AC) sfxJump();
-    showToast('🦘 Jump!', 700);
+    showToast(G._jumpChargesRemaining > 0 ? `🦘 Jump! (${G._jumpChargesRemaining} left)` : '🦘 Jump!', 700);
     recordStyleEvent('jump'); // every jump boosts combo multiplier
     updateHandUI();
     // Mark jump start position for obstacle-over detection
@@ -13030,9 +13114,37 @@ function updatePhysics(dt) {
           const g = ac.createGain(); g.gain.setValueAtTime(0.35, t); g.gain.exponentialRampToValueAtTime(0.001, t+0.22);
           o.connect(g); g.connect(getACDest()); o.start(t); o.stop(t+0.24);
         }
+        // v0.21d: Trebuchet upgrade — landing on first super-bounce explodes obstacles.
+        if((typeof getCardField === 'function') && getCardField('catapult','landingExplodes',false)) {
+          const _trebR = BALL_R * 12 * (typeof getBoomScale === 'function' ? getBoomScale() : 1.0);
+          const px = G.ballPos.x, py = G.ballPos.y, pz = G.ballPos.z;
+          if(typeof spawnExplosion === 'function') spawnExplosion(px, py, pz, 1.4);
+          if(typeof collectObstaclesInRadius === 'function' && typeof destroyObstacles === 'function') {
+            const _hits = collectObstaclesInRadius(px, pz, _trebR);
+            if(_hits.length > 0) destroyObstacles(_hits, px, py, pz);
+          }
+          if(typeof destroyWallChunksInRadius === 'function') destroyWallChunksInRadius(px, pz, _trebR);
+          showToast('🪤💥 Trebuchet!', 900);
+        }
       } else {
         G.ballVel.y *= -BOUNCE;
         if(Math.abs(G.ballVel.y) < 0.4) G.ballVel.y = 0;
+      }
+      // v0.21d: Rocket Jump upgrade — meaningful downward landing triggers
+      // an explosion at the ball position. Consumes the pending flag so
+      // multiple subsequent bounces don't each detonate.
+      if(G._rocketJumpPending && G.ballVel.y < -2.0) {
+        G._rocketJumpPending = false;
+        const _rocketR = BALL_R * 12 * (typeof getBoomScale === 'function' ? getBoomScale() : 1.0);
+        const px = G.ballPos.x, py = G.ballPos.y, pz = G.ballPos.z;
+        if(typeof spawnExplosion === 'function') spawnExplosion(px, py, pz, 1.4);
+        if(typeof collectObstaclesInRadius === 'function' && typeof destroyObstacles === 'function') {
+          const _hits = collectObstaclesInRadius(px, pz, _rocketR);
+          if(_hits.length > 0) destroyObstacles(_hits, px, py, pz);
+        }
+        if(typeof destroyWallChunksInRadius === 'function') destroyWallChunksInRadius(px, pz, _rocketR);
+        if(typeof triggerShake === 'function') triggerShake('heavy');
+        showToast('🦘💥 Rocket Jump!', 900);
       }
     }
   }
@@ -17824,6 +17936,23 @@ function openShop() {
   G._shopRerolledThisHole = false;
   // v0.20c: reset Free Reroll usage each hole so the perk fires at every shop, not once per run.
   G._freeRerollUsed = false;
+  // v0.21d: roll whether this shop visit offers the upgrade slot. Holes 1-2
+  // never offer (gentle ramp); post-elite shops always offer; otherwise 25%.
+  // The post-elite flag is consumed (set false) here regardless of the roll
+  // outcome so it can't carry across multiple shops.
+  G._shopOffersUpgrade = (typeof rollUpgradeOfferForShop === 'function')
+    ? rollUpgradeOfferForShop()
+    : false;
+  // Snapshot the post-elite reason BEFORE we clear the flag so renderShop()
+  // can pick the right flair label ("POST-ELITE BONUS" vs "UPGRADE AVAILABLE").
+  G._shopUpgradeWasPostElite = !!G._postEliteShop;
+  G._postEliteShop = false;
+  if(G._shopOffersUpgrade && typeof anyUpgradesAvailable === 'function' && anyUpgradesAvailable()) {
+    G._currentRunUpgradeOffersShown = (G._currentRunUpgradeOffersShown | 0) + 1;
+  } else {
+    // No eligible upgrades to show — hide the button entirely.
+    G._shopOffersUpgrade = false;
+  }
   // v0.18a: at ★8+, force a "fragile" perk into every shop. Shrink Ray / All Bounce /
   // Bowling Ball change the run fundamentally — forcing one pressures players to
   // either embrace the chaos or skip the shop. Adds a visible sign of harder difficulty.
@@ -18035,6 +18164,46 @@ function renderShop() {
   const picks = G._shopCurrentPicks || [];
   const cardPicks = G._shopCardPicks || [];
   grid.innerHTML = '';
+
+  // v0.21d: Upgrade slot — renders as a distinct gold-bordered tile at the
+  // very top of the shop grid. Tapping opens the upgrade overlay where the
+  // player picks a card/perk + branch.
+  if(G._shopOffersUpgrade) {
+    const cardCount = (typeof getEligibleCardUpgrades === 'function') ? getEligibleCardUpgrades().length : 0;
+    const perkCount = (typeof getEligiblePerkUpgrades === 'function') ? getEligiblePerkUpgrades().length : 0;
+    const totalCount = cardCount + perkCount;
+    if(totalCount > 0) {
+      const isPostElite = !!G._shopUpgradeWasPostElite;
+      const hasVoucher = (G._freeUpgradeVouchers|0) > 0;
+      const flair = hasVoucher
+        ? `🎟️ FREE UPGRADE${G._freeUpgradeVouchers > 1 ? ' ×'+G._freeUpgradeVouchers : ''}`
+        : (isPostElite ? '⚠️ POST-ELITE BONUS' : '✨ UPGRADE AVAILABLE');
+      const tileSubtitle = hasVoucher
+        ? `${totalCount} eligible — your voucher covers the cost. Pick a card or perk to evolve.`
+        : `${totalCount} eligible — pick one of two branches to evolve it. Effect lasts the rest of the run.`;
+      grid.innerHTML += `<div class="shop-section-label">⭐ Upgrades <span class="shop-section-desc">— double down on what you already own</span></div>`;
+      grid.innerHTML += `
+        <div class="shop-card shop-upgrade-card" onclick="openUpgradePicker()" style="
+          background:linear-gradient(135deg, rgba(255,215,80,0.18) 0%, rgba(255,140,40,0.10) 100%);
+          border:2px solid #ffd750;
+          box-shadow:0 0 18px rgba(255,215,80,0.35), inset 0 0 12px rgba(255,215,80,0.12);
+          position:relative;">
+          <div class="shop-card-emoji" style="filter:drop-shadow(0 0 6px rgba(255,215,80,0.7))">⭐</div>
+          <div class="shop-card-body">
+            <div class="shop-card-name" style="color:#ffe580">Upgrade a Card or Perk</div>
+            <div class="shop-card-desc">${tileSubtitle}</div>
+            <div class="shop-card-meta">
+              <span class="rarity-badge" style="background:linear-gradient(90deg,#ffd750,#ff8c2a);color:#3a1a00;font-weight:900">${flair}</span>
+              <span class="shop-price" style="color:#ffd750;font-weight:800">Pick →</span>
+            </div>
+          </div>
+        </div>`;
+    } else {
+      // Edge: was offered but eligibility evaporated mid-shop (shouldn't happen
+      // in normal flow, but defensive). Just suppress.
+      G._shopOffersUpgrade = false;
+    }
+  }
 
   // ── Card row ──
   if(cardPicks.length > 0) {
@@ -18861,7 +19030,7 @@ function missileInFlightHitCheck(px, pz, missileR = MISSILE_BODY_RADIUS) {
   return null;
 }
 
-function fireProjectile({ blastRadius = 4.0, travelSpeed = 22, color = 0xff4400, emissive = 0xff2200, maxDist = 40, scale = 1.0, hitRadius = null, spiral = 0, accel = 0, maxSpeed = 140 } = {}) {
+function fireProjectile({ blastRadius = 4.0, travelSpeed = 22, color = 0xff4400, emissive = 0xff2200, maxDist = 40, scale = 1.0, hitRadius = null, spiral = 0, accel = 0, maxSpeed = 140, piercing = false, splitCount = 0 } = {}) {
   if(G.rolling || G.inHole) return;
   // Guard: ensure shotDir is valid
   if(!G.shotDir || G.shotDir.length() < 0.01) {
@@ -19069,9 +19238,19 @@ function fireProjectile({ blastRadius = 4.0, travelSpeed = 22, color = 0xff4400,
     const wallHit = sweptWallHit;
 
     if(hits.length > 0 || wallHit || travelled >= maxDist) {
-      scene.remove(missileGroup);
-      G._activeMissileGroup = null;
-      stopRocketRumble();
+      // v0.21d: Railgun upgrade — when piercing is on and the stop reason is
+      // an obstacle hit (not a wall, not maxDist), do the boom but DON'T
+      // remove the missile or null the anim. The blast destroys the obstacle
+      // so it won't trigger missileInFlightHitCheck again next frame.
+      const _piercing = !!piercing;
+      const _stoppedByMaxDist = !(hits.length > 0) && !wallHit && travelled >= maxDist;
+      const _stoppedByWall = wallHit;
+      const _shouldStop = !_piercing || _stoppedByWall || _stoppedByMaxDist;
+      if(_shouldStop) {
+        scene.remove(missileGroup);
+        G._activeMissileGroup = null;
+        stopRocketRumble();
+      }
       // Big impact shake
       if(hits.length > 0) triggerShake('heavy');
       else triggerShake('med');
@@ -19108,7 +19287,38 @@ function fireProjectile({ blastRadius = 4.0, travelSpeed = 22, color = 0xff4400,
       spawnExplosion(px + (Math.random()-0.5)*0.8*boomVfxScale, py + 0.4, pz + (Math.random()-0.5)*0.8*boomVfxScale, boomVfxScale*0.7);
       for(let k=0; k<coinsEarned; k++) { G.coins++; updateCoinHUD(); }
       if(blastHits.length > 0) showToast(`💥 ${blastHits.length} destroyed! +${coinsEarned} 🪙`, 1600);
-      G._missileAnim = null;
+      // v0.21d: MIRV — on impact, spawn N secondary explosions in a fan
+      // pattern radiating away from the missile's flight direction (the
+      // "warheads reflect" feel). Each is a real boom: destroys obstacles +
+      // walls in its small radius. Fires only on the FIRST stop (so a
+      // piercing missile doesn't spam splits — only the final stop counts).
+      if(splitCount > 0 && _shouldStop) {
+        const _splitR = scaledBlast * 0.65;
+        const _ringR = scaledBlast * 0.9;
+        // Reflect direction = -dir (warheads spray back-and-fan from nose)
+        const _baseAng = Math.atan2(-dir.z, -dir.x);
+        const _spread = Math.PI * 0.85; // ~150° fan
+        for(let _si = 0; _si < splitCount; _si++) {
+          const _t = (splitCount === 1) ? 0 : (_si / (splitCount - 1) - 0.5);
+          const _ang = _baseAng + _t * _spread;
+          const _wx = px + Math.cos(_ang) * _ringR;
+          const _wz = pz + Math.sin(_ang) * _ringR;
+          const _delay = 100 + _si * 80;
+          setTimeout(() => {
+            const _terY = G.heightMap.length ? getTerrainHeight(_wx, _wz) : 0;
+            const _wy = _terY + FLOOR_H/2 + 0.05;
+            if(typeof spawnExplosion === 'function') spawnExplosion(_wx, _wy, _wz, 1.0);
+            if(typeof collectObstaclesInRadius === 'function' && typeof destroyObstacles === 'function') {
+              const _hits = collectObstaclesInRadius(_wx, _wz, _splitR);
+              if(_hits.length > 0) destroyObstacles(_hits, _wx, _wy, _wz);
+            }
+            if(typeof destroyWallChunksInRadius === 'function') destroyWallChunksInRadius(_wx, _wz, _splitR);
+            if(typeof triggerShake === 'function') triggerShake('med');
+          }, _delay);
+        }
+        if(typeof showToast === 'function') showToast(`🚀×${splitCount} MIRV!`, 1100);
+      }
+      if(_shouldStop) G._missileAnim = null;
     }
   };
 
@@ -19731,7 +19941,7 @@ function unarmCardByInstance(instanceId, cardId) {
     case 'arc_shot':         G._arcShotActive = false; break;
     case 'catapult':         G._catapultActive = false; break;
     case 'wall_magnet':      G._wallMagnetActive = false; break;
-    case 'jumper':           G._jumpPreloaded = false; G._jumpPending = false; break;
+    case 'jumper':           G._jumpPreloaded = false; G._jumpPending = false; G._jumpChargesRemaining = 0; G._rocketJumpPending = false; break;
     case 'pinball':          G._pinballArmed = false; break;
     case 'parkour':          // v0.21b: decrement charges on un-arm; clear all flags if last
       G._parkourCharges = Math.max(0, (G._parkourCharges || 0) - 1);
@@ -20074,7 +20284,14 @@ function _executeCardAbilityInner(id) {
   switch(id) {
     case 'jumper':       triggerJump(); break;
     case 'explosivo':    triggerExplosivo(); break;
-    case 'shooter':      fireProjectile({ blastRadius:2.5, travelSpeed:22, color:0xff4400, emissive:0xff2200 }); break;
+    case 'shooter':      {
+      // v0.21d: Big Payload upgrade reads radiusMult off CARD_DEFS.shooter.
+      const _msMul = (typeof getCardField === 'function') ? getCardField('shooter','radiusMult',1.0) : 1.0;
+      // v0.21d: MIRV upgrade reads splitCount off CARD_DEFS.shooter (default 0, MIRV = 3).
+      const _msSplit = (typeof getCardField === 'function') ? (getCardField('shooter','splitCount',0)|0) : 0;
+      fireProjectile({ blastRadius: 2.5 * _msMul, travelSpeed:22, color:0xff4400, emissive:0xff2200, splitCount: _msSplit });
+      break;
+    }
     case 'sniper':       activateSniper(); break;
     case 'sharpshooter': activateSharpshooterBall(); break;
     case 'catapult':     activateCatapult(); break;
@@ -20085,7 +20302,38 @@ function _executeCardAbilityInner(id) {
     case 'ghost_ball':   activateGhostBall(); break;
     case 'backspin':     activateBackspin(); break;
     case 'lil_scootch':  activateScootch(); break;
-    case 'dodgeball':    activateDodgeball(); break;
+    case 'dodgeball':    {
+      // v0.21d: Dodgeball Frenzy upgrade reads spawnCount off CARD_DEFS.dodgeball
+      // (default 1, Frenzy = 2). _missileAnim is a single slot, so we chain
+      // the second activation after the first one finishes by polling.
+      const _dbN = (typeof getCardField === 'function') ? getCardField('dodgeball','spawnCount',1) : 1;
+      const _n = Math.max(1, _dbN|0);
+      activateDodgeball();
+      if(_n > 1) {
+        // Stagger queued spawns. Each waits until _missileAnim slot is free.
+        let _queued = _n - 1;
+        const _tick = () => {
+          if(_queued <= 0) return;
+          if(!G._missileAnim) {
+            _queued--;
+            // Slight angular offset for a "fan" feel.
+            const _saved = G.shotDir.clone();
+            const _ang = (_n - _queued - 1) * 0.18 - 0.09; // small spread per shot
+            const _ca = Math.cos(_ang), _sa = Math.sin(_ang);
+            const nx = _saved.x * _ca - _saved.z * _sa;
+            const nz = _saved.x * _sa + _saved.z * _ca;
+            G.shotDir.set(nx, 0, nz).normalize();
+            activateDodgeball();
+            G.shotDir.copy(_saved);
+            if(_queued > 0) setTimeout(_tick, 200);
+          } else {
+            setTimeout(_tick, 200);
+          }
+        };
+        setTimeout(_tick, 220);
+      }
+      break;
+    }
     case 'slow_mo':      activateSlowMoPerk(); break;
     case 'walkies':      activateWalkiesCard(); break;
     case 'arc_shot':     G._arcShotActive = true; showToast('🌈 Arc Shot armed!', 800); break;
@@ -20095,7 +20343,11 @@ function _executeCardAbilityInner(id) {
       // by setting an "extra shot pending" flag the per-shot teardown checks.
       if(consumeCloneDurationMult('iron_ball') > 1) G._ironBallExtraShot = true;
       applyIronBallVisual();
-      showToast('🔩 Iron Ball armed!', 800);
+      // v0.21d: Wrecking Ball upgrade — distinct toast.
+      {
+        const _wbUp = (typeof getCardField === 'function') ? getCardField('iron_ball','powerMult',1.0) : 1.0;
+        showToast(_wbUp > 1 ? '🔩 Wrecking Ball armed — +50% power!' : '🔩 Iron Ball armed!', 800);
+      }
       break;
     case 'power_shot':   G._powerShotStacks = (G._powerShotStacks||0) + 1; G._powerShotTensionActive = true; showToast('💪 Power Shot' + (G._powerShotStacks > 1 ? ' ×'+G._powerShotStacks+'!' : ' armed!'), 800); break;
     case 'mulligan':     activateMulligan(); break;
@@ -20111,7 +20363,16 @@ function _executeCardAbilityInner(id) {
     case 'cannonball':   G._cannonballActive = true; showToast('💣 Cannonball armed — smash through walls!', 1000); break;
     case 'wrecking_ball': showToast('⛓️ Wrecking Ball coming soon!', 1000); break;
     case 'portal_grenade': armPortalGrenade(); break;
-    case 'floomba':      spawnFloombaFromCard(); break;
+    case 'floomba':      {
+      // v0.21d: Floomba Squad upgrade reads spawnCount off CARD_DEFS.floomba (default 1, Squad = 2).
+      const _floombaN = (typeof getCardField === 'function') ? getCardField('floomba','spawnCount',1) : 1;
+      const _n = Math.max(1, _floombaN|0);
+      for(let _fi=0; _fi<_n; _fi++) {
+        if(_fi === 0) spawnFloombaFromCard();
+        else setTimeout(() => spawnFloombaFromCard(), _fi * 220); // small stagger so they spawn from offset positions
+      }
+      break;
+    }
     case 'perpetual_motion': activatePerpetualMotion(); break;
     case 'wall_magnet':  G._wallMagnetActive = true; showToast('🧲 Wall Magnet armed!', 800); break;
     case 'mighty_egg':   activateMightyEgg(); break;
@@ -20233,6 +20494,10 @@ function updateHandUI() {
     // armed/disabled/active states.
     if(card._cloneDuplicate)  cls += ' card-cloned';
     if(card._dealersChoice)   cls += ' card-tutored';
+    // v0.21e: Upgraded cards (Mega Power, Big Scootch, etc.) get a shiny
+    // gold-edge treatment so the player can scan their hand and see at a
+    // glance which slots are running upgraded versions.
+    if(def.upgraded)          cls += ' card-upgraded';
     // Deal animation for newly drawn cards
     const isNew = G._newlyDrawnCards && G._newlyDrawnCards.includes(card.instanceId);
     if(isNew) cls += ' card-dealing';
@@ -20434,12 +20699,23 @@ function deactivateGhostBall() {
 
 function activateBackspin() {
   if(!G.rolling) return;
-  // Strong braking force
-  G.ballVel.multiplyScalar(0.3);
+  // v0.21d: Hard Brake upgrade — read CARD_DEFS.backspin for full-stop +
+  // draw flags. Default behavior (0.3× velocity scale, no draw) preserved.
+  const _brakeFull = (typeof getCardField === 'function') ? getCardField('backspin','brakeFullStop',false) : false;
+  const _drawAmt   = (typeof getCardField === 'function') ? getCardField('backspin','drawOnUse',0) : 0;
+  if(_brakeFull) {
+    // Full stop instead of 0.3× decay.
+    G.ballVel.set(0, G.ballVel.y, 0);
+  } else {
+    G.ballVel.multiplyScalar(0.3);
+  }
   spawnHitParticles(G.ballPos);
-  triggerShake(0.15);
+  triggerShake(_brakeFull ? 0.22 : 0.15);
   if(AC) sfxBounce(4);
-  showToast('🔄 Brake!', 600);
+  showToast(_brakeFull ? '🔄 Hard Brake!' : '🔄 Brake!', 600);
+  if(_drawAmt > 0 && typeof drawCards === 'function') {
+    drawCards(_drawAmt|0);
+  }
 }
 window.activateBackspin = activateBackspin;
 
@@ -20455,9 +20731,16 @@ function activateScootch() {
   } else {
     nx = -Math.sin(G.camTheta); nz = -Math.cos(G.camTheta);
   }
-  const nudgeForce = 2.25;
+  // v0.21d: Big Scootch upgrade reads nudgeForceMult off CARD_DEFS.lil_scootch.
+  const _nudgeMul = (typeof getCardField === 'function') ? getCardField('lil_scootch','nudgeForceMult',1.0) : 1.0;
+  const nudgeForce = 2.25 * _nudgeMul;
   G.ballVel.x += nx * nudgeForce;
   G.ballVel.z += nz * nudgeForce;
+  // v0.21d: Scootch Combo upgrade — draw a card on activation.
+  const _drawAmt = (typeof getCardField === 'function') ? getCardField('lil_scootch','drawOnUse',0) : 0;
+  if(_drawAmt > 0 && typeof drawCards === 'function') {
+    drawCards(_drawAmt|0);
+  }
   if(!G.rolling) {
     G.rolling = true; G.aimMode = false; G.rollingSlowTimer = 0;
     // v0.17v: Scootch isn't a swing — flag so the ball-stop handler doesn't
@@ -20541,12 +20824,16 @@ function activateSlowMoPerk() {
   G._slowMoUsedThisHole = true;
   G._slowMoScale = 0.25;
   // v0.20h: Clone perk — if this is a clone-doubled play, 6s -> 12s
-  G._slowMoPerkTimer = 6.0 * consumeCloneDurationMult('slow_mo');
+  // v0.21d: Bullet Time upgrade — durationMult on slow_mo perk (2× → 12s base).
+  const _slowMoMul = (typeof getPerkField === 'function') ? getPerkField('slow_mo','durationMult',1.0) : 1.0;
+  G._slowMoPerkTimer = 6.0 * _slowMoMul * consumeCloneDurationMult('slow_mo');
   G._slowMoWaitingForSwing = !G.rolling; // if not rolling yet, wait for swing to start timer
   if(_musicGainNode && AC) {
     _musicGainNode.gain.setTargetAtTime(0.4, AC.currentTime, 0.3);
   }
-  showToast('🐌 Slow Mo!' + (G.rolling ? ' 6s' : ' Swing to start!'), 1200);
+  const _label = (_slowMoMul > 1) ? 'Bullet Time!' : 'Slow Mo!';
+  const _dur = Math.round(6 * _slowMoMul);
+  showToast(`🐌 ${_label}` + (G.rolling ? ` ${_dur}s` : ' Swing to start!'), 1200);
   updateHandUI();
   updateSlowMoButton();
 }
@@ -20624,7 +20911,18 @@ window.activatePinball = activatePinball;
 function startPinballActive() {
   G._pinballArmed = false;
   G._pinballActive = true;
-  G._pinballTimer = 12.0;
+  // v0.21d: Eternal Pinball upgrade reads durationMult off CARD_DEFS.pinball
+  // (Eternal Pinball = 20/12 → ~20s). Hyperball (branch B) leaves duration at
+  // 12s but bumps speedMult — applied as a one-time velocity kick below.
+  const _pbMul = (typeof getCardField === 'function') ? getCardField('pinball','durationMult',1.0) : 1.0;
+  const _pbSpd = (typeof getCardField === 'function') ? getCardField('pinball','speedMult',1.0) : 1.0;
+  G._pinballTimer = 12.0 * _pbMul;
+  // Hyperball: scale current velocity for an immediate "hyper" kick. Without
+  // friction (pinball mode), this 2× speed persists for the duration.
+  if(_pbSpd !== 1.0 && G.ballVel) {
+    G.ballVel.x *= _pbSpd;
+    G.ballVel.z *= _pbSpd;
+  }
   G._pinballHueT = 0;
   // Cache original ball material to restore on deactivate
   if(G.ballMesh && !G._pinballOrigMat) {
@@ -21663,6 +21961,10 @@ function activateDodgeball() {
   let bounces = 0, travelled = 0;
   let squashTimer = 0;
   let dbElapsed = 0; // 4s max lifetime
+  // v0.21d: Bouncing Bomb upgrade reads explodeEveryNBounces off CARD_DEFS.dodgeball.
+  // Tracks last-detonation bounce count so we fire once per N-th bounce.
+  const _bbInterval = (typeof getCardField === 'function') ? getCardField('dodgeball','explodeEveryNBounces',0) : 0;
+  let _lastBoomBounces = 0;
   const hasSnowball = G.snowballStacks > 0;
   const hasBouncy = G.modifiers.some(m=>m.id==='bouncy_walls');
   const hitObstacles = new Set(); // prevent double-counting
@@ -21780,6 +22082,22 @@ function activateDodgeball() {
       if(curSpd > capSpd) { const sc = capSpd/curSpd; dx*=sc; dz*=sc; }
     } // end substeps
 
+    // v0.21d: Bouncing Bomb — explode every Nth bounce. Detect threshold
+    // crossings (handles multiple bounces in one frame).
+    if(_bbInterval > 0 && bounces > 0) {
+      while(_lastBoomBounces + _bbInterval <= bounces) {
+        _lastBoomBounces += _bbInterval;
+        const _bbR = BALL_R * 8 * (typeof getBoomScale === 'function' ? getBoomScale() : 1.0);
+        if(typeof spawnExplosion === 'function') spawnExplosion(px, floorY + 0.1, pz, 1.2);
+        if(typeof collectObstaclesInRadius === 'function' && typeof destroyObstacles === 'function') {
+          const _hits = collectObstaclesInRadius(px, pz, _bbR);
+          if(_hits.length > 0) destroyObstacles(_hits, px, floorY, pz);
+        }
+        if(typeof destroyWallChunksInRadius === 'function') destroyWallChunksInRadius(px, pz, _bbR);
+        if(typeof triggerShake === 'function') triggerShake('med');
+      }
+    }
+
     // v0.21a: Hunter stagger — dodgeballs bounce off the Hunter. Pass a
     // bounce object so the helper reflects dx/dz; squash + bounce count
     // bump locally if we connected.
@@ -21834,10 +22152,13 @@ function activateWalkiesCard() {
   if(G.walkiesActive || G.inHole) return;
   G.walkiesActive = true;
   // v0.20h: Clone perk — 10s -> 20s on cloned plays
-  G.walkiesTimer = 10.0 * consumeCloneDurationMult('walkies');
+  // v0.21d: Power Walkies upgrade reads durationMult off CARD_DEFS.walkies.
+  const _wkDurMul = (typeof getCardField === 'function') ? getCardField('walkies','durationMult',1.0) : 1.0;
+  G.walkiesTimer = 10.0 * _wkDurMul * consumeCloneDurationMult('walkies');
   trackStat('walkiesUsed', 1);
   const dur = Math.round(G.walkiesTimer);
-  showToast('🦵 Walkies! ' + dur + 's — tap anywhere or use WASD', 1200);
+  const _label = _wkDurMul > 1 ? 'Power Walkies!' : 'Walkies!';
+  showToast('🦵 ' + _label + ' ' + dur + 's — tap anywhere or use WASD', 1200);
   if(G.ball) {
     G.ballMesh.material = new THREE.MeshStandardMaterial({color:0xffcc44, roughness:0.3, metalness:0.1});
   }
@@ -21890,6 +22211,10 @@ function activateMightyEgg() {
     return;
   }
   G._mightyEggActive = true;
+  // v0.21d: Iron Egg upgrade reads hitAbsorption off CARD_DEFS.mighty_egg
+  // (default 1, Iron Egg = 2). Tracks remaining hits via _mightyEggHitsLeft.
+  const _eggHits = (typeof getCardField === 'function') ? getCardField('mighty_egg','hitAbsorption',1) : 1;
+  G._mightyEggHitsLeft = Math.max(1, _eggHits|0);
   // Egg shell: slightly taller than the ball, 90% transparent white with a
   // soft outline. Positioned as a child of G.ball so it tracks the ball
   // exactly (including the visual rotation) without any physics impact.
@@ -21915,7 +22240,10 @@ function activateMightyEgg() {
   eggGroup.add(eggMesh);
   G.ball.add(eggGroup);
   G._mightyEggMesh = eggGroup;
-  showToast('🥚 Mighty Egg armed — absorbs 1 hit!', 1400);
+  const _eggLabel = (G._mightyEggHitsLeft > 1)
+    ? `🥚 Iron Egg armed — absorbs ${G._mightyEggHitsLeft} hits!`
+    : '🥚 Mighty Egg armed — absorbs 1 hit!';
+  showToast(_eggLabel, 1400);
   triggerShake('light');
   if(AC) {
     try {
@@ -21931,15 +22259,41 @@ function activateMightyEgg() {
 // Returns true if the egg absorbed the hit (caller should skip HP damage);
 // false if no egg was armed. Call this from any damage-causing collision
 // BEFORE applyDamage so the egg soaks the hit.
+// v0.21d: Iron Egg supports multi-hit absorption via _mightyEggHitsLeft.
 function consumeMightyEgg() {
   if(!G._mightyEggActive) return false;
-  G._mightyEggActive = false;
-  crackMightyEgg();
+  G._mightyEggHitsLeft = Math.max(0, (G._mightyEggHitsLeft|0) - 1);
+  if(G._mightyEggHitsLeft <= 0) {
+    G._mightyEggActive = false;
+    crackMightyEgg();
+  } else {
+    // Quick "ping" — egg cracks visibly but doesn't shatter yet.
+    triggerShake('light');
+    if(AC) sfxBounce(2);
+    showToast(`🥚 Egg absorbed! ${G._mightyEggHitsLeft} left`, 900);
+  }
   return true;
 }
 
 // Spawn 6 shards that fly outward + gravity + fade, loud crack SFX.
 function crackMightyEgg() {
+  // v0.21d: Dragon Egg upgrade — read explodeOnCrack off CARD_DEFS.mighty_egg.
+  // Trigger an explosion at the ball position BEFORE removing the shell so
+  // the boom is visually attached to the cracking egg.
+  const _explodeOnCrack = (typeof getCardField === 'function')
+    ? getCardField('mighty_egg','explodeOnCrack',false) : false;
+  if(_explodeOnCrack) {
+    const _eggR = BALL_R * 14 * (typeof getBoomScale === 'function' ? getBoomScale() : 1.0);
+    const px = G.ballPos.x, py = G.ballPos.y, pz = G.ballPos.z;
+    if(typeof spawnExplosion === 'function') spawnExplosion(px, py, pz, 1.6);
+    if(typeof collectObstaclesInRadius === 'function' && typeof destroyObstacles === 'function') {
+      const _hits = collectObstaclesInRadius(px, pz, _eggR);
+      if(_hits.length > 0) destroyObstacles(_hits, px, py, pz);
+    }
+    if(typeof destroyWallChunksInRadius === 'function') destroyWallChunksInRadius(px, pz, _eggR);
+    if(typeof triggerShake === 'function') triggerShake('heavy');
+    showToast('🥚🐉💥 Dragon Egg!', 1100);
+  }
   // Remove the shell mesh from the ball.
   if(G._mightyEggMesh && G.ball) {
     G.ball.remove(G._mightyEggMesh);
@@ -22257,14 +22611,18 @@ function clearStickyState() {
 function activateParkour() {
   // v0.21b: each tap of a parkour card adds a charge instead of dead-tapping
   // when one is already armed. Visual lift/glow handled via isCardArmedPreSwing.
-  G._parkourCharges = (G._parkourCharges || 0) + 1;
+  // v0.21d: Acrobat upgrade reads vaultCount off CARD_DEFS.parkour (default 1,
+  // Acrobat = 2). Each activation adds vaultCount charges instead of just 1.
+  const _vaultN = (typeof getCardField === 'function') ? getCardField('parkour','vaultCount',1) : 1;
+  G._parkourCharges = (G._parkourCharges || 0) + Math.max(1, _vaultN|0);
   // Keep _parkourCardActive as a derived flag for back-compat — anything
   // reading it via legacy code still gets the right truthy answer.
   G._parkourCardActive = true;
   G._parkourArcing = false; // not currently mid-arc on first arm
   const _n = G._parkourCharges;
-  if(_n > 1) showToast(`🤸 Parkour ×${_n} — leap ${_n} obstacles!`, 1200);
-  else        showToast('🤸 Parkour armed — leap the next obstacle!', 1200);
+  const _label = _vaultN > 1 ? '🤸 Acrobat' : '🤸 Parkour';
+  if(_n > 1) showToast(`${_label} ×${_n} — leap ${_n} obstacles!`, 1200);
+  else        showToast(`${_label} armed — leap the next obstacle!`, 1200);
   if(AC) {
     try {
       const ac = getAC(), t = ac.currentTime;
@@ -23100,6 +23458,8 @@ function fireSharpshooter() {
   //   • 50% faster starting speed (48 m/s)
   //   • NO meaningful distance cap — hard backstop at 500m (bigger than any course)
   //   • Accelerates at 40 m/s² up to 140 m/s max — long-range shots arrive dramatically fast
+  // v0.21d: Railgun upgrade reads piercing off CARD_DEFS.sniper.
+  const _snPierce = (typeof getCardField === 'function') ? !!getCardField('sniper','piercing',false) : false;
   fireProjectile({
     blastRadius: 3.0,
     travelSpeed: 48,
@@ -23111,6 +23471,7 @@ function fireSharpshooter() {
     spiral: 1,
     accel: 40,
     maxSpeed: 140,
+    piercing: _snPierce,
   });
   // ── VATS-style cinematic setup ─────────────────────
   // Find the freshly-spawned missile group (it was added to the scene by fireProjectile).
@@ -23296,10 +23657,14 @@ function fireSharpshooterBall() {
   // Jumper pre-load: add upward punch to the ball's launch velocity
   if(G._jumpPreloaded) {
     G.ballVel.y = Math.max(G.ballVel.y, G.ballVel.y + 6.38);
-    G._jumpPreloaded = false;
-    if(G.ball && G._jumpPreloadOrigEmissive && G.ballMesh.material && G.ballMesh.material.emissive) {
-      G.ballMesh.material.emissive.copy(G._jumpPreloadOrigEmissive);
-      G._jumpPreloadOrigEmissive = null;
+    // v0.21d: Double Jump — decrement charges; only clear preload if all spent.
+    G._jumpChargesRemaining = Math.max(0, (G._jumpChargesRemaining|0) - 1);
+    if(G._jumpChargesRemaining <= 0) {
+      G._jumpPreloaded = false;
+      if(G.ball && G._jumpPreloadOrigEmissive && G.ballMesh.material && G.ballMesh.material.emissive) {
+        G.ballMesh.material.emissive.copy(G._jumpPreloadOrigEmissive);
+        G._jumpPreloadOrigEmissive = null;
+      }
     }
     recordStyleEvent('jump');
     if(AC) sfxJump();
@@ -23381,9 +23746,12 @@ function activateCatapult() {
 function activateFreezeFrame() {
   G._freezeFrameActive = true;
   // v0.20h: Clone perk — 10s -> 20s on cloned plays
-  G._freezeFrameTimer = 10.0 * consumeCloneDurationMult('freeze_frame');
+  // v0.21d: Deep Freeze upgrade reads durationMult off CARD_DEFS.freeze_frame (2.0 → 20s).
+  const _ffMul = (typeof getCardField === 'function') ? getCardField('freeze_frame','durationMult',1.0) : 1.0;
+  G._freezeFrameTimer = 10.0 * _ffMul * consumeCloneDurationMult('freeze_frame');
   const dur = Math.round(G._freezeFrameTimer);
-  showToast('🧊 Freeze Frame! ' + dur + 's', 1200);
+  const _label = _ffMul > 1 ? 'Deep Freeze!' : 'Freeze Frame!';
+  showToast('🧊 ' + _label + ' ' + dur + 's', 1200);
   triggerShake('light');
   if(AC) {
     const ac = getAC(), t = ac.currentTime;
@@ -23684,11 +24052,20 @@ function activateGoldenPath() {
 }
 
 function triggerJump() {
+  // v0.21d: Double Jump upgrade reads jumpCharges off CARD_DEFS.jumper
+  // (default 1, Double Jump = 2). Each card-play seeds the counter.
+  const _jumpN = (typeof getCardField === 'function') ? getCardField('jumper','jumpCharges',1) : 1;
   // Pre-swing pre-load: if ball isn't rolling yet and we're in aim mode,
   // arm a pre-loaded jump that will fire the moment the swing launches.
   if(G.aimMode && !G.rolling && !G.inHole && G.state === 'playing') {
     G._jumpPreloaded = true;
-    showToast('🦘 Jump Pre-loaded for swing', 1400);
+    G._jumpChargesRemaining = Math.max(1, _jumpN|0);
+    // v0.21d: Rocket Jump upgrade — flag pending landing-explosion.
+    if((typeof getCardField === 'function') && getCardField('jumper','landingExplodes',false)) {
+      G._rocketJumpPending = true;
+    }
+    const _label = _jumpN > 1 ? `🦘 Double Jump Pre-loaded (×${_jumpN})` : '🦘 Jump Pre-loaded for swing';
+    showToast(_label, 1400);
     triggerShake('light');
     if(AC) {
       // Spring-coil SFX: low charge-up
@@ -23710,6 +24087,11 @@ function triggerJump() {
   const jumpReady = (G.rolling || (performance.now() - (G._shotJustFired||0) < 300)) && !G.inHole && !G.aimMode;
   if(jumpReady) {
     G._jumpPending = true;
+    if(!G._jumpChargesRemaining) G._jumpChargesRemaining = Math.max(1, _jumpN|0);
+    // v0.21d: Rocket Jump upgrade — flag pending landing-explosion.
+    if((typeof getCardField === 'function') && getCardField('jumper','landingExplodes',false)) {
+      G._rocketJumpPending = true;
+    }
   }
 }
 window.triggerJump = triggerJump;
@@ -25155,6 +25537,16 @@ function throwGrenadeAt(power, dir, opts) {
   // Clear the cancellable flag — card is consumed at this point, no refund.
   G._pendingCancellableCard = null;
   const isHoly = !!(opts && opts.holy);
+  // v0.21d: Sticky Grenade upgrade reads stickyOnImpact + radiusMult off
+  // CARD_DEFS.grenade. Only applies to non-holy grenades.
+  const _grenSticky = (!isHoly && typeof getCardField === 'function')
+    ? !!getCardField('grenade','stickyOnImpact',false) : false;
+  const _grenRadMul = (!isHoly && typeof getCardField === 'function')
+    ? getCardField('grenade','radiusMult',1.0) : 1.0;
+  // v0.21d: Cluster Grenade upgrade reads clusterCount off CARD_DEFS.grenade.
+  // Spawns N mini-explosions on first bounce.
+  const _grenCluster = (!isHoly && typeof getCardField === 'function')
+    ? (getCardField('grenade','clusterCount',0)|0) : 0;
   const _power = Math.max(0.1, Math.min(1.0, power || 0.5));
   const _dir = (dir || G.shotDir).clone();
   _dir.y = 0;
@@ -25164,7 +25556,11 @@ function throwGrenadeAt(power, dir, opts) {
   // still multiplies on top — a holy grenade with Big Boom is genuinely huge.
   // v0.20i: bumped 2× → 3× per Adam — HHG should feel meaningfully bigger
   // than a regular grenade so it earns its legendary slot.
-  const BLAST_R = BALL_R * 8 * 2 * getBoomScale() * (isHoly ? 3.0 : 1.0); // 8 ball lengths, 3× for HHG
+  // v0.21d: Hand of God upgrade reads radiusMult off CARD_DEFS.holy_hand_grenade
+  // (default 1.0; Hand of God = 4/3 brings total to 4×).
+  const _hhgUp = (typeof getCardField === 'function') ? getCardField('holy_hand_grenade','radiusMult',1.0) : 1.0;
+  // v0.21d: Sticky Grenade upgrade — _grenRadMul (1.5×) on non-holy grenades.
+  const BLAST_R = BALL_R * 8 * 2 * getBoomScale() * (isHoly ? 3.0 * _hhgUp : 1.0 * _grenRadMul); // 8 ball lengths, 3× for HHG (×upgrade)
   // v0.21a: throwables (grenade/HHG) extend with Strengthen Swing — match preview math.
   const lobDist = (4 + _power * 16) * (G.swingMult || 1.0); // v0.20d range × swing buff
   const lobTime = 0.8;
@@ -25329,7 +25725,39 @@ function throwGrenadeAt(power, dir, opts) {
         gy = floorY;
         spawnHitParticles(new THREE.Vector3(gx, gy, gz));
         if(AC) sfxBounce(2 + bounceCount);
-        if(bounceCount >= MAX_BOUNCES) {
+        // v0.21d: Cluster Grenade — on FIRST bounce, spawn N mini-explosions
+        // in a ring around the bounce position. Each is a real explosion
+        // (destroys obstacles + walls in its small radius), not just FX.
+        if(_grenCluster > 0 && bounceCount === 1) {
+          const _miniR = BLAST_R * 0.55;
+          const _ringR = BLAST_R * 0.7;
+          for(let _ci = 0; _ci < _grenCluster; _ci++) {
+            const _ang = (_ci / _grenCluster) * Math.PI * 2 + Math.random() * 0.3;
+            const _mx = gx + Math.cos(_ang) * _ringR;
+            const _mz = gz + Math.sin(_ang) * _ringR;
+            const _delay = 80 + _ci * 70;
+            setTimeout(() => {
+              const _terY = G.heightMap.length ? getTerrainHeight(_mx, _mz) : 0;
+              const _my = _terY + FLOOR_H/2 + 0.05;
+              if(typeof spawnExplosion === 'function') spawnExplosion(_mx, _my, _mz, 0.85);
+              if(typeof collectObstaclesInRadius === 'function' && typeof destroyObstacles === 'function') {
+                const _hits = collectObstaclesInRadius(_mx, _mz, _miniR);
+                if(_hits.length > 0) destroyObstacles(_hits, _mx, _my, _mz);
+              }
+              if(typeof destroyWallChunksInRadius === 'function') destroyWallChunksInRadius(_mx, _mz, _miniR);
+            }, _delay);
+          }
+          if(typeof showToast === 'function') showToast(`🧨×${_grenCluster} Cluster!`, 1100);
+        }
+        // v0.21d: Sticky Grenade — first ground touch sticks. Skip bounce
+        // entirely; jump straight to landed state (fuse begins).
+        if(_grenSticky) {
+          landed = true;
+          landTime = performance.now();
+          targetMesh.position.set(gx, groundY + FLOOR_H/2 + 0.03, gz);
+          gvx = 0; gvz = 0; gvy = 0;
+          if(typeof showToast === 'function') showToast('🧨 Sticky!', 700);
+        } else if(bounceCount >= MAX_BOUNCES) {
           landed = true;
           landTime = performance.now();
           // Update target position to where it actually landed
@@ -25394,6 +25822,16 @@ function throwGrenadeAt(power, dir, opts) {
           flashScreenWhite();
         }
         triggerShake(isHoly ? 'heavy' : 'heavy');
+        // v0.21d: Divine Wrath upgrade reads healOnExplosion off CARD_DEFS.holy_hand_grenade.
+        // Only heals on HHG (isHoly), since the upgrade lives on that card. applyHeal
+        // caps at G.hpMax and updates HUD/lives.
+        if(isHoly) {
+          const _heal = (typeof getCardField === 'function') ? getCardField('holy_hand_grenade','healOnExplosion',0) : 0;
+          if(_heal > 0 && typeof applyHeal === 'function') {
+            const _actual = applyHeal(_heal, 'divine_wrath');
+            if(_actual > 0) showToast(`⛪💚 Divine Wrath — +${_actual} HP`, 1300);
+          }
+        }
         // Blast ring
         const blastRing = new THREE.Mesh(
           new THREE.TorusGeometry(0.3, 0.08, 8, 32),
@@ -26114,7 +26552,11 @@ function activateBoulder() {
     G.shotAngle = G.camTheta + Math.PI;
   }
   const dir = G.shotDir.clone().normalize();
-  const BOULDER_R = 1.2;
+  // v0.21d: Mega Boulder upgrade reads sizeMult and durationMult off
+  // CARD_DEFS.boulder. Both default to 1.0; Mega Boulder = 1.5× / 1.5×.
+  const _bSizeMul = (typeof getCardField === 'function') ? getCardField('boulder','sizeMult',1.0) : 1.0;
+  const _bDurMul  = (typeof getCardField === 'function') ? getCardField('boulder','durationMult',1.0) : 1.0;
+  const BOULDER_R = 1.2 * _bSizeMul;
   const BOULDER_SPEED = 18;
 
   // Start behind camera
@@ -26153,7 +26595,8 @@ function activateBoulder() {
   let travelled = 0;
   // v0.20f4: shortened 80 → 64 (~20% reduction). Boulder was over-rewarding —
   // can still clear most paths, but late-hole/hazard-dense holes can survive.
-  const maxDist = 64;
+  // v0.21d: Mega Boulder upgrade — durationMult expands maxDist proportionally.
+  const maxDist = 64 * _bDurMul;
   const hitSet = new Set(); // track what we've already hit
   // v0.20u: Portal Grenade per-projectile teleport cooldown stamp.
   const _boulderPortalState = { _lastPortalT: 0 };
@@ -27061,6 +27504,10 @@ window.triggerLapModeFinish = triggerLapModeFinish;
 // Spawn a floomba from card — deploys at ball position
 function spawnFloombaFromCard() {
   if(!G._floombas) G._floombas = [];
+  // v0.21d: Mega Floomba upgrade reads sizeMult and speedMult off
+  // CARD_DEFS.floomba (Mega Floomba = 1.5× / 2.0×).
+  const _flSizeMul  = (typeof getCardField === 'function') ? getCardField('floomba','sizeMult',1.0)  : 1.0;
+  const _flSpeedMul = (typeof getCardField === 'function') ? getCardField('floomba','speedMult',1.0) : 1.0;
   const fwx = G.ballPos.x + (Math.random()-0.5)*3;
   const fwz = G.ballPos.z + (Math.random()-0.5)*3;
   const ftY = G.heightMap.length ? getTerrainHeight(fwx, fwz) : 0;
@@ -27081,15 +27528,19 @@ function spawnFloombaFromCard() {
   fbGroup.add(antBall);
   fbGroup.position.set(fwx, ftY + FLOOR_H/2 + 0.3, fwz);
   fbGroup.userData.noOutline = true;
+  // v0.21d: scale entire floomba group for Mega Floomba upgrade.
+  if(_flSizeMul !== 1.0) fbGroup.scale.setScalar(_flSizeMul);
   scene.add(fbGroup);
   const fAng = Math.random() * Math.PI * 2;
-  const fSpeed = 5 + Math.random() * 3;
+  const fSpeed = (5 + Math.random() * 3) * _flSpeedMul;
   G._floombas.push({
     mesh: fbGroup, pos: new THREE.Vector3(fwx, ftY + FLOOR_H/2 + 0.2, fwz),
     vel: new THREE.Vector3(Math.sin(fAng)*fSpeed, 0, Math.cos(fAng)*fSpeed),
     _hitSet: new Set(), _flipTimer: 0, _squashTimer: 0, _squashDir: new THREE.Vector3(1,0,0),
+    _radiusMul: _flSizeMul, // for collision-radius scaling if Floomba physics reads it later
   });
-  showToast('🤖 Floomba deployed!', 1000);
+  const _label = (_flSizeMul > 1 || _flSpeedMul > 1) ? 'Mega Floomba deployed!' : 'Floomba deployed!';
+  showToast('🤖 ' + _label, 1000);
   triggerShake('light');
   if(AC) {
     const ac=getAC(),t=ac.currentTime;
@@ -27104,13 +27555,15 @@ function triggerExplosivo() {
   if(!G.ballPos) return;
   if(G.rolling) recordStyleEvent('explosivo_rolling');
   const px = G.ballPos.x, py = G.ballPos.y, pz = G.ballPos.z;
+  // v0.21d: Mega Explosivo upgrade — read radiusMult off CARD_DEFS.explosivo (1.75×).
+  const _expMul = (typeof getCardField === 'function') ? getCardField('explosivo','radiusMult',1.0) : 1.0;
   // v0.17y5: explosivo gets 2x range and 2x visual FX scale to match.
   // Previous: BALL_R * 8 * 2 = 16 radii wide. New: BALL_R * 16 * 2 = 32 radii.
-  const BLAST_R = BALL_R * 16 * 2 * getBoomScale();
+  const BLAST_R = BALL_R * 16 * 2 * getBoomScale() * _expMul;
 
   // Staggered multi-burst explosion for dramatic slow-motion feel
   // v0.17y5: visual scale also doubled so the fireball matches the new range.
-  const bvs = getBoomScale() * 2.0;
+  const bvs = getBoomScale() * 2.0 * _expMul;
   spawnExplosion(px, py, pz, bvs);
   setTimeout(() => spawnExplosion(px + (Math.random()-0.5)*0.6*bvs, py + 0.2, pz + (Math.random()-0.5)*0.6*bvs, bvs*0.8), 80);
   setTimeout(() => spawnExplosion(px + (Math.random()-0.5)*0.8*bvs, py + 0.4, pz + (Math.random()-0.5)*0.8*bvs, bvs*0.8), 180);
@@ -27173,8 +27626,12 @@ function triggerExplosivo() {
     destroyObstacles(hits, px, py, pz);
     destroyWallChunksInRadius(px, pz, BLAST_R);
   }, 150);
-  showToast('💥 BOOM!', 1000);
+  showToast(_expMul > 1 ? '💥 MEGA BOOM!' : '💥 BOOM!', 1000);
   triggerShake('heavy');
+  if(_expMul > 1) {
+    // v0.21d: Mega Explosivo — second shake at 200ms for the "to taste" feel.
+    setTimeout(() => triggerShake('heavy'), 200);
+  }
 }
 
 // Explosivo: can detonate at rest (before swing) or while rolling
@@ -27191,7 +27648,10 @@ function activateGhostBall() {
   if(G.ghostBallActive) return;
   G.ghostBallActive = true;
   // v0.20h: Clone perk — 4s -> 8s on cloned plays
-  G._ghostTimer = 4.0 * consumeCloneDurationMult('ghost_ball');
+  // v0.21d: Long Ghost upgrade reads durationMult off CARD_DEFS.ghost_ball
+  // (Long Ghost = 2.0 → 8s). Stacks with Clone (8s × 2 = 16s).
+  const _ghMul = (typeof getCardField === 'function') ? getCardField('ghost_ball','durationMult',1.0) : 1.0;
+  G._ghostTimer = 4.0 * _ghMul * consumeCloneDurationMult('ghost_ball');
   if(G.ball) {
     G.ballMesh.material = new THREE.MeshToonMaterial({
       color:0xaaddff, transparent:true, opacity:0.35,
@@ -28645,8 +29105,14 @@ function fireShot() {
   // its activator), so when frisbee fires, the regular arcExtra of +4.5 is
   // already in play; we add a small extra here for an even loftier flight.
   const frisbeeArc = G._frisbeeArmed ? 1.0 : 0;
-  const arcExtra = G._catapultActive ? 6.5 : (G._arcShotActive ? 4.5 + frisbeeArc : 0);
-  const powerMult = G._powerShotStacks > 0 ? Math.pow(2.0, G._powerShotStacks) : 1.0;
+  // v0.21d: Trebuchet upgrade reads arcHeightMult off CARD_DEFS.catapult
+  // (default 1.0; Trebuchet = 2.0 doubles the +6.5 arc pop).
+  const _catapultArcMul = (G._catapultActive && typeof getCardField === 'function')
+    ? getCardField('catapult','arcHeightMult',1.0) : 1.0;
+  const arcExtra = G._catapultActive ? (6.5 * _catapultArcMul) : (G._arcShotActive ? 4.5 + frisbeeArc : 0);
+  // v0.21d: Mega Power upgrade — match aim calc.
+  const _psMulFs = (typeof getPowerShotPerStackMul === 'function') ? getPowerShotPerStackMul() : 2.0;
+  const powerMult = G._powerShotStacks > 0 ? Math.pow(_psMulFs, G._powerShotStacks) : 1.0;
   // v0.20c: catapult on its own travels too far for what's a chaos card —
   // every shot ended up halfway across the course. Damp horizontal speed by
   // 0.7 when catapult is solo. Combo with Power Shot restores full power
@@ -28744,10 +29210,14 @@ function fireShot() {
   // Use Math.max so Catapult's bigger initial Y (9.0) still wins over a normal jump.
   if(G._jumpPreloaded) {
     G.ballVel.y = Math.max(G.ballVel.y, 6.38);
-    G._jumpPreloaded = false;
-    if(G.ball && G._jumpPreloadOrigEmissive && G.ballMesh.material && G.ballMesh.material.emissive) {
-      G.ballMesh.material.emissive.copy(G._jumpPreloadOrigEmissive);
-      G._jumpPreloadOrigEmissive = null;
+    // v0.21d: Double Jump — decrement charges; only clear preload if all spent.
+    G._jumpChargesRemaining = Math.max(0, (G._jumpChargesRemaining|0) - 1);
+    if(G._jumpChargesRemaining <= 0) {
+      G._jumpPreloaded = false;
+      if(G.ball && G._jumpPreloadOrigEmissive && G.ballMesh.material && G.ballMesh.material.emissive) {
+        G.ballMesh.material.emissive.copy(G._jumpPreloadOrigEmissive);
+        G._jumpPreloadOrigEmissive = null;
+      }
     }
     recordStyleEvent('jump');
     if(AC) sfxJump();
@@ -29550,7 +30020,9 @@ function updateKeyboardCamera(dt) {
   const CAM_ROT_SPEED = 1.4;
   const AIM_ROT_SPEED = 2.0;
   const CAM_ZOOM_SPEED = 8.0;
-  const WALK_SPEED = 3.5;
+  // v0.21d: Power Walkies upgrade reads walkSpeedMult off CARD_DEFS.walkies (2.0).
+  const _walkSpdMul = (typeof getCardField === 'function') ? getCardField('walkies','walkSpeedMult',1.0) : 1.0;
+  const WALK_SPEED = 3.5 * _walkSpdMul;
 
   // ── Walkies mode: WASD moves ball ───────────────────
   if(G.walkiesActive) {
@@ -29558,6 +30030,27 @@ function updateKeyboardCamera(dt) {
     const secsLeft = Math.ceil(G.walkiesTimer);
     if(secsLeft > 0 && Math.floor(G.walkiesTimer + dt) > Math.floor(G.walkiesTimer)) {
       showToast(`🦵 ${secsLeft}s`, 800);
+    }
+    // v0.21d: Stompies upgrade — read destroyOnContact off CARD_DEFS.walkies.
+    // While walking, obstacles within a small radius of the ball get smashed.
+    // Throttled to once per ~120ms to avoid sound spam, but the physics check
+    // runs every frame so collisions never miss.
+    if((typeof getCardField === 'function') && getCardField('walkies','destroyOnContact',false)) {
+      const _stompR = BALL_R * 2.2;
+      const _now = performance.now();
+      if((_now - (G._lastStompTime||0)) > 120) {
+        if(typeof collectObstaclesInRadius === 'function' && typeof destroyObstacles === 'function') {
+          const _hits = collectObstaclesInRadius(G.ballPos.x, G.ballPos.z, _stompR);
+          if(_hits.length > 0) {
+            G._lastStompTime = _now;
+            destroyObstacles(_hits, G.ballPos.x, G.ballPos.y, G.ballPos.z);
+            if(typeof triggerShake === 'function') triggerShake('light');
+            // Coin payout per stomped obstacle (matches Bounce & Boom feel).
+            for(let bk=0;bk<_hits.length;bk++){ G.coins++; }
+            updateCoinHUD();
+          }
+        }
+      }
     }
     if(G.walkiesTimer <= 0) {
       endWalkies();
@@ -30129,7 +30622,666 @@ const ACTIVE_PERKS = ALL_PERKS.filter(p => !INACTIVE_PERKS.has(p.id));
 ALL_PERKS.length = 0;
 ALL_PERKS.push(...ACTIVE_PERKS);
 
+// ════════════════════════════════════════════════════════════════════
+// v0.21d: CARD & PERK UPGRADES
+// ────────────────────────────────────────────────────────────────────
+// Each base card/perk has up to two upgrade branches (a/b). When the
+// player buys an upgrade, the runtime CARD_DEFS / ALL_PERKS entry is
+// mutated in place so all 20+ existing lookup sites Just Work and every
+// instance of the source in the deck/modifiers becomes the upgraded
+// version. The original definition is stashed on _baseDef for debug.
+//
+// Gameplay-affecting fields on upgrades (powerMult, radiusMult,
+// durationMult, etc.) are read by individual systems via direct field
+// access — see lookups marked with `// upgrade-aware`. Effects not yet
+// wired into gameplay are flagged with `_unwired:true` so the upgrade
+// overlay can dim them rather than promising power that doesn't ship.
+// ════════════════════════════════════════════════════════════════════
+
+const CARD_UPGRADES = {
+  // ── COMMON ──
+  lil_scootch: {
+    a: { id:'big_scootch', name:'Big Scootch', emoji:'🧤', archetypes:['pinball','demolition'],
+         desc:'3× nudge force — the ball gets a real shove.',
+         nudgeForceMult: 3.0 },
+    b: { id:'scootch_combo', name:'Scootch Combo', emoji:'🧤', archetypes:['card_engine'],
+         desc:'Scootching also draws a card. Hand stays full while you chip away.',
+         drawOnUse: 1 },
+  },
+  power_shot: {
+    a: { id:'mega_power', name:'Mega Power', emoji:'💪', archetypes:['demolition','speed'],
+         desc:'3× max power (was 2×). Screen-shake on impact.',
+         powerMult: 3.0, screenShakeOnImpact: true },
+    b: { id:'pierce_shot', name:'Pierce Shot', emoji:'💪', archetypes:['demolition'],
+         desc:'2.25× power per stack — modest power buff, big when the wall-shatter follow-up lands.',
+         powerMult: 2.25, shatterOneWall: true, _unwired:true },
+  },
+  shooter: {
+    a: { id:'mirv', name:'MIRV', emoji:'🚀', archetypes:['demolition'],
+         desc:'Missile splits into 3 warheads on first impact, each fanning back from the boom.',
+         splitCount: 3 },
+    b: { id:'big_payload', name:'Big Payload', emoji:'🚀', archetypes:['demolition'],
+         desc:'2× impact size — the boom is bigger.',
+         radiusMult: 2.0 },
+  },
+  grenade: {
+    a: { id:'cluster_grenade', name:'Cluster Grenade', emoji:'🧨', archetypes:['demolition'],
+         desc:'Spawns 4 mini-grenades in a ring on first bounce. Saturation bombing.',
+         clusterCount: 4 },
+    b: { id:'sticky_grenade', name:'Sticky Grenade', emoji:'🧨', archetypes:['trick_shot'],
+         desc:'Sticks to the ground on first contact — no bounce. 1.5× radius.',
+         stickyOnImpact: true, radiusMult: 1.5 },
+  },
+  backspin: {
+    a: { id:'hard_brake', name:'Hard Brake', emoji:'🔄', archetypes:['pinball','trick_shot'],
+         desc:'Full stop + draw a card. The pause that refreshes.',
+         brakeFullStop: true, drawOnUse: 1 },
+    // Branch B left open intentionally — only one branch listed in spec
+  },
+  jumper: {
+    a: { id:'double_jump', name:'Double Jump', emoji:'🦘', archetypes:['pinball','speed'],
+         desc:'Trigger jump 2 times per swing instead of once.',
+         jumpCharges: 2 },
+    b: { id:'rocket_jump', name:'Rocket Jump', emoji:'🦘', archetypes:['demolition'],
+         desc:'Pre-loaded or mid-swing jump explodes obstacles when you land. Ground shakes.',
+         landingExplodes: true },
+  },
+  catapult: {
+    a: { id:'trebuchet', name:'Trebuchet', emoji:'🪤', archetypes:['demolition','speed'],
+         desc:'2× arc height. Landings explode on impact.',
+         arcHeightMult: 2.0, landingExplodes: true },
+    // Branch B left open
+  },
+  mighty_egg: {
+    a: { id:'iron_egg', name:'Iron Egg', emoji:'🥚', archetypes:['demolition'],
+         desc:'Absorbs 2 hits instead of 1. Tougher shell.',
+         hitAbsorption: 2 },
+    b: { id:'dragon_egg', name:'Dragon Egg', emoji:'🥚', archetypes:['demolition'],
+         desc:'Cracks on first hit, but explodes when it cracks. Damage trade-up.',
+         explodeOnCrack: true },
+  },
+  // ── RARE ──
+  // (slow_mo upgrade lives in PERK_UPGRADES — the card variant is in
+  //  INACTIVE_CARDS so only the perk variant is reachable.)
+  walkies: {
+    a: { id:'power_walkies', name:'Power Walkies', emoji:'🦵', archetypes:['speed'],
+         desc:'2× walk speed, +30% duration (~13s).',
+         walkSpeedMult: 2.0, durationMult: 1.3 },
+    b: { id:'stompies', name:'Stompies', emoji:'🦵', archetypes:['demolition'],
+         desc:'Walking destroys obstacles you touch. Heavy footfalls.',
+         destroyOnContact: true },
+  },
+  iron_ball: {
+    a: { id:'wrecking_ball_iron', name:'Wrecking Ball', emoji:'🔩', archetypes:['demolition'],
+         desc:'+50% shot power and a louder visual punch. (Full 3× size lands when collision-radius scaling ships.)',
+         powerMult: 1.5 },
+    // Branch B left open
+  },
+  freeze_frame: {
+    a: { id:'deep_freeze', name:'Deep Freeze', emoji:'🧊', archetypes:['trick_shot'],
+         desc:'20s duration (was 10s). Frozen obstacles shatter on ball contact.',
+         durationMult: 2.0, shatterOnContact: true },
+    // shatterOnContact wiring is partial — duration ships, shatter flagged unwired
+  },
+  parkour: {
+    a: { id:'acrobat', name:'Acrobat', emoji:'🤸', archetypes:['trick_shot'],
+         desc:'Vaults the first 2 obstacles, not just one. (+50% trick points + brief slow-mo land in a future patch.)',
+         vaultCount: 2, trickPointsMult: 1.5, briefSlowMo: true },
+    // Branch B left open
+  },
+  // ── EPIC ──
+  sniper: {
+    a: { id:'railgun', name:'Railgun', emoji:'🎯', archetypes:['demolition'],
+         desc:'Sniper missile pierces through obstacles instead of stopping at one.',
+         piercing: true },
+    // Branch B left open
+  },
+  boulder: {
+    a: { id:'mega_boulder', name:'Mega Boulder', emoji:'🪨', archetypes:['demolition'],
+         desc:'1.5× size, 1.5× duration.',
+         sizeMult: 1.5, durationMult: 1.5 },
+    // Branch B left open
+  },
+  dodgeball: {
+    a: { id:'dodgeball_frenzy', name:'Dodgeball Frenzy', emoji:'🔴', archetypes:['demolition','pinball'],
+         desc:'2 dodgeballs in a fan (queued — second fires after first finishes).',
+         spawnCount: 2 },
+    b: { id:'bouncing_bomb', name:'Bouncing Bomb', emoji:'🔴', archetypes:['demolition'],
+         desc:'Dodgeball explodes on every 3rd bounce. Bouncing → booming.',
+         explodeEveryNBounces: 3 },
+  },
+  explosivo: {
+    a: { id:'mega_explosivo', name:'Mega Explosivo', emoji:'💥', archetypes:['demolition'],
+         desc:'1.75× radius. Screen-shake to taste.',
+         radiusMult: 1.75, screenShakeOnImpact: true },
+    // Branch B left open
+  },
+  ghost_ball: {
+    a: { id:'long_ghost', name:'Long Ghost', emoji:'👻', archetypes:['trick_shot','pinball'],
+         desc:'8s duration (was 4s). The phase lasts twice as long. (1.2× speed + ghostify-touched lands later.)',
+         durationMult: 2.0, speedMult: 1.2, ghostifyTouched: true },
+    // speedMult & ghostifyTouched flagged for follow-up wiring
+  },
+  // wrecking_ball legendary upgrade from spec — base card is currently in
+  // INACTIVE_CARDS so the upgrade is harmless dead code. Kept for when the
+  // base card is reactivated.
+  floomba: {
+    a: { id:'mega_floomba', name:'Mega Floomba', emoji:'🤖', archetypes:['demolition'],
+         desc:'1.5× size and 2× speed.',
+         sizeMult: 1.5, speedMult: 2.0 },
+    b: { id:'floomba_squad', name:'Floomba Squad', emoji:'🤖', archetypes:['demolition'],
+         desc:'2 Floombas spawn instead of 1. Roomba army.',
+         spawnCount: 2 },
+  },
+  // ── LEGENDARY ──
+  holy_hand_grenade: {
+    a: { id:'hand_of_god', name:'Hand of God', emoji:'⛪', archetypes:['demolition'],
+         desc:'4× blast radius (vs HHG\'s 3×). The Lord is wroth.',
+         radiusMult: 4.0/3.0 /* HHG already 3×; 4/3 brings the total to 4× */ },
+    b: { id:'divine_wrath', name:'Divine Wrath', emoji:'⛪', archetypes:['demolition'],
+         desc:'Holy explosion also heals you 1 HP. Smite + sustain.',
+         healOnExplosion: 1 },
+  },
+  pinball: {
+    a: { id:'eternal_pinball', name:'Eternal Pinball', emoji:'🎰', archetypes:['pinball'],
+         desc:'20s duration (was 12s).',
+         durationMult: 20/12 },
+    b: { id:'hyperball', name:'Hyperball', emoji:'🎰', archetypes:['pinball','speed'],
+         desc:'12s but ball is 2× speed at launch. The bounce friction is already zero, so the kick persists.',
+         speedMult: 2.0 },
+  },
+};
+
+// ────────────────────────────────────────────────────────────────────
+// PERK UPGRADES — only branches that ship with the system; can be
+// expanded as upgrade content matures. Spec mentions "stackable perks
+// upgrade buffs all current stacks at once" — that comes free since
+// the runtime ALL_PERKS entry is mutated in place and stack counting
+// already reads modifier ids.
+// ────────────────────────────────────────────────────────────────────
+const PERK_UPGRADES = {
+  // v0.21d: Bullet Time — 12s + 2× combo points during effect.
+  // Slow Mo lives in ALL_PERKS (not CARD_DEFS — the card variant is in
+  // INACTIVE_CARDS), so its upgrade goes here.
+  slow_mo: {
+    a: { id:'bullet_time', name:'Bullet Time', emoji:'🐌', archetypes:['trick_shot'],
+         desc:'12s instead of 6s. Drink in the chaos. (Combo-bonus during effect lands in a follow-up patch.)',
+         durationMult: 2.0 },
+    // Branch B left open
+  },
+};
+
+// Runtime state — cleared on run start.
+// G.upgradedCards = { source_id: 'a'|'b' }
+// G.upgradedPerks = { source_id: 'a'|'b' }
+
+// Apply a card upgrade in-place. Mutates CARD_DEFS[sourceId] so every
+// existing lookup picks up the upgraded fields automatically.
+function applyCardUpgrade(sourceId, branch) {
+  const branches = CARD_UPGRADES[sourceId];
+  if(!branches) return false;
+  const up = branches[branch];
+  if(!up) return false;
+  const baseDef = CARD_DEFS[sourceId];
+  if(!baseDef) return false;
+  // Stash original fields the first time we mutate, so debug/restart can recover.
+  if(!baseDef._baseDef) {
+    baseDef._baseDef = {
+      name: baseDef.name, desc: baseDef.desc, emoji: baseDef.emoji,
+    };
+  }
+  baseDef.name = up.name;
+  baseDef.desc = up.desc;
+  baseDef.emoji = up.emoji || baseDef.emoji;
+  baseDef.upgraded = true;
+  baseDef.upgradeBranch = branch;
+  baseDef.upgradeId = up.id;
+  baseDef.archetypes = up.archetypes || [];
+  // Merge effect fields (powerMult, radiusMult, durationMult, etc.)
+  for(const k in up) {
+    if(k === 'id' || k === 'name' || k === 'desc' || k === 'emoji' || k === 'archetypes' || k === '_unwired') continue;
+    baseDef[k] = up[k];
+  }
+  if(up._unwired) baseDef._unwired = true;
+  return true;
+}
+
+// Apply a perk upgrade in-place on every matching ALL_PERKS entry.
+function applyPerkUpgrade(sourceId, branch) {
+  const branches = PERK_UPGRADES[sourceId];
+  if(!branches) return false;
+  const up = branches[branch];
+  if(!up) return false;
+  const perk = ALL_PERKS.find(p => p.id === sourceId);
+  if(!perk) return false;
+  if(!perk._baseDef) {
+    perk._baseDef = { name: perk.name, desc: perk.desc, emoji: perk.emoji };
+  }
+  perk.name = up.name;
+  perk.desc = up.desc;
+  perk.emoji = up.emoji || perk.emoji;
+  perk.upgraded = true;
+  perk.upgradeBranch = branch;
+  perk.upgradeId = up.id;
+  perk.archetypes = up.archetypes || [];
+  for(const k in up) {
+    if(k === 'id' || k === 'name' || k === 'desc' || k === 'emoji' || k === 'archetypes' || k === '_unwired') continue;
+    perk[k] = up[k];
+  }
+  if(up._unwired) perk._unwired = true;
+  return true;
+}
+
+// Reset all upgraded defs back to their baseline. Called at run start.
+// Note: in multiplayer, upgrades are currently shared across all players
+// because CARD_DEFS / ALL_PERKS are global. This is a known limitation —
+// if MP becomes a focus, savePlayerState / loadPlayerState would need to
+// re-apply each player's upgrade picks on turn switch (or refactor effects
+// to read from a per-player upgrade map instead of mutating defs).
+function resetAllUpgrades() {
+  for(const id in CARD_DEFS) {
+    const def = CARD_DEFS[id];
+    if(def && def._baseDef) {
+      def.name = def._baseDef.name;
+      def.desc = def._baseDef.desc;
+      def.emoji = def._baseDef.emoji;
+      delete def.upgraded; delete def.upgradeBranch; delete def.upgradeId;
+      delete def.archetypes; delete def._unwired; delete def._baseDef;
+      // Strip merged effect fields so re-upgrading the same card on a
+      // subsequent run doesn't carry stale state.
+      const KEEP = new Set(['id','emoji','name','desc','rarity','price','context','holdable','weight','stackPrice','stackable']);
+      for(const k of Object.keys(def)) if(!KEEP.has(k)) delete def[k];
+    }
+  }
+  for(const perk of ALL_PERKS) {
+    if(perk._baseDef) {
+      perk.name = perk._baseDef.name;
+      perk.desc = perk._baseDef.desc;
+      perk.emoji = perk._baseDef.emoji;
+      delete perk.upgraded; delete perk.upgradeBranch; delete perk.upgradeId;
+      delete perk.archetypes; delete perk._unwired; delete perk._baseDef;
+      const KEEP = new Set(['id','emoji','name','desc','rarity','price','weight','stackable','stackPrice']);
+      for(const k of Object.keys(perk)) if(!KEEP.has(k)) delete perk[k];
+    }
+  }
+}
+
+// Compute the price of a single upgrade. v0.21e: simplified — upgrade
+// costs the same as the base card/perk after the standard per-hole
+// inflation curve. No rarity multiplier, no stack multiplier. The
+// `isPerk` and `currentStacks` args are kept for signature stability
+// but ignored in the pricing math.
+// v0.21e: also honors free-upgrade vouchers (granted by tier-2/3 elite
+// rewards) — first call with at least one voucher returns 0.
+function getUpgradePrice(sourceDef, isPerk, currentStacks) {
+  if((G._freeUpgradeVouchers|0) > 0) return 0;
+  const rate = (G._diffMods && G._diffMods.shopRate) || 0.15;
+  const baseMult = (G._diffMods && G._diffMods.priceBaseMult) || 1.5;
+  const endlessMult = G._endlessMode ? Math.pow(1.7, G._endlessHolesPlayed | 0) : 1.0;
+  const pm = (typeof PRICE_MULTIPLIER !== 'undefined' ? PRICE_MULTIPLIER : 1);
+  const raw = sourceDef.price * baseMult
+            * (1 + (G.hole|0) * rate) * pm * endlessMult;
+  return Math.max(1, Math.round(raw));
+}
+
+// List cards in deck that have at least one upgrade branch defined and
+// haven't already been upgraded this run.
+function getEligibleCardUpgrades() {
+  if(!G.deck || !G.deck.length) return [];
+  const ownedIds = new Set(G.deck);
+  const out = [];
+  for(const sid of ownedIds) {
+    if(!CARD_UPGRADES[sid]) continue;
+    if(G.upgradedCards && G.upgradedCards[sid]) continue;
+    const def = CARD_DEFS[sid];
+    if(!def) continue;
+    out.push({ sourceId: sid, def, branches: CARD_UPGRADES[sid] });
+  }
+  // Sort common → rare → epic → legendary for readability.
+  const ro = { common:0, rare:1, epic:2, legendary:3 };
+  out.sort((a,b) => (ro[a.def.rarity]||0) - (ro[b.def.rarity]||0)
+                  || a.def.name.localeCompare(b.def.name));
+  return out;
+}
+
+function getEligiblePerkUpgrades() {
+  if(!G.modifiers || !G.modifiers.length) return [];
+  const ownedIds = new Set(G.modifiers.map(m => m.id));
+  const out = [];
+  for(const sid of ownedIds) {
+    if(!PERK_UPGRADES[sid]) continue;
+    if(G.upgradedPerks && G.upgradedPerks[sid]) continue;
+    const def = ALL_PERKS.find(p => p.id === sid);
+    if(!def) continue;
+    const stacks = G.modifiers.filter(m => m.id === sid).length;
+    out.push({ sourceId: sid, def, branches: PERK_UPGRADES[sid], stacks });
+  }
+  const ro = { common:0, rare:1, epic:2, legendary:3 };
+  out.sort((a,b) => (ro[a.def.rarity]||0) - (ro[b.def.rarity]||0)
+                  || a.def.name.localeCompare(b.def.name));
+  return out;
+}
+
+// Should this shop visit offer the upgrade button?
+// - Holes 1-2: never (gentle ramp, no deck depth yet)
+// - Free-upgrade voucher banked: always (player paid an elite to earn it)
+// - Post-elite shop (resolveEliteHoleResult just fired): always
+// - Otherwise: 55% chance (v0.21e: was 25%, bumped so upgrades show up
+//   on at least half of regular shop visits, not just post-elite)
+function rollUpgradeOfferForShop() {
+  if((G.hole|0) < 2) return false; // hole index is 0-based, so <2 means H1+H2
+  if((G._freeUpgradeVouchers|0) > 0) return true;
+  if(G._postEliteShop) return true;
+  const chance = (G._diffMods && G._diffMods.upgradeOfferChance) || 0.55;
+  return Math.random() < chance;
+}
+
+// Helper: is there at least one thing the player can actually upgrade?
+function anyUpgradesAvailable() {
+  return getEligibleCardUpgrades().length > 0 || getEligiblePerkUpgrades().length > 0;
+}
+
+// ─── Upgrade-aware field lookup helpers ───
+// Read a numeric field off CARD_DEFS[id] with a default. After an upgrade
+// applies, the field is set on the runtime def; before, we return the
+// default. Used by gameplay code that wants to honor upgrade tweaks.
+function getCardField(cardId, fieldName, defaultValue) {
+  const def = CARD_DEFS[cardId];
+  if(!def) return defaultValue;
+  const v = def[fieldName];
+  return (v == null) ? defaultValue : v;
+}
+
+// Convenience: per-stack power multiplier for Power Shot (Mega Power = 3×).
+// Default base is 2× per stack.
+function getPowerShotPerStackMul() {
+  return getCardField('power_shot', 'powerMult', 2.0);
+}
+
+// Read a numeric field off a perk in ALL_PERKS with a default.
+function getPerkField(perkId, fieldName, defaultValue) {
+  const def = (typeof ALL_PERKS !== 'undefined') ? ALL_PERKS.find(p => p.id === perkId) : null;
+  if(!def) return defaultValue;
+  const v = def[fieldName];
+  return (v == null) ? defaultValue : v;
+}
+
 function showModifierChoice(){ /* replaced by shop — kept as no-op for safety */ }
+
+// ════════════════════════════════════════════════════════════════════
+// v0.21d: UPGRADE PICKER UI
+// ────────────────────────────────────────────────────────────────────
+// Two-stage flow: (1) list of eligible cards/perks, tap one →
+// (2) side-by-side branch comparison, tap a branch → applied + close.
+// Overlay sits on top of the shop (z=160 vs shop z=130) so when the
+// player closes it, they're back at the shop.
+// ════════════════════════════════════════════════════════════════════
+
+window.openUpgradePicker = function() {
+  if(typeof shopGraceActive === 'function' && shopGraceActive()) return;
+  const ov = document.getElementById('upgrade-overlay');
+  if(!ov) return;
+  G._upgradePickerStage = 'list';
+  G._upgradePickerSource = null;
+  renderUpgradePicker();
+  ov.style.opacity = '1';
+  ov.style.pointerEvents = 'all';
+};
+
+window.closeUpgradePicker = function() {
+  const ov = document.getElementById('upgrade-overlay');
+  if(!ov) return;
+  // If we're in branch view, going back should return to list view, not close.
+  if(G._upgradePickerStage === 'branch') {
+    G._upgradePickerStage = 'list';
+    G._upgradePickerSource = null;
+    renderUpgradePicker();
+    return;
+  }
+  ov.style.opacity = '0';
+  ov.style.pointerEvents = 'none';
+};
+
+function renderUpgradePicker() {
+  const list = document.getElementById('upgrade-overlay-list');
+  const titleEl = document.getElementById('upgrade-overlay-title');
+  const subEl = document.getElementById('upgrade-overlay-subtitle');
+  const coinEl = document.getElementById('upgrade-overlay-coins');
+  const backBtn = document.getElementById('upgrade-overlay-back');
+  if(!list) return;
+  if(coinEl) coinEl.textContent = G.coins | 0;
+  list.innerHTML = '';
+
+  if(G._upgradePickerStage === 'branch') {
+    // ── Branch comparison view ──
+    const src = G._upgradePickerSource;
+    if(!src) { G._upgradePickerStage = 'list'; renderUpgradePicker(); return; }
+    if(titleEl) titleEl.textContent = `${src.def.emoji} ${src.def.name} — pick a branch`;
+    if(subEl) subEl.textContent = `Locked in for the rest of the run · 🪙 ${src.price}`;
+    if(backBtn) backBtn.textContent = '← Back to list';
+    const branches = src.branches;
+    const canAfford = G.coins >= src.price;
+    list.style.gridTemplateColumns = '1fr 1fr';
+    for(const bk of ['a','b']) {
+      const up = branches[bk];
+      if(!up) {
+        list.innerHTML += `
+          <div style="padding:18px 12px;border-radius:14px;border:1px dashed rgba(255,255,255,0.18);
+            background:rgba(255,255,255,0.02);text-align:center;color:rgba(255,255,255,0.35);font-size:0.7rem;">
+            <div style="font-size:1.6rem;opacity:0.4;margin-bottom:6px">—</div>
+            No second branch yet. Branch ${bk.toUpperCase()} comes in a future patch.
+          </div>`;
+        continue;
+      }
+      const archTags = (up.archetypes||[]).map(a =>
+        `<span style="display:inline-block;padding:2px 8px;border-radius:8px;background:rgba(255,215,80,0.14);color:#ffe580;font-size:0.55rem;letter-spacing:1px;text-transform:uppercase;margin:2px 2px 0 0;font-weight:700">${a.replace('_',' ')}</span>`
+      ).join('');
+      const unwiredBadge = up._unwired
+        ? `<div style="margin-top:6px;font-size:0.55rem;color:rgba(255,180,80,0.85);letter-spacing:1px;font-weight:700">⚠ TEXT-ONLY (effect lands in a future patch)</div>`
+        : '';
+      const disabledStyle = canAfford
+        ? 'cursor:pointer;'
+        : 'opacity:0.45;cursor:not-allowed;';
+      const handler = canAfford
+        ? `onclick="confirmUpgradeBranch('${src.sourceId}','${bk}','${src.isPerk?'perk':'card'}')"`
+        : '';
+      list.innerHTML += `
+        <div ${handler} style="
+          padding:14px 12px;border-radius:14px;border:2px solid #ffd750;
+          background:linear-gradient(160deg, rgba(255,215,80,0.16) 0%, rgba(60,30,80,0.4) 100%);
+          box-shadow:0 0 14px rgba(255,215,80,0.25);
+          ${disabledStyle}
+          display:flex;flex-direction:column;gap:6px;text-align:left;
+          transition:transform 100ms ease, box-shadow 200ms ease;"
+          onmouseenter="this.style.transform='translateY(-2px)';this.style.boxShadow='0 4px 22px rgba(255,215,80,0.5)'"
+          onmouseleave="this.style.transform='';this.style.boxShadow='0 0 14px rgba(255,215,80,0.25)'">
+          <div style="font-size:0.55rem;letter-spacing:2px;color:#ffd750;font-weight:800">BRANCH ${bk.toUpperCase()}</div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="font-size:1.6rem">${up.emoji}</div>
+            <div style="font-weight:800;font-size:0.95rem;color:#ffe580">${up.name}</div>
+          </div>
+          <div style="font-size:0.72rem;color:rgba(255,255,255,0.85);line-height:1.35">${up.desc}</div>
+          <div>${archTags}</div>
+          ${unwiredBadge}
+        </div>`;
+    }
+    return;
+  }
+
+  // ── List view ──
+  if(titleEl) titleEl.textContent = 'Pick a card or perk to evolve';
+  if(subEl) subEl.textContent = 'Tap one to see its two upgrade branches';
+  if(backBtn) backBtn.textContent = '← Back to Shop';
+  list.style.gridTemplateColumns = '1fr';
+
+  const cards = (typeof getEligibleCardUpgrades === 'function') ? getEligibleCardUpgrades() : [];
+  const perks = (typeof getEligiblePerkUpgrades === 'function') ? getEligiblePerkUpgrades() : [];
+
+  if(cards.length === 0 && perks.length === 0) {
+    list.innerHTML = `<div style="padding:32px 12px;text-align:center;color:rgba(255,255,255,0.4);font-size:0.8rem">
+      No eligible upgrades right now. Buy more cards or perks first!
+    </div>`;
+    return;
+  }
+
+  if(cards.length > 0) {
+    list.innerHTML += `<div style="margin:6px 0 4px;font-size:0.6rem;letter-spacing:2px;color:rgba(255,255,255,0.45);font-weight:700">CARDS IN YOUR DECK</div>`;
+    for(const entry of cards) {
+      const def = entry.def;
+      const price = (typeof getUpgradePrice === 'function') ? getUpgradePrice(def, false, 1) : def.price * 2;
+      const canAfford = G.coins >= price;
+      const deckCount = (G.deck || []).filter(c => c === entry.sourceId).length;
+      list.innerHTML += renderUpgradeListItem({
+        sourceId: entry.sourceId, def, price, canAfford,
+        countLabel: deckCount > 1 ? `×${deckCount} in deck` : '',
+        isPerk: false,
+      });
+    }
+  }
+  if(perks.length > 0) {
+    list.innerHTML += `<div style="margin:14px 0 4px;font-size:0.6rem;letter-spacing:2px;color:rgba(255,255,255,0.45);font-weight:700">PERKS YOU OWN</div>`;
+    for(const entry of perks) {
+      const def = entry.def;
+      const price = (typeof getUpgradePrice === 'function') ? getUpgradePrice(def, true, entry.stacks) : def.price * 2;
+      const canAfford = G.coins >= price;
+      const stackLabel = entry.stacks > 1 ? `×${entry.stacks} stacks` : '';
+      list.innerHTML += renderUpgradeListItem({
+        sourceId: entry.sourceId, def, price, canAfford,
+        countLabel: stackLabel,
+        isPerk: true,
+      });
+    }
+  }
+}
+
+function renderUpgradeListItem(o) {
+  const isFree = (G._freeUpgradeVouchers|0) > 0;
+  const cantClass = o.canAfford ? '' : 'opacity:0.45;cursor:not-allowed;';
+  const cursor = o.canAfford ? 'cursor:pointer;' : 'cursor:not-allowed;';
+  const handler = o.canAfford
+    ? `onclick="onUpgradePickSource('${o.sourceId}', ${o.isPerk})"`
+    : '';
+  const rarityColor = ({
+    common:'#9aa0a6', rare:'#5b9bf2', epic:'#a35bf2', legendary:'#ffae20'
+  })[o.def.rarity] || '#aaa';
+  const priceLabel = isFree
+    ? `<span style="background:linear-gradient(90deg,#ffd750,#ff8c2a);color:#3a1a00;padding:3px 8px;border-radius:8px;font-weight:900;letter-spacing:1px">FREE</span>`
+    : `🪙 ${o.price}`;
+  return `
+    <div ${handler} style="
+      padding:12px 14px;border-radius:12px;
+      border:1px solid ${o.canAfford ? 'rgba(255,215,80,0.45)' : 'rgba(255,255,255,0.12)'};
+      background:rgba(255,255,255,0.04);
+      display:flex;align-items:center;gap:12px;
+      transition:transform 100ms ease, background 200ms ease;
+      ${cursor}${cantClass}"
+      onmouseenter="if(${o.canAfford})this.style.background='rgba(255,215,80,0.10)'"
+      onmouseleave="this.style.background='rgba(255,255,255,0.04)'">
+      <div style="font-size:1.7rem;flex:0 0 auto">${o.def.emoji}</div>
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <div style="font-weight:800;font-size:0.88rem">${o.def.name}</div>
+          <span style="font-size:0.55rem;letter-spacing:1.4px;background:${rarityColor};color:#000;padding:2px 6px;border-radius:6px;font-weight:800">${(o.def.rarity||'common').toUpperCase()}</span>
+          ${o.countLabel ? `<span style="font-size:0.6rem;color:rgba(255,255,255,0.5)">${o.countLabel}</span>` : ''}
+        </div>
+        <div style="font-size:0.66rem;color:rgba(255,255,255,0.55);margin-top:2px;line-height:1.35">${o.def.desc}</div>
+      </div>
+      <div style="flex:0 0 auto;display:flex;flex-direction:column;align-items:flex-end;gap:2px">
+        <div style="font-size:0.85rem;font-weight:800;color:${o.canAfford ? '#ffd750' : 'rgba(255,255,255,0.4)'}">${priceLabel}</div>
+        <div style="font-size:0.55rem;letter-spacing:1.5px;color:#ffd750;font-weight:700">UPGRADE →</div>
+      </div>
+    </div>`;
+}
+
+window.onUpgradePickSource = function(sourceId, isPerk) {
+  const branches = isPerk ? PERK_UPGRADES[sourceId] : CARD_UPGRADES[sourceId];
+  if(!branches) return;
+  const def = isPerk ? ALL_PERKS.find(p => p.id === sourceId) : CARD_DEFS[sourceId];
+  if(!def) return;
+  let stacks = 1;
+  if(isPerk && def.stackable) stacks = (G.modifiers || []).filter(m => m.id === sourceId).length;
+  const price = (typeof getUpgradePrice === 'function') ? getUpgradePrice(def, isPerk, stacks) : def.price * 2;
+  G._upgradePickerStage = 'branch';
+  G._upgradePickerSource = { sourceId, def, branches, price, isPerk, stacks };
+  renderUpgradePicker();
+};
+
+window.confirmUpgradeBranch = function(sourceId, branch, kindStr) {
+  const isPerk = (kindStr === 'perk');
+  const branches = isPerk ? PERK_UPGRADES[sourceId] : CARD_UPGRADES[sourceId];
+  if(!branches || !branches[branch]) return;
+  const def = isPerk ? ALL_PERKS.find(p => p.id === sourceId) : CARD_DEFS[sourceId];
+  if(!def) return;
+  let stacks = 1;
+  if(isPerk && def.stackable) stacks = (G.modifiers || []).filter(m => m.id === sourceId).length;
+  const price = (typeof getUpgradePrice === 'function') ? getUpgradePrice(def, isPerk, stacks) : def.price * 2;
+  if(G.coins < price) return;
+  // Already upgraded? (defensive guard)
+  if(isPerk && G.upgradedPerks && G.upgradedPerks[sourceId]) return;
+  if(!isPerk && G.upgradedCards && G.upgradedCards[sourceId]) return;
+
+  // v0.21e: consume one free-upgrade voucher if any are banked. Voucher
+  // already made price = 0 via getUpgradePrice, but we still need to
+  // decrement the counter so subsequent upgrades aren't all free.
+  const _wasFreeUpgrade = ((G._freeUpgradeVouchers|0) > 0);
+  if(_wasFreeUpgrade) {
+    G._freeUpgradeVouchers = Math.max(0, (G._freeUpgradeVouchers|0) - 1);
+  }
+
+  // Apply
+  G.coins -= price;
+  if(typeof trackStat === 'function') trackStat('coinsSpent', price);
+  if(isPerk) {
+    if(!G.upgradedPerks) G.upgradedPerks = {};
+    G.upgradedPerks[sourceId] = branch;
+    applyPerkUpgrade(sourceId, branch);
+  } else {
+    if(!G.upgradedCards) G.upgradedCards = {};
+    G.upgradedCards[sourceId] = branch;
+    applyCardUpgrade(sourceId, branch);
+  }
+
+  // Telemetry
+  if(!G._currentRunUpgrades) G._currentRunUpgrades = [];
+  G._currentRunUpgrades.push({
+    hole: G.hole | 0,
+    sourceId,
+    branch,
+    upgradedId: branches[branch].id,
+    pricePaid: price,
+    isPerk,
+    currentStacks: stacks,
+    voucherUsed: _wasFreeUpgrade,
+  });
+
+  // Toast
+  const upName = branches[branch].name;
+  const upEmoji = branches[branch].emoji;
+  const _toastPrefix = _wasFreeUpgrade ? '🎟️ Free Upgrade — ' : '';
+  if(typeof showToast === 'function') showToast(`${_toastPrefix}${upEmoji} Upgraded! ${upName}`, 1800);
+
+  // FX
+  if(typeof AC !== 'undefined' && AC && typeof sfxCoinPickup === 'function') {
+    for(let k=0;k<4;k++) setTimeout(()=>sfxCoinPickup(), k*80);
+  }
+  if(typeof updateCoinHUD === 'function') updateCoinHUD();
+  if(typeof updatePerkHUD === 'function') updatePerkHUD();
+
+  // Check if there's anything left to upgrade — if so, return to list view.
+  // Otherwise close the overlay so the player drops back to the shop.
+  const stillEligible = anyUpgradesAvailable();
+  if(stillEligible && (G.coins > 0)) {
+    G._upgradePickerStage = 'list';
+    G._upgradePickerSource = null;
+    renderUpgradePicker();
+  } else {
+    closeUpgradePicker();
+  }
+  // Re-render the shop to refresh the upgrade tile state (eligibility may
+  // have dropped; coin display also needs to reflect spend).
+  if(typeof renderShop === 'function') renderShop();
+};
+
 
 
 
@@ -30572,6 +31724,11 @@ function saveRunData(outcome) {
       // v0.20a3: telemetry — full per-shop log for economy tuning. One entry per
       // openShop() invocation. Multiplayer fans this out per player per shop visit.
       shopVisits: (G._currentRunShopVisits || []).slice(),
+      // v0.21d: card/perk upgrade telemetry. Lets us tune upgrade pricing,
+      // identify dead-pick branches, and verify upgrade spend stays under
+      // the 25-30% target laid out in the spec.
+      upgradesPurchased: (G._currentRunUpgrades || []).slice(),
+      upgradeOffersShown: (G._currentRunUpgradeOffersShown | 0),
       scorecard: (G.scorecard || []).slice(),
       seed: G._currentSeed || G.seed || '',
       runDuration: G._runStartTime ? Math.max(0, Math.round(performance.now() - G._runStartTime)) : 0,
@@ -31610,9 +32767,14 @@ function openDeckViewer() {
     }
 
     const tip = _escapeHtml(def.desc || '');
+    // v0.21d: upgraded cards get a gold border + ★ badge.
+    const upClass = def.upgraded ? ' dc-upgraded' : '';
+    const upBadge = def.upgraded ? `<div class="dc-upgrade-star" style="position:absolute;top:4px;right:4px;font-size:0.7rem;color:#ffd750;text-shadow:0 0 6px rgba(255,215,80,0.8);font-weight:900">★</div>` : '';
+    const upStyle = def.upgraded ? `style="position:relative;border-color:#ffd750;box-shadow:0 0 10px rgba(255,215,80,0.35);background:linear-gradient(160deg, rgba(255,215,80,0.10) 0%, rgba(255,255,255,0.04) 70%)"` : '';
     grid.innerHTML += `
-      <div class="deck-card dc-${status} dv-hoverable" title="${def.name} — ${tip}"
-           data-kind="card" data-name="${_escapeHtml(def.name)}" data-desc="${tip}">
+      <div class="deck-card dc-${status} dv-hoverable${upClass}" title="${def.name} — ${tip}"
+           data-kind="card" data-name="${_escapeHtml(def.name)}" data-desc="${tip}" ${upStyle}>
+        ${upBadge}
         <div class="dc-emoji">${def.emoji}</div>
         <div class="dc-name">${def.name}</div>
         <div class="dc-status st-${status}">${statusLabel}</div>
@@ -31644,9 +32806,13 @@ function openDeckViewer() {
         if(!def) continue;
         const stacks = counts[m.id]||1;
         const tip = _escapeHtml(def.desc || '');
+        // v0.21d: upgraded perks get a gold border + ★ badge.
+        const upBadge = def.upgraded ? `<div style="position:absolute;top:4px;right:4px;font-size:0.7rem;color:#ffd750;text-shadow:0 0 6px rgba(255,215,80,0.8);font-weight:900">★</div>` : '';
+        const upStyle = def.upgraded ? `style="position:relative;border-color:#ffd750;box-shadow:0 0 10px rgba(255,215,80,0.35);background:linear-gradient(160deg, rgba(255,215,80,0.10) 0%, rgba(255,255,255,0.04) 70%)"` : '';
         perksGrid.innerHTML += `
           <div class="deck-card dv-hoverable" title="${def.name} — ${tip}"
-               data-kind="perk" data-name="${_escapeHtml(def.name)}" data-desc="${tip}">
+               data-kind="perk" data-name="${_escapeHtml(def.name)}" data-desc="${tip}" ${upStyle}>
+            ${upBadge}
             <div class="dc-emoji">${def.emoji}</div>
             <div class="dc-name">${def.name}${stacks>1?' ×'+stacks:''}</div>
           </div>`;
@@ -32822,6 +33988,16 @@ function startGame(){
   // offerings + purchases + rerolls; included in saveRunData() for post-run analysis.
   G._currentRunShopVisits = [];
   G._currentShopVisit = null;
+  // v0.21d: card/perk upgrade state — clear runtime upgrade picks AND restore
+  // any mutated CARD_DEFS / ALL_PERKS entries to baseline. Without the
+  // resetAllUpgrades() call, a second run would inherit upgrades from the first.
+  G.upgradedCards = {};
+  G.upgradedPerks = {};
+  G._postEliteShop = false;
+  G._currentRunUpgrades = []; // telemetry log of all upgrade purchases this run
+  G._currentRunUpgradeOffersShown = 0; // count of shop visits where upgrade slot appeared
+  G._freeUpgradeVouchers = 0; // v0.21e: tier-2/3 elite reward vouchers
+  if(typeof resetAllUpgrades === 'function') resetAllUpgrades();
   // v0.20j: Elite Holes — fresh per-run state. _eliteHistory is per-run for
   // potential Run Award integration ("Coward — skipped every elite", etc.).
   G._eliteOffer = null;
@@ -33279,6 +34455,9 @@ function resolveEliteHoleResult(strokesUsed, par) {
   G._activeElite = null;
   G._eliteWager = 0;
   hideEliteStakesPip();
+  // v0.21d: signal the upcoming shop visit to guarantee an upgrade offer.
+  // Consumed by openShop() / rollUpgradeOfferForShop().
+  G._postEliteShop = true;
 }
 
 function deliverEliteReward(reward, wager) {
@@ -33310,6 +34489,17 @@ function deliverEliteReward(reward, wager) {
       G._freeCardVouchers.push(reward.rarity);
       sub = `Pick any ${reward.rarity} card or perk free at next shop`;
       label = `Free ${reward.rarity}`;
+      break;
+    case 'free_upgrade':
+      // v0.21e: Free upgrade voucher — next time the upgrade picker opens,
+      // the next purchase costs 0 coins. Vouchers stack across multiple
+      // tier-2/3 elite wins.
+      if(!G._freeUpgradeVouchers) G._freeUpgradeVouchers = 0;
+      G._freeUpgradeVouchers++;
+      sub = G._freeUpgradeVouchers > 1
+        ? `${G._freeUpgradeVouchers} free upgrades banked`
+        : 'Pick any upgrade free at next shop';
+      label = 'Free Upgrade';
       break;
     case 'double_or_nothing':
       G.coins += wager; // already had wager → now have 2× wager total
