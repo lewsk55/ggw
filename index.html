@@ -1980,6 +1980,24 @@ transition:all 0.15s;
 }
 .shop-skip-btn:active { background:rgba(255,255,255,0.15); }
 
+/* v0.21k6: Undo last purchase. Slightly warmer tone than skip so it
+   reads as "rewind a thing you did" rather than "leave." */
+.shop-undo-btn {
+margin-top:10px;
+font-family:'Inter', sans-serif;
+font-size:0.78rem;
+font-weight:700;
+letter-spacing:1px;
+padding:10px 28px;
+background:rgba(255,180,90,0.14);
+color:rgba(255,210,150,0.92);
+border:1px solid rgba(255,180,90,0.45);
+border-radius:50px; cursor:pointer;
+transition:all 0.15s;
+box-shadow: 0 0 12px rgba(255,180,90,0.18);
+}
+.shop-undo-btn:active { background:rgba(255,180,90,0.26); transform:scale(0.97); }
+
 /* ── Elite Fork overlay (v0.20j) ──
    Two-card chooser: Safe (normal hole) vs Elite (high-risk archetype).
    Visual language: pearl/teal for safe, blood-red ember for elite.
@@ -3250,6 +3268,11 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
   </div>
   <div class="shop-grid" id="shop-grid"></div>
   <button class="shop-reroll-btn" id="shop-reroll-btn" onclick="rerollShop()">🎲 Reroll — <span id="reroll-cost">1</span> 🪙</button>
+  <!-- v0.21k6: Undo button — refunds the most-recent purchase made this
+       shop visit. Hidden by default (display:none); revealed by buyCard /
+       buyPerk after a successful purchase, hidden again after undo or
+       when the shop closes. -->
+  <button class="shop-undo-btn" id="shop-undo-btn" onclick="undoLastShopPurchase()" style="display:none">↶ Undo Last Purchase</button>
   <button class="shop-skip-btn" onclick="closeShop()">Next Hole →</button>
 </div>
 
@@ -4082,8 +4105,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.21k5';
-const CHANGE_NOTE = 'Lap Mode redesign. Track shape changed from square (22×22) to tall rectangle (22×36) — left/right straights now ~2× longer than top/bottom for a more interesting racing line. Obstacle density reduced: 1 bumper on short straights, 2 on long straights (was 2 everywhere); spikes 50% chance on short straights, always on long; popup walls only on long straights. Added 4 shifting speed hoops (one per straight) oscillating perpendicular to travel — same pattern Giant Hole uses. Par bumped 12 → 16 to match longer perimeter; lap par time bumped 72s → 110s. Arrow now targets the MIDPOINT between the last-passed CP and the next CP (the middle of the upcoming leg) instead of sitting on top of the next CP — matches user direction more naturally, especially on the start straight.';
+const GAME_VERSION = '0.22a7';
+const CHANGE_NOTE = 'Crate fixes: conveyors now actually push crates (had wrong field schema — the check silently failed every frame). Fans now push crates along blow direction (was radial + wrong fields). Air vs ground friction split: airborne crates only lose ~26%/sec to drag (was 97%/sec full friction), so arcs complete cleanly all the way to landing instead of stalling 75% through. Angular damp also lightened in air for cleaner mid-flight tumbles.';
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
@@ -6416,12 +6439,28 @@ function generatePuttPuttCourse(holeNum) {
     [{dir:'V',len:L+S},{dir:'H',len:1},{dir:'V',len:M}],
   ];
 
-  // Hole 0: simple single-turn L shapes only. Hole 1-2: moderate variety. 3+: full pool.
-  // Higher difficulty and later holes weight toward longer, more complex layouts.
-  // v0.20f: progress-based thresholds via holeRamp (0..17 equivalent).
+  // Hole 0-1: shape-varied early holes (par 3-5 mix). Was: only the 4
+  // single-turn L-shapes → every first hole was a turn-3 par. Per Adam:
+  // "Need more variation on first 2 holes — right now we're only getting
+  // a single turn 3 par. Feel free to add different course shapes as
+  // long as it's lighter on obstacles." Pool now includes:
+  //   - L-shapes (shorter — par 3 territory)
+  //   - U-turns (medium length — par 4)
+  //   - Z-shapes (longer — par 4)
+  //   - Long straights with kinks (par 4-5)
+  // Density stays low because obstacle-spawn weights also key off
+  // holeRamp; only the SHAPE pool is broadened here.
+  // v0.21k6: was 4 layouts (L-shapes only); now 10 with explicit
+  // par 3-5 spread.
+  // Hole 2-4: moderate variety. 5+: full pool.
   let pool;
-  if(holeRamp < 1) {
-    pool = [allLayouts[0],allLayouts[1],allLayouts[2],allLayouts[3]];
+  if(holeRamp < 2) {
+    pool = [
+      allLayouts[0], allLayouts[1], allLayouts[2], allLayouts[3], // 4 L-shapes (par 3)
+      allLayouts[6], allLayouts[7],                                // 2 U-turns (par 4)
+      allLayouts[8], allLayouts[9],                                // 2 Z-shapes (par 4)
+      allLayouts[14], allLayouts[15],                              // 2 long straights w/ kink (par 4-5)
+    ];
   } else if(holeRamp < 5) {
     pool = [allLayouts[0],allLayouts[1],allLayouts[2],allLayouts[3],
        allLayouts[6],allLayouts[7],allLayouts[8],allLayouts[9],
@@ -6611,11 +6650,40 @@ function generatePuttPuttCourse(holeNum) {
   // ── 7. Cylindrical bumper data ────────────────────────
   // v0.19r: `power` variant — atomic-orange, 1.6× larger, chaotic reflection,
   // much stronger bounce. Rare spawn chance scales with hole + difficulty.
+  // v0.22a: per-hole crate-vs-bumper biome roll. Each hole picks a "crate
+  // intensity" 0..1.5:
+  //   ~25% of holes:  bumper-heavy (crate intensity 0.0-0.4)
+  //   ~55% of holes:  balanced     (crate intensity 0.5-1.0)
+  //   ~20% of holes:  crate-dominant (crate intensity 1.0-1.5)
+  // Bumpers get cut 20-40% across the board, with the crate-dominant
+  // biome cutting 50-70% to make crates feel like the headline.
+  const _crateRoll = rng();
+  let _crateIntensity, _bumperCutFactor;
+  if(_crateRoll < 0.25) {
+    // Bumper-heavy biome — light on crates
+    _crateIntensity = rng() * 0.4;
+    _bumperCutFactor = 0.80 + rng() * 0.10; // 80-90% of base bumpers
+  } else if(_crateRoll < 0.80) {
+    // Balanced
+    _crateIntensity = 0.5 + rng() * 0.5;
+    _bumperCutFactor = 0.65 + rng() * 0.15; // 65-80% (20-35% cut)
+  } else {
+    // Crate-dominant
+    _crateIntensity = 1.0 + rng() * 0.5;
+    _bumperCutFactor = 0.30 + rng() * 0.20; // 30-50% (50-70% cut)
+  }
+  // Holes 0-1 keep things light — no crate-dominant biome that early
+  if(holeRamp < 2) {
+    _crateIntensity = Math.min(_crateIntensity, 0.4);
+    _bumperCutFactor = Math.max(_bumperCutFactor, 0.75);
+  }
   const bumperData = [];
   // v0.20f: count + power-variant probability now scale by holeRamp (run progress)
   // v0.20t3: replaced (diff>=4?2:0) cliff with smooth ramp Math.floor(Math.max(0, (diff-2)))
   // diff 3:+1, 4:+2, 5:+3 ... 10:+8 — preserves diff-4 feel, extends ramp to top tiers
-  const bumperN = Math.floor((1 + Math.floor(rng()*2) + Math.floor(diff*0.7) + Math.floor(holeRamp*0.25) + Math.floor(Math.max(0, (diff-2)))) * areaScale * _eliteObsMul);
+  // v0.22a: scale bumperN by _bumperCutFactor (biome-dependent crate-vs-bumper trade)
+  const _bumperBaseN = Math.floor((1 + Math.floor(rng()*2) + Math.floor(diff*0.7) + Math.floor(holeRamp*0.25) + Math.floor(Math.max(0, (diff-2)))) * areaScale * _eliteObsMul);
+  const bumperN = Math.max(0, Math.floor(_bumperBaseN * _bumperCutFactor));
   const powerBumperP = Math.min(0.25, Math.max(0, (holeRamp - 2) * 0.03 + (diff - 2) * 0.04));
   const trsh = [...fair].sort(()=>rng()-0.5);
   for(let p=0,i=0; i<trsh.length&&p<Math.min(bumperN, Math.floor((4+diff+Math.floor(diff/4)*2) * areaScale)); i++) {
@@ -6724,6 +6792,135 @@ function generatePuttPuttCourse(holeNum) {
       bumperData.push({gx:c.x,gy:c.y,wx:wx+ox,wz:wz+oz,radius:r});
     register(wx,wz,TILE_SIZE*2.5);
     p++;
+  }
+
+  // ── 9b2. Crate data (v0.22a) ──────────────────────────
+  // Physics crates — Half-Life-style breakable chaos. Spawn count + mix
+  // of solo crates vs stacks vs towers driven by _crateIntensity rolled
+  // earlier (0..1.5) and holeRamp (early holes lighter).
+  // crateData entries: { wx, wz, size, formation, towerHeight? }
+  //   formation: 'solo' | 'pyramid' | 'tower'
+  //   solo: single crate at (wx,wz) with the given size
+  //   pyramid: 3-2-1 (6 crates), all uniform size
+  //   tower: N crates stacked, N = towerHeight
+  const crateData = [];
+  if(_crateIntensity > 0.05) {
+    // Solo crate count: 0-3 baseline scaled by intensity + a touch by holeRamp
+    let soloN = Math.floor(((1 + rng() * 3) * _crateIntensity + Math.min(2, holeRamp * 0.15)) * areaScale);
+    // Stack count: 0-2, only past hole 1
+    // Stack count: 0-2, only past hole 0
+    // v0.22a3: lowered intensity gate (0.4 → 0.2) so even bumper-heavy
+    // biomes can still get a stack. Stacks were rare or absent because
+    // the constraints stacked: low-intensity rolls + holeRamp gate +
+    // strict spawn predicate (allFairInRadius) all rejected candidates.
+    // Per Adam: "Still no stacks or pyramids to be seen."
+    let stackN = 0;
+    if(holeRamp >= 1 && _crateIntensity > 0.2) {
+      stackN = (rng() < _crateIntensity * 0.85 + 0.20) ? 1 : 0;
+      if(_crateIntensity > 1.0 && rng() < 0.65) stackN++;
+    }
+    // Tower count: 0-2, allowed from hole 3+ at any intensity
+    let towerN = 0;
+    if(holeRamp >= 3 && _crateIntensity > 0.3) {
+      if(rng() < _crateIntensity * 0.65 + 0.10) towerN++;
+      if(_crateIntensity > 1.0 && rng() < 0.55) towerN++;
+    }
+    // v0.22a3: GUARANTEE at least one stack-or-tower on a fraction of
+    // holes regardless of intensity rolls. Without this, bumper-heavy
+    // biomes can produce 0 stacks for an entire run. ~40% of holes past
+    // hole 1 force at least one stack; ~20% past hole 4 force a tower.
+    if(holeRamp >= 1 && stackN === 0 && rng() < 0.40) stackN = 1;
+    if(holeRamp >= 4 && towerN === 0 && rng() < 0.20) towerN = 1;
+    // Late-run "warehouse" surprise — ~5% past holeRamp 7, dense crate spam
+    if(holeRamp >= 7 && rng() < 0.05) {
+      soloN += 4 + Math.floor(rng() * 4);
+      stackN = Math.max(stackN, 2);
+      towerN = Math.max(towerN, 1);
+    }
+
+    // Helper: random crate size within range, biased by intensity (high
+    // intensity → bigger average size for warehouse vibes)
+    const _randCrateSize = () => {
+      const t = rng();
+      // Bias toward middle when low intensity, full range when high
+      const blend = _crateIntensity > 1.0 ? t : (0.3 + t * 0.5);
+      return CRATE_H_MIN + blend * (CRATE_H_MAX - CRATE_H_MIN);
+    };
+
+    // Predicate: candidate cell is fair, not too close to anything
+    const _isCrateClear = (c, requireRadius) => {
+      if(grid[c.y][c.x] !== CELL.FAIR) return false;
+      if(teeDist(c) < 3) return false;
+      if(holeDist(c) < 3) return false; // 3-cell exclusion ≈ 6m at TILE_SIZE 2
+      if(!allFairInRadius(c.x, c.y, 1)) return false;
+      const wx = c.x * TILE_SIZE, wz = c.y * TILE_SIZE;
+      if(tooClose(wx, wz, requireRadius)) return false;
+      // Also keep crates out of existing crate spots
+      if(crateData.some(cd => Math.hypot(wx - cd.wx, wz - cd.wz) < requireRadius)) return false;
+      return true;
+    };
+
+    // v0.22a3: place STACKS and TOWERS FIRST, then solos. Previously
+    // solos got first pick of fairway cells and registered their
+    // exclusion radii, which left no usable cells for stacks. Stacks
+    // are rare and visually impactful, so they get priority.
+
+    // Pyramid stacks — relaxed placement.
+    // v0.22a3: removed allFairInRadius requirement entirely. The fair
+    // area constraint was rejecting nearly every candidate cell on
+    // narrow lanes — pyramid rendering doesn't need a 3×3 fair zone
+    // because the floor is global, not per-cell. The crates self-
+    // support and the bottom row sits on whatever's beneath. Per Adam:
+    // "Still no stacks or pyramids to be seen."
+    const stackShuf = [...fair].sort(() => rng() - 0.5);
+    let stackPlaced = 0;
+    for(let i = 0; i < stackShuf.length && stackPlaced < stackN; i++) {
+      const c = stackShuf[i];
+      const size = _randCrateSize();
+      const dim = size * 2;
+      const clear = TILE_SIZE * 1.0 + dim;
+      if(!_isCrateClear(c, clear)) continue;
+      const wx = c.x * TILE_SIZE, wz = c.y * TILE_SIZE;
+      // v0.22a5: occasional 3-crate (2-1) pyramids in addition to the
+      // full 3-2-1 (6-crate) pyramids. Per Adam: "add occasionally 3
+      // crate pyramids as well." Roll: 35% small, 65% full.
+      const pyramidVariant = (rng() < 0.35) ? 'small' : 'full';
+      crateData.push({ wx, wz, size, formation: 'pyramid', pyramidVariant });
+      register(wx, wz, clear);
+      stackPlaced++;
+    }
+
+    // Towers — minimal footprint (single base crate)
+    const towerShuf = [...fair].sort(() => rng() - 0.5);
+    let towerPlaced = 0;
+    for(let i = 0; i < towerShuf.length && towerPlaced < towerN; i++) {
+      const c = towerShuf[i];
+      const size = _randCrateSize();
+      const dim = size * 2;
+      const clear = TILE_SIZE * 0.8 + dim;
+      if(!_isCrateClear(c, clear)) continue;
+      const wx = c.x * TILE_SIZE, wz = c.y * TILE_SIZE;
+      const towerHeight = 3 + Math.floor(rng() * 3); // 3, 4, or 5
+      crateData.push({ wx, wz, size, formation: 'tower', towerHeight });
+      register(wx, wz, clear);
+      towerPlaced++;
+    }
+
+    // Solo crates — fill remaining cells AFTER stacks/towers claimed theirs
+    const soloShuf = [...fair].sort(() => rng() - 0.5);
+    let placed = 0;
+    for(let i = 0; i < soloShuf.length && placed < soloN; i++) {
+      const c = soloShuf[i];
+      const size = _randCrateSize();
+      const dim = size * 2;
+      const clear = TILE_SIZE * 1.0 + dim;
+      if(!_isCrateClear(c, clear)) continue;
+      const wx = c.x * TILE_SIZE + (rng() - 0.5) * 0.4;
+      const wz = c.y * TILE_SIZE + (rng() - 0.5) * 0.4;
+      crateData.push({ wx, wz, size, formation: 'solo' });
+      register(wx, wz, clear);
+      placed++;
+    }
   }
 
   // ── 9c. Angled wall data ──────────────────────────────
@@ -7437,6 +7634,25 @@ function generatePuttPuttCourse(holeNum) {
     }
   }
 
+  // ── Rare mega 10-coin (v0.22a) — 8% of courses get one ──
+  // Tier above the 5-coin: bigger, denser glow, golden particle aura. Sits
+  // somewhere in the back half of the path so the player has to actually
+  // chart a route to reach it (rather than passing through naturally).
+  if(rng() < 0.08) {
+    const megaCands = [...ppFair]
+      .filter(c => ppTeeDist(c) >= 5 && ppHoleDist(c) >= 3)
+      .sort(() => rng() - 0.5);
+    for(let mi = 0; mi < megaCands.length; mi++) {
+      const c = megaCands[mi];
+      const wx = c.x * TILE_SIZE, wz = c.y * TILE_SIZE;
+      // Generous spacing — the 10-coin's particle aura is bigger than the 5
+      if(coinData.some(cd => Math.hypot(wx-cd.wx, wz-cd.wz) < TILE_SIZE * 2.5)) continue;
+      if(rockData.some(r => Math.hypot(wx-r.wx, wz-r.wz) < TILE_SIZE * 1.8)) continue;
+      coinData.push({ wx, wz, value: 10 });
+      break; // only one per hole
+    }
+  }
+
   // ── Healing hearts (v0.19s) ──────────────────────────
   // Spinning glowing hearts on the fairway. On pickup: heal +2 HP.
   // Per-hole spawn rate: ~25% at regular (diff 3), scaled lightly by diff:
@@ -7556,6 +7772,8 @@ function generatePuttPuttCourse(holeNum) {
           holeDefense, teeDir,
           chasmZone,
           speedHoopData, chasmAirborneData,
+          // v0.22a: physics crates
+          crateData,
           ...eliteFlags};
 }
 
@@ -8774,6 +8992,31 @@ function buildCourse(data) {
     }
   }
 
+  // ── Putt Putt: Physics crates (v0.22a) ────────────────
+  // Spawn crates from data.crateData. Each entry is solo / pyramid /
+  // tower; we delegate to the runtime helpers spawnCrate /
+  // spawnCratePyramid / spawnCrateTower (defined near destroyObstacles).
+  G.crates = [];
+  G._crateStacks = [];
+  G._crateDrops = [];
+  G._holeUpgradeVouchers = 0;
+  if(typeof G._stackIdCounter !== 'number') G._stackIdCounter = 0;
+  if(data.crateData && data.crateData.length) {
+    for(const cd of data.crateData) {
+      try {
+        if(cd.formation === 'pyramid' && typeof spawnCratePyramid === 'function') {
+          spawnCratePyramid(cd.wx, cd.wz, cd.size, cd.pyramidVariant);
+        } else if(cd.formation === 'tower' && typeof spawnCrateTower === 'function') {
+          spawnCrateTower(cd.wx, cd.wz, cd.size, cd.towerHeight || 3);
+        } else if(typeof spawnCrate === 'function') {
+          spawnCrate(cd.wx, cd.wz, cd.size);
+        }
+      } catch(err) {
+        console.warn('[crate] spawn failed', cd, err);
+      }
+    }
+  }
+
   // ── Putt Putt: Corner bounce triangles ───────────────
   // Yellow indestructible triangles — hypotenuse across each 90° corner.
   G.angledWalls = [];
@@ -9417,22 +9660,69 @@ function buildCourse(data) {
       color: 0xffee55, transparent: true, opacity: 0.5,
       emissive: 0xffcc00, emissiveIntensity: 1.8, depthWrite: false,
     });
+    // v0.22a: helper — paint a "5" or "10" denomination onto a 64×64 canvas
+    // texture that's mapped to both faces of the coin cylinder via UV.
+    // CylinderGeometry uses material slot 0 for the side, 1 for top, 2 for
+    // bottom — we use a multi-material setup so the label sits on the flat
+    // faces only. Cached per-value so we don't re-paint every coin.
+    const _denomTexCache = {};
+    const makeDenomTexture = (val) => {
+      if(_denomTexCache[val]) return _denomTexCache[val];
+      const c = document.createElement('canvas');
+      c.width = c.height = 128;
+      const ctx = c.getContext('2d');
+      // Background: the metallic coin color
+      ctx.fillStyle = val === 10 ? '#ffeebb' : '#ffd700';
+      ctx.fillRect(0, 0, 128, 128);
+      // Inner ring
+      ctx.strokeStyle = val === 10 ? '#ffaa22' : '#cc8800';
+      ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.arc(64, 64, 52, 0, Math.PI*2); ctx.stroke();
+      // The number itself — bold sans, dark gold so it reads through bloom
+      ctx.fillStyle = val === 10 ? '#7a3a00' : '#8a4a00';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = 'bold ' + (val === 10 ? '54px' : '64px') + ' Inter, sans-serif';
+      ctx.fillText(String(val), 64, 64);
+      const tex = new THREE.CanvasTexture(c);
+      tex.anisotropy = 4;
+      _denomTexCache[val] = tex;
+      return tex;
+    };
     for(const cd of data.coinData) {
       const terrY = getTerrainHeight(cd.wx, cd.wz);
       const y = terrY + FLOOR_H / 2 + 0.28 * _coinWorldS;
-      const isSpecial = (cd.value || 1) === 5;
-      const coinScale = isSpecial ? 1.6 : 1.0;
+      const cval = cd.value || 1;
+      const isSpecial = cval === 5;
+      const isMega = cval === 10;
+      const coinScale = isMega ? 1.9 : (isSpecial ? 1.6 : 1.0);
 
       // Pivot group positioned at coin world pos — spin Y on this group
       const pivot = new THREE.Group();
       pivot.position.set(cd.wx, y, cd.wz);
       pivot.userData.noOutline = true;
 
-      // Coin mesh: cylinder standing on edge (rotate X so flat face looks forward)
-      const cMat = isSpecial
-        ? new THREE.MeshStandardMaterial({color:0xffeedd, roughness:0.01, metalness:1.0, emissive:0xffcc44, emissiveIntensity:1.2})
-        : coinMat;
-      const m = new THREE.Mesh(coinGeo, cMat);
+      // Coin mesh: cylinder standing on edge (rotate X so flat face looks forward).
+      // v0.22a: 5/10 coins get face textures via per-face material array.
+      // Slot order for CylinderGeometry: [side, top, bottom]. Side stays solid
+      // gold; top + bottom get the denomination-stamped canvas texture.
+      let m;
+      if(isSpecial || isMega) {
+        const sideColor = isMega ? 0xfff0c8 : 0xffeedd;
+        const sideMat = new THREE.MeshStandardMaterial({
+          color: sideColor, roughness: 0.01, metalness: 1.0,
+          emissive: isMega ? 0xffd744 : 0xffcc44,
+          emissiveIntensity: isMega ? 1.6 : 1.2
+        });
+        const denomTex = makeDenomTexture(cval);
+        const faceMat = new THREE.MeshStandardMaterial({
+          map: denomTex, roughness: 0.18, metalness: 0.85,
+          emissive: isMega ? 0xffaa22 : 0xffaa00,
+          emissiveIntensity: isMega ? 0.55 : 0.40
+        });
+        m = new THREE.Mesh(coinGeo, [sideMat, faceMat, faceMat]);
+      } else {
+        m = new THREE.Mesh(coinGeo, coinMat);
+      }
       m.rotation.x = Math.PI / 2;
       m.scale.setScalar(coinScale);
       m.userData.noOutline = true;
@@ -9442,12 +9732,38 @@ function buildCourse(data) {
       // Bloom glow disc — flat on the ground, not part of the pivot
       const glowG = new THREE.CylinderGeometry(0.32 * coinScale * _coinWorldS, 0.32 * coinScale * _coinWorldS, 0.02 * _coinWorldS, 16);
       const glowClone = glowMat.clone();
-      if(isSpecial) { glowClone.emissiveIntensity = 3.0; glowClone.opacity = 0.7; }
+      if(isMega)        { glowClone.emissiveIntensity = 4.5; glowClone.opacity = 0.85; glowClone.color.setHex(0xffd744); glowClone.emissive.setHex(0xffaa22); }
+      else if(isSpecial){ glowClone.emissiveIntensity = 3.0; glowClone.opacity = 0.7; }
       const glowM = new THREE.Mesh(glowG, glowClone);
       glowM.rotation.x = Math.PI / 2;
       glowM.position.set(cd.wx, y - 0.01, cd.wz);
       glowM.userData.noOutline = true;
       group.add(glowM);
+
+      // v0.22a: 10-coin gets a continuous golden particle aura — small
+      // sparkle dots that orbit + fade. Stored on the coin record so the
+      // animate loop drives them; they're part of the same pivot group so
+      // the suck/collect logic moves them along with the coin mesh.
+      let particleField = null;
+      if(isMega) {
+        particleField = new THREE.Group();
+        particleField.userData.noOutline = true;
+        const PARTICLE_COUNT = 7;
+        for(let pi = 0; pi < PARTICLE_COUNT; pi++) {
+          const pmat = new THREE.MeshBasicMaterial({
+            color: 0xffe066, transparent: true, opacity: 0.85, depthWrite: false
+          });
+          const pm = new THREE.Mesh(new THREE.SphereGeometry(0.04 * _coinWorldS, 6, 4), pmat);
+          pm.userData.noOutline = true;
+          // Each particle has a random orbit radius/phase/vertical bob freq
+          pm.userData.megaPhase = (pi / PARTICLE_COUNT) * Math.PI * 2;
+          pm.userData.megaR = (0.30 + Math.random() * 0.18) * _coinWorldS;
+          pm.userData.megaBobF = 1.5 + Math.random() * 1.5;
+          pm.userData.megaBobA = (0.10 + Math.random() * 0.14) * _coinWorldS;
+          particleField.add(pm);
+        }
+        pivot.add(particleField);
+      }
 
       G.coinMeshes.push({
         pivot,                          // spin this around Y
@@ -9455,9 +9771,11 @@ function buildCourse(data) {
         wx: cd.wx, wz: cd.wz,
         collected: false,
         bobOffset: Math.random() * Math.PI * 2,
-        spinSpeed: isSpecial ? 5.5 : 4.0 + Math.random() * 1.2,
-        value: cd.value || 1,
+        spinSpeed: isMega ? 6.5 : (isSpecial ? 5.5 : 4.0 + Math.random() * 1.2),
+        value: cval,
         isSpecial,
+        isMega,
+        particleField,
       });
     }
   }
@@ -9915,6 +10233,48 @@ function buildCourse(data) {
           const targetSpd = (state._wanderSpeed || 6.0) * _shMul;
           wv.x = wv.x / vmag * targetSpd;
           wv.z = wv.z / vmag * targetSpd;
+          // v0.21k6: 3.5 — Grid-based playable-cell guard. If the candidate
+          // commit would land on a non-fair cell (or off the grid), reflect
+          // velocity and clamp the offset back. This is the "safety net" —
+          // even if walls are wrecked (popup walls destroyed, perimeter rails
+          // blown out by Wrecking Ball etc.), the hole still can't escape
+          // the playable area, so the player can always finish the hole.
+          if(G.grid && G.gridW && G.gridH) {
+            const _isPlayable = (gx, gz) => {
+              if(gx < 0 || gz < 0 || gx >= G.gridW || gz >= G.gridH) return false;
+              const _c = G.grid[gz][gx];
+              return _c === CELL.FAIR || _c === CELL.SAND
+                  || _c === CELL.TEE  || _c === CELL.GREEN;
+            };
+            const wxAbs = state._wanderCenter.x + nx2;
+            const wzAbs = state._wanderCenter.z + nz2;
+            const tgx = Math.round(wxAbs / TILE_SIZE);
+            const tgz = Math.round(wzAbs / TILE_SIZE);
+            if(!_isPlayable(tgx, tgz)) {
+              // Find which axis we crossed by looking at neighbors of the
+              // last-known good cell. Compare current candidate to wo (the
+              // pre-step offset) and reflect along the axis that broke first.
+              const wxPrev = state._wanderCenter.x + wo.x;
+              const wzPrev = state._wanderCenter.z + wo.z;
+              const pgx = Math.round(wxPrev / TILE_SIZE);
+              const pgz = Math.round(wzPrev / TILE_SIZE);
+              const xBlocked = !_isPlayable(tgx, pgz);
+              const zBlocked = !_isPlayable(pgx, tgz);
+              if(xBlocked) wv.x = -wv.x;
+              if(zBlocked) wv.z = -wv.z;
+              // If both axes blocked (corner) or neither (diagonal step
+              // with funky grid), fall back to a full reverse — guaranteed
+              // valid since the previous frame committed inside.
+              if(!xBlocked && !zBlocked) { wv.x = -wv.x; wv.z = -wv.z; }
+              // Re-normalize after reflection so speed stays constant.
+              const _vm2 = Math.hypot(wv.x, wv.z) || 0.0001;
+              wv.x = wv.x / _vm2 * targetSpd;
+              wv.z = wv.z / _vm2 * targetSpd;
+              // Snap commit back to last known good offset — don't try to
+              // partial-step into the blocked cell.
+              nx2 = wo.x; nz2 = wo.z;
+            }
+          }
           // 4. Commit and write outputs.
           wo.x = nx2; wo.z = nz2;
           state._wanderOff = wo;
@@ -12610,6 +12970,11 @@ function getCell(wx, wz) {
 const FRICTION = 0.9904;
 
 function updatePhysics(dt) {
+  // v0.22a: integrate crate physics first so subsequent ball collisions
+  // resolve against current crate positions. updateCratePhysics handles
+  // crate-vs-wall, crate-vs-obstacle, crate-vs-crate, ground/gravity,
+  // tower teeter, and rest-snapping.
+  if(typeof updateCratePhysics === 'function') updateCratePhysics(dt);
   // ── Jump — process before rolling guard so grace-window taps always fire ──
   if(G._jumpPending && !G.inHole) {
     G._jumpPending = false;
@@ -12619,6 +12984,29 @@ function updatePhysics(dt) {
     if(G._jumpChargesRemaining <= 0) {
       G._jumpPreloaded = false;
       if(G.ball && G._jumpPreloadOrigEmissive && G.ballMesh.material && G.ballMesh.material.emissive) { G.ballMesh.material.emissive.copy(G._jumpPreloadOrigEmissive); G._jumpPreloadOrigEmissive = null; }
+      // v0.21k6: Double Jump — fireShot deferred draining the jumper card so
+      // the player could tap a 2nd jump mid-roll. Now charges are exhausted,
+      // drain the card from hand/slot/_armedCards so it doesn't strand.
+      if(Array.isArray(G._armedCards)) {
+        const _ji = G._armedCards.findIndex(a => a.cardId === 'jumper');
+        if(_ji !== -1) {
+          const _inst = G._armedCards[_ji].instanceId;
+          G._armedCards.splice(_ji, 1);
+          if(G.hand) {
+            const _hi = G.hand.findIndex(c => c.instanceId === _inst);
+            if(_hi !== -1) {
+              const _c = G.hand[_hi];
+              G.hand.splice(_hi, 1);
+              if(G.discard) G.discard.push(_handToDiscardRecord(_c));
+            }
+          }
+          if(G.cardSlots) {
+            for(let i = 0; i < G.cardSlots.length; i++) {
+              if(G.cardSlots[i] && G.cardSlots[i].instanceId === _inst) G.cardSlots[i] = null;
+            }
+          }
+        }
+      }
     }
     G.ballVel.y = 6.38;
     G.rolling = true;
@@ -13017,6 +13405,15 @@ function updatePhysics(dt) {
   // remains the flag for obstacle destruction. Wall-smashing uses its own flag
   // (G._cannonballActive) directly at the wall-collision site.
   const hasIronBall    = G._ironBallActive;
+  // v0.21k6: Deep Freeze upgrade — frozen obstacles shatter on ball contact.
+  // When freeze_frame is active AND the player upgraded to Deep Freeze
+  // (shatterOnContact=true), contact with any obstacle behaves like an iron
+  // ball pass-through: the obstacle is destroyed via destroyObstacles() and
+  // the ball keeps rolling with light energy loss. This finally wires the
+  // shatterOnContact field that's been flagged in CARD_UPGRADES.freeze_frame.
+  const hasFreezeShatter = G._freezeFrameActive
+    && (typeof getCardField === 'function')
+    && !!getCardField('freeze_frame','shatterOnContact',false);
 
   // ── Substep loop — prevents wall tunneling on fast shots ──
   // Max travel per substep ≈ wall thickness so ball can't skip past geometry.
@@ -13997,15 +14394,15 @@ function updatePhysics(dt) {
           _stickyShared('rock');
           continue; // skip reflection
         }
-        if(hasIronBall) {
-          // Iron Ball: plow through, destroy obstacle with missile-style fling
+        if(hasIronBall || hasFreezeShatter) {
+          // Iron Ball / Deep Freeze: plow through, destroy obstacle with missile-style fling
           G.ballVel.multiplyScalar(0.85);
           const ironHits = [{wx:rock.wx, wz:rock.wz, type:'rock', physRef:rock, meshes:rock.meshes||[]}];
           destroyObstacles(ironHits, G.ballPos.x, G.ballPos.y, G.ballPos.z);
           // v0.20c: iron ball no longer smashes walls — only the obstacle struck.
           spawnExplosion(rock.wx, G.ballPos.y, rock.wz);
           G.coins++; updateCoinHUD();
-          showToast('🔩 Smashed!', 600);
+          showToast(hasIronBall ? '🔩 Smashed!' : '🧊 Shattered!', 600);
         } else {
           // Normal bounce
           const dot = G.ballVel.x*nx + G.ballVel.z*nz;
@@ -14290,14 +14687,14 @@ function updatePhysics(dt) {
           _stickyShared('bumper');
           continue; // skip reflection
         }
-        if(hasIronBall) {
+        if(hasIronBall || hasFreezeShatter) {
           G.ballVel.multiplyScalar(0.85);
           const ironHits = [{wx:bmp.wx, wz:bmp.wz, type:'bumper', physRef:bmp, meshes:[bmp.bodyM, bmp.capM].filter(Boolean)}];
           destroyObstacles(ironHits, G.ballPos.x, G.ballPos.y, G.ballPos.z);
           // v0.20c: iron ball no longer smashes walls — only the obstacle struck.
           spawnExplosion(bmp.wx, G.ballPos.y, bmp.wz);
           G.coins++; updateCoinHUD();
-          showToast('🔩 Smashed!', 600);
+          showToast(hasIronBall ? '🔩 Smashed!' : '🧊 Shattered!', 600);
         } else {
           const dot3 = G.ballVel.x*nx3 + G.ballVel.z*nz3;
           if(dot3 < 0) {
@@ -14469,14 +14866,14 @@ function updatePhysics(dt) {
             continue; // skip reflection + rest of bar code
           }
 
-          if(hasIronBall) {
+          if(hasIronBall || hasFreezeShatter) {
             G.ballVel.multiplyScalar(0.85);
             const ironHits = [{wx:bar.wx, wz:bar.wz, type:'spinBar', physRef:bar, meshes:bar.barGroup?[bar.barGroup]:[]}];
             destroyObstacles(ironHits, G.ballPos.x, G.ballPos.y, G.ballPos.z);
           // v0.20c: iron ball no longer smashes walls — only the obstacle struck.
             spawnExplosion(bar.wx, G.ballPos.y, bar.wz);
             G.coins++; updateCoinHUD();
-            showToast('🔩 Smashed!', 600);
+            showToast(hasIronBall ? '🔩 Smashed!' : '🧊 Shattered!', 600);
           } else {
 
           // Surface velocity at contact point: v = ω × r
@@ -14500,7 +14897,37 @@ function updatePhysics(dt) {
           const relVz = G.ballVel.z - surfVz;
           const relDot = relVx*nx2 + relVz*nz2;
 
-          if(relDot < 0) {
+          // v0.21k6: when the ball is essentially at rest while the player
+          // is aiming/setting up, the original reflection (relDot < 0) often
+          // misses because the ball's velocity is zero and surfV is roughly
+          // tangent to the radial normal. Result: a swinging bar would
+          // visually pass over the static ball and just re-position it
+          // against the bar without imparting any push. Per Adam: "your
+          // ball should still be hittable by obstacles when you are still
+          // and setting up your shot." Detect at-rest + bar-moving-toward-
+          // ball and stamp the bar's surface velocity onto the ball so it
+          // gets shoved off.
+          const _ballAtRest = Math.hypot(G.ballVel.x, G.ballVel.z) < 0.6;
+          const _surfIntoBall = (-surfVx) * nx2 + (-surfVz) * nz2; // surface moving toward ball center?
+          if(_ballAtRest && _surfIntoBall < 0) {
+            // Bar surface is moving in the +normal direction (away from bar
+            // center, toward the ball) — push the ball with the bar's
+            // tangent velocity. Take 0.85× so the hit feels punchy but
+            // doesn't fling the ball into orbit.
+            G.ballVel.x = surfVx * 0.85;
+            G.ballVel.z = surfVz * 0.85;
+            // Small upward kick for visual juice — like getting clipped.
+            if(G.ballVel.y < 0.5) G.ballVel.y = Math.max(G.ballVel.y, 1.2);
+            // Engage rolling state so slow-stop machinery picks up the new
+            // velocity. This counts as a "shot" only in the sense that the
+            // ball is moving — strokes are not incremented.
+            if(!G.rolling) {
+              G.rolling = true;
+              G.rollingSlowTimer = 0;
+              G._nudgeOnlyRoll = true; // don't reset per-swing perks when this stops
+              G.aimMode = false;
+            }
+          } else if(relDot < 0) {
             // Reflect the relative velocity component along the normal,
             // then add back surface velocity — this naturally transfers
             // bar momentum to the ball without double-counting.
@@ -14626,14 +15053,14 @@ function updatePhysics(dt) {
         continue; // skip the regular bounce code below
       }
 
-      if(hasIronBall) {
+      if(hasIronBall || hasFreezeShatter) {
         G.ballVel.multiplyScalar(0.85);
         const ironHits = [{wx:bx, wz:bz, type:'slideBlock', physRef:sb, meshes:sb.blockGroup?[sb.blockGroup]:[]}];
         destroyObstacles(ironHits, G.ballPos.x, G.ballPos.y, G.ballPos.z);
           // v0.20c: iron ball no longer smashes walls — only the obstacle struck.
         spawnExplosion(bx, G.ballPos.y, bz);
         G.coins++; updateCoinHUD();
-        showToast('🔩 Smashed!', 600);
+        showToast(hasIronBall ? '🔩 Smashed!' : '🧊 Shattered!', 600);
         triggerShake(0.3);
         continue;
       }
@@ -14641,6 +15068,12 @@ function updatePhysics(dt) {
       // Determine which face to push on: use the one the block is moving toward
       const blockVelX = (bx-pbx)/0.016;
       const blockVelZ = (bz-pbz)/0.016;
+      // v0.21k6: at-rest ball detection — if the player is aiming and a
+      // slide block runs into them, the relDot test misses (ballVel is
+      // zero, relV = -blockV which still has zero or positive component
+      // along the contact normal depending on geometry). Stamp the
+      // block's velocity onto the ball directly for an at-rest hit.
+      const _ballAtRestSB = Math.hypot(G.ballVel.x, G.ballVel.z) < 0.6;
 
       // Find shallowest penetration axis
       const overlapX = Math.min(dL>0?dL:Infinity, dR>0?dR:Infinity);
@@ -14650,27 +15083,189 @@ function updatePhysics(dt) {
         const nx3 = dL > dR ? -1 : 1;
         const pen = dL > dR ? dL : dR;
         G.ballPos.x += nx3*pen;
-        const relVx3 = G.ballVel.x - blockVelX;
-        const relDot3 = relVx3*nx3;
-        if(relDot3 < 0) {
-          G.ballVel.x -= (1+BOUNCE)*relDot3*nx3;
-          G.ballVel.x += blockVelX*0.4;
+        if(_ballAtRestSB && Math.abs(blockVelX) > 0.3) {
+          G.ballVel.x = blockVelX * 0.9;
+        } else {
+          const relVx3 = G.ballVel.x - blockVelX;
+          const relDot3 = relVx3*nx3;
+          if(relDot3 < 0) {
+            G.ballVel.x -= (1+BOUNCE)*relDot3*nx3;
+            G.ballVel.x += blockVelX*0.4;
+          }
         }
       } else if(overlapZ < Infinity) {
         const nz3 = dF > dB ? -1 : 1;
         const pen = dF > dB ? dF : dB;
         G.ballPos.z += nz3*pen;
-        const relVz3 = G.ballVel.z - blockVelZ;
-        const relDot3 = relVz3*nz3;
-        if(relDot3 < 0) {
-          G.ballVel.z -= (1+BOUNCE)*relDot3*nz3;
-          G.ballVel.z += blockVelZ*0.4;
+        if(_ballAtRestSB && Math.abs(blockVelZ) > 0.3) {
+          G.ballVel.z = blockVelZ * 0.9;
+        } else {
+          const relVz3 = G.ballVel.z - blockVelZ;
+          const relDot3 = relVz3*nz3;
+          if(relDot3 < 0) {
+            G.ballVel.z -= (1+BOUNCE)*relDot3*nz3;
+            G.ballVel.z += blockVelZ*0.4;
+          }
         }
+      }
+      // Engage rolling state so slow-stop machinery handles the bumped ball
+      if(_ballAtRestSB && Math.hypot(G.ballVel.x, G.ballVel.z) > 0.6 && !G.rolling) {
+        G.rolling = true;
+        G.rollingSlowTimer = 0;
+        G._nudgeOnlyRoll = true;
+        G.aimMode = false;
       }
       spawnHitParticles(G.ballPos);
       recordStyleEvent('slide_dodge'); // hit a moving block = skill
       G._challengeObstacleTouched = true;
       triggerShake(Math.min(0.5, Math.hypot(G.ballVel.x, G.ballVel.z) / 30));
+    }
+  }
+
+  // ── Crate collision (v0.22a) ─────────────────────────
+  // Ball-vs-crate: AABB-style overlap with axis-aligned crate cube. On
+  // impact: ball loses ~35%, crate gains proportional kick scaled by mass.
+  // Iron-ball and ghost-ball pass through the same way they do for rocks.
+  // v0.22a: also handles "ball comes to rest on top of a crate" — the
+  // crate's top is walkable and the ball can settle there for aim,
+  // earning a flagship "ON THE BOX" combo if it's the resting spot.
+  if(G.crates && G.crates.length && !ghostActive) {
+    for(const cr of G.crates) {
+      if(cr._destroyed) continue;
+      // v0.19z: parkour immunity
+      if(G._parkourImmunity || G._vacuumImmunity) continue;
+
+      const dx = G.ballPos.x - cr.wx;
+      const dz = G.ballPos.z - cr.wz;
+      const dy = G.ballPos.y - cr.y;
+
+      // Crate AABB in object space — use teeter offsets if the crate is
+      // in a tower (so the visual matches collision)
+      const cWx = cr.wx + (cr._teeterDx || 0);
+      const cWz = cr.wz + (cr._teeterDz || 0);
+      const dxAdj = G.ballPos.x - cWx;
+      const dzAdj = G.ballPos.z - cWz;
+
+      // Half-extent + ball radius
+      const h = cr.size + BALL_R;
+
+      // Skip if clearly outside
+      if(Math.abs(dxAdj) > h || Math.abs(dzAdj) > h) continue;
+      // Y check: ball must be in the crate's Y range
+      const crBot = cr.y - cr.size;
+      const crTop = cr.y + cr.size;
+      if(G.ballPos.y < crBot - BALL_R || G.ballPos.y > crTop + BALL_R + 0.5) continue;
+
+      // Determine if ball is approaching the TOP of the crate from above —
+      // walkable surface case
+      const ballOnTop = (G.ballPos.y - BALL_R) >= (crTop - 0.05) && G.ballVel.y <= 0;
+      if(ballOnTop && Math.abs(dxAdj) < cr.size + BALL_R*0.6 && Math.abs(dzAdj) < cr.size + BALL_R*0.6) {
+        // Land on top — clamp ball Y to crate top + BALL_R
+        G.ballPos.y = crTop + BALL_R;
+        if(G.ballVel.y < 0) G.ballVel.y = -G.ballVel.y * 0.25; // small bounce
+        // Reduce horizontal slightly for "soft landing on wood"
+        G.ballVel.x *= 0.9; G.ballVel.z *= 0.9;
+        // Track that ball landed on a crate this swing — flagship combo
+        if(!G._ballOnCrateThisShot) {
+          G._ballOnCrateThisShot = true;
+          if(typeof recordStyleEvent === 'function') recordStyleEvent('on_the_box');
+        }
+        continue;
+      }
+
+      // Iron-ball / freeze shatter / cannonball — destroy on contact
+      if(hasIronBall || hasFreezeShatter) {
+        G.ballVel.multiplyScalar(0.85);
+        const ironHits = [{ wx: cr.wx, wz: cr.wz, type: 'crate', physRef: cr, meshes: cr.group ? [cr.group] : [] }];
+        destroyObstacles(ironHits, G.ballPos.x, G.ballPos.y, G.ballPos.z);
+        spawnExplosion(cr.wx, G.ballPos.y, cr.wz, 0.7);
+        showToast(hasIronBall ? '🔩 Crate smashed!' : '🧊 Crate shattered!', 600);
+        continue;
+      }
+
+      // Lateral collision — figure out which face the ball hit (shallowest
+      // penetration axis), push out, reflect ball, kick the crate.
+      const overlapX = h - Math.abs(dxAdj);
+      const overlapZ = h - Math.abs(dzAdj);
+      let nx = 0, nz = 0, pen = 0;
+      if(overlapX < overlapZ) {
+        nx = dxAdj >= 0 ? 1 : -1;
+        pen = overlapX;
+      } else {
+        nz = dzAdj >= 0 ? 1 : -1;
+        pen = overlapZ;
+      }
+      // Push ball out
+      G.ballPos.x += nx * pen;
+      G.ballPos.z += nz * pen;
+
+      const dot = G.ballVel.x*nx + G.ballVel.z*nz;
+      if(dot < 0) {
+        // v0.22a3: ball does NOT reflect off the crate. Instead, the
+        // ball's velocity component ALONG the contact normal is reduced
+        // multiplicatively (CRATE_BALL_DRAG = 0.55 keeps 55%) and its
+        // direction is preserved. The ball plows through the crate's
+        // old position, slowed but still moving forward.
+        //
+        // Decompose ball velocity into normal + tangent components:
+        //   v_normal  = dot * (nx, nz)        — along contact normal
+        //   v_tangent = v - v_normal          — perpendicular to normal
+        // Apply drag only to the normal component (the part the crate
+        // resisted). Tangent component (sliding along the face) is
+        // unaffected.
+        const vNx = dot * nx, vNz = dot * nz;
+        const vTx = G.ballVel.x - vNx, vTz = G.ballVel.z - vNz;
+        // Apply drag to normal component (no flip — multiply by DRAG, not -DRAG)
+        const drag = CRATE_BALL_DRAG;
+        G.ballVel.x = vTx + vNx * drag;
+        G.ballVel.z = vTz + vNz * drag;
+
+        // Kick the crate with mass-scaled momentum.
+        const kickMag = -dot * CRATE_BALL_TO_CRATE / cr.mass;
+        cr.vx += -nx * kickMag;
+        cr.vz += -nz * kickMag;
+        // v0.22a6: pop considerably less per Adam. Was min(7.5, dot×0.65);
+        // now min(5.0, dot×0.40). Crates lift off the ground but stay
+        // close to it instead of flying overhead. Combined with the
+        // 0.75× time scale, this reads as "punted" not "yeeted".
+        cr.vy += Math.min(5.0, Math.abs(dot) * 0.40);
+        // Pitch + roll on impact (same mapping as before)
+        const tumbleMag = Math.abs(dot) * 0.55;
+        cr.pitchVel = (cr.pitchVel || 0) + (-nz) * tumbleMag * (1 + (Math.random() - 0.5) * 0.4);
+        cr.rollVel  = (cr.rollVel  || 0) + ( nx) * tumbleMag * (1 + (Math.random() - 0.5) * 0.4);
+        // Yaw spin
+        cr.angleVel += (Math.random() - 0.5) * Math.abs(dot) * 0.5;
+
+        // v0.22a5: if this crate was locked in a stack, unlock it AND
+        // trigger the stack's chain-collapse path so its neighbors
+        // start tumbling too. This makes hitting a stacked crate feel
+        // like knocking a wooden tower over instead of nudging a
+        // glued sculpture.
+        if(cr._inStack) {
+          cr._inStack = false;
+          cr._inTower = false;
+          if(typeof _onStackCrateImpacted === 'function') {
+            _onStackCrateImpacted(cr);
+          }
+        }
+
+        // Impact FX + audio
+        spawnHitParticles(G.ballPos);
+        if(AC) {
+          try {
+            const ac = getAC(), tt = ac.currentTime;
+            const o = ac.createOscillator(); o.type='triangle';
+            o.frequency.setValueAtTime(220, tt);
+            o.frequency.exponentialRampToValueAtTime(80, tt + 0.10);
+            const g = ac.createGain();
+            g.gain.setValueAtTime(0.20, tt);
+            g.gain.exponentialRampToValueAtTime(0.001, tt + 0.13);
+            o.connect(g); g.connect(getACDest()); o.start(tt); o.stop(tt + 0.14);
+          } catch(e){}
+        }
+        triggerShake(Math.min(0.4, Math.abs(dot) / 28));
+        if(typeof recordStyleEvent === 'function') recordStyleEvent('rock_ricochet'); // reuse — feels similar
+      }
     }
   }
 
@@ -14770,14 +15365,14 @@ function updatePhysics(dt) {
       if(G.ballPos.z < pw.wz - hd || G.ballPos.z > pw.wz + hd) continue;
       if(G.ballPos.y > pw.currentTopY + BALL_R) continue;
 
-      if(hasIronBall) {
+      if(hasIronBall || hasFreezeShatter) {
         G.ballVel.multiplyScalar(0.85);
         const ironHits = [{wx:pw.wx, wz:pw.wz, type:'popupWall', physRef:pw, meshes:pw.wallMesh?[pw.wallMesh]:[]}];
         destroyObstacles(ironHits, G.ballPos.x, G.ballPos.y, G.ballPos.z);
           // v0.20c: iron ball no longer smashes walls — only the obstacle struck.
         spawnExplosion(pw.wx, G.ballPos.y, pw.wz);
         G.coins++; updateCoinHUD();
-        showToast('🔩 Smashed!', 600);
+        showToast(hasIronBall ? '🔩 Smashed!' : '🧊 Shattered!', 600);
         triggerShake(0.3);
         continue;
       }
@@ -14983,6 +15578,79 @@ function updatePhysics(dt) {
     }
   }
 
+  // ── Crate drop pickup (v0.22a) ────────────────────────
+  // Walk G._crateDrops and detect ball-overlap. Pickups grant the
+  // appropriate reward (5 coins / heart heal / upgrade voucher). The
+  // generous 0.95m radius matches what hearts use — drops are bigger
+  // than coins and feel bad to miss.
+  if(G._crateDrops && G._crateDrops.length && G.rolling && !ghostActive) {
+    const DROP_R = 0.95 * (TILE_SIZE / TILE_SIZE_BASE);
+    for(const dr of G._crateDrops) {
+      if(dr.collected) continue;
+      const dx = G.ballPos.x - dr.wx;
+      const dz = G.ballPos.z - dr.wz;
+      const dist2D = Math.hypot(dx, dz);
+      // Magnet pulls drops just like coins
+      const hasMagnet = G.modifiers.some(m => m.id === 'magnet');
+      const _magRMult = (typeof getPerkField === 'function') ? getPerkField('magnet','radiusMult',1.0) : 1.0;
+      const magnetR = hasMagnet ? 5.0 * _magRMult : 0;
+      if(magnetR > 0 && dist2D < magnetR && dist2D > 0.01) {
+        const pull = 5.5 * dt;
+        dr.wx += (dx / dist2D) * pull;
+        dr.wz += (dz / dist2D) * pull;
+        if(dr.group) dr.group.position.set(dr.wx, dr.y, dr.wz);
+        if(dr.glowMesh) dr.glowMesh.position.set(dr.wx, dr.y - 0.25, dr.wz);
+      }
+      if(dist2D < DROP_R) {
+        dr.collected = true;
+        if(G.courseGroup) {
+          if(dr.group) G.courseGroup.remove(dr.group);
+          if(dr.glowMesh) G.courseGroup.remove(dr.glowMesh);
+        }
+        if(dr.kind === 'coin5') {
+          // 5 coin pickups in a quick burst
+          for(let cv = 0; cv < 5; cv++) {
+            setTimeout(() => collectCoin(dr.wx, dr.wz), cv * 60);
+          }
+          showToast('🎁 +5 COINS!', 1000);
+          triggerShake(0.15);
+        } else if(dr.kind === 'heart') {
+          const _heal = (typeof getPerkField === 'function') ? getPerkField('extra_heart','heartHeal',2) : 2;
+          const actual = Math.min(_heal, (G.hpMax || 10) - (G.hp || 0));
+          if(actual > 0) {
+            G.hp = Math.min(G.hpMax || 10, (G.hp || 0) + actual);
+            if(typeof spawnHpHealPopup === 'function') spawnHpHealPopup(actual);
+            showToast(`🎁 💖 +${actual} HP!`, 1000);
+            if(typeof updateUI === 'function') updateUI();
+          } else {
+            showToast('🎁 💖 Full HP!', 800);
+          }
+          if(AC) {
+            try {
+              const ac = getAC(), tt = ac.currentTime;
+              const o = ac.createOscillator(); o.type='triangle';
+              o.frequency.setValueAtTime(550, tt);
+              o.frequency.linearRampToValueAtTime(880, tt+0.18);
+              const g = ac.createGain();
+              g.gain.setValueAtTime(0.18, tt); g.gain.exponentialRampToValueAtTime(0.001, tt+0.32);
+              o.connect(g); g.connect(getACDest()); o.start(tt); o.stop(tt+0.34);
+            } catch(e){}
+          }
+        } else if(dr.kind === 'voucher') {
+          G._holeUpgradeVouchers = (G._holeUpgradeVouchers || 0) + 1;
+          showToast('🎁 🔧 UPGRADE VOUCHER!', 1700);
+          // Big triumphant chime
+          if(typeof playCrateDropChime === 'function') playCrateDropChime('voucher');
+          triggerShake(0.25);
+          // Floating "+1 VOUCHER" world-space label
+          if(typeof spawnCrateDropToast === 'function') spawnCrateDropToast(dr.wx, dr.wz, 'voucher');
+        }
+      }
+    }
+    // Prune fully collected drops to keep array tight
+    G._crateDrops = G._crateDrops.filter(d => !d.collected);
+  }
+
   // ── Healing heart pickup (v0.19s) ──────────────────────
   // Roll over a heart → +2 HP (capped at hpMax). Spawns sparkle particles
   // and plays a warm chime SFX. Hearts don't magnetize — they're landmarks,
@@ -15005,9 +15673,11 @@ function updatePhysics(dt) {
         // Heal +heartHeal HP (default 2, Big Heart upgrade = 3), cap at hpMax.
         // v0.21k2: was hardcoded +2 — Big Heart upgrade only affected the Lot
         // of Heart pickup but not regular field hearts. Now reads getPerkField.
+        // v0.21k6: removed difficulty healReduction — hearts now always heal
+        // their advertised value (2 base, 3 with Big Heart) for consistency.
+        // Per Adam: "Make them all 2 hp (unless upgraded to 3 hp)."
         const _bhHeal = (typeof getPerkField === 'function') ? getPerkField('extra_heart','heartHeal',2) : 2;
-        const _bhAdjusted = Math.max(1, _bhHeal - ((G._diffMods && G._diffMods.healReduction) || 0));
-        const healAmt = Math.min(_bhAdjusted, (G.hpMax || 10) - (G.hp || 0));
+        const healAmt = Math.min(_bhHeal, (G.hpMax || 10) - (G.hp || 0));
         if(healAmt > 0) {
           G.hp = Math.min(G.hpMax || 10, (G.hp || 0) + healAmt);
           // Reuse existing floating heart VFX if it exists, else just toast.
@@ -15647,6 +16317,35 @@ function updatePhysics(dt) {
         G._curveBallRate = 0;
         if(typeof destroyBeatEmUpRing === 'function') destroyBeatEmUpRing();
   if(typeof disposeCurveBallPreviewLine === 'function') disposeCurveBallPreviewLine();
+        // v0.21k6: Double Jump — if the swing ended with jumper charges still
+        // remaining (player only used 1 of 2), drain the card now. Pre-fireShot
+        // drain was deferred to keep the card tappable mid-roll.
+        if((G._jumpPreloaded || (G._jumpChargesRemaining|0) > 0) && Array.isArray(G._armedCards)) {
+          const _ji = G._armedCards.findIndex(a => a.cardId === 'jumper');
+          if(_ji !== -1) {
+            const _inst = G._armedCards[_ji].instanceId;
+            G._armedCards.splice(_ji, 1);
+            if(G.hand) {
+              const _hi = G.hand.findIndex(c => c.instanceId === _inst);
+              if(_hi !== -1) {
+                const _c = G.hand[_hi];
+                G.hand.splice(_hi, 1);
+                if(G.discard) G.discard.push(_handToDiscardRecord(_c));
+              }
+            }
+            if(G.cardSlots) {
+              for(let i = 0; i < G.cardSlots.length; i++) {
+                if(G.cardSlots[i] && G.cardSlots[i].instanceId === _inst) G.cardSlots[i] = null;
+              }
+            }
+          }
+          G._jumpPreloaded = false;
+          G._jumpChargesRemaining = 0;
+          if(G.ball && G._jumpPreloadOrigEmissive && G.ballMesh && G.ballMesh.material && G.ballMesh.material.emissive) {
+            G.ballMesh.material.emissive.copy(G._jumpPreloadOrigEmissive);
+            G._jumpPreloadOrigEmissive = null;
+          }
+        }
         // v0.19x: clear sticky + parkour state if armed but not triggered
         if(typeof clearStickyState === 'function') clearStickyState();
         if(typeof clearParkourState === 'function') clearParkourState();
@@ -16134,21 +16833,34 @@ function updateGravityWellSound(dist) {
 // ghost runs feel meaningful. hole_via_destruction: bonus when the swing that
 // holes also destroys something, applied at hole-out time.
 const STYLE_PTS = {
-  wall_bounce: 50, rock_ricochet: 100, bumper_hit: 75,
-  spin_bar_hit: 150, fan_ride: 100, speed_hoop: 125,
-  conveyor_ride: 50, spike_dodge: 200, coin_flight: 25,
-  obstacle_destroyed: 200, wall_destroyed: 500, slide_dodge: 100, jump_over: 600,
-  wall_skip: 350,
+  // v0.21k6: trick combos boosted ~25-50%. Per Adam's telemetry-driven
+  // note: trick-shot/pinball builds were underrewarded for the precision
+  // skill they require. Destruction values left at their pre-rebalance
+  // numbers — the boost to tricks is enough to close the gap without
+  // taking points away from demolition builds.
+  wall_bounce: 50, rock_ricochet: 100,
+  bumper_hit: 100,                        // 75 → 100 (trick, boost)
+  spin_bar_hit: 200,                      // 150 → 200 (trick, boost)
+  fan_ride: 150,                          // 100 → 150 (trick, boost)
+  speed_hoop: 175,                        // 125 → 175 (trick, boost)
+  conveyor_ride: 75,                      // 50 → 75 (trick, modest boost)
+  spike_dodge: 250,                       // 200 → 250 (trick, boost)
+  coin_flight: 25,
+  obstacle_destroyed: 200,                // unchanged
+  wall_destroyed: 500,                    // unchanged
+  slide_dodge: 140,                       // 100 → 140 (trick, boost)
+  jump_over: 600,
+  wall_skip: 500,                         // 350 → 500 (trick, boost)
   jump: 150,
-  corner_deflect: 75,
+  corner_deflect: 100,                    // 75 → 100 (trick, boost)
   ghost_oob: 8000,  // ghost ball through OOB and back (was 6000)
   jump_oob: 6500,   // jumped over OOB and landed in bounds (was 4800)
   ghost_through: 350, // each obstacle/wall ghosted through (v0.20c)
-  hole_via_destruction: 2000, // sank the ball on the same swing as a destruction (v0.20c)
+  hole_via_destruction: 2000,             // unchanged
   // v0.19z5: Parkour vault is a flagship combo event — big points + purple
   // display so it reads as a headline moment, not a dim glitchy text tag.
-  parkour_vault: 800,
-  obstacle_dodge: 250,
+  parkour_vault: 1000,                    // 800 → 1000 (flagship trick, boost)
+  obstacle_dodge: 350,                    // 250 → 350 (trick, boost)
   // v0.20a2: Reverse card is a flagship purple combo — instant direction flip
   // is high-skill / high-chaos, and rewards big when chained or used to
   // salvage a runaway shot into the cup.
@@ -16157,6 +16869,16 @@ const STYLE_PTS = {
   // ball into the cup. Fires from onHoled when entrySpeed < 1.5 m/s. Pairs
   // nicely with Backspin builds and gravity-pull approaches.
   slow_approach: 800,
+  // v0.21k6: Portal traversal — fires every time the ball or any projectile
+  // crosses a portal pair. Medium-high points encourage Portal-grenade
+  // builds; multi-traversal tricks (loop the ball through twice) compound
+  // naturally. Uses the same rate-limiting as wall_bounce — each portal
+  // entry registers once per pass, and the firing site debounces to stop
+  // a single dwell from spamming the event.
+  portal_traverse: 400,
+  // v0.22a: ON THE BOX — flagship combo for landing the ball on top of a
+  // physics crate. High-skill tactical landing; rare and chaotic.
+  on_the_box: 1200,
 };
 
 // Named tricks: [condition_fn(events, shotCtx), name, bonusPts]
@@ -16272,13 +16994,19 @@ const STYLE_NAMES = {
   reverse_card:'⏪ REVERSE',
   // v0.20i: slow approach combo — fires when the ball trickles into the cup.
   slow_approach:'🐢 SLOW ROLL',
+  // v0.21k6: Portal traversal — fires per ball/projectile portal pass.
+  portal_traverse:'🟣 PORTAL',
+  // v0.22a: Landed on top of a physics crate
+  on_the_box:'📦 ON THE BOX',
 };
 
 // v0.19z5: events that render with flagship styling — big purple glow,
 // larger text — instead of plain white. These are "you pulled off something
 // special" moments (currently just parkour_vault; easy to extend).
 // v0.20a2: reverse_card joins parkour_vault as a flagship purple combo.
-const FLAGSHIP_EVENTS = new Set(['parkour_vault', 'reverse_card']);
+// v0.22a: on_the_box also flagship — landing on a physics crate is
+// genuinely impressive and rare; deserves the headline visual.
+const FLAGSHIP_EVENTS = new Set(['parkour_vault', 'reverse_card', 'on_the_box']);
 
 // Compute the current shot's live score (single source of truth)
 function computeLiveShotScore() {
@@ -18179,12 +18907,90 @@ function onSummaryDismiss() {
   }
   if(!G._shopUsedThisHole) {
     G._shopUsedThisHole = true;
-    openShop();
+    // v0.22a: Crate-drop upgrade vouchers — if the player picked up any
+    // 🔧 vouchers from destroyed crates this hole, redeem them now BEFORE
+    // the shop opens. Use-it-or-lose-it: any voucher dismissed without
+    // picking is converted to a 30-coin fallback. Vouchers route through
+    // the existing free-upgrade machinery (_freeUpgradeVouchers).
+    if((G._holeUpgradeVouchers | 0) > 0) {
+      _redeemHoleUpgradeVouchers(() => openShop());
+    } else {
+      openShop();
+    }
   } else {
     nextHole();
   }
 }
 window.onSummaryDismiss = onSummaryDismiss;
+
+// v0.22a: Drain G._holeUpgradeVouchers (crate-drop "free upgrade" tokens).
+// For each voucher, check if any cards/perks are eligible for upgrade. If
+// yes, open the upgrade picker; on close (whether the player picked or
+// dismissed), recurse to handle the next voucher. If no eligible target
+// exists, convert the remaining vouchers to 30 coins each with a toast,
+// then call onComplete.
+function _redeemHoleUpgradeVouchers(onComplete) {
+  const remaining = G._holeUpgradeVouchers | 0;
+  if(remaining <= 0) { if(onComplete) onComplete(); return; }
+  const cardCount = (typeof getEligibleCardUpgrades === 'function') ? getEligibleCardUpgrades().length : 0;
+  const perkCount = (typeof getEligiblePerkUpgrades === 'function') ? getEligiblePerkUpgrades().length : 0;
+  if(cardCount + perkCount === 0) {
+    // No eligible upgrades — convert all remaining vouchers to coins.
+    const coinValue = 30 * remaining;
+    G.coins = (G.coins || 0) + coinValue;
+    G._holeUpgradeVouchers = 0;
+    showToast(`🔧 No eligible cards — vouchers → +${coinValue} coins`, 1800);
+    if(typeof updateCoinHUD === 'function') updateCoinHUD();
+    if(onComplete) onComplete();
+    return;
+  }
+  // Inject one voucher into the free-upgrade pool and open the picker.
+  G._freeUpgradeVouchers = (G._freeUpgradeVouchers | 0) + 1;
+  G._holeUpgradeVouchers = remaining - 1;
+  // Watch the upgrade overlay for close → recurse. Polling because the
+  // close path goes through several routes (pick, close button, etc.).
+  if(typeof openUpgradePicker === 'function') {
+    showToast(`🔧 Crate Voucher — pick a card or perk to upgrade!`, 1500);
+    openUpgradePicker();
+    // Track when overlay closes to advance to next voucher / shop
+    const overlay = document.getElementById('upgrade-overlay');
+    let lastOpacity = overlay ? overlay.style.opacity : '0';
+    const watchInterval = setInterval(() => {
+      const ov = document.getElementById('upgrade-overlay');
+      if(!ov) { clearInterval(watchInterval); if(onComplete) onComplete(); return; }
+      const opac = ov.style.opacity;
+      // Closed when opacity is '0' or empty
+      if((opac === '0' || opac === '') && lastOpacity === '1') {
+        clearInterval(watchInterval);
+        // If the player closed without spending the voucher, return it
+        // to the hole bucket so it expires properly (use-it-or-lose-it
+        // means the next iteration will see no decrement happened and
+        // convert it to coins, which is the correct fallback).
+        if((G._freeUpgradeVouchers | 0) > 0) {
+          // They still have a voucher → they backed out. Treat as
+          // declined: drop the free-upgrade token and convert this
+          // voucher to coins.
+          G._freeUpgradeVouchers = Math.max(0, (G._freeUpgradeVouchers | 0) - 1);
+          G.coins = (G.coins || 0) + 30;
+          if(typeof updateCoinHUD === 'function') updateCoinHUD();
+          showToast('🔧 Voucher unused — converted to +30 coins', 1400);
+        }
+        // Recurse for next voucher (or call onComplete when done)
+        setTimeout(() => _redeemHoleUpgradeVouchers(onComplete), 200);
+      }
+      lastOpacity = opac;
+    }, 150);
+  } else {
+    // Picker missing? Convert all to coins as fallback.
+    const coinValue = 30 * (1 + (G._holeUpgradeVouchers | 0));
+    G.coins = (G.coins || 0) + coinValue;
+    G._holeUpgradeVouchers = 0;
+    G._freeUpgradeVouchers = Math.max(0, (G._freeUpgradeVouchers | 0) - 1);
+    showToast(`🔧 Vouchers → +${coinValue} coins`, 1500);
+    if(typeof updateCoinHUD === 'function') updateCoinHUD();
+    if(onComplete) onComplete();
+  }
+}
 
 // ── v0.21a: Endless post-game mode ────────────────────
 // Three entry points called from onHoled's three winning-final-hole branches.
@@ -18474,6 +19280,11 @@ function closeShop() {
     G._currentShopVisit = null;
   }
   G._shopCurrentPicks = null;
+  // v0.21k6: drop the undo snapshot — closing the shop commits all
+  // purchases. Hide the undo button too so it doesn't stick around for
+  // the next shop visit.
+  G._lastShopPurchase = null;
+  if(typeof _hideShopUndoBtn === 'function') _hideShopUndoBtn();
   document.getElementById('shop-overlay').classList.remove('visible');
   if(G.hp <= 0 && !isMultiplayer()) { showGameOver(true); return; }
 
@@ -18779,6 +19590,20 @@ window.buyCard = function(id) {
   const voucherIdx = G._freeCardVouchers.indexOf(card.rarity);
   const useVoucher = voucherIdx >= 0;
   if(!useVoucher && G.coins < scaledPrice) return;
+  // v0.21k6: Undo snapshot — record everything we're about to mutate so
+  // undoLastShopPurchase() can roll it back. Single-step (most recent
+  // purchase only) — buying a 2nd card overwrites the snapshot, mirroring
+  // the standard "undo only one step" pattern used elsewhere in the game.
+  G._lastShopPurchase = {
+    kind: 'card',
+    cardId: id,
+    coinsSpent: useVoucher ? 0 : scaledPrice,
+    voucherUsed: useVoucher ? card.rarity : null,
+    // Snapshot of card picks so the bought card can be restored to the
+    // shop list on undo. Shallow copy is enough — card objects come from
+    // CARD_DEFS and aren't mutated.
+    cardPicksBefore: (G._shopCardPicks || []).slice(),
+  };
   if(useVoucher) {
     G._freeCardVouchers.splice(voucherIdx, 1);
     showToast(`🃏 Free ${card.rarity} card claimed!`, 1400);
@@ -18796,6 +19621,7 @@ window.buyCard = function(id) {
     G._shopCardPicks = G._shopCardPicks.filter(c => c.id !== id);
   }
   renderShop();
+  _showShopUndoBtn();
 };
 
 window.buyPerk = function(id) {
@@ -18820,6 +19646,25 @@ window.buyPerk = function(id) {
     }});
     return;
   }
+  // v0.21k6: Undo snapshot — see buyCard for the pattern. Perks have
+  // a few more fields to roll back: applyPerkEffect side effects (HP
+  // changes, max-HP increases, swing-mult tweaks). For now we only
+  // support undo on perks that DON'T have irreversible side effects;
+  // anything with hpMax / hp / swingMult / Dealer's Choice picker
+  // mutation is flagged as non-undoable.
+  const NON_UNDOABLE_PERKS = new Set([
+    'extra_heart','heart_surgeon','strengthen_swing','snowball','dealers_choice',
+    'angler','clone','pinball_perk','holy_aura','perpetual_motion_perk',
+    'walkies_perk','ghost_passive','elite_safety','goal_oriented'
+  ]);
+  const undoable = !NON_UNDOABLE_PERKS.has(perk.id);
+  G._lastShopPurchase = undoable ? {
+    kind: 'perk',
+    perkId: id,
+    coinsSpent: useVoucher ? 0 : scaledPrice,
+    voucherUsed: useVoucher ? perk.rarity : null,
+    perkPicksBefore: (G._shopCurrentPicks || []).slice(),
+  } : null;
   if(useVoucher) {
     G._freeCardVouchers.splice(voucherIdx, 1);
     showToast(`⭐ Free ${perk.rarity} perk claimed!`, 1400);
@@ -18850,6 +19695,71 @@ window.buyPerk = function(id) {
     G._shopCurrentPicks = G._shopCurrentPicks.filter(p => p.id !== id);
   }
   renderShop();
+  if(undoable) _showShopUndoBtn(); else _hideShopUndoBtn();
+};
+
+// v0.21k6: Show / hide the Undo Last Purchase button. Called by
+// buyCard/buyPerk after a successful purchase, and by closeShop /
+// undoLastShopPurchase to clear it.
+function _showShopUndoBtn() {
+  const btn = document.getElementById('shop-undo-btn');
+  if(btn) btn.style.display = '';
+}
+function _hideShopUndoBtn() {
+  const btn = document.getElementById('shop-undo-btn');
+  if(btn) btn.style.display = 'none';
+}
+
+// v0.21k6: Roll back the most recent shop purchase. Refunds coins (or
+// the consumed voucher), removes the bought card/perk, and restores
+// the bought item to the shop list so the player can browse again.
+// Single-step — once you make another purchase or close the shop, the
+// previous undo opportunity is gone.
+window.undoLastShopPurchase = function() {
+  const snap = G._lastShopPurchase;
+  if(!snap) { _hideShopUndoBtn(); return; }
+  if(snap.kind === 'card') {
+    // Pop the card from the deck (most recent matching id)
+    const di = (G.deck || []).lastIndexOf(snap.cardId);
+    if(di !== -1) G.deck.splice(di, 1);
+    // Restore card picks
+    G._shopCardPicks = snap.cardPicksBefore.slice();
+    // Refund: coins or voucher
+    if(snap.voucherUsed) {
+      if(!G._freeCardVouchers) G._freeCardVouchers = [];
+      G._freeCardVouchers.push(snap.voucherUsed);
+    } else {
+      G.coins += (snap.coinsSpent | 0);
+      trackStat('coinsSpent', -(snap.coinsSpent | 0)); // un-tally
+    }
+    // Telemetry — mark refund. Keeps shop visit log honest.
+    if(typeof _markShopPurchase === 'function') {
+      try { _markShopPurchase(snap.cardId, 'card_undo'); } catch(e){}
+    }
+    showToast('↶ Card refunded', 900);
+  } else if(snap.kind === 'perk') {
+    // Remove the most recently added matching perk
+    const mi = (G.modifiers || []).map(m => m && m.id).lastIndexOf(snap.perkId);
+    if(mi !== -1) G.modifiers.splice(mi, 1);
+    G._shopCurrentPicks = snap.perkPicksBefore.slice();
+    if(snap.voucherUsed) {
+      if(!G._freeCardVouchers) G._freeCardVouchers = [];
+      G._freeCardVouchers.push(snap.voucherUsed);
+    } else {
+      G.coins += (snap.coinsSpent | 0);
+      trackStat('coinsSpent', -(snap.coinsSpent | 0));
+    }
+    G._perksBoughtThisRun = Math.max(0, (G._perksBoughtThisRun || 0) - 1);
+    if(typeof _markShopPurchase === 'function') {
+      try { _markShopPurchase(snap.perkId, 'perk_undo'); } catch(e){}
+    }
+    showToast('↶ Perk refunded', 900);
+  }
+  G._lastShopPurchase = null;
+  updateCoinHUD();
+  updateHandUI();
+  renderShop();
+  _hideShopUndoBtn();
 };
 
 // ── Card Removal — every 3 holes ─────────────────────
@@ -19051,6 +19961,16 @@ function collectObstaclesInRadius(cx, cz, blastR) {
   if(G.spikes)      G.spikes.forEach(s       => check(s.wx, s.wz, 'spike',     s, ()=>s.mesh?[s.mesh]:[]));
   if(G.angledWalls) G.angledWalls.forEach(a  => { if(!a._indestructible) check((a.ax+a.bx)/2, (a.az+a.bz)/2, 'angledWall', a, ()=>a.mesh?[a.mesh]:[]); });
   if(G.pendulums)   G.pendulums.forEach(p    => check(p.wx, p.wz, 'pendulum',   p, ()=>p.pendGroup?[p.pendGroup]:[]));
+  // v0.22a: crates participate in blast-radius destruction. We use the
+  // crate's effective radius (size + small padding) so big crates feel
+  // like big targets.
+  if(G.crates) G.crates.forEach(cr => {
+    if(cr._destroyed) return;
+    const d = Math.hypot(cx - cr.wx, cz - cr.wz);
+    if(d <= blastR + cr.size) {
+      hits.push({ wx: cr.wx, wz: cr.wz, type: 'crate', physRef: cr, meshes: cr.group ? [cr.group] : [] });
+    }
+  });
   return hits;
 }
 
@@ -19197,6 +20117,1358 @@ function destroyWallChunksInRadius(cx, cz, radius) {
   return count;
 }
 
+// ─────────────────────────────────────────────────────
+// v0.22a: PHYSICS CRATES — Half-Life-style breakable crates that absorb
+// ball momentum, bounce around the level, collide with obstacles +
+// other crates, and drop coins/hearts/upgrade-voucher pickups when
+// destroyed by projectiles, explosions, or iron ball.
+//
+// Architecture:
+//   - G.crates is a flat list of crate records. Each has:
+//       wx, wz, y           — current world position (y = floor + halfH)
+//       size                — half-extent (cube), drives mass + visual scale
+//       mass                — slightly heavier when bigger
+//       vx, vz, vy          — linear velocity
+//       angle               — Y rotation (for tumble visual)
+//       angleVel            — Y angular velocity
+//       hp                  — 1; explosions/projectiles/iron-ball destroy
+//       _destroyed          — true once removed from play
+//       group               — THREE.Group containing the crate mesh
+//       stackId             — link back to crate stack for chain collapse
+//       stackIndex          — position within stack (0 = bottom)
+//
+//   - G._crateStacks holds stack metadata: { id, formation, size,
+//     crates: [...], topple: { active, dir, t } }. Formations:
+//       'pyramid'   — 3-2-1 (6 crates, base 3 wide × 2 deep, top 1)
+//       'tower'     — N-tall single column (3-5 crates)
+//
+//   - Per-frame: updateCratePhysics(dt) integrates all live crates,
+//     resolves crate-vs-wall, crate-vs-obstacle (spinner/slider/fan/
+//     conveyor/popup-wall/bumper), crate-vs-crate, and applies tower
+//     teeter/sway when relevant.
+//
+//   - Pillar #2: crates can never be the cause of damage to the player
+//     (no spikes, no explosion on contact). They only redirect/slow.
+//   - Pillar #3: crates compound with iron ball, demolition, and Big
+//     Suck. Each destroyed crate has a 10% drop chance (5-coin / heart /
+//     upgrade voucher), so demolition builds get sustain + crit pickups.
+//   - Pillar #5: crate drop SFX + world-space toast = juice.
+// ─────────────────────────────────────────────────────
+
+// Crate sizing — sliding scale within these bounds.
+//   half-extent (h) range: 0.225 .. 0.525m (so 0.45m to 1.05m cubes)
+//   mass scales gently with size: 0.25 + (h - min)/(max-min) * 0.15 (range 0.25 .. 0.40)
+// v0.22a1: was 0.30..0.70 half-extent; cut 25% per Adam — crates were
+// reading too big on screen and dominated the hole footprint. Now max
+// crate is roughly the size of a slide block, min is bumper-cap-sized.
+const CRATE_H_MIN = 0.225;
+const CRATE_H_MAX = 0.525;
+
+// Crate-vs-ball coupling — how much of the ball's velocity gets transferred
+// to the crate, and how much the ball loses on impact.
+// v0.22a1: per Adam — "crates should be 75% lighter; currently they slow
+// the ball down too much and don't travel very far to cause much chaos."
+// Two-front fix:
+//   1. Mass cut to ~25% of original (1.0-1.6 → 0.25-0.40) — see _crateParams
+//   2. CRATE_BALL_BOUNCE bumped from 0.65 to 0.85 — ball keeps more of its
+//      momentum on impact (was losing ~35%, now ~15%). Ball follows
+//      through better, crate still gets a satisfying boot.
+//   3. CRATE_BALL_TO_CRATE bumped from 0.55 to 0.80 — paired with the
+//      lower mass, this means crates fly noticeably farther on a kick.
+// v0.22a3: "ball plows through, crate goes flying" model. Per Adam:
+// "Make them even lighter compared to the ball. I'd like the ball to
+// slow down when they hit a crate, not reflect off them."
+//
+// v0.22a4: re-tuned per Adam — crates were "far too light (bouncing
+// too far away after a light touch). They should go airborne more as
+// well." Two fixes:
+//   - Mass partially restored (was 0.12-0.20, now 0.18-0.28 — halfway
+//     between v0.22a2 and v0.22a3) so light touches don't yeet crates
+//     across the level.
+//   - Horizontal impulse coefficient cut (1.4 → 0.9) so each unit of
+//     ball momentum produces less sideways crate velocity.
+//   - Upward pop coefficient INCREASED (0.55 → 0.85, cap 7.0 → 9.0) so
+//     the same impact lofts the crate higher. Net read: ball hit
+//     "punts" the crate skyward instead of "skidding" it sideways.
+const CRATE_BALL_BOUNCE = 0.0;        // ball does NOT reflect
+const CRATE_BALL_DRAG   = 0.55;       // ball keeps 55% of speed in normal direction
+const CRATE_BALL_TO_CRATE = 0.9;      // v0.22a4: 1.4 → 0.9 (less horizontal)
+const CRATE_FRICTION = 0.94;          // per-tick decay of crate horizontal velocity
+const CRATE_REST_THRESHOLD = 0.25;    // m/s — below this, crate is considered at rest
+
+// v0.22a2: lower gravity + slower XZ time so crates feel chunky and read
+// as heavier-than-life wooden boxes instead of skidding hockey pucks.
+// Per Adam: "crates move too fast in response to impacts and they should
+// go airborne slightly. Lower their gravity slightly and have them pop up
+// and spin appropriately. Slow down their motion by 50% compared to the
+// rest of the world."
+//
+// Two-knob approach:
+//   - CRATE_GRAVITY halved (-22 → -11) — crates fall slower, hang time
+//     stays long, airborne moments register visually
+//   - CRATE_TIME_SCALE 0.5 — XZ position integration runs at half-speed
+//     while ANGULAR velocity stays at full-speed. Net visual: crates
+//     translate slowly but spin/tumble fast, reading as heavy chunks
+//     of wood rather than light pucks. The tradeoff is that the crate
+//     "world" runs slower than the ball world — crates stop in a
+//     reasonable distance instead of flying into the next county.
+const CRATE_GRAVITY = -11;            // v0.22a2: halved from -22
+const CRATE_TIME_SCALE = 0.75;        // v0.22a6: 0.5 → 0.75 per Adam ("slow their speed to 30% [meant 75%] not 50%")
+const CRATE_BOUNCE_RESTITUTION = 0.50; // v0.22a2: 0.35 → 0.50, more bounce off ground/walls
+
+// Tower physics — taller stacks teeter more
+const TOWER_TEETER_AMPLITUDE = 0.018;  // base radians at top of stack
+const TOWER_TEETER_FREQ = 1.2;         // hz
+
+// Drop chance + composition
+const CRATE_DROP_CHANCE = 0.10;        // 10% per destroyed crate
+// Of drops: 75% coin (5), 24% heart, 1% upgrade voucher
+const CRATE_DROP_COIN_CUTOFF = 0.75;
+const CRATE_DROP_HEART_CUTOFF = 0.99;  // 0.75 .. 0.99 = heart, > 0.99 = voucher
+
+// Build a single crate mesh (a cube with painted "wood crate" sides + visible
+// edges). Half-Life cliché aesthetic — orange/tan wood with dark X bracing.
+function buildCrateMesh(size) {
+  const g = new THREE.Group();
+  const dim = size * 2; // full edge length
+  // Crate body — 6 faces, slightly different shades for visual interest
+  const woodTexCanvas = document.createElement('canvas');
+  woodTexCanvas.width = woodTexCanvas.height = 128;
+  const ctx = woodTexCanvas.getContext('2d');
+  // Wood plank base
+  ctx.fillStyle = '#b8784a';
+  ctx.fillRect(0, 0, 128, 128);
+  // Plank seams (horizontal)
+  ctx.strokeStyle = '#7a4a28';
+  ctx.lineWidth = 2;
+  for(let py = 16; py < 128; py += 32) {
+    ctx.beginPath(); ctx.moveTo(0, py); ctx.lineTo(128, py); ctx.stroke();
+  }
+  // Iron bracing — X across center
+  ctx.strokeStyle = '#3a2a1a';
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(8, 8); ctx.lineTo(120, 120);
+  ctx.moveTo(120, 8); ctx.lineTo(8, 120);
+  ctx.stroke();
+  // Outer border
+  ctx.strokeStyle = '#3a2a1a';
+  ctx.lineWidth = 6;
+  ctx.strokeRect(3, 3, 122, 122);
+  // Subtle highlight noise
+  for(let n = 0; n < 30; n++) {
+    ctx.fillStyle = `rgba(255,200,140,${0.04 + Math.random()*0.06})`;
+    ctx.fillRect(Math.random()*128, Math.random()*128, 4, 4);
+  }
+  const tex = new THREE.CanvasTexture(woodTexCanvas);
+  tex.anisotropy = 4;
+  const mat = new THREE.MeshStandardMaterial({
+    map: tex, roughness: 0.85, metalness: 0.05,
+    color: 0xffffff,
+  });
+  const cube = new THREE.Mesh(new THREE.BoxGeometry(dim, dim, dim), mat);
+  cube.userData.noOutline = false; // crates outline in toon style
+  g.add(cube);
+  return g;
+}
+
+// Compute per-crate physical params from size
+function _crateParams(size) {
+  // v0.22a6: touch heavier per Adam. Was 0.24-0.36 (v0.22a5); now
+  // 0.32-0.48. Combined with the much lower upward pop, hits feel
+  // notably weighty without going back to "ball stops dead" territory.
+  const t = Math.min(1, Math.max(0, (size - CRATE_H_MIN) / (CRATE_H_MAX - CRATE_H_MIN)));
+  return { mass: 0.32 + t * 0.16 };
+}
+
+// Place a single crate on the field. wx/wz = world center; size = half-extent.
+function spawnCrate(wx, wz, size, opts = {}) {
+  const params = _crateParams(size);
+  const baseY = (G.heightMap && G.heightMap.length) ? getTerrainHeight(wx, wz) : 0;
+  const y = baseY + FLOOR_H/2 + size + (opts.yOffset || 0);
+  const group = buildCrateMesh(size);
+  group.position.set(wx, y, wz);
+  if(G.courseGroup) G.courseGroup.add(group);
+  const crate = {
+    wx, wz, y, size,
+    mass: params.mass,
+    vx: 0, vz: 0, vy: 0,
+    angle: opts.angle || 0,
+    angleVel: 0,
+    // v0.22a2: pitch (X-axis rotation) + roll (Z-axis rotation) for proper
+    // tumbling. On ball impact, the ball's incoming direction maps to a
+    // pitch/roll vector perpendicular to the hit, so a face-on hit pitches
+    // the crate forward and a side-on hit rolls it. Friction decays these
+    // alongside angleVel so the crate eventually settles flat.
+    pitch: 0, pitchVel: 0,
+    roll: 0,  rollVel: 0,
+    hp: 1,
+    _destroyed: false,
+    group,
+    stackId: opts.stackId || null,
+    stackIndex: opts.stackIndex || 0,
+    teeterPhase: Math.random() * Math.PI * 2,
+    _restTimer: 0,
+    // Compatibility shims for the existing destroy/iron-ball pipeline:
+    // collectObstaclesInRadius / destroyObstacles work on records with
+    // wx, wz, type, physRef, meshes. We expose ours via the helper
+    // collectCratesInRadius.
+    type: 'crate',
+    meshes: [group],
+  };
+  G.crates.push(crate);
+  return crate;
+}
+
+// Spawn a pyramid stack — variant: 'small' = 2-1 (3 crates) or
+// 'full' = 3-2-1 (6 crates). All crates share the same size.
+//
+// v0.22a5: pyramids and towers now LOCK at spawn (_inStack=true) and
+// stay perfectly still until impacted. Per Adam: "Instead of remaining
+// stacked, the pyramids immediately clip through each other and create
+// these lines of boxes. Maybe make stacks and pyramids 'locked' until
+// the player touches them?"
+//
+// Why this is needed: my crate-vs-crate collision skips Y-separated
+// pairs (Y diff > sumSize*0.9 → continue), which means stacked crates
+// don't see each other vertically. With gravity active, the upper
+// crates fell THROUGH the lower ones onto the ground, then the AABB
+// horizontal collision pushed everyone sideways into a line. Locking
+// stacked crates at spawn avoids the issue entirely AND saves CPU on
+// idle stacks. Lock releases per-crate when ball/projectile hits, or
+// when the stack collapse path runs.
+function spawnCratePyramid(wx, wz, size, variant) {
+  variant = variant || 'full';
+  const stackId = 'stack_' + (++G._stackIdCounter);
+  const stack = { id: stackId, formation: 'pyramid', size, crates: [],
+                  topple: { active: false, dir: {x:0,z:0}, t: 0 },
+                  centerX: wx, centerZ: wz, variant };
+  G._crateStacks.push(stack);
+  const dim = size * 2;
+  const gap = dim * 0.02;
+  if(variant === 'small') {
+    // 2-1 mini pyramid (3 crates total). Bottom row 2 wide, top 1.
+    for(let i = -0.5; i <= 0.5; i++) {
+      const cx = wx + i * (dim + gap);
+      const c = spawnCrate(cx, wz, size, { stackId, stackIndex: stack.crates.length, yOffset: 0 });
+      c._inStack = true;
+      c._stackLevel = 0;
+      stack.crates.push(c);
+    }
+    const top = spawnCrate(wx, wz, size, { stackId, stackIndex: stack.crates.length, yOffset: dim });
+    top._inStack = true;
+    top._stackLevel = 1;
+    stack.crates.push(top);
+  } else {
+    // Bottom row: 3 crates in a line along X (gridded, centered on wx)
+    for(let i = -1; i <= 1; i++) {
+      const cx = wx + i * (dim + gap);
+      const c = spawnCrate(cx, wz, size, { stackId, stackIndex: stack.crates.length, yOffset: 0 });
+      c._inStack = true;
+      c._stackLevel = 0;
+      stack.crates.push(c);
+    }
+    // Middle row: 2 crates centered above the bottom row gaps
+    for(let i = -0.5; i <= 0.5; i++) {
+      const cx = wx + i * (dim + gap);
+      const c = spawnCrate(cx, wz, size, { stackId, stackIndex: stack.crates.length, yOffset: dim });
+      c._inStack = true;
+      c._stackLevel = 1;
+      stack.crates.push(c);
+    }
+    // Top crate
+    const top = spawnCrate(wx, wz, size, { stackId, stackIndex: stack.crates.length, yOffset: dim * 2 });
+    top._inStack = true;
+    top._stackLevel = 2;
+    stack.crates.push(top);
+  }
+  return stack;
+}
+
+// Spawn a teetering tower (N-tall single column, N = 3..5).
+// v0.22a5: towers also use _inStack now (in addition to _inTower for
+// the teeter logic). _inStack = "this crate is locked, skip integration".
+function spawnCrateTower(wx, wz, size, height) {
+  height = Math.max(3, Math.min(5, height|0));
+  const stackId = 'tower_' + (++G._stackIdCounter);
+  const stack = { id: stackId, formation: 'tower', size, crates: [],
+                  topple: { active: false, dir: {x:0,z:0}, t: 0 },
+                  centerX: wx, centerZ: wz, towerHeight: height };
+  G._crateStacks.push(stack);
+  const dim = size * 2;
+  for(let i = 0; i < height; i++) {
+    const c = spawnCrate(wx, wz, size, { stackId, stackIndex: i, yOffset: dim * i });
+    c._inTower = true;
+    c._inStack = true;
+    c._towerLevel = i;
+    c._stackLevel = i;
+    stack.crates.push(c);
+  }
+  return stack;
+}
+
+if(typeof G !== 'undefined' && G._stackIdCounter == null) G._stackIdCounter = 0;
+
+// Find crates within radius — used by explosion/projectile destruction.
+// Returns hit records compatible with destroyObstacles().
+function collectCratesInRadius(cx, cz, blastR) {
+  const hits = [];
+  if(!G.crates) return hits;
+  for(const cr of G.crates) {
+    if(cr._destroyed) continue;
+    const d = Math.hypot(cx - cr.wx, cz - cr.wz);
+    if(d <= blastR + cr.size) {
+      hits.push({
+        wx: cr.wx, wz: cr.wz, type: 'crate',
+        physRef: cr, meshes: cr.group ? [cr.group] : [],
+      });
+    }
+  }
+  return hits;
+}
+
+// ─────────────────────────────────────────────────────
+// Crate destruction + drops
+// ─────────────────────────────────────────────────────
+
+// Roll a drop. Returns null (no drop), or { kind: 'coin5' | 'heart' | 'voucher' }.
+function _rollCrateDrop() {
+  if(Math.random() >= CRATE_DROP_CHANCE) return null;
+  const r = Math.random();
+  if(r < CRATE_DROP_COIN_CUTOFF) return { kind: 'coin5' };
+  if(r < CRATE_DROP_HEART_CUTOFF) return { kind: 'heart' };
+  return { kind: 'voucher' };
+}
+
+// Spawn a drop pickup at (wx, wz). If autoCollect = true (iron ball
+// smashed the crate), the drop is consumed instantly with a toast.
+function spawnCrateDrop(wx, wz, drop, autoCollect) {
+  if(!drop) return;
+  if(autoCollect) {
+    // Apply the effect immediately + show a toast
+    if(drop.kind === 'coin5') {
+      G.coins = (G.coins || 0) + 5;
+      if(typeof updateCoinHUD === 'function') updateCoinHUD();
+      showToast('🎁 +5 coins (smashed)!', 1100);
+    } else if(drop.kind === 'heart') {
+      const heal = (typeof getPerkField === 'function') ? getPerkField('extra_heart','heartHeal',2) : 2;
+      const actual = Math.min(heal, (G.hpMax || 10) - (G.hp || 0));
+      if(actual > 0) {
+        G.hp = Math.min(G.hpMax || 10, (G.hp || 0) + actual);
+        if(typeof spawnHpHealPopup === 'function') spawnHpHealPopup(actual);
+        showToast(`🎁 💖 +${actual} HP (smashed)!`, 1100);
+        if(typeof updateUI === 'function') updateUI();
+      } else {
+        showToast('🎁 💖 Full HP! (smashed)', 900);
+      }
+    } else if(drop.kind === 'voucher') {
+      G._holeUpgradeVouchers = (G._holeUpgradeVouchers || 0) + 1;
+      showToast('🎁 🔧 UPGRADE VOUCHER (smashed)!', 1700);
+      if(typeof spawnCrateDropToast === 'function') spawnCrateDropToast(wx, wz, 'voucher');
+    }
+    if(typeof playCrateDropChime === 'function') playCrateDropChime(drop.kind);
+    return;
+  }
+  // Otherwise: spawn a physical pickup at the crate position. Player must
+  // roll over it to collect. Flag with type for the existing pickup loops
+  // to grant the right reward.
+  const baseY = (G.heightMap && G.heightMap.length) ? getTerrainHeight(wx, wz) : 0;
+  const y = baseY + FLOOR_H/2 + 0.30;
+  let group, mesh, glowMesh;
+  if(drop.kind === 'coin5') {
+    // Reuse the 5-coin appearance — gold cylinder with "5" face label.
+    const _coinWorldS = (typeof TILE_SIZE === 'number' && typeof TILE_SIZE_BASE === 'number')
+      ? (TILE_SIZE / TILE_SIZE_BASE) : 1.0;
+    const denom = (() => {
+      const c = document.createElement('canvas'); c.width = c.height = 128;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#ffd700'; ctx.fillRect(0,0,128,128);
+      ctx.strokeStyle = '#cc8800'; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.arc(64,64,52,0,Math.PI*2); ctx.stroke();
+      ctx.fillStyle = '#8a4a00'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = 'bold 64px Inter, sans-serif'; ctx.fillText('5', 64, 64);
+      return new THREE.CanvasTexture(c);
+    })();
+    const sideMat = new THREE.MeshStandardMaterial({ color:0xffeedd, roughness:0.01, metalness:1.0, emissive:0xffcc44, emissiveIntensity:1.2 });
+    const faceMat = new THREE.MeshStandardMaterial({ map: denom, roughness:0.18, metalness:0.85, emissive:0xffaa00, emissiveIntensity:0.4 });
+    const coinGeo = new THREE.CylinderGeometry(0.18*_coinWorldS, 0.18*_coinWorldS, 0.07*_coinWorldS, 16);
+    mesh = new THREE.Mesh(coinGeo, [sideMat, faceMat, faceMat]);
+    mesh.rotation.x = Math.PI/2;
+    mesh.scale.setScalar(1.6);
+    group = new THREE.Group();
+    group.add(mesh);
+    group.userData.noOutline = true;
+    // Glow disc
+    glowMesh = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.45*_coinWorldS, 0.45*_coinWorldS, 0.02*_coinWorldS, 16),
+      new THREE.MeshStandardMaterial({ color:0xffee55, transparent:true, opacity:0.7, emissive:0xffcc00, emissiveIntensity:3.0, depthWrite:false })
+    );
+    glowMesh.rotation.x = Math.PI/2;
+    glowMesh.userData.noOutline = true;
+  } else if(drop.kind === 'heart') {
+    // Pink heart — reuse heart construction style
+    const heartMat = new THREE.MeshStandardMaterial({ color:0xff5588, emissive:0xff3366, emissiveIntensity:0.85, roughness:0.4 });
+    group = new THREE.Group();
+    const lobeR = 0.16;
+    const l = new THREE.Mesh(new THREE.SphereGeometry(lobeR, 10, 8), heartMat); l.position.set(-0.13, 0.05, 0); group.add(l);
+    const r = new THREE.Mesh(new THREE.SphereGeometry(lobeR, 10, 8), heartMat); r.position.set( 0.13, 0.05, 0); group.add(r);
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(0.20, 0.28, 10), heartMat); cone.position.y = -0.18; cone.rotation.x = Math.PI; group.add(cone);
+    group.userData.noOutline = true;
+    mesh = group;
+    glowMesh = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.40, 0.40, 0.02, 16),
+      new THREE.MeshStandardMaterial({ color:0xff77aa, transparent:true, opacity:0.7, emissive:0xff4477, emissiveIntensity:2.5, depthWrite:false })
+    );
+    glowMesh.rotation.x = Math.PI/2;
+    glowMesh.userData.noOutline = true;
+  } else {
+    // Upgrade voucher — golden wrench/tool icon. Use an emoji-on-quad approach.
+    const c = document.createElement('canvas'); c.width = c.height = 256;
+    const cctx = c.getContext('2d');
+    cctx.fillStyle = 'rgba(0,0,0,0)'; cctx.fillRect(0,0,256,256);
+    cctx.font = '180px Inter, sans-serif'; cctx.textAlign = 'center'; cctx.textBaseline = 'middle';
+    cctx.fillText('🔧', 128, 140);
+    const tex = new THREE.CanvasTexture(c);
+    const planeMat = new THREE.MeshBasicMaterial({ map: tex, transparent:true, depthWrite:false });
+    const plane = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.7), planeMat);
+    plane.userData.noOutline = true;
+    group = new THREE.Group();
+    group.add(plane);
+    group.userData.noOutline = true;
+    mesh = plane;
+    glowMesh = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.55, 0.55, 0.02, 16),
+      new THREE.MeshStandardMaterial({ color:0xffd750, transparent:true, opacity:0.85, emissive:0xffaa22, emissiveIntensity:4.0, depthWrite:false })
+    );
+    glowMesh.rotation.x = Math.PI/2;
+    glowMesh.userData.noOutline = true;
+  }
+  group.position.set(wx, y, wz);
+  if(glowMesh) glowMesh.position.set(wx, y - 0.25, wz);
+  if(G.courseGroup) {
+    G.courseGroup.add(group);
+    if(glowMesh) G.courseGroup.add(glowMesh);
+  }
+  const dropRec = {
+    kind: drop.kind,
+    wx, wz, y, baseY: y,
+    group, mesh, glowMesh,
+    collected: false,
+    bobOffset: Math.random() * Math.PI * 2,
+    spinSpeed: drop.kind === 'voucher' ? 2.5 : 4.5,
+  };
+  if(!G._crateDrops) G._crateDrops = [];
+  G._crateDrops.push(dropRec);
+  // Triumphant SFX + world-space toast at drop spawn time
+  if(typeof playCrateDropChime === 'function') playCrateDropChime(drop.kind);
+  if(typeof spawnCrateDropToast === 'function') spawnCrateDropToast(wx, wz, drop.kind);
+}
+
+// World-space "CRATE DROP!" floating text. Uses a CSS DOM element
+// projected to screen each frame from the world position. Lives ~1.4s.
+function spawnCrateDropToast(wx, wz, kind) {
+  const el = document.createElement('div');
+  el.className = 'crate-drop-toast';
+  let label, color;
+  if(kind === 'coin5')        { label = '🎁 +5 COINS';      color = '#ffd750'; }
+  else if(kind === 'heart')   { label = '🎁 +HEART';        color = '#ff77aa'; }
+  else                        { label = '🎁 UPGRADE TOKEN!'; color = '#ffe066'; }
+  el.textContent = label;
+  el.style.cssText = `
+    position:fixed; left:0; top:0;
+    transform:translate(-50%,-50%);
+    font-family:'Inter',sans-serif; font-weight:900;
+    font-size:${kind === 'voucher' ? '1.4rem' : '1.1rem'};
+    color:${color};
+    text-shadow: 0 2px 8px rgba(0,0,0,0.8), 0 0 16px ${color};
+    pointer-events:none; z-index:120;
+    transition:opacity 0.4s ease-out, transform 0.4s ease-out;
+    opacity:0;
+    letter-spacing: 1.5px;
+  `;
+  document.body.appendChild(el);
+  // Project world to screen each frame for ~1.4s
+  const startT = performance.now();
+  const DUR = kind === 'voucher' ? 2000 : 1400;
+  const v3 = new THREE.Vector3(wx, 1.2, wz);
+  const project = () => {
+    const elapsed = performance.now() - startT;
+    if(elapsed >= DUR || !el.parentNode) {
+      if(el.parentNode) el.parentNode.removeChild(el);
+      return;
+    }
+    if(typeof camera !== 'undefined' && camera) {
+      const tmp = v3.clone();
+      // Float upward over time
+      tmp.y = 1.2 + (elapsed / DUR) * 1.4;
+      tmp.project(camera);
+      const sx = (tmp.x * 0.5 + 0.5) * window.innerWidth;
+      const sy = (-tmp.y * 0.5 + 0.5) * window.innerHeight;
+      el.style.left = sx + 'px';
+      el.style.top = sy + 'px';
+      // Fade in then hold then fade out
+      let opacity = 1;
+      if(elapsed < 200) opacity = elapsed / 200;
+      else if(elapsed > DUR - 400) opacity = (DUR - elapsed) / 400;
+      el.style.opacity = opacity;
+    }
+    requestAnimationFrame(project);
+  };
+  requestAnimationFrame(project);
+}
+
+// Triumphant 3-note arpeggio chime for crate drops. Voucher gets a 4th
+// magical sparkle layer.
+function playCrateDropChime(kind) {
+  if(!AC) return;
+  try {
+    const ac = getAC(), t = ac.currentTime;
+    const isVoucher = (kind === 'voucher');
+    // Major arpeggio: C5, E5, G5, [C6 for voucher]
+    const notes = isVoucher ? [523, 659, 784, 1047] : [523, 659, 784];
+    notes.forEach((f, i) => {
+      const o = ac.createOscillator();
+      o.type = isVoucher ? 'sine' : 'triangle';
+      o.frequency.setValueAtTime(f, t + i * 0.07);
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0, t + i * 0.07);
+      g.gain.linearRampToValueAtTime(isVoucher ? 0.18 : 0.14, t + i * 0.07 + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.07 + 0.32);
+      o.connect(g); g.connect(getACDest());
+      o.start(t + i * 0.07); o.stop(t + i * 0.07 + 0.36);
+    });
+    // Voucher: extra shimmer (high noise burst with bandpass filter)
+    if(isVoucher) {
+      const bufLen = 0.4 * ac.sampleRate;
+      const buf = ac.createBuffer(1, bufLen, ac.sampleRate);
+      const data = buf.getChannelData(0);
+      for(let i = 0; i < bufLen; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / bufLen);
+      const src = ac.createBufferSource(); src.buffer = buf;
+      const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 6500; bp.Q.value = 4;
+      const sg = ac.createGain(); sg.gain.value = 0.10;
+      src.connect(bp); bp.connect(sg); sg.connect(getACDest());
+      src.start(t + 0.05);
+    }
+  } catch(e) {}
+}
+
+// Destroy a crate (called by projectile/explosion/iron-ball pipeline).
+// Spawns a wood-splinter explosion + rolls a drop. autoCollect=true for
+// iron-ball-smashed crates (drops auto-collected with toast).
+function destroyCrate(crate, autoCollect, ironBallSmashed) {
+  if(!crate || crate._destroyed) return;
+  crate._destroyed = true;
+  // Remove mesh from scene
+  if(crate.group && crate.group.parent) crate.group.parent.remove(crate.group);
+  // Splintery wood-style explosion FX
+  if(typeof spawnExplosion === 'function') {
+    spawnExplosion(crate.wx, crate.y, crate.wz, 0.8);
+  }
+  // Wood splinter particles
+  for(let i = 0; i < 8; i++) {
+    const sg = new THREE.BoxGeometry(0.10, 0.04, 0.04);
+    const sm = new THREE.Mesh(sg, new THREE.MeshStandardMaterial({
+      color: 0x8a5a30, roughness: 0.9
+    }));
+    sm.position.set(crate.wx, crate.y, crate.wz);
+    sm.userData.noOutline = true;
+    if(scene) scene.add(sm);
+    if(G.particles) {
+      G.particles.push({
+        mesh: sm,
+        vel: new THREE.Vector3(
+          (Math.random() - 0.5) * 6,
+          1.5 + Math.random() * 3,
+          (Math.random() - 0.5) * 6
+        ),
+        life: 0.6 + Math.random() * 0.4, maxLife: 1.0,
+        gravity: -8,
+      });
+    }
+  }
+  if(AC) {
+    try {
+      const ac = getAC(), t = ac.currentTime;
+      // Wood crack thud
+      const o = ac.createOscillator(); o.type = 'square';
+      o.frequency.setValueAtTime(180, t);
+      o.frequency.exponentialRampToValueAtTime(60, t + 0.15);
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.3, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+      o.connect(g); g.connect(getACDest()); o.start(t); o.stop(t + 0.2);
+      // Splinter noise burst
+      const bufLen = 0.18 * ac.sampleRate;
+      const buf = ac.createBuffer(1, bufLen, ac.sampleRate);
+      const data = buf.getChannelData(0);
+      for(let i = 0; i < bufLen; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / bufLen) * 0.7;
+      const src = ac.createBufferSource(); src.buffer = buf;
+      const hp = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1500;
+      const sg = ac.createGain(); sg.gain.value = 0.18;
+      src.connect(hp); hp.connect(sg); sg.connect(getACDest()); src.start(t);
+    } catch(e) {}
+  }
+  // Style event + counters
+  if(typeof recordStyleEvent === 'function') recordStyleEvent('obstacle_destroyed');
+  G.coins = (G.coins || 0) + 1;
+  if(typeof updateCoinHUD === 'function') updateCoinHUD();
+  // If part of a stack, mark the stack for chain-collapse
+  if(crate.stackId) {
+    _onStackCrateDestroyed(crate);
+  }
+  // Roll a drop
+  const drop = _rollCrateDrop();
+  if(drop) {
+    spawnCrateDrop(crate.wx, crate.wz, drop, !!autoCollect);
+  }
+}
+
+// v0.22a5: when a stacked crate is HIT (but not destroyed) by ball or
+// projectile, release the whole stack from its locked state so the
+// physics simulation kicks in and the structure collapses naturally.
+// Each crate gets a small randomized upward+outward kick scaled by
+// distance from the impact site, plus stagger delays so the collapse
+// reads as a chain reaction rather than a simultaneous explosion.
+function _onStackCrateImpacted(impactedCrate) {
+  if(!G._crateStacks || !impactedCrate) return;
+  const stack = G._crateStacks.find(s => s.id === impactedCrate.stackId);
+  if(!stack) return;
+  // Already toppling? Don't re-trigger.
+  if(stack.topple && stack.topple.active) return;
+  if(stack.topple) stack.topple.active = true;
+
+  const ix = impactedCrate.wx, iz = impactedCrate.wz, iy = impactedCrate.y;
+  for(const cr of stack.crates) {
+    if(cr._destroyed) continue;
+    if(cr === impactedCrate) continue; // already released by caller
+    if(!cr._inStack) continue;          // already loose (e.g. mid-collapse)
+
+    const dx = cr.wx - ix;
+    const dz = cr.wz - iz;
+    const dy = cr.y - iy;
+    const horizDist = Math.hypot(dx, dz) || 0.01;
+    // Above-impact crates: bigger kick, fall down toward gap. Same-level
+    // neighbors: small lateral nudge. Below-impact crates: barely
+    // affected (they're supporting the weight, ride out the tremor).
+    const isAbove = dy > impactedCrate.size * 0.5;
+    const isSameLevel = Math.abs(dy) <= impactedCrate.size * 0.5;
+
+    let kickDelay = 0;
+    if(isAbove) {
+      // Higher = later. Approximate "wave traveling up the stack".
+      kickDelay = Math.max(0, dy / impactedCrate.size) * 50;
+    } else if(isSameLevel) {
+      kickDelay = 30 + horizDist * 20;
+    }
+
+    setTimeout(() => {
+      if(cr._destroyed) return;
+      cr._inStack = false;
+      cr._inTower = false;
+      if(isAbove) {
+        // Above: random tumble + slight outward drift
+        cr.vx += (dx / horizDist) * (1.0 + Math.random() * 1.2);
+        cr.vz += (dz / horizDist) * (1.0 + Math.random() * 1.2);
+        cr.vy += 0.4 + Math.random() * 0.8;
+        cr.angleVel += (Math.random() - 0.5) * 5;
+        cr.pitchVel = (cr.pitchVel || 0) + (Math.random() - 0.5) * 4;
+        cr.rollVel  = (cr.rollVel  || 0) + (Math.random() - 0.5) * 4;
+      } else if(isSameLevel) {
+        // Same level: nudged outward, slight rotation
+        cr.vx += (dx / horizDist) * (0.6 + Math.random() * 0.8);
+        cr.vz += (dz / horizDist) * (0.6 + Math.random() * 0.8);
+        cr.vy += 0.2;
+        cr.angleVel += (Math.random() - 0.5) * 2;
+        cr.pitchVel = (cr.pitchVel || 0) + (Math.random() - 0.5) * 1.5;
+        cr.rollVel  = (cr.rollVel  || 0) + (Math.random() - 0.5) * 1.5;
+      } else {
+        // Below: minimal — just unlock and let gravity hold
+        cr.angleVel += (Math.random() - 0.5) * 0.5;
+      }
+    }, kickDelay);
+  }
+}
+
+// When a crate inside a stack is destroyed, propagate to remaining stack
+// crates. Pyramid: gravity drops the row above. Tower: levels above
+// the destroyed crate inherit a tilt + tumble velocity.
+function _onStackCrateDestroyed(crate) {
+  if(!G._crateStacks) return;
+  const stack = G._crateStacks.find(s => s.id === crate.stackId);
+  if(!stack) return;
+  if(stack.formation === 'tower') {
+    // Tower: levels above the destroyed one tip over in a random direction.
+    // Stagger by 60ms per level so it reads as a chain.
+    const destroyedLevel = crate._towerLevel | 0;
+    const tipDirX = (Math.random() - 0.5) * 2;
+    const tipDirZ = (Math.random() - 0.5) * 2;
+    const tipLen = Math.hypot(tipDirX, tipDirZ) || 1;
+    const tDx = tipDirX / tipLen, tDz = tipDirZ / tipLen;
+    for(const cr of stack.crates) {
+      if(cr._destroyed) continue;
+      if((cr._towerLevel | 0) > destroyedLevel) {
+        const delay = ((cr._towerLevel | 0) - destroyedLevel) * 60;
+        setTimeout(() => {
+          if(cr._destroyed) return;
+          // Inherit a horizontal kick + slight upward bounce — the higher,
+          // the more energy.
+          const heightAbove = ((cr._towerLevel | 0) - destroyedLevel);
+          cr.vx += tDx * (1.5 + heightAbove * 1.0);
+          cr.vz += tDz * (1.5 + heightAbove * 1.0);
+          cr.vy += 1.2 + heightAbove * 0.4;
+          cr.angleVel += (Math.random() - 0.5) * 6;
+          cr._inTower = false; // detach from tower stacking constraint
+          cr._inStack = false; // v0.22a5: release physics lock
+          cr._towerLevel = -1;
+        }, delay);
+      }
+    }
+    stack.topple.active = true;
+  } else if(stack.formation === 'pyramid') {
+    // Pyramid: when a base crate dies, the supported crate above tumbles.
+    // Cheap heuristic: any non-destroyed crate above (higher Y) gets a
+    // small kick toward the gap. Plus side neighbors at same level
+    // tumble inward toward the gap.
+    // v0.22a5: also release _inStack so the kicked crates start
+    // integrating again — without this, the lock would keep them
+    // frozen in mid-air.
+    setTimeout(() => {
+      for(const cr of stack.crates) {
+        if(cr._destroyed) continue;
+        // Crates above the destroyed one OR adjacent at same level
+        const dy = cr.y - crate.y;
+        const dxFromDestroyed = cr.wx - crate.wx;
+        const dzFromDestroyed = cr.wz - crate.wz;
+        const horizDist = Math.hypot(dxFromDestroyed, dzFromDestroyed);
+        // Above (higher y) → falls into gap
+        // Same level (dy ≈ 0) and within ~2× size horizontally → bumped slightly
+        if(dy > crate.size * 1.2 || horizDist < crate.size * 2.5) {
+          const d = horizDist || 0.01;
+          cr.vx += (dxFromDestroyed / d) * 1.5 + (Math.random() - 0.5) * 0.6;
+          cr.vz += (dzFromDestroyed / d) * 1.5 + (Math.random() - 0.5) * 0.6;
+          cr.vy += dy > crate.size ? 0.6 : 0.2;
+          cr.angleVel += (Math.random() - 0.5) * 4;
+          cr.pitchVel = (cr.pitchVel || 0) + (Math.random() - 0.5) * 2;
+          cr.rollVel  = (cr.rollVel  || 0) + (Math.random() - 0.5) * 2;
+          cr._inTower = false;
+          cr._inStack = false; // release physics lock
+        }
+      }
+    }, 80);
+  }
+}
+
+// ─────────────────────────────────────────────────────
+// Per-frame crate physics. Runs after obstacle motion and before ball
+// collision — order matters because the at-rest-ball logic in spin bars /
+// slide blocks should resolve against current crate positions.
+// ─────────────────────────────────────────────────────
+function updateCratePhysics(dt) {
+  if(!G.crates || !G.crates.length) return;
+  // Cap dt so a paused tab + resume doesn't shotput crates off the level
+  const _dt = Math.min(0.05, dt);
+
+  // ── 1. Tower teeter — passive sway when standing still ──
+  if(G._crateStacks) {
+    const t = performance.now() * 0.001;
+    for(const stack of G._crateStacks) {
+      if(stack.formation !== 'tower') continue;
+      if(stack.topple.active) continue;
+      // Sum of un-destroyed crates in this stack still "in tower" formation
+      let activeTowerCount = 0;
+      for(const cr of stack.crates) if(!cr._destroyed && cr._inTower) activeTowerCount++;
+      if(activeTowerCount < 2) continue;
+      // Apply sway: each level above the base gets a proportional offset
+      for(const cr of stack.crates) {
+        if(cr._destroyed || !cr._inTower) continue;
+        const lvl = cr._towerLevel | 0;
+        if(lvl === 0) continue; // base doesn't sway
+        const ampX = TOWER_TEETER_AMPLITUDE * lvl * stack.size * 4;
+        const ampZ = TOWER_TEETER_AMPLITUDE * lvl * stack.size * 4 * 0.7;
+        const phase = stack.id.length * 0.1; // unique phase per stack
+        // Apply a tiny lateral shift to the crate position so the visual
+        // is a sway, not a rotation. Cleared each frame via the base offset.
+        cr._teeterDx = Math.sin(t * TOWER_TEETER_FREQ + phase) * ampX;
+        cr._teeterDz = Math.cos(t * TOWER_TEETER_FREQ * 0.8 + phase) * ampZ;
+      }
+    }
+  }
+
+  // ── 2. Integrate dynamic crates (those with velocity) ──
+  for(const cr of G.crates) {
+    if(cr._destroyed) continue;
+    // v0.22a5: locked stack crates (pyramids + towers) skip integration
+    // until impacted. The _inStack flag is set at spawn and cleared on
+    // ball/projectile/blast contact OR when the stack collapse path
+    // releases them. Without this, vertically-stacked crates fall
+    // through each other (crate-vs-crate collision skips Y-separated
+    // pairs) and the stack disintegrates into a horizontal line at
+    // frame 1. Per Adam: "Maybe make stacks and pyramids 'locked'
+    // until the player touches them?"
+    if(cr._inStack) continue;
+
+    // v0.22a7: compute ground level FIRST so air vs grounded friction
+    // can be applied differently. Per Adam: "the first 75% of the arc
+    // usually looks fine but then the box's airborne momentum will
+    // often come to a sudden stop before it falls down to the ground."
+    //
+    // Root cause: friction (Math.pow(0.94, dt*60)) was running every
+    // frame regardless of whether the crate was on the ground. A crate
+    // mid-air would lose ~97% of its horizontal velocity in 1 second,
+    // killing the arc before gravity could finish bringing it down.
+    // Real-world: airborne objects only lose to air drag (negligible).
+    // Now: full friction only when grounded; minimal drag when airborne.
+    const baseY = (G.heightMap && G.heightMap.length) ? getTerrainHeight(cr.wx, cr.wz) : 0;
+    const floorY = baseY + FLOOR_H/2 + cr.size;
+    const isAirborne = cr.y > floorY + 0.05;
+
+    // Apply gravity + appropriate friction
+    cr.vy += CRATE_GRAVITY * _dt;
+    if(isAirborne) {
+      // Air drag — very small, just enough to bleed extreme spins/throws.
+      // Was 0.94 (lost 97%/sec); now 0.995 (lost ~26%/sec).
+      cr.vx *= Math.pow(0.995, _dt * 60);
+      cr.vz *= Math.pow(0.995, _dt * 60);
+    } else {
+      // Ground friction — full effect, lets sliding crates settle.
+      cr.vx *= Math.pow(CRATE_FRICTION, _dt * 60);
+      cr.vz *= Math.pow(CRATE_FRICTION, _dt * 60);
+    }
+    // v0.22a2: angular velocity decays slower (0.92 → 0.96) so the crate
+    // keeps tumbling visibly while it slides — was settling too fast.
+    // v0.22a7: also lighter angular damp when airborne so tumbles
+    // continue cleanly through the whole arc.
+    const angDamp = isAirborne ? 0.99 : 0.96;
+    cr.angleVel *= Math.pow(angDamp, _dt * 60);
+    cr.pitchVel = (cr.pitchVel || 0) * Math.pow(angDamp, _dt * 60);
+    cr.rollVel  = (cr.rollVel  || 0) * Math.pow(angDamp, _dt * 60);
+
+    // Integrate position. v0.22a2: XZ runs at CRATE_TIME_SCALE so
+    // crates translate slower than the rest of the world. Y (gravity) and
+    // angular velocity stay at 1× — the crate hangs in the air longer
+    // and spins fast while moving slow, reading as heavy-and-tumbly.
+    cr.wx += cr.vx * _dt * CRATE_TIME_SCALE;
+    cr.wz += cr.vz * _dt * CRATE_TIME_SCALE;
+    cr.y  += cr.vy * _dt;
+    cr.angle += cr.angleVel * _dt;
+    cr.pitch = (cr.pitch || 0) + (cr.pitchVel || 0) * _dt;
+    cr.roll  = (cr.roll  || 0) + (cr.rollVel  || 0) * _dt;
+
+    // Ground clamp uses the floorY we already computed above
+    if(cr.y <= floorY) {
+      cr.y = floorY;
+      if(cr.vy < -0.3) {
+        // v0.22a2: corner-strike redirection. If the crate has noticeable
+        // pitch/roll velocity when it hits the ground, it's mid-tumble
+        // and would bounce off a CORNER, not the flat bottom face. Real-
+        // world result: the bounce deflects sideways. We simulate that
+        // by converting some downward Y velocity into XZ velocity in the
+        // direction the crate is rotating. Cheap, sells the visual.
+        // v0.22a4: also damp pitch/roll accumulation a bit during the
+        // bounce — without this, a crate could bounce flat repeatedly
+        // while preserving its 30° pitch and never reach the settle
+        // pass at non-zero vy. Damping at each bounce ensures the
+        // pitch trends back toward π/2 multiples even mid-bounce.
+        const tumbleMag = Math.hypot(cr.pitchVel || 0, cr.rollVel || 0);
+        if(tumbleMag > 1.0) {                                    // v0.22a4: 1.5 → 1.0
+          // Pitch axis rotates in XZ via pitch around X — so positive
+          // pitchVel means crate spins forward, contact point lands
+          // ahead, deflects backward. Roll around Z deflects sideways.
+          // Simplification: deflect in -X direction proportional to
+          // pitchVel, +Z to rollVel.
+          const deflectMag = Math.min(6, Math.abs(cr.vy) * 0.4);
+          // Choose deflection direction from existing motion when possible,
+          // else pure pitch/roll axes
+          const speed = Math.hypot(cr.vx, cr.vz);
+          let dDx, dDz;
+          if(speed > 0.5) {
+            // Continue in current motion direction with kick added
+            dDx = cr.vx / speed; dDz = cr.vz / speed;
+          } else {
+            // Pure pitch → +X, pure roll → +Z; sign random for chaos
+            dDx = (cr.pitchVel || 0) * 0.5 + (Math.random() - 0.5) * 1;
+            dDz = (cr.rollVel  || 0) * 0.5 + (Math.random() - 0.5) * 1;
+            const m = Math.hypot(dDx, dDz) || 1;
+            dDx /= m; dDz /= m;
+          }
+          cr.vx += dDx * deflectMag;
+          cr.vz += dDz * deflectMag;
+          // Eat half the upward bounce to "spend" the energy on the deflect
+          cr.vy = -cr.vy * CRATE_BOUNCE_RESTITUTION * 0.6;
+          // Crate also picks up new spin from the corner impact
+          cr.angleVel += (Math.random() - 0.5) * 4;
+          cr.pitchVel *= -0.4; cr.rollVel *= -0.4;
+        } else {
+          // Flat-on bounce — standard reflection
+          cr.vy = -cr.vy * CRATE_BOUNCE_RESTITUTION;
+          // v0.22a4: also damp angular velocity during a flat bounce so
+          // landing crates progressively settle their rotation rather
+          // than preserving it across multiple bounces.
+          cr.pitchVel *= 0.65;
+          cr.rollVel  *= 0.65;
+          cr.angleVel *= 0.85;
+        }
+        // Ground impact thunk
+        if(AC && Math.abs(cr.vy) > 1.5) {
+          try {
+            const ac = getAC(), tt = ac.currentTime;
+            const o = ac.createOscillator(); o.type='sine';
+            o.frequency.setValueAtTime(120, tt);
+            o.frequency.exponentialRampToValueAtTime(50, tt + 0.10);
+            const g = ac.createGain();
+            g.gain.setValueAtTime(0.18, tt);
+            g.gain.exponentialRampToValueAtTime(0.001, tt + 0.12);
+            o.connect(g); g.connect(getACDest()); o.start(tt); o.stop(tt + 0.13);
+          } catch(e){}
+        }
+        // Friction kick on landing
+        cr.vx *= 0.85; cr.vz *= 0.85;
+      } else {
+        cr.vy = 0;
+        // v0.22a4: removed inline pitch/roll snap logic from this
+        // branch. The snap now runs every frame in the settle pass at
+        // the end of the integration loop (see "Settle/rest pass"
+        // below), independent of the bounce branch. This is the fix
+        // for: "crates resting on corners with a face tilted up" —
+        // the old code only snapped when vy was already zero, which
+        // missed the common case of a crate landing with high pitch
+        // velocity and bouncing several times before vy settled.
+        // Per Adam: "they don't come to rest flat on the ground
+        // correctly — the rotation is off (some are angled off the
+        // ground unnaturally)."
+        cr.pitchVel *= 0.85;
+        cr.rollVel *= 0.85;
+        cr.angleVel *= 0.85;
+      }
+    }
+
+    // Wall bounce — perimeter walls + angled walls. Treat crate as an
+    // axis-aligned box matching its current XZ position; reflect velocity.
+    if(G.wallPolylines && G.wallPolylines.length) {
+      for(const poly of G.wallPolylines) {
+        for(let pi = 0; pi < poly.length - 1; pi++) {
+          const ax = poly[pi].x, az = poly[pi].z;
+          const bx = poly[pi+1].x, bz = poly[pi+1].z;
+          const ex = bx - ax, ez = bz - az;
+          const lsq = ex*ex + ez*ez;
+          if(lsq < 0.0001) continue;
+          const tw = Math.max(0, Math.min(1, ((cr.wx - ax)*ex + (cr.wz - az)*ez) / lsq));
+          const cwx = ax + tw*ex, cwz = az + tw*ez;
+          const wdx = cr.wx - cwx, wdz = cr.wz - cwz;
+          const wd = Math.hypot(wdx, wdz);
+          const reach = cr.size + 0.18;
+          if(wd < reach && wd > 0.001) {
+            const wnx = wdx/wd, wnz = wdz/wd;
+            cr.wx += wnx * (reach - wd);
+            cr.wz += wnz * (reach - wd);
+            const dot = cr.vx*wnx + cr.vz*wnz;
+            if(dot < 0) {
+              cr.vx -= (1 + CRATE_BOUNCE_RESTITUTION) * dot * wnx;
+              cr.vz -= (1 + CRATE_BOUNCE_RESTITUTION) * dot * wnz;
+              cr.angleVel += (Math.random() - 0.5) * 2;
+            }
+          }
+        }
+      }
+    }
+    // Angled walls (corner triangles)
+    if(G.angledWalls && G.angledWalls.length) {
+      for(const aw of G.angledWalls) {
+        if(aw._destroyed) continue;
+        for(const edge of aw.edges) {
+          const eax = edge.x0, eaz = edge.z0;
+          const ebx = edge.x1, ebz = edge.z1;
+          const eex = ebx - eax, eez = ebz - eaz;
+          const elsq = eex*eex + eez*eez;
+          if(elsq < 0.0001) continue;
+          const ett = Math.max(0, Math.min(1, ((cr.wx - eax)*eex + (cr.wz - eaz)*eez) / elsq));
+          const ecx = eax + ett*eex, ecz = eaz + ett*eez;
+          const edx = cr.wx - ecx, edz = cr.wz - ecz;
+          const ed = Math.hypot(edx, edz);
+          const reach2 = cr.size + 0.18;
+          if(ed < reach2 && ed > 0.001) {
+            const enx = edx/ed, enz = edz/ed;
+            cr.wx += enx * (reach2 - ed);
+            cr.wz += enz * (reach2 - ed);
+            const dot = cr.vx*enx + cr.vz*enz;
+            if(dot < 0) {
+              cr.vx -= (1 + CRATE_BOUNCE_RESTITUTION) * dot * enx;
+              cr.vz -= (1 + CRATE_BOUNCE_RESTITUTION) * dot * enz;
+            }
+          }
+        }
+      }
+    }
+
+    // Bumper interaction — bumpers reflect crates like they reflect balls.
+    if(G.bumpers && G.bumpers.length) {
+      for(const bmp of G.bumpers) {
+        if(bmp._destroyed) continue;
+        const dx = cr.wx - bmp.wx, dz = cr.wz - bmp.wz;
+        const d = Math.hypot(dx, dz);
+        const reach = (bmp.r || 0.4) + cr.size;
+        if(d < reach && d > 0.001) {
+          const nx = dx/d, nz = dz/d;
+          cr.wx += nx * (reach - d);
+          cr.wz += nz * (reach - d);
+          const dot = cr.vx*nx + cr.vz*nz;
+          // Bumpers add energy on hit (like to balls)
+          if(dot < 0) {
+            const restitution = 1.4 + (bmp.variant === 'power' ? 1.0 : 0);
+            cr.vx -= (1 + restitution) * dot * nx;
+            cr.vz -= (1 + restitution) * dot * nz;
+            cr.angleVel += (Math.random() - 0.5) * 4;
+          }
+        }
+      }
+    }
+
+    // Spin bar interaction — sweeps crates aside. Use the at-rest-ball
+    // logic shape: surface velocity stamped onto the crate.
+    if(G.spinBars && G.spinBars.length) {
+      const _shMul = G._speedHoleMul || 1;
+      for(const bar of G.spinBars) {
+        if(bar._destroyed) continue;
+        const ax = bar.wx + Math.cos(bar.angle) * bar.len;
+        const az = bar.wz - Math.sin(bar.angle) * bar.len;
+        const bx = bar.wx - Math.cos(bar.angle) * bar.len;
+        const bz = bar.wz + Math.sin(bar.angle) * bar.len;
+        const ex = bx - ax, ez = bz - az;
+        const lsq = ex*ex + ez*ez;
+        if(lsq < 0.0001) continue;
+        const tw = Math.max(0, Math.min(1, ((cr.wx - ax)*ex + (cr.wz - az)*ez) / lsq));
+        const cpx = ax + tw*ex, cpz = az + tw*ez;
+        const dx = cr.wx - cpx, dz = cr.wz - cpz;
+        const d = Math.hypot(dx, dz);
+        const reach = cr.size + 0.18;
+        if(d < reach && d > 0.001) {
+          const nx = dx/d, nz = dz/d;
+          cr.wx += nx * (reach - d);
+          cr.wz += nz * (reach - d);
+          const rx = cpx - bar.wx, rz = cpz - bar.wz;
+          const _eff = bar.speed * _shMul;
+          const surfVx = _eff * rz;
+          const surfVz = -_eff * rx;
+          // Stamp surface velocity scaled by crate's mass (heavier moves less)
+          const massScale = 1.0 / cr.mass;
+          cr.vx = surfVx * 0.7 * massScale + cr.vx * 0.3;
+          cr.vz = surfVz * 0.7 * massScale + cr.vz * 0.3;
+          cr.angleVel += (Math.random() - 0.5) * 4;
+        }
+      }
+    }
+
+    // Slide block interaction
+    if(G.slideBlocks && G.slideBlocks.length) {
+      for(const sb of G.slideBlocks) {
+        if(sb._destroyed) continue;
+        const soff = Math.sin(sb.phase || 0) * (sb.range || 0);
+        const sx = sb.wx + (sb.axis === 'X' ? soff : 0);
+        const sz = sb.wz + (sb.axis === 'Z' ? soff : 0);
+        const hw = (sb.halfW || 0.225) + cr.size;
+        const hd = (sb.halfD || 0.225) + cr.size;
+        const dx = cr.wx - sx, dz = cr.wz - sz;
+        if(Math.abs(dx) < hw && Math.abs(dz) < hd) {
+          // Push out on shallowest axis
+          const overlapX = hw - Math.abs(dx);
+          const overlapZ = hd - Math.abs(dz);
+          if(overlapX < overlapZ) {
+            const sign = dx >= 0 ? 1 : -1;
+            cr.wx += sign * overlapX;
+            const pbx = sb._prevX != null ? sb._prevX : sx;
+            const blockVelX = (sx - pbx) / Math.max(0.001, _dt);
+            if(sb.axis === 'X' && Math.abs(blockVelX) > 0.3) {
+              cr.vx = blockVelX * 0.9 / cr.mass;
+            } else if((sign > 0 && cr.vx < 0) || (sign < 0 && cr.vx > 0)) {
+              cr.vx = -cr.vx * CRATE_BOUNCE_RESTITUTION;
+            }
+          } else {
+            const sign = dz >= 0 ? 1 : -1;
+            cr.wz += sign * overlapZ;
+            const pbz = sb._prevZ != null ? sb._prevZ : sz;
+            const blockVelZ = (sz - pbz) / Math.max(0.001, _dt);
+            if(sb.axis === 'Z' && Math.abs(blockVelZ) > 0.3) {
+              cr.vz = blockVelZ * 0.9 / cr.mass;
+            } else if((sign > 0 && cr.vz < 0) || (sign < 0 && cr.vz > 0)) {
+              cr.vz = -cr.vz * CRATE_BOUNCE_RESTITUTION;
+            }
+          }
+          cr.angleVel += (Math.random() - 0.5) * 3;
+        }
+        sb._prevX = sx; sb._prevZ = sz;
+      }
+    }
+
+    // Conveyor drift — v0.22a7 fix: was using wrong schema (wx/wz/halfW/halfD/dirX/dirZ/speed)
+    // which doesn't exist on G.conveyors objects. Real schema is {dvx, dvz, strength,
+    // minX/maxX/minZ/maxZ}. The bad field accesses returned NaN/undefined and the
+    // crate-on-conveyor check silently failed every frame. Per Adam: "The boxes
+    // don't move along the conveyor belts."
+    if(G.conveyors && !G._freezeFrameActive) {
+      for(const cv of G.conveyors) {
+        // AABB check using the conveyor's real bounds (minX..maxX, minZ..maxZ)
+        // expanded by the crate's half-extent for tolerance.
+        if(cr.wx > cv.minX - cr.size && cr.wx < cv.maxX + cr.size &&
+           cr.wz > cv.minZ - cr.size && cr.wz < cv.maxZ + cr.size) {
+          // Push along belt direction. Real schema uses dvx/dvz (already
+          // unit-vector × strength baked in elsewhere) — apply same way
+          // the ball-on-conveyor force does, scaled by 1.5 for crates so
+          // they don't feel sluggish on a belt that pushes the ball
+          // strongly. Mass-scaled so heavier crates drift slower.
+          const conveyorPush = 1.5 / cr.mass;
+          cr.vx += (cv.dvx || 0) * _dt * conveyorPush;
+          cr.vz += (cv.dvz || 0) * _dt * conveyorPush;
+        }
+      }
+    }
+
+    // Fan push — v0.22a7 fix: was using f.range (doesn't exist) and pushing
+    // radially outward instead of along fan's blow direction. Real schema
+    // matches the ball-on-fan code: fan.wx, fan.wz, fan.dx, fan.dz (unit
+    // direction the fan blows toward), fan.coneLen (range), fan.coneHalfAngle
+    // (cone width), fan.strength.
+    if(G.fans && !G._freezeFrameActive) {
+      for(const f of G.fans) {
+        if(f._destroyed) continue;
+        if(!f.coneLen) continue;
+        // Y-gate: only push grounded/near-ground crates. Otherwise mid-air
+        // crates get blasted off-course by overhead fans.
+        const heightAboveTerrain = cr.y - ((G.heightMap && G.heightMap.length) ? getTerrainHeight(cr.wx, cr.wz) : 0);
+        if(heightAboveTerrain > cr.size * 2.5 + 0.6) continue;
+        const toCx = cr.wx - f.wx;
+        const toCz = cr.wz - f.wz;
+        const dist = Math.hypot(toCx, toCz);
+        if(dist < 0.01 || dist > f.coneLen) continue;
+        // Inside cone? Compare to fan's blow direction.
+        const dotDir = (toCx/dist)*f.dx + (toCz/dist)*f.dz;
+        if(dotDir < Math.cos(f.coneHalfAngle)) continue;
+        const falloff = 1 - (dist / f.coneLen);
+        // Push along fan's blow direction (NOT radially) — same as ball.
+        // Mass-scaled so heavier crates drift slower.
+        const force = (f.strength || 4) * falloff / cr.mass;
+        cr.vx += f.dx * force * _dt;
+        cr.vz += f.dz * force * _dt;
+      }
+    }
+
+    // Popup wall — block when up
+    if(G.popupWalls && G.popupWalls.length) {
+      for(const pw of G.popupWalls) {
+        if(pw._destroyed) continue;
+        const upBelt = (pw.currentTopY || 0) > cr.size * 0.5;
+        if(!upBelt) continue;
+        const hw = (pw.halfW || 0.5) + cr.size;
+        const hd = (pw.halfD || 0.5) + cr.size;
+        const dx = cr.wx - pw.wx, dz = cr.wz - pw.wz;
+        if(Math.abs(dx) < hw && Math.abs(dz) < hd) {
+          const overlapX = hw - Math.abs(dx);
+          const overlapZ = hd - Math.abs(dz);
+          if(overlapX < overlapZ) {
+            const sign = dx >= 0 ? 1 : -1;
+            cr.wx += sign * overlapX;
+            if((sign > 0 && cr.vx < 0) || (sign < 0 && cr.vx > 0)) cr.vx = -cr.vx * CRATE_BOUNCE_RESTITUTION;
+          } else {
+            const sign = dz >= 0 ? 1 : -1;
+            cr.wz += sign * overlapZ;
+            if((sign > 0 && cr.vz < 0) || (sign < 0 && cr.vz > 0)) cr.vz = -cr.vz * CRATE_BOUNCE_RESTITUTION;
+          }
+        }
+      }
+    }
+
+    // ── Settle/rest pass (v0.22a4) ──
+    // Independent of the bounce path above. If the crate is near the
+    // ground and moving slowly, apply gradual rotation snap toward the
+    // nearest stable orientation (multiples of π/2 on each axis — the
+    // four flat-faced cube poses).
+    //
+    // Per Adam: "they don't come to rest flat on the ground correctly
+    // — the rotation is off (some are angled off the ground unnaturally)"
+    //
+    // The bug: previously snap only ran in the `else` branch of the
+    // ground-bounce check, meaning crates with non-zero vy never reached
+    // the snap path. A crate with pitch=30° landing flat on its bottom
+    // face would bounce a few times without ever damping the pitch,
+    // then settle visually clipped into the ground at 30°. Now snap
+    // runs every frame as long as the crate is grounded.
+    const _grounded = cr.y <= floorY + 0.10;
+    const _hSpeed = Math.hypot(cr.vx, cr.vz);
+    const _angSpeed = Math.abs(cr.angleVel) + Math.abs(cr.pitchVel || 0) + Math.abs(cr.rollVel || 0);
+    if(_grounded) {
+      // If we're grounded and rotating slowly enough that we should be
+      // settling, ease pitch/roll toward nearest π/2 multiple. Strength
+      // of ease scales with how slow the rotation is — fast tumbles
+      // ignore the pull, slow ones get strong correction.
+      const settleFactor = Math.max(0, 1 - _angSpeed / 4); // 0 when fast, 1 when slow
+      if(settleFactor > 0) {
+        const HALF_PI = Math.PI * 0.5;
+        const _easeToward = (cur, factor) => {
+          // Find nearest π/2 multiple, with shortest-path delta
+          const target = Math.round(cur / HALF_PI) * HALF_PI;
+          let delta = target - cur;
+          // Wrap to [-π, π] for shortest path (avoids 2π unwind)
+          while(delta > Math.PI) delta -= 2 * Math.PI;
+          while(delta < -Math.PI) delta += 2 * Math.PI;
+          // Ease — strength scales with both per-frame factor AND the
+          // slow-rotation gate so we don't fight the player mid-tumble
+          const ease = 0.20 * factor;
+          return cur + delta * ease;
+        };
+        cr.pitch = _easeToward(cr.pitch || 0, settleFactor);
+        cr.roll  = _easeToward(cr.roll  || 0, settleFactor);
+        // Bleed angular velocity faster when settling
+        cr.pitchVel = (cr.pitchVel || 0) * Math.pow(0.75, settleFactor);
+        cr.rollVel  = (cr.rollVel  || 0) * Math.pow(0.75, settleFactor);
+      }
+    }
+
+    // Rest threshold — if velocity is tiny, snap to zero so we don't
+    // micro-jitter forever. v0.22a4: also snap pitch/roll EXACTLY to
+    // the target π/2 multiple to kill any floating-point drift that
+    // could leave the crate visually tilted at rest.
+    const speed = Math.hypot(cr.vx, cr.vz);
+    if(speed < CRATE_REST_THRESHOLD && Math.abs(cr.vy) < 0.4 && cr.y <= floorY + 0.05 && _angSpeed < 0.3) {
+      cr.vx = 0; cr.vz = 0; cr.vy = 0;
+      cr.angleVel = 0;
+      cr.pitchVel = 0;
+      cr.rollVel  = 0;
+      // Hard snap rotations to nearest π/2 — no more drift
+      const HALF_PI = Math.PI * 0.5;
+      cr.pitch = Math.round((cr.pitch || 0) / HALF_PI) * HALF_PI;
+      cr.roll  = Math.round((cr.roll  || 0) / HALF_PI) * HALF_PI;
+    }
+  }
+
+  // ── 3. Crate-vs-crate collisions ──
+  // O(n²) but n is small (typical hole < 12 crates).
+  //
+  // v0.22a6: switched from 2D AABB + Y-separation gate to PROPER 3D
+  // AABB resolution. Per Adam's screenshot showing crates clipping
+  // through each other after a tower collapse:
+  //
+  // The old 2D approach had a fundamental bug. When crate B fell onto
+  // crate A, the Y-gap test (`if(|Δy| > sumSize × 0.9) continue`) was
+  // TRUE while B was still above A, so collision was skipped. Then
+  // gravity kept pulling B down, B's y went BELOW A's top, the gate
+  // passed, and the horizontal AABB pushed B SIDEWAYS into A — never
+  // resolving the Y-axis penetration. Result: crates ended up
+  // interpenetrating with their faces overlapping by ~40%.
+  //
+  // 3D AABB fixes this by resolving on the SHALLOWEST overlap axis.
+  // When B falls onto A from above, the Y overlap is small (just the
+  // amount B has dropped past A's top) while X+Z overlaps are large
+  // (B sits directly above A). Shallowest = Y → push apart on Y →
+  // B lands on top. Once stacked, idle gravity is countered by the
+  // contact resolution every frame, so B stays put.
+  const n = G.crates.length;
+  for(let i = 0; i < n; i++) {
+    const a = G.crates[i];
+    if(a._destroyed || a._inStack) continue;
+    for(let j = i + 1; j < n; j++) {
+      const b = G.crates[j];
+      if(b._destroyed || b._inStack) continue;
+      const dx = b.wx - a.wx;
+      const dy = b.y - a.y;
+      const dz = b.wz - a.wz;
+      const sum = a.size + b.size;
+      const overlapX = sum - Math.abs(dx);
+      const overlapY = sum - Math.abs(dy);
+      const overlapZ = sum - Math.abs(dz);
+      if(overlapX <= 0 || overlapY <= 0 || overlapZ <= 0) continue;
+      // Pick the shallowest axis as the contact normal
+      let nx = 0, ny = 0, nz = 0, pen = 0;
+      if(overlapY <= overlapX && overlapY <= overlapZ) {
+        // Vertical contact — one crate landing on / pushing through another
+        ny = dy >= 0 ? 1 : -1;
+        pen = overlapY;
+      } else if(overlapX <= overlapZ) {
+        nx = dx >= 0 ? 1 : -1;
+        pen = overlapX;
+      } else {
+        nz = dz >= 0 ? 1 : -1;
+        pen = overlapZ;
+      }
+      // Push apart along the contact normal — equal split. b moves +n,
+      // a moves -n. For Y axis we update .y (not .wy — crates use .y).
+      const halfPen = pen * 0.5;
+      if(ny !== 0) {
+        a.y -= ny * halfPen;
+        b.y += ny * halfPen;
+      } else {
+        a.wx -= nx * halfPen; a.wz -= nz * halfPen;
+        b.wx += nx * halfPen; b.wz += nz * halfPen;
+      }
+      // Exchange velocity along the contact normal
+      const va = a.vx*nx + (a.vy||0)*ny + a.vz*nz;
+      const vb = b.vx*nx + (b.vy||0)*ny + b.vz*nz;
+      if(va - vb > 0) { // approaching
+        const totalMass = a.mass + b.mass;
+        const newVa = (va * (a.mass - b.mass) + 2 * b.mass * vb) / totalMass;
+        const newVb = (vb * (b.mass - a.mass) + 2 * a.mass * va) / totalMass;
+        const restitution = ny !== 0 ? 0.10 : CRATE_BOUNCE_RESTITUTION; // very dead bounce on stacking
+        a.vx += (newVa - va) * nx * restitution;
+        a.vz += (newVa - va) * nz * restitution;
+        b.vx += (newVb - vb) * nx * restitution;
+        b.vz += (newVb - vb) * nz * restitution;
+        if(ny !== 0) {
+          a.vy = (a.vy || 0) + (newVa - va) * ny * restitution;
+          b.vy = (b.vy || 0) + (newVb - vb) * ny * restitution;
+          // Stack-landing damp: if the upper crate (whichever has +ny side)
+          // was falling fast, kill most of its remaining vy so it doesn't
+          // jitter against gravity every frame. The shallower the contact,
+          // the more we damp — fast slams still bounce a bit.
+          if(ny > 0) {
+            // b is above a: b just landed on top. Damp b's downward vel.
+            if(b.vy < 0) b.vy *= 0.2;
+          } else {
+            // a is above b: a landed on top. Damp a's downward vel.
+            if(a.vy < 0) a.vy *= 0.2;
+          }
+        }
+        // Tumble — only on horizontal contacts. Stacking should
+        // settle, not start them spinning.
+        if(ny === 0) {
+          const tumbleA = (Math.abs(va - vb)) * 0.3;
+          a.angleVel += (Math.random() - 0.5) * tumbleA;
+          b.angleVel += (Math.random() - 0.5) * tumbleA;
+          a.pitchVel = (a.pitchVel || 0) + (-nz) * tumbleA * 0.5;
+          a.rollVel  = (a.rollVel  || 0) + ( nx) * tumbleA * 0.5;
+          b.pitchVel = (b.pitchVel || 0) + ( nz) * tumbleA * 0.5;
+          b.rollVel  = (b.rollVel  || 0) + (-nx) * tumbleA * 0.5;
+        }
+        // Audible tap — wood-on-wood thunk (quieter than ball-impact)
+        if(AC && Math.abs(va - vb) > 1.0) {
+          try {
+            const ac = getAC(), tt = ac.currentTime;
+            const o = ac.createOscillator(); o.type='sine';
+            o.frequency.setValueAtTime(180, tt);
+            o.frequency.exponentialRampToValueAtTime(80, tt + 0.06);
+            const g = ac.createGain();
+            g.gain.setValueAtTime(0.10, tt);
+            g.gain.exponentialRampToValueAtTime(0.001, tt + 0.08);
+            o.connect(g); g.connect(getACDest()); o.start(tt); o.stop(tt + 0.09);
+          } catch(e){}
+        }
+      }
+    }
+  }
+
+  // ── 4. Sync mesh transforms ──
+  for(const cr of G.crates) {
+    if(cr._destroyed || !cr.group) continue;
+    let renderX = cr.wx, renderZ = cr.wz;
+    if(cr._teeterDx != null) renderX += cr._teeterDx;
+    if(cr._teeterDz != null) renderZ += cr._teeterDz;
+    cr.group.position.set(renderX, cr.y, renderZ);
+    // v0.22a2: apply full 3-axis rotation. Pitch (X), yaw (Y), roll (Z).
+    // Order matters: yaw first, then pitch, then roll, so the crate
+    // tumbles in a way that reads as natural physics rather than gimbal-
+    // locking. Three.js applies in XYZ order by default which matches.
+    cr.group.rotation.y = cr.angle;
+    cr.group.rotation.x = cr.pitch || 0;
+    cr.group.rotation.z = cr.roll  || 0;
+  }
+}
+
 function destroyObstacles(hits, epicentreX, epicentreY, epicentreZ) {
   // Analytics: count every destruction for the current hole (all call sites benefit)
   if(hits && hits.length) G._holeObstaclesDestroyed = (G._holeObstaclesDestroyed||0) + hits.length;
@@ -19204,6 +21476,26 @@ function destroyObstacles(hits, epicentreX, epicentreY, epicentreZ) {
   // Cleared each time fireShot runs.
   if(hits && hits.length) G._swingDestroyCount = (G._swingDestroyCount||0) + hits.length;
   let coinsEarned = 0;
+  // v0.22a: separate crate hits — they have their own destruction pipeline
+  // (wood splinter VFX, drop roll, stack chain-collapse). Route through
+  // destroyCrate and remove from G.crates. autoCollect derived from
+  // whether the ball is currently iron-ball'd (smashed open).
+  const cratesHit = (hits || []).filter(h => h && h.type === 'crate');
+  if(cratesHit.length > 0) {
+    const ironBallActive = !!G._ironBallActive;
+    for(const ch of cratesHit) {
+      if(!ch.physRef) continue;
+      destroyCrate(ch.physRef, ironBallActive, ironBallActive);
+    }
+    if(G.crates) G.crates = G.crates.filter(c => !c._destroyed);
+    coinsEarned += cratesHit.length;
+    // Don't run the rest of destroyObstacles for crate-only hits
+    if(cratesHit.length === hits.length) {
+      return coinsEarned;
+    }
+    // Filter the crates out of the remaining processing
+    hits = hits.filter(h => h.type !== 'crate');
+  }
   for(const hit of hits) {
     // Eject meshes as physics debris
     for(const mesh of hit.meshes) {
@@ -19501,7 +21793,343 @@ function missileInFlightHitCheck(px, pz, missileR = MISSILE_BODY_RADIUS) {
       return { wx:p.wx, wz:p.wz, type:'pendulum', physRef:p, meshes:p.pendGroup?[p.pendGroup]:[] };
     }
   }
+  // v0.22a5: Crates — AABB vs missile circle. Per Adam: "missiles
+  // (and i assume other projectiles) pass through the boxes right
+  // now". The missile flight loop iterates obstacles directly via
+  // this function and was missing the crate type.
+  if(G.crates) for(const cr of G.crates) {
+    if(cr._destroyed) continue;
+    // AABB hit test using crate half-extent + missile body radius
+    const dx = Math.abs(px - cr.wx);
+    const dz = Math.abs(pz - cr.wz);
+    if(dx < cr.size + missileR && dz < cr.size + missileR) {
+      return { wx:cr.wx, wz:cr.wz, type:'crate', physRef:cr, meshes:cr.group?[cr.group]:[] };
+    }
+  }
   return null;
+}
+
+// v0.21k6: MIRV mini-rocket — physics-driven sub-projectile spawned when
+// a parent MIRV missile lands. Each rocket flies along its assigned fan
+// direction with a small initial vertical kick (visible arc), bouncing
+// off walls + corner triangles like a grenade, then explodes on first
+// ground contact OR after a max time. Uses the existing _missileAnim
+// per-rocket pattern but parallel: each sub-rocket runs its own
+// requestAnimationFrame loop independent of the parent.
+//
+//   px, py, pz: parent landing world position
+//   dirX, dirZ: unit fan direction (already normalized by caller)
+//   blastR: explosion radius for this sub-rocket
+function spawnMirvSubRocket(px, py, pz, dirX, dirZ, blastR) {
+  if(!scene) return;
+  // Build a tiny missile mesh — visually distinct from the parent (smaller,
+  // brighter trail). Standard rocket palette with a pulsing emissive head.
+  const rocketGroup = new THREE.Group();
+  const bodyMat = new THREE.MeshStandardMaterial({
+    color: 0xff7733, roughness: 0.35, metalness: 0.4,
+    emissive: 0xff4422, emissiveIntensity: 0.7
+  });
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.07, 0.18, 4, 8), bodyMat);
+  body.rotation.z = Math.PI / 2;
+  rocketGroup.add(body);
+  // Bright trail glow disc
+  const trailMat = new THREE.MeshBasicMaterial({
+    color: 0xffaa55, transparent: true, opacity: 0.7, depthWrite: false
+  });
+  const trail = new THREE.Mesh(new THREE.SphereGeometry(0.14, 6, 4), trailMat);
+  trail.userData.noOutline = true;
+  rocketGroup.add(trail);
+  rocketGroup.userData.noOutline = true;
+  rocketGroup.position.set(px, py + 0.08, pz);
+  scene.add(rocketGroup);
+
+  // Initial flight params: fast horizontal + small upward kick so the
+  // rocket arcs visibly. ~1.2s max flight before forced detonation.
+  const SPEED = 14;
+  const VY0 = 4.5;
+  const G_GRAV = -16;
+  let vx = dirX * SPEED, vz = dirZ * SPEED, vy = VY0;
+  let rx = px, ry = py + 0.08, rz = pz;
+  const startT = performance.now();
+  const MAX_T = 1200; // ms
+  const ROCKET_R = 0.18;
+  let bounceCount = 0;
+  const MAX_BOUNCES = 2;
+  let detonated = false;
+
+  // Tiny launch poof
+  if(typeof spawnHitParticles === 'function') {
+    try { spawnHitParticles(rocketGroup.position); } catch(e){}
+  }
+
+  const detonate = () => {
+    if(detonated) return;
+    detonated = true;
+    if(rocketGroup.parent) rocketGroup.parent.remove(rocketGroup);
+    if(typeof spawnExplosion === 'function') spawnExplosion(rx, ry, rz, 0.85);
+    if(typeof collectObstaclesInRadius === 'function' && typeof destroyObstacles === 'function') {
+      const hits = collectObstaclesInRadius(rx, rz, blastR);
+      if(hits.length > 0) destroyObstacles(hits, rx, ry, rz);
+    }
+    if(typeof destroyWallChunksInRadius === 'function') destroyWallChunksInRadius(rx, rz, blastR);
+    if(typeof triggerShake === 'function') triggerShake('med');
+    // Sub-rocket explosion SFX — same pattern as other booms but a touch
+    // higher pitch so the cluster reads as smaller secondary detonations.
+    if(AC) {
+      try {
+        const ac = getAC(), t = ac.currentTime;
+        const o = ac.createOscillator(); o.type = 'sine';
+        o.frequency.setValueAtTime(280, t);
+        o.frequency.exponentialRampToValueAtTime(80, t + 0.18);
+        const g = ac.createGain();
+        g.gain.setValueAtTime(0.35, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+        o.connect(g); g.connect(getACDest()); o.start(t); o.stop(t + 0.24);
+      } catch(e){}
+    }
+  };
+
+  let lastT = startT;
+  const tick = () => {
+    if(detonated) return;
+    const now = performance.now();
+    const dt = Math.min(0.05, (now - lastT) / 1000);
+    lastT = now;
+    if(now - startT >= MAX_T) { detonate(); return; }
+    // Integrate
+    vy += G_GRAV * dt;
+    rx += vx * dt; rz += vz * dt; ry += vy * dt;
+    // Wall bounce — reuse wallPolylines like a dodgeball
+    if(G.wallPolylines && G.wallPolylines.length) {
+      for(const poly of G.wallPolylines) {
+        for(let pi = 0; pi < poly.length - 1; pi++) {
+          const ax2 = poly[pi].x, az2 = poly[pi].z;
+          const bx2 = poly[pi+1].x, bz2 = poly[pi+1].z;
+          const ex = bx2 - ax2, ez = bz2 - az2;
+          const lsq = ex*ex + ez*ez;
+          if(lsq < 0.0001) continue;
+          const tt = Math.max(0, Math.min(1, ((rx - ax2)*ex + (rz - az2)*ez) / lsq));
+          const cx2 = ax2 + tt*ex, cz2 = az2 + tt*ez;
+          const wdx = rx - cx2, wdz = rz - cz2;
+          const wd = Math.hypot(wdx, wdz);
+          if(wd < ROCKET_R + 0.18 && wd > 0.001) {
+            const wnx = wdx/wd, wnz = wdz/wd;
+            rx += wnx * (ROCKET_R + 0.18 - wd);
+            rz += wnz * (ROCKET_R + 0.18 - wd);
+            const dot = vx*wnx + vz*wnz;
+            if(dot < 0) { vx -= 2*dot*wnx; vz -= 2*dot*wnz; }
+            bounceCount++;
+            if(bounceCount >= MAX_BOUNCES) { detonate(); return; }
+          }
+        }
+      }
+    }
+    // Corner triangle (angledWalls) — same edge schema rules as floomba
+    if(G.angledWalls && G.angledWalls.length) {
+      for(const aw of G.angledWalls) {
+        if(aw._destroyed) continue;
+        for(const edge of aw.edges) {
+          const eax = edge.x0, eaz = edge.z0;
+          const ebx = edge.x1, ebz = edge.z1;
+          const eex = ebx - eax, eez = ebz - eaz;
+          const elsq = eex*eex + eez*eez;
+          if(elsq < 0.0001) continue;
+          const ett = Math.max(0, Math.min(1, ((rx - eax)*eex + (rz - eaz)*eez) / elsq));
+          const ecx = eax + ett*eex, ecz = eaz + ett*eez;
+          const edx = rx - ecx, edz = rz - ecz;
+          const ed = Math.hypot(edx, edz);
+          if(ed < ROCKET_R + 0.18 && ed > 0.001) {
+            const enx = edx/ed, enz = edz/ed;
+            rx += enx * (ROCKET_R + 0.18 - ed);
+            rz += enz * (ROCKET_R + 0.18 - ed);
+            const dot = vx*enx + vz*enz;
+            if(dot < 0) { vx -= 2*dot*enx; vz -= 2*dot*enz; }
+            bounceCount++;
+            if(bounceCount >= MAX_BOUNCES) { detonate(); return; }
+          }
+        }
+      }
+    }
+    // Ground contact → detonate
+    const groundY = G.heightMap && G.heightMap.length ? getTerrainHeight(rx, rz) : 0;
+    const floorY = groundY + FLOOR_H/2 + 0.05;
+    if(ry <= floorY) {
+      ry = floorY;
+      // Allow one ground bounce for visual juice — small upward kick.
+      if(bounceCount === 0 && vy < 0) {
+        vy = Math.abs(vy) * 0.45;
+        bounceCount++;
+      } else {
+        detonate(); return;
+      }
+    }
+    rocketGroup.position.set(rx, ry, rz);
+    // Trail flicker
+    if(trail.material) trail.material.opacity = 0.6 + Math.random() * 0.25;
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+
+// v0.21k6: Cluster Grenade mini-grenade — a tiny green grenade that
+// arcs outward from the parent's boom point, bounces once, and explodes.
+// Same physics shape as spawnMirvSubRocket but lobbier (lower horizontal
+// speed, higher arc) and visually distinct (small green sphere with
+// pin instead of orange rocket capsule).
+//
+//   px, py, pz: parent boom origin (slightly above ground)
+//   dirX, dirZ: unit fan direction
+//   blastR: explosion radius for this mini-grenade
+function spawnClusterMiniGrenade(px, py, pz, dirX, dirZ, blastR) {
+  if(!scene) return;
+  const grenGroup = new THREE.Group();
+  const bodyMat = new THREE.MeshStandardMaterial({
+    color: 0x446633, roughness: 0.4, metalness: 0.3,
+    emissive: 0x223311, emissiveIntensity: 0.3
+  });
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.10, 8, 6), bodyMat);
+  grenGroup.add(body);
+  // Tiny pin
+  const pin = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.018, 0.018, 0.07, 6),
+    new THREE.MeshStandardMaterial({color: 0xccccaa, metalness: 0.6, roughness: 0.3})
+  );
+  pin.position.y = 0.085;
+  grenGroup.add(pin);
+  grenGroup.userData.noOutline = true;
+  grenGroup.position.set(px, py, pz);
+  scene.add(grenGroup);
+
+  // Lobby arc — slower horizontal, bigger upward kick than MIRV rockets.
+  const SPEED = 8.5;
+  const VY0 = 5.5;
+  const G_GRAV = -16;
+  let vx = dirX * SPEED, vz = dirZ * SPEED, vy = VY0;
+  let rx = px, ry = py, rz = pz;
+  const startT = performance.now();
+  const MAX_T = 1500; // ms — generous so the arc visibly completes
+  const GREN_R = 0.12;
+  let bounceCount = 0;
+  const MAX_BOUNCES = 1;   // one wall bounce, then detonate
+  let detonated = false;
+  let groundBounceUsed = false;
+
+  // Tumble for visual juice
+  let spinX = (Math.random() - 0.5) * 8;
+  let spinZ = (Math.random() - 0.5) * 8;
+
+  const detonate = () => {
+    if(detonated) return;
+    detonated = true;
+    if(grenGroup.parent) grenGroup.parent.remove(grenGroup);
+    if(typeof spawnExplosion === 'function') spawnExplosion(rx, ry, rz, 0.85);
+    if(typeof collectObstaclesInRadius === 'function' && typeof destroyObstacles === 'function') {
+      const hits = collectObstaclesInRadius(rx, rz, blastR);
+      if(hits.length > 0) destroyObstacles(hits, rx, ry, rz);
+    }
+    if(typeof destroyWallChunksInRadius === 'function') destroyWallChunksInRadius(rx, rz, blastR);
+    if(typeof triggerShake === 'function') triggerShake('med');
+    if(AC) {
+      try {
+        const ac = getAC(), t = ac.currentTime;
+        // Mini-grenade pop — lower-pitched than MIRV rocket, "thump" texture.
+        const o = ac.createOscillator(); o.type = 'sine';
+        o.frequency.setValueAtTime(180, t);
+        o.frequency.exponentialRampToValueAtTime(50, t + 0.20);
+        const g = ac.createGain();
+        g.gain.setValueAtTime(0.4, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.24);
+        o.connect(g); g.connect(getACDest()); o.start(t); o.stop(t + 0.26);
+      } catch(e){}
+    }
+  };
+
+  let lastT = startT;
+  const tick = () => {
+    if(detonated) return;
+    const now = performance.now();
+    const dt = Math.min(0.05, (now - lastT) / 1000);
+    lastT = now;
+    if(now - startT >= MAX_T) { detonate(); return; }
+    // Integrate
+    vy += G_GRAV * dt;
+    rx += vx * dt; rz += vz * dt; ry += vy * dt;
+    // Wall bounce
+    if(G.wallPolylines && G.wallPolylines.length) {
+      for(const poly of G.wallPolylines) {
+        for(let pi = 0; pi < poly.length - 1; pi++) {
+          const ax2 = poly[pi].x, az2 = poly[pi].z;
+          const bx2 = poly[pi+1].x, bz2 = poly[pi+1].z;
+          const ex = bx2 - ax2, ez = bz2 - az2;
+          const lsq = ex*ex + ez*ez;
+          if(lsq < 0.0001) continue;
+          const tt = Math.max(0, Math.min(1, ((rx - ax2)*ex + (rz - az2)*ez) / lsq));
+          const cx2 = ax2 + tt*ex, cz2 = az2 + tt*ez;
+          const wdx = rx - cx2, wdz = rz - cz2;
+          const wd = Math.hypot(wdx, wdz);
+          if(wd < GREN_R + 0.18 && wd > 0.001) {
+            const wnx = wdx/wd, wnz = wdz/wd;
+            rx += wnx * (GREN_R + 0.18 - wd);
+            rz += wnz * (GREN_R + 0.18 - wd);
+            const dot = vx*wnx + vz*wnz;
+            if(dot < 0) { vx -= 2*dot*wnx; vz -= 2*dot*wnz; }
+            // Damp horizontal a touch on wall hit so the arc doesn't fly forever
+            vx *= 0.7; vz *= 0.7;
+            bounceCount++;
+            if(bounceCount > MAX_BOUNCES) { detonate(); return; }
+          }
+        }
+      }
+    }
+    // Corner-triangle bounce (angledWalls)
+    if(G.angledWalls && G.angledWalls.length) {
+      for(const aw of G.angledWalls) {
+        if(aw._destroyed) continue;
+        for(const edge of aw.edges) {
+          const eax = edge.x0, eaz = edge.z0;
+          const ebx = edge.x1, ebz = edge.z1;
+          const eex = ebx - eax, eez = ebz - eaz;
+          const elsq = eex*eex + eez*eez;
+          if(elsq < 0.0001) continue;
+          const ett = Math.max(0, Math.min(1, ((rx - eax)*eex + (rz - eaz)*eez) / elsq));
+          const ecx = eax + ett*eex, ecz = eaz + ett*eez;
+          const edx = rx - ecx, edz = rz - ecz;
+          const ed = Math.hypot(edx, edz);
+          if(ed < GREN_R + 0.18 && ed > 0.001) {
+            const enx = edx/ed, enz = edz/ed;
+            rx += enx * (GREN_R + 0.18 - ed);
+            rz += enz * (GREN_R + 0.18 - ed);
+            const dot = vx*enx + vz*enz;
+            if(dot < 0) { vx -= 2*dot*enx; vz -= 2*dot*enz; }
+            vx *= 0.7; vz *= 0.7;
+            bounceCount++;
+            if(bounceCount > MAX_BOUNCES) { detonate(); return; }
+          }
+        }
+      }
+    }
+    // Ground contact — first hit bounces (small kick), second detonates
+    const groundY = G.heightMap && G.heightMap.length ? getTerrainHeight(rx, rz) : 0;
+    const floorY = groundY + FLOOR_H/2 + 0.05;
+    if(ry <= floorY) {
+      ry = floorY;
+      if(!groundBounceUsed && vy < -0.5) {
+        vy = Math.abs(vy) * 0.45;
+        // Damp horizontal so it lands inside the radius reasonably
+        vx *= 0.55; vz *= 0.55;
+        groundBounceUsed = true;
+        if(AC) { try { sfxBounce(2); } catch(e){} }
+      } else {
+        detonate(); return;
+      }
+    }
+    grenGroup.position.set(rx, ry, rz);
+    // Tumble
+    grenGroup.rotation.x += spinX * dt;
+    grenGroup.rotation.z += spinZ * dt;
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
 }
 
 function fireProjectile({ blastRadius = 4.0, travelSpeed = 22, color = 0xff4400, emissive = 0xff2200, maxDist = 40, scale = 1.0, hitRadius = null, spiral = 0, accel = 0, maxSpeed = 140, piercing = false, splitCount = 0 } = {}) {
@@ -19761,34 +22389,28 @@ function fireProjectile({ blastRadius = 4.0, travelSpeed = 22, color = 0xff4400,
       spawnExplosion(px + (Math.random()-0.5)*0.8*boomVfxScale, py + 0.4, pz + (Math.random()-0.5)*0.8*boomVfxScale, boomVfxScale*0.7);
       for(let k=0; k<coinsEarned; k++) { G.coins++; updateCoinHUD(); }
       if(blastHits.length > 0) showToast(`💥 ${blastHits.length} destroyed! +${coinsEarned} 🪙`, 1600);
-      // v0.21d: MIRV — on impact, spawn N secondary explosions in a fan
-      // pattern radiating away from the missile's flight direction (the
-      // "warheads reflect" feel). Each is a real boom: destroys obstacles +
-      // walls in its small radius. Fires only on the FIRST stop (so a
-      // piercing missile doesn't spam splits — only the final stop counts).
+      // v0.21d: MIRV — on impact, spawn N flying mini-rockets in a fan
+      // pattern radiating away from the missile's nose (the "warheads
+      // reflect" feel). Each is a small physics-driven projectile with
+      // its own gravity + wall bounces, exploding on first ground touch
+      // or after maxTime. Fires only on the FIRST stop (so a piercing
+      // missile doesn't spam splits — only the final stop counts).
+      // v0.21k6: redesigned from instant offset explosions → real flying
+      // rockets with arc + bounce, per Adam's note that the fan should
+      // be visible mini-rockets, not just nearby blasts.
       if(splitCount > 0 && _shouldStop) {
         const _splitR = scaledBlast * 0.65;
-        const _ringR = scaledBlast * 0.9;
         // Reflect direction = -dir (warheads spray back-and-fan from nose)
         const _baseAng = Math.atan2(-dir.z, -dir.x);
         const _spread = Math.PI * 0.85; // ~150° fan
         for(let _si = 0; _si < splitCount; _si++) {
           const _t = (splitCount === 1) ? 0 : (_si / (splitCount - 1) - 0.5);
           const _ang = _baseAng + _t * _spread;
-          const _wx = px + Math.cos(_ang) * _ringR;
-          const _wz = pz + Math.sin(_ang) * _ringR;
-          const _delay = 100 + _si * 80;
+          // Stagger launch by 35ms so they read as separate rockets, not
+          // a synchronous burst. Small enough to feel snappy.
           setTimeout(() => {
-            const _terY = G.heightMap.length ? getTerrainHeight(_wx, _wz) : 0;
-            const _wy = _terY + FLOOR_H/2 + 0.05;
-            if(typeof spawnExplosion === 'function') spawnExplosion(_wx, _wy, _wz, 1.0);
-            if(typeof collectObstaclesInRadius === 'function' && typeof destroyObstacles === 'function') {
-              const _hits = collectObstaclesInRadius(_wx, _wz, _splitR);
-              if(_hits.length > 0) destroyObstacles(_hits, _wx, _wy, _wz);
-            }
-            if(typeof destroyWallChunksInRadius === 'function') destroyWallChunksInRadius(_wx, _wz, _splitR);
-            if(typeof triggerShake === 'function') triggerShake('med');
-          }, _delay);
+            spawnMirvSubRocket(px, py, pz, Math.cos(_ang), Math.sin(_ang), _splitR);
+          }, _si * 35);
         }
         if(typeof showToast === 'function') showToast(`🚀×${splitCount} MIRV!`, 1100);
       }
@@ -19934,7 +22556,7 @@ const CARD_DEFS = {
   mighty_egg:   { id:'mighty_egg',   emoji:'🥚', name:'Mighty Egg',        desc:'Encase your ball in a protective egg. Absorbs one 1-HP hit from spikes or other damage obstacles. Cracks on impact.', rarity:'common', price:10, context:'any', holdable:false, weight:2 },
   sticky:       { id:'sticky',       emoji:'🟢', name:'Sticky',           desc:'Ball sticks to the first surface it hits — wall, bumper, spinner, slide block, rock, corner, spike (still costs HP), or pop-up wall. Take a FREE re-aim shot from the stuck position. Tap card again to unstick.', rarity:'common', price:15, context:'pre', holdable:false, weight:4 },
   parkour:      { id:'parkour',      emoji:'🤸', name:'Parkour',          desc:'This swing: automatically vault the first obstacle in your path with a slow-mo cartwheel.', rarity:'rare', price:20, context:'pre', holdable:false, weight:3 },
-  vacuum:       { id:'vacuum',       emoji:'🌪️', name:'Vacuum',            desc:'Suck up all coins and obstacles in a V-shaped cone in front of you. Play anytime — mid-roll briefly slows time.', rarity:'rare', price:30, context:'any', holdable:false, weight:2 },
+  vacuum:       { id:'vacuum',       emoji:'🌪️', name:'Vacuum',            desc:'Suck up coins, hearts, and obstacles in a wide V-shaped cone in front of you. Play anytime — mid-roll briefly slows time.', rarity:'rare', price:30, context:'any', holdable:false, weight:2 },
   goal_oriented:{ id:'goal_oriented',emoji:'🎯', name:'Goal Oriented',    desc:'Instantly redirect your ball toward the hole mid-swing.', rarity:'epic', price:25, context:'during', holdable:false, weight:3 },
   // v0.21c: Frisbee — arc fly-over, then snaps to a hard stop. Pull-distance still
   // controls power; horizontal range is 1.5× normal max but ground friction is 4×
@@ -20011,13 +22633,13 @@ const CHARACTERS = {
       '🎯 +50% style score on obstacle destruction',
     ],
     curses: [
-      '🚫 Cannot use airborne cards (Jumper, Catapult)',
+      '🚫 Cannot use airborne cards (Jumper, Catapult, Arc Shot, Sharpshooter, Frisbee)',
     ],
     starter: {
       deck: ['iron_ball','iron_ball','explosivo','power_shot'],
       perks: ['scorched_earth'],
     },
-    bannedCards: ['jumper','catapult','arc_shot','sharpshooter'],
+    bannedCards: ['jumper','catapult','arc_shot','sharpshooter','frisbee'],
     bannedPerks: [],
     traits: { destroyStyleBonus: true, rhinoHorns: true },
   },
@@ -23722,8 +26344,16 @@ function activateVacuum() {
   }
 
   // Cone: v0.19z: +30% coverage — length 8.0 → 10.4m, half-angle 60° → 69°.
-  const CONE_HALF_ANGLE = Math.PI / 180 * 69;
-  const CONE_LEN = 10.4;
+  // v0.21k6: default cone is now 50% larger (length 10.4 → 15.6m). The
+  // coneRadiusMult upgrade field stacks on top — Big Vacuum sets it to 2.0
+  // for a 31.2m suck radius. The fullCircle field flips half-angle to 180°
+  // so the entire ring around the ball is in-cone.
+  // Pattern: read upgrade fields off CARD_DEFS via getCardField (same as
+  // grenade/shooter/jumper upgrades).
+  const _vacRMul = (typeof getCardField === 'function') ? getCardField('vacuum','coneRadiusMult',1.0) : 1.0;
+  const _vacFull = (typeof getCardField === 'function') ? !!getCardField('vacuum','fullCircle',false) : false;
+  const CONE_HALF_ANGLE = _vacFull ? Math.PI : (Math.PI / 180 * 69);
+  const CONE_LEN = 15.6 * _vacRMul;
   const cosHalf = Math.cos(CONE_HALF_ANGLE);
 
   // Spawn a quick visual burst showing the cone coverage.
@@ -23733,6 +26363,8 @@ function activateVacuum() {
     const odx = tx - G.ballPos.x, odz = tz - G.ballPos.z;
     const d = Math.hypot(odx, odz);
     if(d < 0.001 || d > CONE_LEN) return false;
+    // v0.21k6: full-circle upgrade — radius is the only constraint.
+    if(_vacFull) return true;
     const ndx = odx/d, ndz = odz/d;
     return (ndx*dirX + ndz*dirZ) >= cosHalf;
   };
@@ -23787,6 +26419,131 @@ function activateVacuum() {
     });
   }
 
+  // v0.21k6: Hearts also fly to the ball — same staggered suck pattern as
+  // coins. Each grants the standard heart heal (2 base, 3 with Big Heart).
+  if(G.heartMeshes && G.heartMeshes.length) {
+    const heartQueue = [];
+    for(const h of G.heartMeshes) {
+      if(h.collected) continue;
+      if(!inCone(h.wx, h.wz)) continue;
+      const dx = h.wx - G.ballPos.x, dz = h.wz - G.ballPos.z;
+      heartQueue.push({ heart: h, dist: Math.hypot(dx, dz) });
+    }
+    heartQueue.sort((a, b) => a.dist - b.dist);
+    heartQueue.forEach(({ heart: h }, idx) => {
+      h.collected = true;
+      const delay = 200 + idx * 140;
+      const startX = h.wx, startZ = h.wz;
+      const duration = 750;
+      setTimeout(() => {
+        const startT = performance.now();
+        const anim = () => {
+          const t = Math.min(1, (performance.now() - startT) / duration);
+          const e = t * t;
+          const tx = G.ballPos.x, tz = G.ballPos.z;
+          const x = startX + (tx - startX) * e;
+          const z = startZ + (tz - startZ) * e;
+          if(h.pivot) { h.pivot.position.x = x; h.pivot.position.z = z; }
+          if(h.glowMesh) { h.glowMesh.position.x = x; h.glowMesh.position.z = z; }
+          if(t < 1) requestAnimationFrame(anim);
+          else {
+            if(G.courseGroup) {
+              if(h.pivot) G.courseGroup.remove(h.pivot);
+              if(h.glowMesh) G.courseGroup.remove(h.glowMesh);
+            }
+            // Apply heal — same value as walk-over pickup
+            const _bhHeal = (typeof getPerkField === 'function') ? getPerkField('extra_heart','heartHeal',2) : 2;
+            const healAmt = Math.min(_bhHeal, (G.hpMax || 10) - (G.hp || 0));
+            if(healAmt > 0) {
+              G.hp = Math.min(G.hpMax || 10, (G.hp || 0) + healAmt);
+              if(typeof spawnHpHealPopup === 'function') spawnHpHealPopup(healAmt);
+              showToast(`💖 +${healAmt} HP!`, 900);
+              if(typeof updateUI === 'function') updateUI();
+            }
+            // Warm chime
+            if(AC) {
+              try {
+                const ac = getAC(), t0 = ac.currentTime;
+                const o = ac.createOscillator(); o.type='triangle';
+                o.frequency.setValueAtTime(880, t0);
+                o.frequency.exponentialRampToValueAtTime(1320, t0+0.16);
+                const g = ac.createGain();
+                g.gain.setValueAtTime(0.1, t0); g.gain.exponentialRampToValueAtTime(0.001, t0+0.20);
+                o.connect(g); g.connect(getACDest()); o.start(t0); o.stop(t0+0.22);
+              } catch(e){}
+            }
+          }
+        };
+        requestAnimationFrame(anim);
+      }, delay);
+    });
+  }
+
+  // v0.22a: Crate drops (5-coin / heart / voucher) also fly to ball on
+  // vacuum. Same staggered pattern. Voucher gets a longer delay so it
+  // arrives last as the headliner.
+  if(G._crateDrops && G._crateDrops.length) {
+    const dropQueue = [];
+    for(const dr of G._crateDrops) {
+      if(dr.collected) continue;
+      if(!inCone(dr.wx, dr.wz)) continue;
+      const dx = dr.wx - G.ballPos.x, dz = dr.wz - G.ballPos.z;
+      // Voucher last
+      const sortKey = dr.kind === 'voucher' ? 9999 + Math.hypot(dx, dz) : Math.hypot(dx, dz);
+      dropQueue.push({ drop: dr, dist: Math.hypot(dx, dz), sortKey });
+    }
+    dropQueue.sort((a, b) => a.sortKey - b.sortKey);
+    dropQueue.forEach(({ drop: dr }, idx) => {
+      dr.collected = true;
+      const delay = 250 + idx * 160;
+      const startX = dr.wx, startZ = dr.wz;
+      const duration = 720;
+      setTimeout(() => {
+        const startT = performance.now();
+        const anim = () => {
+          const t = Math.min(1, (performance.now() - startT) / duration);
+          const e = t * t;
+          const tx = G.ballPos.x, tz = G.ballPos.z;
+          const x = startX + (tx - startX) * e;
+          const z = startZ + (tz - startZ) * e;
+          if(dr.group) { dr.group.position.x = x; dr.group.position.z = z; }
+          if(dr.glowMesh) { dr.glowMesh.position.x = x; dr.glowMesh.position.z = z; }
+          if(t < 1) requestAnimationFrame(anim);
+          else {
+            if(G.courseGroup) {
+              if(dr.group) G.courseGroup.remove(dr.group);
+              if(dr.glowMesh) G.courseGroup.remove(dr.glowMesh);
+            }
+            // Apply effect on arrival
+            if(dr.kind === 'coin5') {
+              for(let cv = 0; cv < 5; cv++) {
+                setTimeout(() => collectCoin(G.ballPos.x, G.ballPos.z), cv * 60);
+              }
+              showToast('🌪️🎁 +5 COINS!', 900);
+            } else if(dr.kind === 'heart') {
+              const _heal = (typeof getPerkField === 'function') ? getPerkField('extra_heart','heartHeal',2) : 2;
+              const actual = Math.min(_heal, (G.hpMax || 10) - (G.hp || 0));
+              if(actual > 0) {
+                G.hp = Math.min(G.hpMax || 10, (G.hp || 0) + actual);
+                if(typeof spawnHpHealPopup === 'function') spawnHpHealPopup(actual);
+                showToast(`🌪️🎁 💖 +${actual} HP!`, 1000);
+                if(typeof updateUI === 'function') updateUI();
+              }
+            } else if(dr.kind === 'voucher') {
+              G._holeUpgradeVouchers = (G._holeUpgradeVouchers || 0) + 1;
+              showToast('🌪️🎁 🔧 UPGRADE VOUCHER!', 1700);
+              if(typeof playCrateDropChime === 'function') playCrateDropChime('voucher');
+              triggerShake(0.25);
+            }
+          }
+        };
+        requestAnimationFrame(anim);
+      }, delay);
+    });
+    // Prune fully-collected drops
+    G._crateDrops = G._crateDrops.filter(d => !d.collected);
+  }
+
   // v0.19z2: OBSTACLES FLY TO BALL. v0.19z3: sorted nearest-first, each
   // obstacle's flight delayed by 180ms * index so they suck in visibly one
   // at a time. Each flight takes 1100ms (was 650) so the overall vacuum
@@ -23819,6 +26576,9 @@ function activateVacuum() {
   if(G.fans) for(const f of G.fans) collectObstacle(f, f.meshes || (f.bladeGroup ? [f.bladeGroup] : []));
   if(G.pendulums) for(const pd of G.pendulums) collectObstacle(pd, pd.meshes || (pd.pendGroup ? [pd.pendGroup] : []));
   if(G.conveyors) for(const cv of G.conveyors) collectObstacle(cv, cv.meshes || (cv.arrowGroup ? [cv.arrowGroup] : []));
+  // v0.22a: vacuum sucks crates too — they're physics obstacles in the
+  // cone. Iron-ball-style auto-collect on drops.
+  if(G.crates) for(const cr of G.crates) collectObstacle(cr, cr.group ? [cr.group] : []);
   // Note: corner-triangle angled walls are flagged _indestructible by design
   // (they're course geometry like real walls, not place-on-fairway obstacles),
   // so vacuum doesn't suck them up — keeps parity with missile/grenade/iron-ball.
@@ -25662,6 +28422,24 @@ function _computeExitDoorFacing(landX, landZ, throwDirX, throwDirZ) {
   const tdLen = Math.hypot(fwdX, fwdZ) || 1;
   fwdX /= tdLen; fwdZ /= tdLen;
 
+  // v0.21k6: When the exit portal lands within 50 ball-lengths (~22m) of
+  // the hole, override the corridor heuristic and aim the door directly
+  // at the hole. Per Adam: "When I fire the portal nearby the hole, it's
+  // often facing away defeating the purpose." Door's local +Z is its
+  // outward normal, so we want +Z pointing at the hole — atan2(holeDX, holeDZ).
+  if(G.holePos) {
+    const _holeWX = G.holePos.x * TILE_SIZE + (G._holeWorldOffset?.x || 0);
+    const _holeWZ = G.holePos.y * TILE_SIZE + (G._holeWorldOffset?.z || 0);
+    const _toHoleX = _holeWX - landX;
+    const _toHoleZ = _holeWZ - landZ;
+    const _toHoleD = Math.hypot(_toHoleX, _toHoleZ);
+    // 50 ball-lengths in diameters: 50 * (BALL_R * 2) = 50 * 0.44 = 22m.
+    const HOLE_FACE_RADIUS = 22.0;
+    if(_toHoleD > 0.001 && _toHoleD < HOLE_FACE_RADIUS) {
+      return Math.atan2(_toHoleX / _toHoleD, _toHoleZ / _toHoleD);
+    }
+  }
+
   if(!G.grid || !G.gridW || !G.gridH) {
     return Math.atan2(fwdX, fwdZ);
   }
@@ -26060,6 +28838,15 @@ function tryPortalTeleportXZ(posObj, velObj, stateRef, nowSec) {
   posObj.x = partnerX + outX;
   posObj.z = partnerZ + outZ;
   stateRef._lastPortalT = nowSec;
+  // v0.21k6: Portal traversal style event — fires on every successful
+  // teleport (ball or projectile). Cooldown gate above (_lastPortalT)
+  // already prevents same-pass spam. Per-projectile state objects each
+  // carry their own cooldown stamp, so a ball + missile + grenade going
+  // through the same portal each register independently. Per Adam:
+  // "medium-high point value" — pegged at 400, between bumper_hit (75)
+  // and spike_dodge (200) clusters and below ghost_through (350) for
+  // single events.
+  if(typeof recordStyleEvent === 'function') recordStyleEvent('portal_traverse');
   // FX: portal whoosh + brief shake
   triggerShake('light');
   if(AC) {
@@ -26647,30 +29434,14 @@ function throwGrenadeAt(power, dir, opts) {
         gy = floorY;
         spawnHitParticles(new THREE.Vector3(gx, gy, gz));
         if(AC) sfxBounce(2 + bounceCount);
-        // v0.21d: Cluster Grenade — on FIRST bounce, spawn N mini-explosions
-        // in a ring around the bounce position. Each is a real explosion
-        // (destroys obstacles + walls in its small radius), not just FX.
-        if(_grenCluster > 0 && bounceCount === 1) {
-          const _miniR = BLAST_R * 0.55;
-          const _ringR = BLAST_R * 0.7;
-          for(let _ci = 0; _ci < _grenCluster; _ci++) {
-            const _ang = (_ci / _grenCluster) * Math.PI * 2 + Math.random() * 0.3;
-            const _mx = gx + Math.cos(_ang) * _ringR;
-            const _mz = gz + Math.sin(_ang) * _ringR;
-            const _delay = 80 + _ci * 70;
-            setTimeout(() => {
-              const _terY = G.heightMap.length ? getTerrainHeight(_mx, _mz) : 0;
-              const _my = _terY + FLOOR_H/2 + 0.05;
-              if(typeof spawnExplosion === 'function') spawnExplosion(_mx, _my, _mz, 0.85);
-              if(typeof collectObstaclesInRadius === 'function' && typeof destroyObstacles === 'function') {
-                const _hits = collectObstaclesInRadius(_mx, _mz, _miniR);
-                if(_hits.length > 0) destroyObstacles(_hits, _mx, _my, _mz);
-              }
-              if(typeof destroyWallChunksInRadius === 'function') destroyWallChunksInRadius(_mx, _mz, _miniR);
-            }, _delay);
-          }
-          if(typeof showToast === 'function') showToast(`🧨×${_grenCluster} Cluster!`, 1100);
-        }
+        // v0.21k6: Cluster mini-grenades now spawn at the FINAL detonation
+        // (not first bounce) and fly off in 4 cardinal directions with
+        // their own arcs and bounces — see the boom block below. The
+        // first-bounce instant-explosions were removed because they read
+        // as "more booms near the grenade" instead of "the grenade's
+        // payload separates and scatters." Per Adam: "let's have those
+        // fire off in 4 directions (with small jumps and bounces of
+        // their own) after the initial grenade explosion."
         // v0.21d: Sticky Grenade — first ground touch sticks. Skip bounce
         // entirely; jump straight to landed state (fuse begins).
         if(_grenSticky) {
@@ -26734,6 +29505,21 @@ function throwGrenadeAt(power, dir, opts) {
         spawnExplosion(px, py, pz, isHoly ? 1.6 : undefined);
         setTimeout(() => spawnExplosion(px+(Math.random()-0.5)*0.8, py+0.3, pz+(Math.random()-0.5)*0.8, isHoly ? 1.4 : undefined), 100);
         setTimeout(() => spawnExplosion(px+(Math.random()-0.5)*1.0, py+0.1, pz+(Math.random()-0.5)*1.0, isHoly ? 1.4 : undefined), 220);
+        // v0.21k6: Cluster Grenade — fire off N flying mini-grenades in a
+        // ring after the initial boom. Each one is a real physics-driven
+        // sub-grenade (small jump arc + ~1 bounce + own explosion). The
+        // 100ms stagger after the parent boom gives the visual a clean
+        // "main blast first, then payload scatters" reading.
+        if(_grenCluster > 0) {
+          for(let _ci = 0; _ci < _grenCluster; _ci++) {
+            const _ang = (_ci / _grenCluster) * Math.PI * 2;
+            const _dx = Math.cos(_ang), _dz = Math.sin(_ang);
+            setTimeout(() => {
+              spawnClusterMiniGrenade(px, py + 0.15, pz, _dx, _dz, BLAST_R * 0.55);
+            }, 120 + _ci * 40);
+          }
+          if(typeof showToast === 'function') showToast(`🧨×${_grenCluster} Cluster!`, 1100);
+        }
         if(isHoly) {
           // Extra ring of explosions for holy AOE feel
           for(let k=0;k<6;k++) {
@@ -28757,10 +31543,10 @@ function applyPerkEffect(id) {
       // v0.19s: nerfed to heal 2 only (no max HP increase). Price also
       // dropped 25% (14→11) in the perk definition to match the weaker effect.
       // v0.21h: Big Heart upgrade reads heartHeal off the perk (default 2, Big Heart = 3).
+      // v0.21k6: removed difficulty healReduction for consistency with field hearts.
       {
         const _bhBase = (typeof getPerkField === 'function') ? getPerkField('extra_heart','heartHeal',2) : 2;
-        const heartHeal = Math.max(1, _bhBase - ((G._diffMods && G._diffMods.healReduction) || 0));
-        applyHeal(heartHeal, 'extra_heart_perk');
+        applyHeal(_bhBase, 'extra_heart_perk');
         updateUI();
       }
       break;
@@ -30116,9 +32902,24 @@ function fireShot() {
   }
   if(Array.isArray(G._armedCards) && G._armedCards.length) {
     const _stickyKeep = !!(G._stickyCardActive && !G._stickyFreeSwing);
+    // v0.21k6: Beat 'Em Up needs to remain tappable during the roll so the
+    // player can throw the 3 punches mid-swing. destroyBeatEmUpRing() drains
+    // it from hand/slot/_armedCards when the swing ends.
+    const _beatKeep = !!G._beatEmUpActive;
+    // v0.21k6: Double Jump (jumper with jumpCharges > 1) needs to stay in slot
+    // through the initial swing so the player can tap a SECOND jump. The card
+    // self-drains when _jumpChargesRemaining hits 0 (see updatePhysics jump
+    // consumption block).
+    const _jumpUp = (typeof getCardField === 'function') ? (getCardField('jumper','jumpCharges',1)|0) : 1;
+    const _jumpKeep = (G._jumpPreloaded || G._jumpPending) && _jumpUp > 1
+                     && (G._jumpChargesRemaining|0) > 0;
     for(const a of G._armedCards) {
       // Skip sticky on the initial swing — don't drain yet.
       if(_stickyKeep && a.cardId === 'sticky') continue;
+      // v0.21k6: Beat 'Em Up — same deferred-drain pattern.
+      if(_beatKeep && a.cardId === 'beat_em_up') continue;
+      // v0.21k6: Double Jump — keep jumper in slot until charges exhausted.
+      if(_jumpKeep && a.cardId === 'jumper') continue;
       // Remove from hand by instanceId; push card id to discard
       const hi = G.hand.findIndex(c => c.instanceId === a.instanceId);
       if(hi !== -1) {
@@ -30134,7 +32935,12 @@ function fireShot() {
       }
     }
     // v0.21a3: filter out drained entries; preserve sticky if kept.
-    G._armedCards = G._armedCards.filter(a => _stickyKeep && a.cardId === 'sticky');
+    // v0.21k6: also preserve beat_em_up and multi-charge jumper.
+    G._armedCards = G._armedCards.filter(a =>
+      (_stickyKeep && a.cardId === 'sticky') ||
+      (_beatKeep && a.cardId === 'beat_em_up') ||
+      (_jumpKeep && a.cardId === 'jumper')
+    );
   }
   // v0.20a: Speedball timer starts on FIRST swing of a hole. From then on it
   // runs through planning/aiming/OOB — no pausing. Reset to 60s in initHole.
@@ -30420,6 +33226,8 @@ function fireShot() {
   G._ghostThroughChecked = new Set();
   // v0.20c: reset per-swing destruction tracker for SUNK & SMASHED bonus
   G._swingDestroyCount = 0;
+  // v0.22a: reset ON THE BOX dedup — each swing can score one
+  G._ballOnCrateThisShot = false;
   // v0.20o: Belt-and-suspenders — clear chasm respawn-pending flag so a new
   // stroke can trigger a fall again. The XZ-exit clear handles 99% of cases;
   // this is the safety net for any weird edge case where the ball fires
@@ -31835,14 +34643,25 @@ const CARD_UPGRADES = {
   },
   freeze_frame: {
     a: { id:'deep_freeze', name:'Deep Freeze', emoji:'🧊', archetypes:['trick_shot'],
-         desc:'20s duration (was 10s). Frozen obstacles shatter on ball contact.',
+         desc:'20s duration (was 10s). Frozen obstacles SHATTER on ball contact — plow through them like ice.',
          durationMult: 2.0, shatterOnContact: true },
-    // shatterOnContact wiring is partial — duration ships, shatter flagged unwired
+    // v0.21k6: shatterOnContact wired through hasFreezeShatter flag in
+    // updatePhysics — rocks, bumpers, spinBars, slideBlocks, popupWalls
+    // all destroy on contact while freeze_frame is active.
   },
   parkour: {
     a: { id:'acrobat', name:'Acrobat', emoji:'🤸', archetypes:['trick_shot'],
          desc:'Vaults the first 2 obstacles, not just one. (+50% trick points + brief slow-mo land in a future patch.)',
          vaultCount: 2, trickPointsMult: 1.5, briefSlowMo: true },
+    // Branch B left open
+  },
+  // v0.21k6: Vacuum upgrade — 360° suck zone + 2× radius. The full-circle
+  // ring transforms vacuum from a "scout the cone direction" card into a
+  // "panic button" card — pop it when surrounded.
+  vacuum: {
+    a: { id:'the_big_suck', name:'The Big Suck', emoji:'🌪️', archetypes:['card_engine','trick_shot'],
+         desc:'360° suck zone around you, 2× larger. Pulls everything in — coins, hearts, obstacles.',
+         coneRadiusMult: 2.0, fullCircle: true },
     // Branch B left open
   },
   // ── EPIC ──
@@ -33309,6 +36128,10 @@ function saveRunData(outcome) {
       runId: G._runId,
       version: GAME_VERSION,
       timestamp: new Date().toISOString(),
+      // v0.21k6: character tracking. Lets analytics slice take rates,
+      // archetype affinity, and difficulty performance per character —
+      // critical for tuning Smashy/Speedball/Precision relative to Classic.
+      character: G.currentCharacter || 'classic',
       difficulty: G.difficulty || 1,
       totalHoles: G.totalHoles || 0,
       holesCompleted: (G.scorecard && G.scorecard.length) || 0,
@@ -33763,6 +36586,14 @@ function initHole() {
       if(a.size != null) a.size *= S;
       // ax/az/bx/bz/wx/wz are already in world coords (auto-scaled via TILE_SIZE)
     }
+    // v0.22a2: Crates — scale half-extent so they read at the same
+    // proportional size on Giant Hole as on a normal course. Without
+    // this, a 4× world has tiny 0.4m crates that feel like garnish
+    // instead of obstacles. Position (wx, wz) is already in world
+    // coords so it auto-scales via TILE_SIZE — only `size` needs help.
+    if(data.crateData) for(const cd of data.crateData) {
+      if(cd.size != null) cd.size *= S;
+    }
     // Coins + hearts: pickup mesh size scaled at build time via worldScale
     // (read from TILE_SIZE in buildCourse, see the coin/heart blocks).
   }
@@ -33863,6 +36694,14 @@ function initHole() {
   G.spikes = [];
   G.angledWalls = [];
   G.wallChunks = [];
+  // v0.22a: physics crates — Half-Life-style breakable crates that absorb
+  // ball momentum, bounce around, and drop coins/hearts/upgrade vouchers
+  // when destroyed. See spawnCrates / updateCratePhysics for the full
+  // system. _crateDrops holds spawned pickup items (coins/hearts/voucher).
+  G.crates = [];
+  G._crateDrops = [];
+  G._crateStacks = [];
+  G._holeUpgradeVouchers = 0;
   // v0.20e: CRITICAL — clear _inboundsWalls so stale geometry from a previous
   // run (or hole) can't leak in. The Inbounds perk's wall registration block
   // in buildCourse only runs when the player currently OWNS the perk. If
@@ -35767,9 +38606,12 @@ function startGame(){
   G.spikes = [];
   G.angledWalls = [];
   G.wallChunks = [];
-  // v0.20e: clear stale Inbounds geometry at run start too. Belt-and-
-  // suspenders alongside the per-hole clear — covers the path where a
-  // player completes a run and immediately starts another from the menu.
+  // v0.22a: crate physics state at run-start (mirrors per-hole init)
+  G.crates = [];
+  G._crateDrops = [];
+  G._crateStacks = [];
+  G._holeUpgradeVouchers = 0;
+  // v0.20e: clear stale Inbounds geometry at run start too.
   G._inboundsWalls = null;
   // v0.21h: also clear card-version flag at run start for the same belt-and-
   // suspenders reason — a fresh run never inherits "Inbounds active" state.
@@ -38459,6 +41301,26 @@ function animate(now) {
             });
           }
         }
+        // v0.22a: 10-coin (mega) — drive the orbiting golden particle aura.
+        // Each particle is positioned in pivot-local space (so it follows
+        // the pivot's translate/rotate naturally). Orbit angle advances
+        // independently of pivot rotation; bob runs on a faster sine.
+        if(c.isMega && c.particleField && c.particleField.children) {
+          for(const pm of c.particleField.children) {
+            const ud = pm.userData;
+            if(!ud) continue;
+            ud.megaPhase = (ud.megaPhase || 0) + dt * 1.6; // orbit speed
+            const a = ud.megaPhase;
+            const r = ud.megaR || 0.4;
+            pm.position.x = Math.cos(a) * r;
+            pm.position.z = Math.sin(a) * r;
+            pm.position.y = Math.sin(t * (ud.megaBobF || 2) + ud.megaPhase) * (ud.megaBobA || 0.15);
+            // Twinkle opacity
+            if(pm.material) {
+              pm.material.opacity = 0.55 + Math.abs(Math.sin(t * 3 + ud.megaPhase)) * 0.4;
+            }
+          }
+        }
       }
     }
     // ── Heart bob + spin animation (v0.19s) ─────────────
@@ -38475,6 +41337,26 @@ function animate(now) {
           h.glowMesh.position.y = h.y - 0.28;
           if(h.glowMesh.material) {
             h.glowMesh.material.opacity = 0.45 + Math.sin(t * 4.0 + h.bobOffset) * 0.25;
+          }
+        }
+      }
+    }
+    // ── Crate drop bob/spin (v0.22a) ────────────────────
+    if(G._crateDrops && G._crateDrops.length) {
+      const t = now * 0.001;
+      for(const dr of G._crateDrops) {
+        if(dr.collected || !dr.group) continue;
+        const bob = Math.sin(t * 2.6 + dr.bobOffset) * 0.10;
+        // Bob on Y, spin on Y. For the heart (a Group), spin the group;
+        // for the coin/voucher (a Mesh inside a Group), spin the group too.
+        dr.group.position.y = dr.y + bob;
+        dr.group.rotation.y = t * (dr.spinSpeed || 4.0) + dr.bobOffset;
+        if(dr.glowMesh) {
+          dr.glowMesh.position.y = dr.y - 0.25 + bob * 0.5;
+          if(dr.glowMesh.material) {
+            const baseOpac = dr.kind === 'voucher' ? 0.7 : 0.55;
+            const pulse = dr.kind === 'voucher' ? 0.35 : 0.20;
+            dr.glowMesh.material.opacity = baseOpac + Math.sin(t * 5.0 + dr.bobOffset) * pulse;
           }
         }
       }
