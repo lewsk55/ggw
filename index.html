@@ -236,13 +236,19 @@ display:none;
    - Backdrop banner via padding + bg + blur improves contrast for the dark
      environments later in a run; keeps the bold serif headline look.
    - Smaller font ramp (was 2-3.5rem at 8vw → now 1.1-2.4rem at 5vw) so
-     a two-line "🌪️ VACUUM! 12 coins, 5 obstacles" fits on iPhone width. */
+     a two-line "🌪️ VACUUM! 12 coins, 5 obstacles" fits on iPhone width.
+   - v0.22d: Per Adam — shrunk 75% and moved out of dead-center to the
+     region directly above the combo chain (#style-popup sits at
+     bottom:120px). Toasts now sit at bottom:280px so destruction popups
+     ("Crate smashed!", coin pickups, etc.) layer above the combo
+     readout instead of blanketing the screen mid-action. Font scale
+     dropped to ~25% of prior values (clamp 0.55-0.85rem). */
 #toast {
 position:absolute;
-top:50%; left:50%;
-transform:translate(-50%,-50%);
+bottom:280px; left:50%;
+transform:translateX(-50%);
 font-family:'Playfair Display', serif;
-font-size:clamp(1.1rem, 5vw, 2.4rem);
+font-size:clamp(0.55rem, 1.5vw, 0.85rem);
 font-weight:700;
 color:#fff;
 text-shadow:0 2px 20px rgba(0,0,0,0.3), 0 0 60px rgba(100,200,50,0.6);
@@ -252,9 +258,9 @@ opacity:0;
 transition:opacity 0.4s;
 text-align:center;
 white-space:normal;
-max-width:min(92vw, 720px);
-padding:10px 18px;
-border-radius:14px;
+max-width:min(70vw, 480px);
+padding:5px 10px;
+border-radius:10px;
 background:rgba(0,0,0,0.30);
 backdrop-filter:blur(6px);
 -webkit-backdrop-filter:blur(6px);
@@ -264,7 +270,7 @@ box-shadow:0 4px 24px rgba(0,0,0,0.25);
 #toast.show { opacity:1; }
 @media (min-width:900px) {
   /* On desktop allow a touch larger for emphasis. */
-  #toast { font-size:clamp(1.6rem, 3.5vw, 3rem); }
+  #toast { font-size:clamp(0.7rem, 1.2vw, 1.0rem); }
 }
 
 /* ── Cosmetic Unlock Progress Bar (v0.19v) ── */
@@ -560,6 +566,44 @@ overflow-y:auto;
 -webkit-overflow-scrolling:touch;
 }
 #overlay.hidden { display:none; }
+
+/* v0.22c: Full-screen black fade played at game-over BEFORE the run summary
+   appears. Sits above everything in the UI but below modal toasts. Fade is
+   driven by the .visible class — JS adds it, then 1.2s later inserts the
+   summary overlay UNDER (z 100), then 1.7s after start triggers a white-out
+   that is the fade-back-in to the summary. */
+#gameover-fade {
+  position: fixed; inset: 0;
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 1.2s ease-in;
+  z-index: 250; /* above overlay (100), below crisis-level modals (300+) */
+}
+#gameover-fade.visible {
+  opacity: 1;
+  pointer-events: all;
+}
+/* When summary is ready, this class fades the black down so the overlay
+   shows through. JS swaps it in after the summary HTML is built. */
+#gameover-fade.lift {
+  opacity: 0;
+  transition: opacity 0.7s ease-out;
+}
+#gameover-fade .skull {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 6rem;
+  color: rgba(255, 255, 255, 0.85);
+  opacity: 0;
+  transition: opacity 0.5s ease-in 0.6s;
+  text-align: center;
+  letter-spacing: 0.2em;
+  font-weight: 700;
+  text-shadow: 0 0 30px rgba(255, 60, 60, 0.6), 0 4px 12px rgba(0,0,0,0.8);
+  user-select: none;
+}
+#gameover-fade.visible .skull { opacity: 1; }
 
 /* Profile picker — mirrors #overlay styling so they feel consistent */
 #profile-picker {
@@ -1393,6 +1437,28 @@ transform:translateX(-50%);
 display:flex; gap:8px;
 z-index:15;
 pointer-events:none;
+}
+/* v0.22b: Crowded House mobile shrink. With 6+ cards in hand the default
+   60px slots overflow narrow phone viewports (Adam reported the 1st and
+   6th cards going off screen on iPhone). Tighten gap + slot dimensions
+   based on data-handsize so the row fits inside ~360px width. Desktop
+   (min-width 720) keeps the original sizing — overflow isn't a problem
+   on big screens. */
+@media (max-width: 720px) {
+  #card-hand[data-handsize="6"] { gap: 6px; }
+  #card-hand[data-handsize="6"] .card-slot { width: 52px; height: 64px; }
+  #card-hand[data-handsize="6"] .card-slot .card-emoji { font-size: 1.4rem; }
+  #card-hand[data-handsize="6"] .card-slot .card-label { font-size: 0.55rem; }
+
+  #card-hand[data-handsize="7"] { gap: 5px; }
+  #card-hand[data-handsize="7"] .card-slot { width: 46px; height: 58px; }
+  #card-hand[data-handsize="7"] .card-slot .card-emoji { font-size: 1.25rem; }
+  #card-hand[data-handsize="7"] .card-slot .card-label { font-size: 0.5rem; }
+
+  #card-hand[data-handsize="8"] { gap: 4px; }
+  #card-hand[data-handsize="8"] .card-slot { width: 40px; height: 52px; }
+  #card-hand[data-handsize="8"] .card-slot .card-emoji { font-size: 1.1rem; }
+  #card-hand[data-handsize="8"] .card-slot .card-label { font-size: 0.45rem; }
 }
 /* v0.20f4: armed-effect chips strip — sits just above the card hand and
    shows pill-shaped indicators for any pre-swing arming (Power Shot stacks,
@@ -3424,28 +3490,48 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
      gesture is now handled passively via a click listener on the document
      that checks coordinates — see the debug-tap-zone JS block. -->
 
-<!-- Debug menu (~ key) -->
+<!-- Debug menu (` ×4 to open) -->
+<!-- v0.22d: reworked layout per Adam.
+     Top: Skip Hole + Special Options dropdown (containing Add Life, Coins, Force Elite, Pick Elite, Unlock All, Open Console).
+     Middle: 4-column grid — Cards | Upgraded Cards | Perks | Upgraded Perks.
+     Each column entry shows tooltip with description + base cost on hover (desktop) or long-press (mobile).
+     Open: backtick × 4 within 1.5s, OR mobile-corner 4-tap (existing). -->
 <div id="debug-menu">
   <h3>🛠 Debug</h3>
   <button class="dbg-btn" id="dbg-skip">⏭ Skip hole (−1 par)</button>
-  <button class="dbg-btn" id="dbg-budget">❤️ Add a life</button>
-  <button class="dbg-btn" id="dbg-coins">🪙 +50 coins</button>
-  <button class="dbg-btn" id="dbg-elite">⚠️ Force elite next hole</button>
-  <button class="dbg-btn" id="dbg-elite-pick">🎯 Pick specific elite…</button>
-  <button class="dbg-btn" id="dbg-unlock-all">🔓 Unlock everything</button>
-  <button class="dbg-btn" id="dbg-console">🛠 Open mobile console</button>
+  <button class="dbg-btn" id="dbg-special-toggle" style="background:rgba(120,80,180,0.35);border-color:rgba(180,140,220,0.55)">⚙️ Special Options ▾</button>
+  <div id="dbg-special-panel" style="display:none;flex-direction:column;gap:4px;padding:6px 8px;background:rgba(40,20,60,0.4);border-radius:8px;margin-top:-4px">
+    <button class="dbg-btn" id="dbg-budget">❤️ Add a life</button>
+    <button class="dbg-btn" id="dbg-coins">🪙 +50 coins</button>
+    <button class="dbg-btn" id="dbg-elite">⚠️ Force elite next hole</button>
+    <button class="dbg-btn" id="dbg-elite-pick">🎯 Pick specific elite…</button>
+    <button class="dbg-btn" id="dbg-unlock-all">🔓 Unlock everything</button>
+    <button class="dbg-btn" id="dbg-console">🛠 Open mobile console</button>
+  </div>
   <div style="height:1px;background:rgba(255,255,255,0.15);margin:6px 0"></div>
-  <div style="display:flex;gap:12px;max-height:50vh;overflow-y:auto">
+  <div style="display:flex;gap:8px;max-height:55vh;overflow-y:auto">
     <div style="flex:1;min-width:0">
       <div style="color:rgba(255,255,255,0.5);font-size:0.55rem;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:4px;text-align:center">🃏 Cards</div>
       <div id="dbg-card-list" style="display:flex;flex-direction:column;gap:4px"></div>
     </div>
     <div style="width:1px;background:rgba(255,255,255,0.1)"></div>
     <div style="flex:1;min-width:0">
+      <div style="color:rgba(255,255,255,0.5);font-size:0.55rem;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:4px;text-align:center">✨ Upgraded</div>
+      <div id="dbg-upcard-list" style="display:flex;flex-direction:column;gap:4px"></div>
+    </div>
+    <div style="width:1px;background:rgba(255,255,255,0.1)"></div>
+    <div style="flex:1;min-width:0">
       <div style="color:rgba(255,255,255,0.5);font-size:0.55rem;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:4px;text-align:center">⭐ Perks</div>
       <div id="dbg-perk-list" style="display:flex;flex-direction:column;gap:4px"></div>
     </div>
+    <div style="width:1px;background:rgba(255,255,255,0.1)"></div>
+    <div style="flex:1;min-width:0">
+      <div style="color:rgba(255,255,255,0.5);font-size:0.55rem;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:4px;text-align:center">✨ Upgraded</div>
+      <div id="dbg-upperk-list" style="display:flex;flex-direction:column;gap:4px"></div>
+    </div>
   </div>
+  <!-- Tooltip bubble — populated on hover/long-press -->
+  <div id="dbg-tooltip" style="display:none;position:fixed;z-index:530;background:rgba(15,10,25,0.96);color:#fff;font-family:'Inter',sans-serif;font-size:0.7rem;padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.18);max-width:260px;box-shadow:0 8px 32px rgba(0,0,0,0.5);pointer-events:none;line-height:1.4"></div>
   <div class="dbg-close" id="dbg-close">close (~ or Esc)</div>
 </div>
 
@@ -3481,6 +3567,13 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
 </div>
 
 <!-- Overlay -->
+
+<!-- v0.22c: Full-screen game-over fade-to-black. Sits above the canvas
+     and the run-summary overlay during the brief death sequence, then
+     fades back out once the summary HTML is built underneath. -->
+<div id="gameover-fade">
+  <div class="skull">💀<br>GAME OVER</div>
+</div>
 
 <div id="overlay" class="hidden">
   <div id="profile-chip" style="display:none;position:absolute;top:16px;right:16px;background:rgba(255,255,255,0.18);color:#fff;font-family:'Inter',sans-serif;font-size:0.75rem;font-weight:700;letter-spacing:1px;padding:7px 14px;border-radius:24px;cursor:pointer;backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,0.3);z-index:5" onclick="switchProfile()">
@@ -3537,7 +3630,7 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
   <button class="play-btn" onclick="openAchievements()" style="margin-top:6px;background:rgba(245,200,66,0.18);border:1px solid rgba(245,200,66,0.5);color:#f5c842;font-size:0.85rem;padding:10px 28px">🏆 Achievements</button>
   <button class="play-btn" id="btn-import-save" style="margin-top:6px;background:rgba(120,120,120,0.6);font-size:0.7rem;padding:8px 20px" onclick="importSaveFile()">📂 Import Save</button>
   <input type="file" id="import-save-input" accept=".ggwsave,application/json" style="display:none">
-  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.21c4</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Chain Lightning: fat mesh tubes, screen flash, 9m radius</div></div>
+  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.22d1</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Fix: debug-added upgraded cards no longer break the dealing mechanism on future hands</div></div>
 
   <!-- v0.19j: Inline profile picker — skip the separate slot-picks screen -->
   <div class="section-label" style="margin-top:14px">Save Slot</div>
@@ -4105,8 +4198,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.22a7';
-const CHANGE_NOTE = 'Crate fixes: conveyors now actually push crates (had wrong field schema — the check silently failed every frame). Fans now push crates along blow direction (was radial + wrong fields). Air vs ground friction split: airborne crates only lose ~26%/sec to drag (was 97%/sec full friction), so arcs complete cleanly all the way to landing instead of stalling 75% through. Angular damp also lightened in air for cleaner mid-flight tumbles.';
+const GAME_VERSION = '0.22d1';
+const CHANGE_NOTE = 'v0.22d1 fix: debug menu — adding an upgraded card no longer breaks the deal mechanism on subsequent hands. Root cause: deck entries must be string ids with per-index upgrades in G.deckUpgrades; pushing {id, upgradeBranch} as a raw deck entry corrupted drawPile records and produced silent empty hand slots.';
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
@@ -8312,6 +8405,48 @@ function buildCourse(data) {
         beaconCol.userData.noOutline = true;
         group.add(beaconCol);
 
+        // v0.22b: BIG BLUE TRACTOR BEAM — UFO-style transparent column you
+        // can clearly see from anywhere on the course. Separate from the
+        // existing thin yellow beacon (which is the "where exactly" navigation
+        // aid). This is the "where-ish" macro beacon: 25m tall, ~0.6m base,
+        // additive blending so it glows through obstacles. Uses a custom
+        // shader-free approach via THREE.AdditiveBlending so multiple beams
+        // never overlap to opaque white.
+        const tractorR = 0.7;
+        const tractorH = 25;
+        const tractorG = new THREE.CylinderGeometry(tractorR * 0.7, tractorR, tractorH, 16, 1, true);
+        const tractorMat = new THREE.MeshBasicMaterial({
+          color: 0x44aaff,
+          transparent: true,
+          opacity: 0.18,
+          depthWrite: false,
+          side: THREE.DoubleSide,
+          blending: THREE.AdditiveBlending,
+        });
+        const tractorBeam = new THREE.Mesh(tractorG, tractorMat);
+        tractorBeam.position.set(cx, cY + FLOOR_H/2 + tractorH * 0.5, cz);
+        tractorBeam.userData.noOutline = true;
+        tractorBeam.userData.isTractorBeam = true; // tagged for animation
+        group.add(tractorBeam);
+        // Inner brighter core for extra readability up close
+        const tractorCoreG = new THREE.CylinderGeometry(tractorR * 0.25, tractorR * 0.4, tractorH, 12, 1, true);
+        const tractorCoreMat = new THREE.MeshBasicMaterial({
+          color: 0x88ddff,
+          transparent: true,
+          opacity: 0.30,
+          depthWrite: false,
+          side: THREE.DoubleSide,
+          blending: THREE.AdditiveBlending,
+        });
+        const tractorCore = new THREE.Mesh(tractorCoreG, tractorCoreMat);
+        tractorCore.position.set(cx, cY + FLOOR_H/2 + tractorH * 0.5, cz);
+        tractorCore.userData.noOutline = true;
+        tractorCore.userData.isTractorBeam = true;
+        group.add(tractorCore);
+        // Stash on holeBeacon-adjacent reference so move-hole defenses can
+        // translate it; also store base Y for opacity pulsing in animation.
+        G._holeTractorBeam = { mesh: tractorBeam, core: tractorCore, baseY: cY + FLOOR_H/2 + tractorH * 0.5 };
+
         // Vertical particle beacon — larger drifting orbs show the hole's sink zone
         G.holeBeacon = { cx, cz, cY, particles:[], beaconCol };
         const beaconMat = new THREE.MeshStandardMaterial({
@@ -8356,6 +8491,10 @@ function buildCourse(data) {
           if(G.flagGroup) G.flagGroup.visible = false;
           if(G._holeSeeThruCup) G._holeSeeThruCup.visible = false;
           if(G.holeBeacon && G.holeBeacon.beaconCol) G.holeBeacon.beaconCol.visible = false;
+          if(G._holeTractorBeam) {
+            if(G._holeTractorBeam.mesh) G._holeTractorBeam.mesh.visible = false;
+            if(G._holeTractorBeam.core) G._holeTractorBeam.core.visible = false;
+          }
           if(G.holeBeacon && G.holeBeacon.particles) {
             for(const p of G.holeBeacon.particles) if(p && p.mesh) p.mesh.visible = false;
           }
@@ -9853,6 +9992,13 @@ function buildCourse(data) {
     // v0.21j: Hoop Dreams upgrade reads doubleHoops off the perk (default false,
     // Hoop Dreams = true). Each placed hoop gets a "follower" hoop placed
     // immediately behind it along the spline direction, ~1.4 units back.
+    // v0.22c: ALL perk hoops now oscillate side-to-side across the lane.
+    // Per Adam: "Make the speed hoops move side to side on all courses,
+    // and make them always cover the width of the hole." Schema mirrors
+    // the giant-level course-placed oscillating hoops (line 10015 path):
+    //   _coursePlaced flag, baseWX/baseWZ pinning, oscAxis perpendicular
+    //   to lane direction, oscAmp ~3.5 (covers RAIL_OFF=4.0 with buffer),
+    //   oscPhase staggered per hoop, oscSpeed ~1.4 rad/s.
     const _doubleHoops = (typeof getPerkField === 'function') ? getPerkField('speed_hoops','doubleHoops',false) : false;
     const sw = data.splineWS;
     const hoopCount = 2 + Math.floor(Math.random()*2);
@@ -9874,12 +10020,31 @@ function buildCourse(data) {
       hoopMesh.rotation.y = ang;
       hoopMesh.userData.noOutline = true;
       group.add(hoopMesh);
-      G.speedHoops.push({wx:pt.x, wz:pt.z, y, mesh:hoopMesh, triggered:false});
+      // v0.22c: pick the oscillation axis perpendicular to the lane's
+      // local direction so the hoop sweeps SIDE-TO-SIDE across the lane,
+      // not along the spline. Lane direction unit vector is (dx, dz)/|d|;
+      // perpendicular is (-dz, dx). We choose axis 'x' or 'z' based on
+      // which dominates the perpendicular vector.
+      const dlen = Math.hypot(dx, dz) || 1;
+      const perpX = -dz / dlen, perpZ = dx / dlen;
+      const oscAxis = Math.abs(perpX) >= Math.abs(perpZ) ? 'x' : 'z';
+      // Amplitude: 3.5 fills most of the 8-unit lane (RAIL_OFF=4.0 each side)
+      // with ~0.5 buffer so the hoop visual edge doesn't clip the rail.
+      const oscAmp = 3.5;
+      G.speedHoops.push({
+        wx: pt.x, wz: pt.z, y, mesh: hoopMesh, triggered: false,
+        _coursePlaced: true,                     // re-uses oscillation update path
+        baseWX: pt.x, baseWZ: pt.z,
+        oscAxis,
+        oscAmp,
+        oscSpeed: 1.4,                            // matches giant-level pacing
+        oscPhase: placed.length * (Math.PI / 1.5), // staggered between hoops
+        facingAng: ang,
+      });
       // v0.21j: Hoop Dreams follower hoop. Places right behind along the
       // spline direction so a single fast pass triggers both for compounding boost.
       if(_doubleHoops) {
         // Direction normalized; offset back by 1.4m
-        const dlen = Math.hypot(dx, dz) || 1;
         const ndx = dx / dlen, ndz = dz / dlen;
         const fx = pt.x + ndx * 1.4;
         const fz = pt.z + ndz * 1.4;
@@ -9890,7 +10055,19 @@ function buildCourse(data) {
         followerMesh.rotation.y = ang;
         followerMesh.userData.noOutline = true;
         group.add(followerMesh);
-        G.speedHoops.push({wx:fx, wz:fz, y:fy, mesh:followerMesh, triggered:false});
+        // v0.22c: follower hoop oscillates with the same axis but offset
+        // phase by π so the two hoops "dance" — leader sweeps left while
+        // follower sweeps right, then meet and pass. Fun.
+        G.speedHoops.push({
+          wx: fx, wz: fz, y: fy, mesh: followerMesh, triggered: false,
+          _coursePlaced: true,
+          baseWX: fx, baseWZ: fz,
+          oscAxis,
+          oscAmp,
+          oscSpeed: 1.4,
+          oscPhase: placed.length * (Math.PI / 1.5) + Math.PI,
+          facingAng: ang,
+        });
       }
     }
   }
@@ -10293,6 +10470,12 @@ function buildCourse(data) {
           G.holeBeacon.cz = cz + oz;
           if(G.holeBeacon.beaconCol) G.holeBeacon.beaconCol.position.set(cx + ox, baseY + 2.5, cz + oz);
         }
+        // v0.22b: translate the big tractor beam with the moving hole.
+        if(G._holeTractorBeam) {
+          const _bY = G._holeTractorBeam.baseY;
+          if(G._holeTractorBeam.mesh) G._holeTractorBeam.mesh.position.set(cx + ox, _bY, cz + oz);
+          if(G._holeTractorBeam.core) G._holeTractorBeam.core.position.set(cx + ox, _bY, cz + oz);
+        }
       };
     } else if(hd.kind === 'slat_ring_4' || hd.kind === 'slat_ring_6') {
       // STONE SLAT RING — tall pillars with gaps. Collision is a set of
@@ -10555,6 +10738,12 @@ function buildCourse(data) {
             G.holeBeacon.cx = cx + off.x;
             G.holeBeacon.cz = cz + off.z;
             if(G.holeBeacon.beaconCol) G.holeBeacon.beaconCol.position.set(cx + off.x, baseY + 2.5, cz + off.z);
+          }
+          // v0.22b: translate the big tractor beam with the swap.
+          if(G._holeTractorBeam) {
+            const _bY = G._holeTractorBeam.baseY;
+            if(G._holeTractorBeam.mesh) G._holeTractorBeam.mesh.position.set(cx + off.x, _bY, cz + off.z);
+            if(G._holeTractorBeam.core) G._holeTractorBeam.core.position.set(cx + off.x, _bY, cz + off.z);
           }
           // Pop SFX + tiny shake on swap so the player FEELS it.
           // v0.21f: distance-gated. Audible only within ~20 ball-lengths of
@@ -12289,7 +12478,7 @@ function _aimRayHitsPortal(ox, oz, dx, dz, maxT) {
     // Within door width? Project hit point onto the door's local X axis (length).
     const hitX = ox + dx * t, hitZ = oz + dz * t;
     const along = (hitX - p.x) * cf - (hitZ - p.z) * sf;
-    if(Math.abs(along) > _PORTAL_HALFW) continue;
+    if(Math.abs(along) > _portalHalfW()) continue;
     bestT = t;
     hitPortal = p;
   }
@@ -12518,7 +12707,7 @@ function updateAimArrow() {
   // v0.20f2: preview now mirrors EVERY multiplier in fireShot's speed eq, so
   // the arc lands where the ball actually lands regardless of which cards or
   // perks are active. Equation in fireShot:
-  //   speed = shotPower * 32 * boost * ironWeight * powerMult * catapultSoloDamp
+  //   speed = shotPower * BASE_LAUNCH_FACTOR * boost * ironWeight * powerMult * catapultSoloDamp
   // Previously the preview only included `boost` (swingMult), so the arc
   // overshot or undershot whenever Iron Ball, Power Shot, or solo Catapult
   // were active. Now all five factors mirror exactly.
@@ -12535,7 +12724,7 @@ function updateAimArrow() {
   // v0.21c2: Frisbee — 0.75× horizontal range (nerfed from 1.5×).
   // Mirror in the preview so the arc lands where the disc will actually land.
   const frisbeeBoost = G._frisbeeArmed ? 0.75 : 1.0;
-  const spd    = power * 32 * boost * ironWeight * _ironPwrMul * powerMult * catapultSoloDamp * frisbeeBoost;
+  const spd    = power * BASE_LAUNCH_FACTOR * boost * ironWeight * _ironPwrMul * powerMult * catapultSoloDamp * frisbeeBoost;
   const c      = new THREE.Color();
   c.setHSL(0.33 - power * 0.33, 0.9, 0.52);
   // Catapult: bold magenta arc for max readability, overriding the power-color ramp
@@ -12550,9 +12739,15 @@ function updateAimArrow() {
   //   Normal Arc Shot: 2.5 + 4.5 = 7.0
   //   Catapult:        2.5 + 6.5 = 9.0
   //   Frisbee:         2.5 + 5.5 = 8.0  (v0.21c)
+  // v0.22b: Trebuchet upgrade (catapult arcHeightMult, default 1.0, Trebuchet = 2.0)
+  //   was missing from the preview math, so a Trebuchet shot's preview
+  //   underestimated arc height by half. Also: frisbee adds an extra +1
+  //   on TOP of arcExtra when _arcShotActive is true. Mirror it here.
   const vy0Default = 2.5 + 4.5;
-  const vy0Cat     = 2.5 + 6.5;
-  const vy0Fris    = 2.5 + 5.5;
+  const _catArcMulPrev = (hasCatapult && typeof getCardField === 'function')
+    ? getCardField('catapult','arcHeightMult',1.0) : 1.0;
+  const vy0Cat     = 2.5 + (6.5 * _catArcMulPrev);
+  const vy0Fris    = 2.5 + 4.5 + 1.0;   // arcExtra (4.5) + frisbeeArc (+1)
   const vy0    = hasCatapult ? vy0Cat : (G._frisbeeArmed ? vy0Fris : vy0Default);
   const grav   = 12;
   const totalT = (vy0 + Math.sqrt(vy0 * vy0)) / grav;
@@ -12863,7 +13058,7 @@ function updateAimArrow() {
       ? getCardField('iron_ball','powerMult',1.0) : 1.0;
     // v0.21g: per-instance — match the fire-calc product.
     const _pmult = (G._powerShotStacks || 0) > 0 ? getPowerShotTotalMul() : 1.0;
-    const baseSpd = G.shotPower * 32 * _boost * _ironW * _ironPwr * _pmult;
+    const baseSpd = G.shotPower * BASE_LAUNCH_FACTOR * _boost * _ironW * _ironPwr * _pmult;
     // Step parameters; exponential friction loss approximated with FRICTION
     const N = 24;
     const dt = previewDur / N;
@@ -12959,6 +13154,14 @@ const FRICTION_SAND = 0.90;
 const BOUNCE = 0.45;
 const GRAVITY = -12;  // world units/s²
 const BALL_R = 0.22;
+
+// v0.22b: Base launch speed multiplier — was 32, bumped 40% to 45 per Adam
+// ("default max swing strength 40% stronger to account for bigger levels and
+// for when you don't have power shots"). All shot-speed math reads this:
+//   speed = shotPower * BASE_LAUNCH_FACTOR * boost * ironWeight * powerMult * ...
+// Aim-arc preview, curve-ball preview, fireShot, and lob-distance calcs all
+// share this constant so a single tuning pass moves them in lockstep.
+const BASE_LAUNCH_FACTOR = 45;
 
 function getCell(wx, wz) {
   const gx = Math.round(wx/TILE_SIZE), gz = Math.round(wz/TILE_SIZE);
@@ -13213,6 +13416,31 @@ function updatePhysics(dt) {
           recttest(pw.wx, pw.wz, (pw.halfW || 0.4), (pw.halfD || 0.4), 'popup_wall');
         }
       }
+      // v0.22b: parkour over crates. Per Adam: "Parkour should work on
+      // boxes. You should get huge points for leaping over a box stack."
+      // Crates are AABB-shaped so recttest is the right primitive. We
+      // tag the type as 'crate_stack_N' where N is the stack height
+      // (number of crates above this XZ position) so parkourLeap can
+      // award scaled bonus style points and the trick popup reads
+      // "VAULT (5-stack!)" rather than just "VAULT". Stack height is
+      // computed by counting crates within ~1.2 size of this crate's
+      // XZ that have a higher Y.
+      if(G.crates) {
+        for(const cr of G.crates) {
+          if(!cr || cr._destroyed) continue;
+          // Count stack height: this crate + every crate above it sharing XZ
+          let stackH = 1;
+          for(const cr2 of G.crates) {
+            if(cr2 === cr || cr2._destroyed) continue;
+            if(Math.abs(cr2.wx - cr.wx) < cr.size * 0.7
+               && Math.abs(cr2.wz - cr.wz) < cr.size * 0.7
+               && cr2.y > cr.y + cr.size * 0.5) {
+              stackH++;
+            }
+          }
+          recttest(cr.wx, cr.wz, cr.size, cr.size, 'crate_stack_' + stackH);
+        }
+      }
       tryList(G.spikes, 'spike');   // v0.19z6: vault ground spikes too
       // v0.19z6: scan spike-ring balls (rotating hazards around the hole).
       // Each ball's world position depends on ring angle, so we compute it
@@ -13341,6 +13569,60 @@ function updatePhysics(dt) {
       const dx = Math.abs(bx - sbx), dz = Math.abs(bz - sbz);
       if(dx <= hw && dz <= hd) fireJumpOver(sbx, sbz, sbx, sbz, id);
     });
+    // v0.22b: jump over crates (and crate stacks). Per Adam: "Jumping over
+    // boxes should give you bonuses (especially the large ones)." We fire
+    // 'jump_over' when the ball clears a crate's top — but for crates, the
+    // lower-lip is the crate's TOP face (not 60% of its height like
+    // bumpers/spikes), because for crates the meaningful "fly over" is
+    // the moment the ball is above the cube's top surface. Stack height
+    // is detected and fired as 'crate_stack_jumpover_<N>' so we can give
+    // tiered bonus coins/style points for taller stacks.
+    if(G.crates) G.crates.forEach((cr, i) => {
+      if(cr._destroyed) return;
+      // Skip crates that are themselves part of a stack (only fire on
+      // the TOP crate so we get one event per stack pass-over).
+      let stackH = 1;
+      let isTop = true;
+      for(const cr2 of G.crates) {
+        if(cr2 === cr || cr2._destroyed) continue;
+        if(Math.abs(cr2.wx - cr.wx) < cr.size * 0.7
+           && Math.abs(cr2.wz - cr.wz) < cr.size * 0.7) {
+          if(cr2.y > cr.y + cr.size * 0.5) {
+            isTop = false; // there's a crate above us — let the top one fire
+            break;
+          } else if(cr2.y < cr.y - cr.size * 0.5) {
+            stackH++; // crate below us, count toward our stack
+          }
+        }
+      }
+      if(!isTop) return;
+      const crTop = cr.y + cr.size; // world Y of crate top face
+      const lowerLip = crTop + 0.10;
+      const id = 'cr_jo_' + i;
+      if(G._jumpOverChecked.has(id)) return;
+      if(by <= lowerLip) return;
+      // AABB XZ trigger with 1× size buffer = 2× crate width (memory rule)
+      const reach = cr.size + 0.30;
+      const dx = Math.abs(bx - cr.wx), dz = Math.abs(bz - cr.wz);
+      if(dx > reach || dz > reach) return;
+      G._jumpOverChecked.add(id);
+      // Generic jump-over event (counts toward Sky Walker etc.)
+      recordStyleEvent('jump_over');
+      // Stack-specific style event for the bonus tier (single = jump_over_crate,
+      // 2 = jump_over_crate_2, 3+ = jump_over_crate_tower). Read by STYLE_PTS.
+      const stackTag = stackH >= 3 ? 'jump_over_crate_tower'
+                     : stackH === 2 ? 'jump_over_crate_2'
+                     : 'jump_over_crate';
+      recordStyleEvent(stackTag);
+      G._challengeJumpOvers = (G._challengeJumpOvers||0) + 1;
+      checkChallengeCompletion(true);
+      if(G._holeChallenge && G._holeChallenge.id === 'sky_walker') flashChallengeProgress();
+      // Coin reward scales with stack height — bigger stacks pay more
+      const coinCount = Math.min(6, 2 + stackH);
+      for(let _c = 0; _c < coinCount; _c++) collectCoin(cr.wx, cr.wz);
+      const stackLabel = stackH >= 3 ? `${stackH}-stack TOWER!` : (stackH === 2 ? '2-stack!' : 'crate!');
+      showToast(`🦘 Jump over ${stackLabel} +${coinCount} 🪙`, 1000);
+    });
     // ── Wall-skip detection: airborne pass over a wall polyline ──
     // Only fires when ball is meaningfully high (by > wall-top + buffer).
     // Dedup'd per-segment via G._wallSkipChecked Set (reset on shot fire).
@@ -13400,6 +13682,25 @@ function updatePhysics(dt) {
   // so under Shrink Ray the ball visually floated since its collision radius is smaller.
   const BALL_FLOOR_R   = BALL_R_EFF;
   const ghostActive    = G.ghostBallActive; // pass-through rocks/walls
+  // v0.22c: Explosivo immunity helper. If an immunity zone is active and
+  // BOTH the ball and an obstacle are inside it, the obstacle is treated
+  // as if destroyed for collision purposes. Cleared lazily when expired.
+  const _now22c = performance.now();
+  let _explImm = G._explosivoImmunity;
+  if(_explImm && _explImm.expiresAt < _now22c) {
+    G._explosivoImmunity = null;
+    _explImm = null;
+  }
+  // Pre-compute whether the BALL itself is inside the immunity zone —
+  // immunity only applies when both ball and obstacle are inside.
+  const _ballInExplImm = !!_explImm
+    && (Math.hypot(G.ballPos.x - _explImm.x, G.ballPos.z - _explImm.z) < _explImm.r);
+  // Helper: returns true if an obstacle at (ox, oz) should be skipped
+  // because both ball and obstacle are inside an active immunity zone.
+  const _explosivoSkip = (ox, oz) => {
+    if(!_ballInExplImm) return false;
+    return Math.hypot(ox - _explImm.x, oz - _explImm.z) < _explImm.r;
+  };
   // v0.19v: cannonball is now a WALLS-ONLY tool (smash through walls during
   // off-roading), separate from iron ball which destroys obstacles. hasIronBall
   // remains the flag for obstacle destruction. Wall-smashing uses its own flag
@@ -13876,7 +14177,7 @@ function updatePhysics(dt) {
     // rolling shots still respect walls at the tee.
     const launchGrace = G._shotJustFired
       && (performance.now() - G._shotJustFired) < 200
-      && (G._catapultLaunchGrace || G._jumpPreloadLaunchGrace);
+      && (G._catapultLaunchGrace || G._jumpPreloadLaunchGrace || G._frisbeeLaunchGrace);
     // v0.21c: Curve Ball — no wall collision during the curve phase. The ball
     // bends around walls and obstacles instead of bouncing off them. Once the
     // ~1.5s curve timer expires, normal wall physics resume.
@@ -14370,6 +14671,7 @@ function updatePhysics(dt) {
   if(G.rocks && G.rocks.length && !ghostActive) {
     for(const rock of G.rocks) {
       if(rock._destroyed) continue;
+      if(_explosivoSkip(rock.wx, rock.wz)) continue; // v0.22c: explosivo immunity
       // v0.19z: parkour immunity — skip entirely during vault window
       if(G._parkourImmunity || G._vacuumImmunity) continue;
       // Jump-over forgiveness: skip collision when ball is clearly above the rock
@@ -14437,6 +14739,7 @@ function updatePhysics(dt) {
   if(G.spikes && G.spikes.length && !ghostActive && !G._cannonballActive) {
     for(const spike of G.spikes) {
       if(spike._destroyed) continue;
+      if(_explosivoSkip(spike.wx, spike.wz)) continue; // v0.22c: explosivo immunity
       // v0.19z4: parkour + vacuum immunity — both abilities should let the
       // ball clear spikes without damage/bounce.
       if(G._parkourImmunity || G._vacuumImmunity) continue;
@@ -14563,6 +14866,7 @@ function updatePhysics(dt) {
     const cbHits = [];
     for(const spike of G.spikes) {
       if(spike._destroyed) continue;
+      if(_explosivoSkip(spike.wx, spike.wz)) continue; // v0.22c: explosivo immunity
       const dxC = G.ballPos.x - spike.wx;
       const dzC = G.ballPos.z - spike.wz;
       const distC = Math.hypot(dxC, dzC);
@@ -14661,6 +14965,7 @@ function updatePhysics(dt) {
   if(G.bumpers && G.bumpers.length && !ghostActive) {
     for(const bmp of G.bumpers) {
       if(bmp._destroyed) continue;
+      if(_explosivoSkip(bmp.wx, bmp.wz)) continue; // v0.22c: explosivo immunity
       // v0.19z: parkour immunity — skip entirely during vault window
       if(G._parkourImmunity || G._vacuumImmunity) continue;
       // Height gate: skip collision if ball is clearly above the bumper (jump-over forgiveness).
@@ -14764,6 +15069,7 @@ function updatePhysics(dt) {
   if(G.spinBars && G.spinBars.length) {
     for(const bar of G.spinBars) {
       if(bar._destroyed) continue;
+      if(_explosivoSkip(bar.wx, bar.wz)) continue; // v0.22c: explosivo immunity
       // v0.19z: parkour immunity — skip entirely during vault window
       if(G._parkourImmunity || G._vacuumImmunity) continue;
       // Advance bar angle for this substep FIRST — must happen regardless
@@ -14983,6 +15289,7 @@ function updatePhysics(dt) {
   if(G.slideBlocks && G.slideBlocks.length && !ghostActive) {
     for(const sb of G.slideBlocks) {
       if(sb._destroyed) continue;
+      if(_explosivoSkip(sb.wx, sb.wz)) continue; // v0.22c: explosivo immunity
       // v0.19z: parkour immunity — skip entirely during vault window
       if(G._parkourImmunity || G._vacuumImmunity) continue;
       const offset = Math.sin(sb.phase)*sb.range;
@@ -15132,6 +15439,7 @@ function updatePhysics(dt) {
   if(G.crates && G.crates.length && !ghostActive) {
     for(const cr of G.crates) {
       if(cr._destroyed) continue;
+      if(_explosivoSkip(cr.wx, cr.wz)) continue; // v0.22c: explosivo immunity
       // v0.19z: parkour immunity
       if(G._parkourImmunity || G._vacuumImmunity) continue;
 
@@ -15264,7 +15572,12 @@ function updatePhysics(dt) {
           } catch(e){}
         }
         triggerShake(Math.min(0.4, Math.abs(dot) / 28));
-        if(typeof recordStyleEvent === 'function') recordStyleEvent('rock_ricochet'); // reuse — feels similar
+        // v0.22b: dedicated 'crate_bump' style event (formerly reused
+        // rock_ricochet). Per Adam: "Bumping boxes should be a combo item
+        // ('Boxer')." Each individual crate impact pays small style points
+        // and contributes toward the BOXER trick (3+ crates bumped this
+        // shot) and HEAVYWEIGHT trick (5+ crates bumped this shot).
+        if(typeof recordStyleEvent === 'function') recordStyleEvent('crate_bump');
       }
     }
   }
@@ -15316,7 +15629,8 @@ function updatePhysics(dt) {
   // sub-step transit. Other hole-defense paths (magnet field velocity nudge,
   // slat/spike rings) stay post-substep — they aren't tunneling-prone.
   if(G._holeDefense && G._holeDefenseState
-     && G._holeDefense.kind === 'force_field' && G._holeDefenseState.closed) {
+     && G._holeDefense.kind === 'force_field' && G._holeDefenseState.closed
+     && !G.ghostBallActive) {
     const _hd_ff = G._holeDefense;
     const _hds_ff = G._holeDefenseState;
     const _hwF = G.holePos.x * TILE_SIZE + (G._holeWorldOffset?.x || 0);
@@ -15757,9 +16071,14 @@ function updatePhysics(dt) {
       document.body.appendChild(ghostHud);
     }
     const secs = Math.ceil(G._ghostTimer);
-    const frac = G._ghostTimer / 4.0;
-    const urgentColor = G._ghostTimer < 1.5 ? '#ff6666' : '#aaddff';
-    const pulse = G._ghostTimer < 1.5 ? 'font-size:clamp(1.8rem,7vw,2.8rem);' : 'font-size:clamp(1.4rem,5vw,2.2rem);';
+    // v0.22c: was hardcoded /4 — broke pulse + fraction when Long Ghost
+    // upgrade extended duration. Now reads _ghostTimerMax stamped at
+    // activation time. Urgent threshold also scales (last 30% of duration).
+    const _ghMax = G._ghostTimerMax || 3.0;
+    const frac = G._ghostTimer / _ghMax;
+    const urgentT = _ghMax * 0.30;
+    const urgentColor = G._ghostTimer < urgentT ? '#ff6666' : '#aaddff';
+    const pulse = G._ghostTimer < urgentT ? 'font-size:clamp(1.8rem,7vw,2.8rem);' : 'font-size:clamp(1.4rem,5vw,2.2rem);';
     ghostHud.style.color = urgentColor;
     ghostHud.style.cssText += pulse;
     ghostHud.textContent = `👻 ${G._ghostTimer.toFixed(1)}s`;
@@ -15987,7 +16306,17 @@ function updatePhysics(dt) {
   // ── Hole Defense collisions (v0.19t) ──────────────────
   // All defenses share: center at (holeWX, holeWZ) including moving-hole
   // offset; baseY from G.heightMap at the hole's grid cell.
-  if(G._holeDefense && G._holeDefenseState) {
+  // v0.22c: Ghost ball phases through ALL hole-defense obstacles. Per
+  // Adam: "Make sure ghost doesn't bounce off the obstacles around the
+  // hole itself (stones, spinning spikes etc)." Confirmed for force_field
+  // (already gated in the substep block above) and slat rings; this
+  // single ghost gate at the top of the per-frame defense block makes
+  // the rule universal — magnet push, slat pillars, spike ring damage
+  // all suspend while ghost is active. Ghost-hole-in-one through a
+  // defended cup is now the explicit design intent (Pillar #1: break
+  // golf), counterbalanced by the 3s base ghost duration which limits
+  // how often a player can chain the exploit.
+  if(G._holeDefense && G._holeDefenseState && !G.ghostBallActive) {
     const hd  = G._holeDefense;
     const hds = G._holeDefenseState;
     const hw = holeWX, hz = holeWZ;
@@ -16282,6 +16611,7 @@ function updatePhysics(dt) {
         G._catapultGroundBounce = false;
         G._catapultLaunchGrace = false;
         G._jumpPreloadLaunchGrace = false;
+        G._frisbeeLaunchGrace = false;
         if(G._ironBallActive || G._cannonballActive) {
           // Reset ball material from chrome back to normal
           if(G.ball) {
@@ -16600,6 +16930,7 @@ function resetToLastShot() {
   G._catapultGroundBounce = false;
   G._catapultLaunchGrace = false;
   G._jumpPreloadLaunchGrace = false;
+  G._frisbeeLaunchGrace = false;
   // v0.21c: clear new pre-swing card flags
   G._frisbeeActive = false;
   G._frisbeeArmed = false;
@@ -16846,8 +17177,19 @@ const STYLE_PTS = {
   conveyor_ride: 75,                      // 50 → 75 (trick, modest boost)
   spike_dodge: 250,                       // 200 → 250 (trick, boost)
   coin_flight: 25,
-  obstacle_destroyed: 200,                // unchanged
-  wall_destroyed: 500,                    // unchanged
+  obstacle_destroyed: 200,                // v0.22b: locked at 200 — DO NOT NERF
+  wall_destroyed: 500,                    // v0.22b: locked at 500 — DO NOT NERF
+  // v0.22b: crate jump-over tiers — tower vault is a flagship moment.
+  // Per Adam: "you should get huge points for leaping over a box stack
+  // (especially the tallest varieties)." These compose with the regular
+  // jump_over event (600 base) which also fires, so a tower clear
+  // delivers 600 + 1500 = 2100 base.
+  jump_over_crate:        500,
+  jump_over_crate_2:      1000,
+  jump_over_crate_tower:  1500,
+  // v0.22b: Boxer combo — each crate bump pays modest base style points;
+  // chain 3+ crates in a single shot for the BOXER trick (see TRICK_DEFS).
+  crate_bump:             100,
   slide_dodge: 140,                       // 100 → 140 (trick, boost)
   jump_over: 600,
   wall_skip: 500,                         // 350 → 500 (trick, boost)
@@ -16856,7 +17198,7 @@ const STYLE_PTS = {
   ghost_oob: 8000,  // ghost ball through OOB and back (was 6000)
   jump_oob: 6500,   // jumped over OOB and landed in bounds (was 4800)
   ghost_through: 350, // each obstacle/wall ghosted through (v0.20c)
-  hole_via_destruction: 2000,             // unchanged
+  hole_via_destruction: 2000,             // v0.22b: locked at 2000 — DO NOT NERF
   // v0.19z5: Parkour vault is a flagship combo event — big points + purple
   // display so it reads as a headline moment, not a dim glitchy text tag.
   parkour_vault: 1000,                    // 800 → 1000 (flagship trick, boost)
@@ -16900,6 +17242,9 @@ const TRICK_DEFS = [
   { id:'rolling_thunder',name:'ROLLING THUNDER',   pts:300,  test:(e,c)=> c.explosivoWhileRolling },
   { id:'carpet_bomb',    name:'CARPET BOMB',       pts:500,  test:(e)=> e.filter(x=>x.type==='obstacle_destroyed').length >= 4 },
   { id:'bulldozer',      name:'UNSTOPPABLE',       pts:500,  test:(e)=> e.filter(x=>x.type==='obstacle_destroyed').length >= 5 },
+  // v0.22b: Boxer family — chain crate bumps in a single shot.
+  { id:'boxer',          name:'BOXER',             pts:400,  test:(e)=> e.filter(x=>x.type==='crate_bump').length >= 3 },
+  { id:'heavyweight',    name:'HEAVYWEIGHT',       pts:800,  test:(e)=> e.filter(x=>x.type==='crate_bump').length >= 5 },
   { id:'ghost_shortcut', name:'GHOST SHORTCUT',    pts:8000, test:(e,c)=> c.holed && e.some(x=>x.type==='ghost_oob') },
   { id:'shortcut_artist',name:'SHORTCUT ARTIST',   pts:6000, test:(e)=> e.some(x=>x.type==='ghost_oob') },
   { id:'oob_daredevil',  name:'OOB DAREDEVIL',     pts:7200, test:(e,c)=> c.holed && e.some(x=>x.type==='jump_oob') },
@@ -16984,6 +17329,11 @@ const STYLE_NAMES = {
   spin_bar_hit:'SPIN BAR', fan_ride:'FAN RIDE', speed_hoop:'SPEED HOOP',
   conveyor_ride:'CONVEYOR', spike_dodge:'SPIKE DODGE', coin_flight:'COIN',
   obstacle_destroyed:'DESTROYED', wall_destroyed:'WALL DOWN', slide_dodge:'SLIDE BLOCK', jump_over:'JUMP OVER', wall_skip:'WALL SKIP', jump:'JUMP',
+  // v0.22b: crate jump-over tiers
+  jump_over_crate:'📦 BOX VAULT',
+  jump_over_crate_2:'📦 DOUBLE STACK!',
+  jump_over_crate_tower:'📦 TOWER VAULT!!',
+  crate_bump:'📦 BUMP',
   explosivo_rolling:'EXPLOSIVO', corner_deflect:'DEFLECT',
   ghost_oob:'GHOST SHORTCUT', jump_oob:'OOB JUMP',
   ghost_through:'👻 GHOST THROUGH',
@@ -17518,8 +17868,8 @@ function getHeatMult() {
 // ═══════════════════════════════════════════════════════
 
 const CHALLENGE_POOL = [
-  { id:'speed_demon',   label:'⏱️ Speed Demon',    desc:'Hole out in under 10s',          reward:20,
-    guard:()=>true, checkMid:()=>false, checkEnd:()=>G._challengeRollingTime < 10 },
+  { id:'speed_demon',   label:'⏱️ Speed Demon',    desc:'Hole out fast (par × 7s)',          reward:20,
+    guard:()=>true, checkMid:()=>false, checkEnd:()=>G._challengeRollingTime < (G.par || 3) * 7 },
   { id:'coin_hoarder',  label:'🪙 Coin Hoarder',   desc:'Collect 10+ coins this hole',    reward:10,
     // v0.20g: count coins by value (big 5x coins → 5), not by mesh count.
     guard:()=>true,
@@ -17776,13 +18126,17 @@ function calcHoleEarnings(strokes, par, coinsPickedUp, wallCoins = 0) {
     total += wallCoins;
   }
 
-  // Score bonus: under-par pays 10 coins per stroke under (v0.19j — scales with par)
-  // Par-5 HIO = 40, Par-4 eagle = 20, Par-3 birdie = 20, etc.
-  // v0.20a: Precision's underParMult doubles this (20 coins per stroke under).
+  // Score bonus: under-par pays 15 coins per stroke under (v0.22c — was 10)
+  // v0.19j: scales with par (Par-5 HIO = 60, Par-4 eagle = 30, Par-3 birdie = 15, etc.)
+  // v0.20a: Precision's underParMult doubles this.
+  // v0.22c: base bumped 10 → 15 per Adam ("Let's increase payouts by 50%
+  // for under par on normal runs"). Elite/Lap/Chasm courses don't go
+  // through this path for their own scoring multipliers; the bump is
+  // localized to standard hole completion.
   let scoreBonus = 0;
   const underPar = par - strokes;  // positive when under par
   if(underPar > 0) {
-    let perStroke = 10;
+    let perStroke = 15;
     try {
       if(typeof getCurrentCharacter === 'function') {
         const _char = getCurrentCharacter();
@@ -17993,6 +18347,27 @@ function applyDamage(amount, reason) {
   triggerDamageFlash(actual, reason);
   if(typeof updateHpDots === 'function') updateHpDots();
   updateUI();
+  // v0.22c: reliable game-over trigger. Per Adam: "Game over still doesn't
+  // reliably trigger at 0 hp. Seems like you need to hit -1 on a spike to
+  // make it go automatically." Previously gameOver was only checked at
+  // swing-resolution points (finalizeShot, holeOut, dot updates). When a
+  // player died mid-flight on a spike/spin-bar/elite ring, that check never
+  // ran until the next "swing resolves" event — which sometimes never came.
+  // Now: any time HP transitions to 0 (after defib revive consideration
+  // above), we schedule the game-over screen. Multiplayer skips this — the
+  // legacy per-hole flow still applies there. Defer with setTimeout so the
+  // current physics/damage frame finishes cleanly before the overlay paints.
+  if(G.hp <= 0 && !isMultiplayer() && !G._gameOverScheduled) {
+    G._gameOverScheduled = true;
+    if(typeof startGameOverFade === 'function') {
+      startGameOverFade();
+    } else {
+      // Fallback in case fade helper isn't loaded yet
+      setTimeout(() => {
+        if(typeof showGameOver === 'function' && G.hp <= 0) showGameOver(false);
+      }, 700);
+    }
+  }
   return actual;
 }
 function applyHeal(amount, reason) {
@@ -19776,21 +20151,35 @@ function openCardRemoval() {
   const overlay = document.getElementById('card-remove-overlay');
   const grid = document.getElementById('card-remove-grid');
   if(!overlay || !grid) return;
-  const counts = {};
-  for(const id of G.deck) counts[id] = (counts[id]||0) + 1;
+  // v0.22d: list each card INSTANCE individually (not deduped). Per Adam:
+  // "in the card removal area, you should list all the cards (including
+  // duplicates) individually so players can remove individual duplicates.
+  // Currently, if you remove a stack of duplicates, you will lose both
+  // of those duplicate cards instead of one which is what the player
+  // would expect."
+  //
+  // Each entry maps to a specific G.deck[] index and removes ONLY that
+  // index when clicked — duplicates can be trimmed one copy at a time.
+  // We tag the entry with data-deck-idx so removeCardFromDeckByIdx can
+  // splice out the precise position (idx-correct after any prior cuts
+  // because we re-render the overlay after each removal).
   grid.innerHTML = '';
-  const seen = new Set();
-  for(const cardId of G.deck) {
-    if(seen.has(cardId)) continue;
-    seen.add(cardId);
+  for(let i = 0; i < G.deck.length; i++) {
+    const rec = G.deck[i];
+    const cardId = (typeof rec === 'string') ? rec : (rec && rec.id);
+    if(!cardId) continue;
     const def = CARD_DEFS[cardId];
     if(!def) continue;
-    const ct = counts[cardId] || 1;
-    const countBadge = ct > 1 ? ` <span style="font-size:0.45rem;color:rgba(255,255,255,0.4)">×${ct}</span>` : '';
+    // Show upgrade marker if this specific instance is upgraded.
+    const upBranch = (typeof rec === 'object' && rec && rec.upgradeBranch) ? rec.upgradeBranch : null;
+    const upDef = upBranch && (typeof CARD_UPGRADES !== 'undefined') && CARD_UPGRADES[cardId] && CARD_UPGRADES[cardId][upBranch];
+    const dispEmoji = (upDef && upDef.emoji) || def.emoji;
+    const dispName  = (upDef && upDef.name)  || def.name;
+    const upBadge = upBranch ? ' <span style="font-size:0.45rem;color:#ffd166">✨</span>' : '';
     grid.innerHTML += `
-      <div class="card-remove-item" id="cr-${cardId}" onclick="removeCardFromDeck('${cardId}', this)">
-        <div class="cr-emoji">${def.emoji}</div>
-        <div class="cr-name">${def.name}${countBadge}</div>
+      <div class="card-remove-item" data-deck-idx="${i}" onclick="removeCardFromDeckByIdx(${i}, this)">
+        <div class="cr-emoji">${dispEmoji}</div>
+        <div class="cr-name">${dispName}${upBadge}</div>
       </div>`;
   }
   overlay.classList.add('open');
@@ -19872,7 +20261,7 @@ window.removeCardFromDeck = function(cardId, el) {
   // v0.20g: no longer set _cardRemoveUsedThisHole — players can cut as
   // many cards as they want per shop visit, limited only by coins.
   // Remove ONE copy from deck
-  const idx = G.deck.indexOf(cardId);
+  const idx = G.deck.findIndex(c => (typeof c === 'string' ? c === cardId : c && c.id === cardId));
   if(idx >= 0) {
     G.deck.splice(idx, 1);
     // v0.21g: shift G.deckUpgrades down past the removed slot so the per-
@@ -19885,6 +20274,37 @@ window.removeCardFromDeck = function(cardId, el) {
     const dpIdx = G.drawPile.findIndex(r => (typeof r === 'string' ? r === cardId : r && r.id === cardId));
     if(dpIdx >= 0) G.drawPile.splice(dpIdx, 1);
   }
+  _cardRemovalAnim(el, cardId);
+};
+
+// v0.22d: index-precise removal. Used by the new per-instance card-removal
+// UI so duplicates can be trimmed one at a time. Pays the price, splices
+// G.deck[idx] (and aligned trackers), then re-renders the overlay so the
+// remaining instances show with updated indices.
+window.removeCardFromDeckByIdx = function(idx, el) {
+  if(shopGraceActive()) return;
+  const price = getCardRemovePrice();
+  if(G.coins < price) return;
+  if(idx < 0 || idx >= G.deck.length) return;
+  G.coins -= price;
+  updateCoinHUD();
+  const rec = G.deck[idx];
+  const cardId = (typeof rec === 'string') ? rec : (rec && rec.id) || 'unknown';
+  // Drop the specific deck slot
+  G.deck.splice(idx, 1);
+  if(G.deckUpgrades) G.deckUpgrades.splice(idx, 1);
+  _shiftDeckIndicesAfterRemove(idx);
+  // Drop ONE matching draw-pile entry by id (approximation — drawPile is
+  // shuffled and doesn't carry a stable index back to the deck slot).
+  if(Array.isArray(G.drawPile)) {
+    const dpIdx = G.drawPile.findIndex(r => (typeof r === 'string' ? r === cardId : r && r.id === cardId));
+    if(dpIdx >= 0) G.drawPile.splice(dpIdx, 1);
+  }
+  _cardRemovalAnim(el, cardId);
+};
+
+// Shared animation + re-render helper for both removal entry points.
+function _cardRemovalAnim(el, cardId) {
   // Comedy drive-off animation — card gets hit by a driver and flies off screen
   if(el) {
     el.style.pointerEvents = 'none';
@@ -19907,12 +20327,31 @@ window.removeCardFromDeck = function(cardId, el) {
     }
   }
   const def = CARD_DEFS[cardId];
-  showToast(`✂️ ${def ? def.emoji + ' ' + def.name : cardId} removed from deck!`, 1500);
+  showToast(`✂️ ${def ? def.emoji + ' ' + def.name : cardId} removed!`, 1200);
+  // v0.22d: re-render the overlay (don't close) so the player can keep
+  // trimming duplicates one at a time. Close button + Esc both still
+  // exit when the player is done.
   setTimeout(() => {
-    closeCardRemoval();
-    renderShop();
+    if(typeof openCardRemoval === 'function' && G.coins >= getCardRemovePrice() && G.deck.length > 0) {
+      const overlay = document.getElementById('card-remove-overlay');
+      if(overlay && overlay.classList.contains('open')) {
+        // Re-render in place — keep overlay open
+        const grid = document.getElementById('card-remove-grid');
+        if(grid) {
+          // Re-build entries via openCardRemoval logic without re-paying or
+          // re-opening. Simplest: call openCardRemoval() — it pays nothing
+          // when called this way (no coin deduction here, just rendering).
+          openCardRemoval();
+        }
+      } else {
+        renderShop();
+      }
+    } else {
+      closeCardRemoval();
+      renderShop();
+    }
   }, 900);
-};
+}
 
 // ── Reusable projectile system ────────────────────────
 // fireProjectile(config) launches a projectile along the current aim direction.
@@ -20191,7 +20630,10 @@ const CRATE_H_MAX = 0.525;
 //     the same impact lofts the crate higher. Net read: ball hit
 //     "punts" the crate skyward instead of "skidding" it sideways.
 const CRATE_BALL_BOUNCE = 0.0;        // ball does NOT reflect
-const CRATE_BALL_DRAG   = 0.55;       // ball keeps 55% of speed in normal direction
+// v0.22b: drag relaxed 0.55 → 0.75 per Adam ("boxes should slow you down
+// no more than 25% — power shots crawl after hitting them"). Ball keeps
+// 75% of its normal-component speed; tangent component still unchanged.
+const CRATE_BALL_DRAG   = 0.75;       // ball keeps 75% of speed in normal direction
 const CRATE_BALL_TO_CRATE = 0.9;      // v0.22a4: 1.4 → 0.9 (less horizontal)
 const CRATE_FRICTION = 0.94;          // per-tick decay of crate horizontal velocity
 const CRATE_REST_THRESHOLD = 0.25;    // m/s — below this, crate is considered at rest
@@ -21293,7 +21735,16 @@ function updateCratePhysics(dt) {
     const _grounded = cr.y <= floorY + 0.10;
     const _hSpeed = Math.hypot(cr.vx, cr.vz);
     const _angSpeed = Math.abs(cr.angleVel) + Math.abs(cr.pitchVel || 0) + Math.abs(cr.rollVel || 0);
-    if(_grounded) {
+    // v0.22b: also settle when crate is stacked on top of another crate.
+    // The original "_grounded" gate skipped the snap whenever cr.y didn't
+    // reach the floor, which meant any crate sitting ON another crate
+    // never had its pitch/roll snapped to π/2 multiples. Adam's photo
+    // shows three boxes resting at clearly non-axis-aligned angles —
+    // those are the un-snapped stack members. Approx-rest detection:
+    // small XZ + Y velocity AND slow angular velocity is enough; the
+    // crate doesn't have to be physically on the floor.
+    const _atRest = (_hSpeed < 0.6) && (Math.abs(cr.vy) < 0.5) && (_angSpeed < 1.2);
+    if(_grounded || _atRest) {
       // If we're grounded and rotating slowly enough that we should be
       // settling, ease pitch/roll toward nearest π/2 multiple. Strength
       // of ease scales with how slow the rotation is — fast tumbles
@@ -21326,7 +21777,15 @@ function updateCratePhysics(dt) {
     // the target π/2 multiple to kill any floating-point drift that
     // could leave the crate visually tilted at rest.
     const speed = Math.hypot(cr.vx, cr.vz);
-    if(speed < CRATE_REST_THRESHOLD && Math.abs(cr.vy) < 0.4 && cr.y <= floorY + 0.05 && _angSpeed < 0.3) {
+    // v0.22b: the floor-contact gate (cr.y <= floorY + 0.05) was missed
+    // by stacked crates; they'd have correct velocities at rest but
+    // never get the hard-snap, leaving their pitch/roll at non-π/2
+    // values (causing the angle-stack visual bug). We now also accept
+    // a rest snapshot when ALL velocities are tiny — even mid-air a
+    // crate balanced on another crate qualifies.
+    const _atFullRest = speed < CRATE_REST_THRESHOLD && Math.abs(cr.vy) < 0.4 && _angSpeed < 0.3;
+    const _onFloor = cr.y <= floorY + 0.05;
+    if(_atFullRest && (_onFloor || _hSpeed < 0.05)) {
       cr.vx = 0; cr.vz = 0; cr.vy = 0;
       cr.angleVel = 0;
       cr.pitchVel = 0;
@@ -21359,7 +21818,18 @@ function updateCratePhysics(dt) {
   // (B sits directly above A). Shallowest = Y → push apart on Y →
   // B lands on top. Once stacked, idle gravity is countered by the
   // contact resolution every frame, so B stays put.
+  //
+  // v0.22b: iteration pass. Per Adam's photo of crates settling at
+  // mutual non-axis-aligned angles WITH visible interpenetration, the
+  // single-pass resolution can't catch up when 5+ crates land at the
+  // same time — fixing the A-B overlap can introduce a new B-C
+  // overlap, which won't be revisited until next frame, by which
+  // point the visual already shows clipping. 3 iterations is enough
+  // to settle a typical tower without a noticeable perf cost
+  // (n=10 crates, 3 × 45 = 135 pair checks per frame).
   const n = G.crates.length;
+  const _crateIters = (n >= 4) ? 3 : 1;
+  for(let _it = 0; _it < _crateIters; _it++) {
   for(let i = 0; i < n; i++) {
     const a = G.crates[i];
     if(a._destroyed || a._inStack) continue;
@@ -21436,7 +21906,9 @@ function updateCratePhysics(dt) {
           b.rollVel  = (b.rollVel  || 0) + (-nx) * tumbleA * 0.5;
         }
         // Audible tap — wood-on-wood thunk (quieter than ball-impact)
-        if(AC && Math.abs(va - vb) > 1.0) {
+        // v0.22b: only fire on iter 0 — later iters are penetration cleanup
+        // and shouldn't double-trigger SFX.
+        if(_it === 0 && AC && Math.abs(va - vb) > 1.0) {
           try {
             const ac = getAC(), tt = ac.currentTime;
             const o = ac.createOscillator(); o.type='sine';
@@ -21451,6 +21923,7 @@ function updateCratePhysics(dt) {
       }
     }
   }
+  } // end iter loop (v0.22b)
 
   // ── 4. Sync mesh transforms ──
   for(const cr of G.crates) {
@@ -21627,11 +22100,70 @@ function destroyObstacles(hits, epicentreX, epicentreY, epicentreZ) {
   if(G.modifiers.some(m=>m.id==='chain_lightning') && hits.length > 0) {
     applyChainLightning(hits, epicentreY);
   }
+  // v0.22b: Snowball Iron upgrade — when Iron Ball is active and at least
+  // one obstacle was destroyed, scale the ball's XZ velocity by speedOnDestroy
+  // (default 1.0, Snowball Iron = 1.15). Stacks PER destruction in the hit
+  // list, so a 4-rock plow gets 1.15^4 ≈ 1.75× speed by the end of the
+  // resolution. Hard-capped to avoid runaway speeds: 3× the pre-destruction
+  // speed maximum per call.
+  if(G._ironBallActive && hits.length > 0 && G.ball) {
+    const _sodMul = (typeof getCardField === 'function') ? getCardField('iron_ball','speedOnDestroy',1.0) : 1.0;
+    if(_sodMul > 1.001) {
+      const totalMul = Math.min(3.0, Math.pow(_sodMul, hits.length));
+      G.ballVel.x *= totalMul;
+      G.ballVel.z *= totalMul;
+      // Tiny visual tell: speed lines burst when the upgrade triggers.
+      if(typeof spawnHitParticles === 'function') {
+        spawnHitParticles(G.ballPos);
+      }
+    }
+  }
   return coinsEarned;
 }
 
 function spawnExplosion(x, y, z, scale) {
   const sc = scale || 1.0; // 0.5 = small, 1.0 = normal, 2.0 = big
+  // v0.22b: Blast crate stacks. Per Adam: "Explosions should send crate
+  // stacks flying — it shouldn't just impact the box that was hit by the
+  // projectile." Radial impulse with falloff, mass-scaled, with a strong
+  // upward kick so stacks LIFT off the ground (most readable visual).
+  // Radius scales with explosion size; force is generous because crate
+  // mass ranges 0.18-0.28 and we want the chain to actually go airborne.
+  if(G.crates && G.crates.length) {
+    const blastR = 4.5 * sc;        // bigger explosion = wider crate sweep
+    const baseImpulse = 22 * sc;    // tuned vs. crate mass + CRATE_TIME_SCALE
+    for(const cr of G.crates) {
+      if(cr._destroyed) continue;
+      const ddx = cr.wx - x, ddz = cr.wz - z;
+      const d = Math.hypot(ddx, ddz);
+      if(d > blastR) continue;
+      const falloff = 1 - d / blastR;
+      // Direction outward from blast (random scatter at near-zero distance)
+      let nx, nz;
+      if(d < 0.05) {
+        const a = Math.random() * Math.PI * 2;
+        nx = Math.cos(a); nz = Math.sin(a);
+      } else {
+        nx = ddx / d; nz = ddz / d;
+      }
+      const massInv = 1 / Math.max(0.18, cr.mass);
+      const horizMag = baseImpulse * falloff * massInv;
+      cr.vx += nx * horizMag;
+      cr.vz += nz * horizMag;
+      // Vertical lift — explosions punt stacks UP. Bigger close, smaller far.
+      cr.vy += (4.5 + 6.0 * falloff) * sc * massInv;
+      // Spin chaos: yaw + pitch + roll all get big random kicks so the
+      // crate tumbles in flight rather than gliding.
+      cr.angleVel += (Math.random() - 0.5) * 8 * falloff;
+      cr.pitchVel = (cr.pitchVel || 0) + (Math.random() - 0.5) * 6 * falloff;
+      cr.rollVel  = (cr.rollVel  || 0) + (Math.random() - 0.5) * 6 * falloff;
+      // Break stack lock so neighbors get the impulse too — chain collapse
+      if(cr._inStack || cr._inTower) {
+        cr._inStack = false;
+        cr._inTower = false;
+      }
+    }
+  }
   // Fireball shockwave: hot inner + orange outer particles
   const particleCount = Math.floor(20 + 12 * sc);
   for(let i = 0; i < particleCount; i++) {
@@ -22514,14 +23046,14 @@ const CARD_DEFS = {
   boulder:      { id:'boulder',      emoji:'🪨', name:'Boulder',         desc:'Summon an unstoppable boulder that smashes everything.',          rarity:'epic',      price:32,  context:'pre',    holdable:false, weight:2 },
   dodgeball:    { id:'dodgeball',    emoji:'🔴', name:'Dodgeball',       desc:'Fire a super-bouncy red ball that ricochets off everything.',     rarity:'epic',      price:42,  context:'pre',    holdable:false, weight:2 },
   explosivo:    { id:'explosivo',    emoji:'💥', name:'Explosivo',       desc:'Detonate a huge explosion at the ball\'s position.',              rarity:'epic',      price:21,  context:'any',    holdable:false },
-  ghost_ball:   { id:'ghost_ball',   emoji:'👻', name:'Ghost Ball',      desc:'Tap to phase through walls, rocks and obstacles for 4s. Tap again to end early.', rarity:'epic',      price:21,  context:'any',    holdable:false },
+  ghost_ball:   { id:'ghost_ball',   emoji:'👻', name:'Ghost Ball',      desc:'Tap to phase through walls, rocks and obstacles for 3s. Tap again to end early.', rarity:'epic',      price:21,  context:'any',    holdable:false },
   backspin:     { id:'backspin',     emoji:'🔄', name:'Backspin',        desc:'Slam the brakes mid-roll for precise placement.',                rarity:'common',    price:8,   context:'during', holdable:false, weight:4 },
   jumper:       { id:'jumper',       emoji:'🦘', name:'Jumper',          desc:'Jump over obstacles mid-roll — OR pre-load before your swing to launch on fire.', rarity:'common',    price:12,  context:'any',    holdable:false },
   slow_mo:      { id:'slow_mo',      emoji:'🐌', name:'Slow Mo',         desc:'25% speed for 6 seconds. See the chaos in detail.',              rarity:'rare',      price:20,  context:'any',    holdable:false },
-  walkies:      { id:'walkies',      emoji:'🦵', name:'Walkies',         desc:'Sprout legs and walk anywhere for 6 seconds.',                   rarity:'rare',      price:22,  context:'pre',    holdable:false },
+  walkies:      { id:'walkies',      emoji:'🦵', name:'Walkies',         desc:'Sprout legs and walk anywhere for 12 seconds.',                  rarity:'rare',      price:22,  context:'pre',    holdable:false },
   // arc_shot hidden — may revisit later
   // arc_shot:     { id:'arc_shot',     emoji:'🌈', name:'Arc Shot',        desc:'This swing: high arc trajectory, sail over obstacles.',           rarity:'rare',      price:12,  context:'pre',    holdable:false },
-  iron_ball:    { id:'iron_ball',    emoji:'🔩', name:'Iron Ball',       desc:'Plow through obstacles, destroying them on contact. Play anytime!', rarity:'rare',      price:18,  context:'any',    holdable:false },
+  iron_ball:    { id:'iron_ball',    emoji:'🔩', name:'Iron Ball',       desc:'Plow through obstacles, destroying them on contact. 2× shot power. Play anytime!', rarity:'rare',      price:18,  context:'any',    holdable:false, powerMult: 2.0 },
   mulligan:     { id:'mulligan',     emoji:'↩️', name:'Mulligan',        desc:'Undo your last swing. Ball returns, stroke refunded.',            rarity:'rare',      price:22,  context:'post',   holdable:false },
   airstrike:    { id:'airstrike',    emoji:'🎯', name:'Airstrike',       desc:'Tap a spot. After 2s, massive explosion rains down.',             rarity:'epic',      price:28,  context:'pre',    holdable:false },
   cannonball:   { id:'cannonball',   emoji:'💣', name:'Cannonball',      desc:'This swing: blast through walls AND spikes — both shatter on contact. Great for off-roading.',     rarity:'epic',      price:25,  context:'pre',    holdable:false },
@@ -22570,7 +23102,7 @@ const CARD_DEFS = {
   // v0.21c: Beat 'Em Up — during-roll. Cyan ring around the ball; tap card to
   // throw a giant anime fist that punches the closest in-circle obstacle. Up
   // to 3 punches per swing. Each punch destroys + knockback + style bonus.
-  beat_em_up:   { id:'beat_em_up',   emoji:'🥊', name:"Beat 'Em Up",       desc:'Cyan ring follows your ball. Tap to PUNCH the closest obstacle inside. Up to 3 punches per swing. BEATDOWN bonus if all 3 land!', rarity:'epic', price:40, context:'during', holdable:false, weight:2 },
+  beat_em_up:   { id:'beat_em_up',   emoji:'🥊', name:"Beat 'Em Up",       desc:'Cyan ring follows your ball. Tap to PUNCH the closest obstacle inside — works pre-swing or mid-roll. Up to 3 punches per swing. BEATDOWN bonus if all 3 land!', rarity:'epic', price:40, context:'during', holdable:false, weight:2 },
   // v0.21h: Inbounds — card version of the perk. Activates Tron-style blue
   // grid boundary walls for the rest of THIS hole only. Stacks on top of the
   // free OOB grace (1 free per hole). Permanent perk version remains as the
@@ -23325,6 +23857,28 @@ function playCard(instanceId) {
       try { _executeCardAbilityInner('beat_em_up'); }
       catch(e) { console.warn('beat_em_up retap activator failed', e); }
       return false;
+    }
+    // v0.22d: Double Jump re-tap fix. Per Adam: "when I tap the card mid-
+    // swing, I should be able to tap once to jump and then a second time
+    // during the duration of that swing to trigger a second jump anytime.
+    // Right now it just triggers one jump and the card vanishes."
+    //
+    // The bug: jumper was in _UNDOABLE_ARMED, so the second tap routed
+    // to unarmCardByInstance which sets _jumpChargesRemaining=0, wiping
+    // every remaining charge. Now: if jumper has Double Jump (jumpCharges>1)
+    // AND there are charges remaining, route to triggerJump instead of
+    // unarming. Once charges hit zero, the normal drain in updatePhysics
+    // takes the card out of hand. Mid-roll path matters most — pre-swing
+    // un-arm still works because chargesRemaining gets re-seeded on each
+    // play, so unarm-then-replay is harmless then.
+    if(card.id === 'jumper') {
+      const _jN = (typeof getCardField === 'function') ? (getCardField('jumper','jumpCharges',1)|0) : 1;
+      const _jLeft = (G._jumpChargesRemaining|0);
+      if(_jN > 1 && _jLeft > 0 && (G.rolling || G._jumpPreloaded)) {
+        try { triggerJump(); }
+        catch(e) { console.warn('jumper retap triggerJump failed', e); }
+        return false;
+      }
     }
     if(_UNDOABLE_ARMED.has(card.id)) {
       unarmCardByInstance(instanceId, card.id);
@@ -24644,21 +25198,39 @@ window.startCurveBallFlight = startCurveBallFlight;
 // ─────────────────────────────────────────────────────
 const BEAT_EM_UP_RADIUS = 5.0;   // 1.5× grenade AOE-ish (grenade is ~3.3m)
 
+// v0.22d: helper to read the active radius (Big Ring upgrade) and punch
+// count (Final Fight upgrade) for Beat 'Em Up. Centralized so the ring
+// build, the targeting search, and the punches-left init all use the
+// same numbers regardless of which upgrade is in play.
+function _beatEmUpRadius() {
+  const _mul = (typeof getCardField === 'function') ? getCardField('beat_em_up','radiusMult',1.0) : 1.0;
+  return BEAT_EM_UP_RADIUS * _mul;
+}
+function _beatEmUpPunchCount() {
+  return (typeof getCardField === 'function') ? (getCardField('beat_em_up','punchCount',3)|0) : 3;
+}
+
 function activateBeatEmUp() {
   // v0.21c2: pre-swing arming supported. Ring spawns immediately on arm so
   // the player sees the punch radius around the ball during aim. Punches
   // require G.rolling — re-taps before swing show a "wait" hint instead.
+  // v0.22d: pre-swing punches are now ALLOWED. Per Adam: "You should be
+  // able to start your beat em up combo/punches before your swing." This
+  // means the player can pre-stage a punch on a static obstacle inside
+  // the ring before launching, banking on it as a free first punch.
   if(G.inHole || G.state !== 'playing') return;
   // FIRST tap (no active beat-em-up state) → arm.
   if(!G._beatEmUpActive) {
     G._beatEmUpActive = true;
-    G._beatEmUpPunchesLeft = 3;
+    // v0.22d: read punchCount upgrade — Final Fight upgrade gives 6 instead of 3.
+    G._beatEmUpPunchesLeft = _beatEmUpPunchCount();
     G._beatEmUpPunchesLanded = 0;
+    G._beatEmUpMaxPunches = G._beatEmUpPunchesLeft;  // remembered for the bonus check
     buildBeatEmUpRing();   // ring appears immediately, regardless of rolling state
     if(G.rolling) {
       showToast("🥊 Beat 'Em Up — tap to PUNCH!", 1000);
     } else {
-      showToast("🥊 Armed — punch on the swing!", 1100);
+      showToast("🥊 Armed — punch any time!", 1100);
     }
     if(AC) {
       try {
@@ -24673,13 +25245,11 @@ function activateBeatEmUp() {
     }
     return;
   }
-  // Already armed/active. Re-tap behavior depends on rolling state.
-  if(!G.rolling) {
-    // Pre-roll re-tap → no-op with a hint. Don't consume a punch.
-    showToast('🥊 Wait for the swing!', 700);
-    return;
-  }
-  // Mid-roll re-tap → punch logic.
+  // Already armed/active. v0.22d: re-taps now punch in BOTH pre-swing and
+  // mid-roll. Pre-swing punches consume from the same pool as mid-roll
+  // punches; if the player wastes them all on stationary targets before
+  // swinging, that's their call. Per Adam: "You should be able to start
+  // your beat em up combo/punches before your swing."
   if(G._beatEmUpPunchesLeft <= 0) {
     showToast('🥊 No punches left!', 700);
     return;
@@ -24692,7 +25262,9 @@ function activateBeatEmUp() {
     if(sp > 0.4) { dirX = G.ballVel.x / sp; dirZ = G.ballVel.z / sp; }
     else if(G.shotDir && G.shotDir.length() > 0.01) { dirX = G.shotDir.x; dirZ = G.shotDir.z; }
   }
-  const candidates = collectObstaclesInRadius(cx, cz, BEAT_EM_UP_RADIUS);
+  // v0.22d: read live radius (respects Big Ring upgrade)
+  const _liveR = _beatEmUpRadius();
+  const candidates = collectObstaclesInRadius(cx, cz, _liveR);
   if(candidates.length === 0) {
     // No obstacles in range — small "swish" feedback, no punch consumed.
     showToast('🥊 No targets in range', 700);
@@ -24707,19 +25279,23 @@ function activateBeatEmUp() {
     const ndx = odx / d, ndz = odz / d;
     const fwdDot = ndx * dirX + ndz * dirZ;   // +1 = directly forward, -1 = directly behind
     // Score: closeness (negative distance) + forward bias. Forward-cone gets +2 at full alignment.
-    const score = (BEAT_EM_UP_RADIUS - d) + 2.0 * Math.max(0, fwdDot);
+    const score = (_liveR - d) + 2.0 * Math.max(0, fwdDot);
     if(score > bestScore) { bestScore = score; best = h; }
   }
   if(!best) return;
   punchObstacle(best, dirX, dirZ);
   G._beatEmUpPunchesLeft--;
   G._beatEmUpPunchesLanded++;
-  // BEATDOWN bonus on the third successful punch in one swing.
-  if(G._beatEmUpPunchesLanded === 3) {
-    if(typeof recordStyleEvent === 'function') recordStyleEvent('beatdown');
-    G._holeStyleScore = (G._holeStyleScore || 0) + 500;
-    showToast('🥊 BEATDOWN! +500', 1400);
-    triggerShake('med');
+  // v0.22d: BEATDOWN/FINAL FIGHT bonus on landing ALL punches in one swing.
+  // Final Fight upgrade reads finalFightBonus off CARD_DEFS.beat_em_up
+  // (default 500 for base 3-punch BEATDOWN, 1500 for Final Fight 6-punch).
+  const _maxPunches = G._beatEmUpMaxPunches || 3;
+  if(G._beatEmUpPunchesLanded === _maxPunches) {
+    const _bonus = (typeof getCardField === 'function') ? getCardField('beat_em_up','finalFightBonus', _maxPunches >= 6 ? 1500 : 500) : 500;
+    if(typeof recordStyleEvent === 'function') recordStyleEvent(_maxPunches >= 6 ? 'final_fight' : 'beatdown');
+    G._holeStyleScore = (G._holeStyleScore || 0) + _bonus;
+    showToast((_maxPunches >= 6 ? '🥊 FINAL FIGHT! +' : '🥊 BEATDOWN! +') + _bonus, 1400);
+    triggerShake('heavy');
   }
 }
 window.activateBeatEmUp = activateBeatEmUp;
@@ -24727,7 +25303,9 @@ window.activateBeatEmUp = activateBeatEmUp;
 function buildBeatEmUpRing() {
   if(G._beatEmUpRing) return;
   // Cyan flat ring on the ground, follows the ball.
-  const ringGeo = new THREE.RingGeometry(BEAT_EM_UP_RADIUS - 0.10, BEAT_EM_UP_RADIUS, 48);
+  // v0.22d: read live radius (Big Ring upgrade scales it 1.5×).
+  const _liveR = _beatEmUpRadius();
+  const ringGeo = new THREE.RingGeometry(_liveR - 0.10, _liveR, 48);
   const ringMat = new THREE.MeshBasicMaterial({
     color: 0x00e6ff,
     transparent: true,
@@ -24753,6 +25331,7 @@ function destroyBeatEmUpRing() {
   G._beatEmUpArmed = false;
   G._beatEmUpPunchesLeft = 0;
   G._beatEmUpPunchesLanded = 0;
+  G._beatEmUpMaxPunches = 0;  // v0.22d: clear remembered punch cap
   // v0.21c: Beat 'Em Up was a "stays in slot during play" card. Now that the
   // swing ended, drain it: remove from hand, drop from slot, push to discard,
   // remove from _armedCards. Without this it would re-trigger the armed-card
@@ -24878,7 +25457,11 @@ function punchObstacle(hit, dirX, dirZ) {
   };
   animFist();
   // Impact shake + SFX (anime thwack — punchy, slightly pitched-up)
-  triggerShake('med');
+  // v0.22d: shake intensity 'med' → 'light' per Adam ("light screen
+  // shake when you punch an object"). The big BEATDOWN/FINAL FIGHT
+  // bonus shake is still 'heavy', so the climax punch still feels
+  // distinct from the build-up punches.
+  triggerShake('light');
   if(AC) {
     try {
       const ac = getAC(), t = ac.currentTime;
@@ -25534,8 +26117,19 @@ function activateWalkiesCard() {
   G.walkiesActive = true;
   // v0.20h: Clone perk — 10s -> 20s on cloned plays
   // v0.21d: Power Walkies upgrade reads durationMult off CARD_DEFS.walkies.
+  // v0.22c: base duration 10s → 12s per Adam ("bump up time to 12s").
+  // ALSO: snapshot Stompies (destroyOnContact) flag NOW while
+  // _activeCardInstance is still populated — the per-frame stomp check
+  // runs after the activator returns and _activeCardInstance has been
+  // cleared in playCard's finally block, so a getCardField call from
+  // there would fall through to base def and the upgrade silently no-op'd.
+  // Per Adam: "Stompies doesn't work at all — ball just walks up to the
+  // obstacle and stops there." Now we read once at arm time and stash on
+  // G._walkiesStompiesActive for the per-frame check to consume.
   const _wkDurMul = (typeof getCardField === 'function') ? getCardField('walkies','durationMult',1.0) : 1.0;
-  G.walkiesTimer = 10.0 * _wkDurMul * consumeCloneDurationMult('walkies');
+  G.walkiesTimer = 12.0 * _wkDurMul * consumeCloneDurationMult('walkies');
+  G._walkiesStompiesActive = (typeof getCardField === 'function')
+    ? !!getCardField('walkies','destroyOnContact',false) : false;
   trackStat('walkiesUsed', 1);
   // v0.21f: prime _walkDir from the current aim arrow so walkies starts
   // moving in the direction the player is facing — no need to tap to
@@ -27315,6 +27909,7 @@ function fireSharpshooterBall() {
   // Launch-grace (Sharpshooter-ball only uses jump-preload grace; no Catapult here)
   G._jumpPreloadLaunchGrace = !!G._jumpPreloaded;
   G._catapultLaunchGrace = false;
+  G._frisbeeLaunchGrace = false;
   // Jumper pre-load: add upward punch to the ball's launch velocity
   if(G._jumpPreloaded) {
     G.ballVel.y = Math.max(G.ballVel.y, G.ballVel.y + 6.38);
@@ -27778,10 +28373,20 @@ window.activateShooter = activateShooter;
 // v0.20w: door dimensions bumped ~20% from v0.20u baseline (was 16R × 32R)
 // to make portals more inviting visual targets and forgive slight ball
 // drift on entry. Now ~9.6 ball-widths × 19.2 ball-heights.
+// v0.22b: Wider Portal upgrade (portal_grenade branch B) reads
+// portalRadiusMult off CARD_DEFS. Multiplier is captured in
+// _PORTAL_RADIUS_MUL at portal-creation time so all per-frame collision
+// checks can use the same widened halfW without re-reading the field.
+let _PORTAL_RADIUS_MUL = 1.0;
 const _PORTAL_DOOR_W = BALL_R * 19.2;
 const _PORTAL_DOOR_H = BALL_R * 38.4;
-const _PORTAL_HALFW  = _PORTAL_DOOR_W * 0.5;
+const _PORTAL_HALFW_BASE = _PORTAL_DOOR_W * 0.5;
 const _PORTAL_HALFH  = _PORTAL_DOOR_H * 0.5;
+// Use a getter for the effective half-width — old code references
+// _PORTAL_HALFW directly. This stays a const to keep all existing call
+// sites working; the upgrade scales it at runtime via the variable above.
+function _portalHalfW() { return _PORTAL_HALFW_BASE * _PORTAL_RADIUS_MUL; }
+const _PORTAL_HALFW  = _PORTAL_HALFW_BASE; // legacy const for non-collision uses (visual ring radius)
 const _PORTAL_TELEPORT_COOLDOWN = 0.5;
 // v0.20y: full Portal-game window approach (Option A). RTT is rendered at
 // matching screen aspect; the screen-space UV shader on the door samples
@@ -27848,6 +28453,7 @@ function _resetPortalState() {
   G._portalArming = false;  // true while card is armed but entry not committed yet
   G._portalArmingPreview = null; // preview mesh that follows the ball
   G._portalRttFrame = 0;    // alternates 0/1 across animate frames for half-fps
+  _PORTAL_RADIUS_MUL = 1.0; // v0.22b: clear Wider Portal upgrade at hole reset
 }
 
 // Arm Portal Grenade. v0.20v simplification: NO manual entry placement
@@ -28502,6 +29108,10 @@ function _computeExitDoorFacing(landX, landZ, throwDirX, throwDirZ) {
 // future callers like a debug "force exit at X,Z" can reuse the spawn
 // logic without inheriting the auto-rotation heuristic.)
 function _placeExitPortal(landX, landZ, facing) {
+  // v0.22b: Wider Portal upgrade — capture portalRadiusMult once when the
+  // portal is placed. Per-frame collision checks read the live multiplier.
+  _PORTAL_RADIUS_MUL = (typeof getCardField === 'function')
+    ? getCardField('portal_grenade','portalRadiusMult',1.0) : 1.0;
   G._portalExit = _buildPortal('exit', landX, landZ, facing);
   scene.add(G._portalExit.group);
 }
@@ -28770,7 +29380,7 @@ function tryPortalTeleportXZ(posObj, velObj, stateRef, nowSec) {
     const cf = Math.cos(portal.facing), sf = Math.sin(portal.facing);
     const along  = dx * cf - dz * sf;
     const normal = dx * sf + dz * cf;
-    if(Math.abs(along) > _PORTAL_HALFW) return false;
+    if(Math.abs(along) > _portalHalfW()) return false;
     // Thickness threshold — within ~0.6m of the door plane on either side
     if(Math.abs(normal) > 0.6) return false;
     // v0.20w1: front-side gate. Ball must be approaching from the +outward
@@ -28887,7 +29497,9 @@ function _throwExitPortalGrenade(power, dir) {
   _dir.normalize();
   // 4-36m wide power range so Portal Grenade can cover long fairways.
   // v0.21a: Strengthen Swing extends portal throw too — match preview math.
-  const lobDist = (4 + _power * 32) * (G.swingMult || 1.0);
+  // v0.22b: Portal Trebuchet upgrade — getCardField('portal_grenade','lobMult',1.0).
+  const _ptLobMul = (typeof getCardField === 'function') ? getCardField('portal_grenade','lobMult',1.0) : 1.0;
+  const lobDist = (4 + _power * 32) * (G.swingMult || 1.0) * _ptLobMul;
   const lobTime = 0.8;
   const startPos = G.ballPos.clone();
   startPos.y += 0.3;
@@ -29164,8 +29776,10 @@ function rebuildGrenadePreview() {
   const power = Math.max(0.1, Math.min(1.0, G._grenadePower || 0.5));
   // v0.21a: Strengthen Swing extends throwables (grenade/HHG/portal) range.
   // Aligns with existing swingMult behavior on regular shots and arc preview.
+  // v0.22b: Portal Trebuchet upgrade doubles portal throw distance.
   const _swMul = G.swingMult || 1.0;
-  const lobDist = (isPortal ? (4 + power * 32) : (4 + power * 16)) * _swMul;
+  const _ptLobMul2 = isPortal && typeof getCardField === 'function' ? getCardField('portal_grenade','lobMult',1.0) : 1.0;
+  const lobDist = (isPortal ? (4 + power * 32) * _ptLobMul2 : (4 + power * 16)) * _swMul;
   const lobTime = 0.8;
   const dir = G.shotDir.clone().normalize();
   const startX = G.ballPos.x, startZ = G.ballPos.z, startY = G.ballPos.y + 0.3;
@@ -29419,6 +30033,113 @@ function throwGrenadeAt(power, dir, opts) {
               const eDot=gvx*enx+gvz*enz;
               if(eDot<0){gvx-=1.6*eDot*enx;gvz-=1.6*eDot*enz;}
             }
+          }
+        }
+      }
+
+      // v0.22b: Grenade obstacle ricochet — rocks/crates/bumpers/spin-bar
+      // pivots/slide-blocks deflect the grenade like the player ball does.
+      // Previously grenades passed through anything that wasn't a wall or
+      // corner triangle. Per Adam: "Grenades should ricochet off obstacles
+      // like you do." We bounce off the obstacle's XZ silhouette without
+      // destroying it (HHG/explosion at fuse-end still cleans them up).
+      // Skipped when GRENADE_FLY_OVER (high arc) so a clean lob still
+      // sails over short obstacles and lands cleanly.
+      if(!GRENADE_FLY_OVER) {
+        const _grBounceR = GRENADE_R + 0.05; // slim padding
+        // Helper: circular obstacle reflect (rocks, bumpers, spike caps, slide-block end-caps)
+        const _grenReflectCircle = (ox, oz, oR) => {
+          const ddx = gx - ox, ddz = gz - oz;
+          const d = Math.hypot(ddx, ddz);
+          const minD = oR + _grBounceR;
+          if(d < minD && d > 0.001) {
+            const nx = ddx/d, nz = ddz/d;
+            gx += nx * (minD - d); gz += nz * (minD - d);
+            const dot = gvx*nx + gvz*nz;
+            if(dot < 0) { gvx -= 1.6*dot*nx; gvz -= 1.6*dot*nz; }
+          }
+        };
+        if(G.rocks) for(const r of G.rocks) {
+          if(r._destroyed) continue;
+          _grenReflectCircle(r.wx, r.wz, r.r || 0.5);
+        }
+        if(G.bumpers) for(const b of G.bumpers) {
+          if(b._destroyed) continue;
+          _grenReflectCircle(b.wx, b.wz, b.r || 0.3);
+        }
+        if(G.spikes) for(const sp of G.spikes) {
+          if(sp._destroyed) continue;
+          _grenReflectCircle(sp.wx, sp.wz, sp.r || sp.radius || 0.5);
+        }
+        // Spin bars — closest-point on tip-to-tip segment
+        if(G.spinBars) for(const s of G.spinBars) {
+          if(s._destroyed) continue;
+          const cosA = Math.cos(s.angle), sinA = Math.sin(s.angle);
+          const sax = s.wx - cosA*s.len, saz = s.wz + sinA*s.len;
+          const sbx = s.wx + cosA*s.len, sbz = s.wz - sinA*s.len;
+          const sex = sbx-sax, sez = sbz-saz, sLSq = sex*sex+sez*sez;
+          if(sLSq < 0.0001) continue;
+          const st = Math.max(0, Math.min(1, ((gx-sax)*sex+(gz-saz)*sez)/sLSq));
+          const scx = sax+st*sex, scz = saz+st*sez;
+          const sdx2 = gx-scx, sdz2 = gz-scz;
+          const sd = Math.hypot(sdx2, sdz2);
+          const sMin = (s.barR || 0.18) + _grBounceR;
+          if(sd < sMin && sd > 0.001) {
+            const snx = sdx2/sd, snz = sdz2/sd;
+            gx += snx * (sMin - sd); gz += snz * (sMin - sd);
+            const sdot = gvx*snx + gvz*snz;
+            if(sdot < 0) { gvx -= 1.6*sdot*snx; gvz -= 1.6*sdot*snz; }
+          }
+        }
+        // Slide blocks — AABB
+        if(G.slideBlocks) for(const sb of G.slideBlocks) {
+          if(sb._destroyed) continue;
+          const hx = (sb.halfW || 0.4) + _grBounceR;
+          const hz = (sb.halfD || 0.4) + _grBounceR;
+          const sdx = gx - sb.wx, sdz = gz - sb.wz;
+          if(Math.abs(sdx) < hx && Math.abs(sdz) < hz) {
+            const oxV = hx - Math.abs(sdx), ozV = hz - Math.abs(sdz);
+            if(oxV < ozV) {
+              const sgn = sdx >= 0 ? 1 : -1;
+              gx += sgn * oxV;
+              if((sgn > 0 && gvx < 0) || (sgn < 0 && gvx > 0)) gvx = -gvx * 0.6;
+            } else {
+              const sgn = sdz >= 0 ? 1 : -1;
+              gz += sgn * ozV;
+              if((sgn > 0 && gvz < 0) || (sgn < 0 && gvz > 0)) gvz = -gvz * 0.6;
+            }
+          }
+        }
+        // Crates — AABB with Y range. Grenades bouncing off a crate's
+        // side face deflect; landing on top is handled by ground bounce.
+        if(G.crates) for(const cr of G.crates) {
+          if(cr._destroyed) continue;
+          const cWx = cr.wx + (cr._teeterDx || 0);
+          const cWz = cr.wz + (cr._teeterDz || 0);
+          const h = cr.size + _grBounceR;
+          const cdx = gx - cWx, cdz = gz - cWz;
+          if(Math.abs(cdx) >= h || Math.abs(cdz) >= h) continue;
+          const crBot = cr.y - cr.size, crTop = cr.y + cr.size;
+          if(gy < crBot - 0.1 || gy > crTop + 0.4) continue;
+          // Lateral resolve — shallowest axis
+          const oX = h - Math.abs(cdx), oZ = h - Math.abs(cdz);
+          if(oX < oZ) {
+            const sgn = cdx >= 0 ? 1 : -1;
+            gx += sgn * oX;
+            if((sgn > 0 && gvx < 0) || (sgn < 0 && gvx > 0)) gvx = -gvx * 0.65;
+          } else {
+            const sgn = cdz >= 0 ? 1 : -1;
+            gz += sgn * oZ;
+            if((sgn > 0 && gvz < 0) || (sgn < 0 && gvz > 0)) gvz = -gvz * 0.65;
+          }
+          // Optional: kick the crate — small nudge so the grenade impact
+          // reads physically. Mass-scaled, much weaker than ball impact.
+          const kickMag = Math.hypot(gvx, gvz) * 0.15 / Math.max(0.2, cr.mass);
+          if(cdx !== 0 || cdz !== 0) {
+            const ddist = Math.hypot(cdx, cdz) || 1;
+            cr.vx += -(cdx/ddist) * kickMag;
+            cr.vz += -(cdz/ddist) * kickMag;
+            cr.angleVel += (Math.random()-0.5) * 0.8;
           }
         }
       }
@@ -31465,6 +32186,28 @@ function triggerExplosivo() {
 
   const hits = collectObstaclesInRadius(px, pz, BLAST_R);
   blastIdleBalls(px, pz, BLAST_R, 25);
+  // v0.22c: Explosivo immunity zone. Per Adam: "When you use Explosivo
+  // mid-swing, all obstacles within its perimeter should no longer be
+  // able to hit your ball. Currently I will often trigger explosivo
+  // mid-swing but (especially if I'm moving fast) the destroyed
+  // obstacles still collide with my ball when as a player I would
+  // expect explosivo to clear my path."
+  //
+  // The bug: destruction is intentionally delayed 150ms for dramatic
+  // effect. During those 150ms, doomed obstacles remain in the live
+  // physics lists (G.rocks, G.bumpers etc.) so a fast-moving ball
+  // smashes into them before they get removed. Even after destruction,
+  // the ball can re-clip a mesh that hasn't been pruned yet.
+  //
+  // Fix: stash a circular immunity zone {x, z, r, expiresAt} that the
+  // collision code checks first. Any obstacle inside the zone is
+  // skipped while the ball is also inside the zone, for the next 600ms
+  // (covers the 150ms destroy delay + a generous buffer for visual
+  // fade-out and any in-flight substep iterations).
+  G._explosivoImmunity = {
+    x: px, z: pz, r: BLAST_R,
+    expiresAt: performance.now() + 600,
+  };
   // Delay destruction slightly for dramatic effect
   setTimeout(() => {
     destroyObstacles(hits, px, py, pz);
@@ -31493,9 +32236,14 @@ function activateGhostBall() {
   G.ghostBallActive = true;
   // v0.20h: Clone perk — 4s -> 8s on cloned plays
   // v0.21d: Long Ghost upgrade reads durationMult off CARD_DEFS.ghost_ball
-  // (Long Ghost = 2.0 → 8s). Stacks with Clone (8s × 2 = 16s).
+  // (Long Ghost = 2.0 → 6s). Stacks with Clone (6s × 2 = 12s).
+  // v0.22c: base duration nerfed 4s → 3s per Adam ("Cut ghost to 3s to
+  // slightly nerf — Yes"). Long Ghost upgrade still applies its 2× → 6s.
+  // Also stash _ghostTimerMax so the HUD pulse threshold and fraction
+  // scale correctly when upgraded (was hardcoded /4 fraction).
   const _ghMul = (typeof getCardField === 'function') ? getCardField('ghost_ball','durationMult',1.0) : 1.0;
-  G._ghostTimer = 4.0 * _ghMul * consumeCloneDurationMult('ghost_ball');
+  G._ghostTimer = 3.0 * _ghMul * consumeCloneDurationMult('ghost_ball');
+  G._ghostTimerMax = G._ghostTimer;
   if(G.ball) {
     G.ballMesh.material = new THREE.MeshToonMaterial({
       color:0xaaddff, transparent:true, opacity:0.35,
@@ -31512,8 +32260,9 @@ window.activateGhostBall = activateGhostBall;
 function applyPerkEffect(id) {
   switch(id) {
     case 'strengthen_swing': {
-      // v0.21h: Mighty Swing upgrade reads pctPerStack off the perk (default 0.20, Mighty = 0.35).
-      const _ssp = (typeof getPerkField === 'function') ? getPerkField('strengthen_swing','pctPerStack',0.20) : 0.20;
+      // v0.21h: Mighty Swing upgrade reads pctPerStack off the perk (default 0.30, Mighty = 0.35).
+      // v0.22b: base bumped 0.20 → 0.30 per Adam ("higher value by default").
+      const _ssp = (typeof getPerkField === 'function') ? getPerkField('strengthen_swing','pctPerStack',0.30) : 0.30;
       G.swingMult = (G.swingMult || 1.0) * (1.0 + _ssp);
       break;
     }
@@ -31589,7 +32338,21 @@ function applyPerkEffect(id) {
       while(G.cardSlots.length < CARD_SLOT_KEYS.length) G.cardSlots.push(null);
       // Deal targetSize cards at the start of each hole
       G._initialDraw = targetSize;
+      // v0.22b: Crowded House mid-run draw fix. Previously we only updated
+      // _initialDraw (so future holes deal more cards) but didn't draw the
+      // delta this hole — meaning the new 6th slot sat empty until next
+      // hole. Per Adam: "Cards don't automatically fill your sixth slot
+      // when you have crowded house." Now we top up to targetSize from
+      // the draw pile right after the slot UI grows.
+      const _topUpNeeded = targetSize - G.hand.length;
+      if(_topUpNeeded > 0 && typeof drawCards === 'function') {
+        drawCards(_topUpNeeded);
+      }
       if(typeof assignCardsToSlots === 'function') assignCardsToSlots();
+      // v0.22b: tag the hand container so CSS can shrink slot sizes when
+      // crowded — keeps 6/7/8 cards inside the iPhone viewport.
+      const _handEl = document.getElementById('card-hand');
+      if(_handEl) _handEl.setAttribute('data-handsize', String(targetSize));
       updateHandUI();
       // Toast for stacks > 1 — name the tier
       if(fhStacks === 2) showToast('🂡 Really Crowded House! 7 cards in hand', 1500);
@@ -32631,6 +33394,7 @@ function onPointerDown(x, y, id) {
     G._catapultGroundBounce = false;
     G._catapultLaunchGrace = false;
     G._jumpPreloadLaunchGrace = false;
+    G._frisbeeLaunchGrace = false;
     if(G._ironBallActive || G._cannonballActive) {
       if(G.ball) {
         const pColor = isMultiplayer() ? G.players[G.currentPlayer].color : 0xffffff;
@@ -33040,7 +33804,13 @@ function fireShot() {
   // The 4× brake on landing still makes it stop fast; with 0.75× pre-brake
   // distance, the disc covers about half of what it used to.
   const frisbeeBoost = G._frisbeeArmed ? 0.75 : 1.0;
-  const speed = G.shotPower * 32 * boost * ironWeight * powerMult * catapultSoloDamp * frisbeeBoost;
+  // v0.22b: pull iron_ball powerMult here too — preview was already
+  // multiplying it in (line 12618), but the actual fireShot speed wasn't.
+  // With the new 2.0 base + 3.0 Wrecking Ball upgrade this gap was big
+  // enough that Iron Ball preview-vs-actual diverged ~2-3×.
+  const _ironPwrMul = (G._ironBallActive && typeof getCardField === 'function')
+    ? getCardField('iron_ball','powerMult',1.0) : 1.0;
+  const speed = G.shotPower * BASE_LAUNCH_FACTOR * boost * ironWeight * _ironPwrMul * powerMult * catapultSoloDamp * frisbeeBoost;
   const firedPower = G.shotPower;
   G.ballVel.set(G.shotDir.x * speed, 2.5 + arcExtra, G.shotDir.z * speed);
   // Screen shake on shot — proportional to power
@@ -33126,8 +33896,11 @@ function fireShot() {
   }
   // Launch-grace flags: enable 200ms wall pass-through only for Catapult / pre-loaded Jumper.
   // These trigger airborne launches where colliding with a nearby wall at tee is annoying.
+  // v0.22b: Frisbee gets the same treatment — disc launches into the air on
+  // throw and bouncing off a close wall at the tee felt frustrating per Adam.
   G._catapultLaunchGrace = !!G._catapultActive;
   G._jumpPreloadLaunchGrace = !!G._jumpPreloaded;
+  G._frisbeeLaunchGrace = !!G._frisbeeArmed;
   // Jumper pre-load consumption: punch Y-velocity up on launch if armed.
   // Use Math.max so Catapult's bigger initial Y (9.0) still wins over a normal jump.
   if(G._jumpPreloaded) {
@@ -33582,55 +34355,217 @@ function debugUnlockAll() {
 
 function debugRenderPerks() {
   const rarityColor = {common:'#7ec8e3',rare:'#a78bfa',epic:'#f59e0b',legendary:'#ef4444'};
+  // v0.22d: tooltip helpers. Show on mouseover (desktop) and on long-press
+  // (mobile, 600ms hold). Hide on mouseleave / touchend / touchmove.
+  // The single shared #dbg-tooltip element gets repositioned each show.
+  const tooltipEl = document.getElementById('dbg-tooltip');
+  const showTooltip = (el, text) => {
+    if(!tooltipEl) return;
+    tooltipEl.innerHTML = text;
+    tooltipEl.style.display = 'block';
+    const rect = el.getBoundingClientRect();
+    // Position to the right of the button when there's room, else left
+    const winW = window.innerWidth;
+    const ttW = 260;
+    let left = rect.right + 8;
+    if(left + ttW > winW - 8) left = Math.max(8, rect.left - ttW - 8);
+    let top = rect.top;
+    // Clamp to viewport
+    const ttH = tooltipEl.offsetHeight || 80;
+    if(top + ttH > window.innerHeight - 8) top = window.innerHeight - ttH - 8;
+    if(top < 8) top = 8;
+    tooltipEl.style.left = left + 'px';
+    tooltipEl.style.top = top + 'px';
+  };
+  const hideTooltip = () => {
+    if(tooltipEl) tooltipEl.style.display = 'none';
+  };
+  // Attach hover (desktop) + long-press (mobile) handlers to a button.
+  const attachTooltip = (btn, text) => {
+    btn.addEventListener('mouseenter', () => showTooltip(btn, text));
+    btn.addEventListener('mouseleave', hideTooltip);
+    let pressTimer = null;
+    btn.addEventListener('touchstart', (e) => {
+      if(pressTimer) clearTimeout(pressTimer);
+      pressTimer = setTimeout(() => showTooltip(btn, text), 600);
+    }, { passive: true });
+    const cancelPress = () => {
+      if(pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+      hideTooltip();
+    };
+    btn.addEventListener('touchend', cancelPress);
+    btn.addEventListener('touchcancel', cancelPress);
+    btn.addEventListener('touchmove', cancelPress);
+  };
 
-  // ── Cards column ──
+  // ── Column 1: Cards (base) ──
   const cardList = document.getElementById('dbg-card-list');
   if(cardList) {
     cardList.innerHTML = '';
     for(const [id, card] of Object.entries(CARD_DEFS)) {
-      const deckCount = G.deck.filter(c => c === id).length;
-      const handCount = G.hand.filter(c => c.id === id).length;
+      // Skip inactive cards from debug menu — keeps the list focused on
+      // what's actually playable. INACTIVE_CARDS lives in module scope.
+      if(typeof INACTIVE_CARDS !== 'undefined' && INACTIVE_CARDS.has(id)) continue;
+      const deckCount = G.deck.filter(c => c === id || (c && c.id === id)).length;
       const rc = rarityColor[card.rarity] || '#fff';
       const btn = document.createElement('button');
       btn.className = 'dbg-btn';
-      btn.style.cssText = `font-size:0.65rem;padding:5px 8px;border-left:3px solid ${rc};`;
+      btn.style.cssText = `font-size:0.62rem;padding:4px 6px;border-left:3px solid ${rc};text-align:left;`;
       btn.innerHTML = `${card.emoji} ${card.name}${deckCount>0?` <span style="color:${rc}">×${deckCount}</span>`:''}`;
       btn.onclick = () => {
-        // Add card to hand directly (not deck) and slot it
-        const instance = { id, instanceId: G._cardInstanceCounter++ };
+        // v0.22d (fix): same canonical pattern as the upgraded path —
+        // stamp deckIndex on the hand instance so reshuffles/discards
+        // preserve the per-deck-index identity, and align G.deckUpgrades
+        // length with G.deck length (no upgrade branch for base cards).
+        if(!Array.isArray(G.deckUpgrades)) G.deckUpgrades = [];
+        const newDeckIdx = G.deck.length;
+        G.deck.push(id);
+        G.deckUpgrades[newDeckIdx] = null;
+        const instance = { id, instanceId: G._cardInstanceCounter++, deckIndex: newDeckIdx };
         G.hand.push(instance);
-        G.deck.push(id); // also add to deck for tracking
         assignCardsToSlots();
         updateHandUI();
         sfxCardDeal();
         animateCardDeal(instance.instanceId);
-        showToast(`${card.emoji} ${card.name} added to hand`, 800);
+        showToast(`${card.emoji} ${card.name} added`, 800);
         debugRenderPerks();
       };
+      attachTooltip(btn,
+        `<div style="font-weight:700;color:${rc};margin-bottom:4px">${card.emoji} ${card.name}</div>` +
+        `<div style="color:rgba(255,255,255,0.85);margin-bottom:6px">${card.desc || ''}</div>` +
+        `<div style="color:rgba(255,255,255,0.55);font-size:0.62rem">Base cost: <b style="color:#ffd166">${card.price || 0}</b> 🪙 · ${card.rarity}</div>`
+      );
       cardList.appendChild(btn);
     }
   }
 
-  // ── Perks column ──
+  // ── Column 2: Upgraded Cards ──
+  const upCardList = document.getElementById('dbg-upcard-list');
+  if(upCardList) {
+    upCardList.innerHTML = '';
+    if(typeof CARD_UPGRADES !== 'undefined') {
+      for(const [baseId, branches] of Object.entries(CARD_UPGRADES)) {
+        if(typeof INACTIVE_CARDS !== 'undefined' && INACTIVE_CARDS.has(baseId)) continue;
+        const baseCard = CARD_DEFS[baseId];
+        if(!baseCard) continue;
+        for(const branchKey of ['a','b']) {
+          const up = branches[branchKey];
+          if(!up) continue;
+          const rc = rarityColor[baseCard.rarity] || '#fff';
+          const btn = document.createElement('button');
+          btn.className = 'dbg-btn';
+          btn.style.cssText = `font-size:0.62rem;padding:4px 6px;border-left:3px solid ${rc};text-align:left;background:linear-gradient(90deg,rgba(255,215,80,0.10),rgba(255,255,255,0.05));`;
+          btn.innerHTML = `✨ ${up.emoji || baseCard.emoji} ${up.name}`;
+          btn.onclick = () => {
+            // v0.22d (fix): use the canonical deck pattern. G.deck holds
+            // string ids; per-instance upgrade branches live in
+            // G.deckUpgrades[deckIdx] aligned by index. The hand instance
+            // carries the deckIndex so reshuffles preserve the upgrade.
+            //
+            // Earlier this branch pushed { id, upgradeBranch } as the
+            // deck entry, which broke _makeCardRecordFromDeckIndex
+            // (it does `const id = G.deck[deckIdx]` — got the whole
+            // object back, then drawPile entries had id={...object}, then
+            // hand entries had id={...object}, then CARD_DEFS[id] was
+            // undefined → silent empty slot, SFX fires for "4 cards
+            // dealt" but only the non-broken hand entries render).
+            if(!Array.isArray(G.deckUpgrades)) G.deckUpgrades = [];
+            const newDeckIdx = G.deck.length;
+            G.deck.push(baseId);
+            G.deckUpgrades[newDeckIdx] = branchKey;
+            const instance = { id: baseId, instanceId: G._cardInstanceCounter++,
+                               deckIndex: newDeckIdx,
+                               upgradeBranch: branchKey,
+                               _defOverride: (typeof buildCardInstanceDef === 'function')
+                                 ? buildCardInstanceDef(baseId, branchKey) : null };
+            G.hand.push(instance);
+            assignCardsToSlots();
+            updateHandUI();
+            sfxCardDeal();
+            animateCardDeal(instance.instanceId);
+            showToast(`✨ ${up.name} added (upgraded ${baseCard.name})`, 1000);
+            debugRenderPerks();
+          };
+          attachTooltip(btn,
+            `<div style="font-weight:700;color:#ffd166;margin-bottom:4px">✨ ${up.name}</div>` +
+            `<div style="font-size:0.62rem;color:rgba(255,255,255,0.5);margin-bottom:4px">Upgrade of ${baseCard.emoji} ${baseCard.name}</div>` +
+            `<div style="color:rgba(255,255,255,0.85);margin-bottom:6px">${up.desc || ''}</div>` +
+            `<div style="color:rgba(255,255,255,0.55);font-size:0.62rem">Base cost: <b style="color:#ffd166">${baseCard.price || 0}</b> 🪙 · ${baseCard.rarity}</div>`
+          );
+          upCardList.appendChild(btn);
+        }
+      }
+    }
+  }
+
+  // ── Column 3: Perks (base) ──
   const list = document.getElementById('dbg-perk-list');
-  if(!list) return;
-  list.innerHTML = '';
-  for(const perk of ALL_PERKS) {
-    const count = G.modifiers.filter(m=>m.id===perk.id).length;
-    const rc = rarityColor[perk.rarity] || '#fff';
-    const btn = document.createElement('button');
-    btn.className = 'dbg-btn';
-    btn.style.cssText = `font-size:0.65rem;padding:5px 8px;border-left:3px solid ${rc};`;
-    btn.innerHTML = `${perk.emoji} ${perk.name}${count>0?` <span style="color:${rc}">×${count}</span>`:''}`;
-    btn.onclick = () => {
-      G.modifiers.push({...perk});
-      applyPerkEffect(perk.id);
-      updateHandUI();
-      updateUI();
-      showToast(`${perk.emoji} ${perk.name} granted`, 1000);
-      debugRenderPerks();
-    };
-    list.appendChild(btn);
+  if(list) {
+    list.innerHTML = '';
+    for(const perk of ALL_PERKS) {
+      // Skip inactive perks from the menu
+      if(typeof INACTIVE_PERKS !== 'undefined' && INACTIVE_PERKS.has(perk.id)) continue;
+      const count = G.modifiers.filter(m=>m.id===perk.id).length;
+      const rc = rarityColor[perk.rarity] || '#fff';
+      const btn = document.createElement('button');
+      btn.className = 'dbg-btn';
+      btn.style.cssText = `font-size:0.62rem;padding:4px 6px;border-left:3px solid ${rc};text-align:left;`;
+      btn.innerHTML = `${perk.emoji} ${perk.name}${count>0?` <span style="color:${rc}">×${count}</span>`:''}`;
+      btn.onclick = () => {
+        G.modifiers.push({...perk});
+        applyPerkEffect(perk.id);
+        updateHandUI();
+        updateUI();
+        showToast(`${perk.emoji} ${perk.name} granted`, 1000);
+        debugRenderPerks();
+      };
+      attachTooltip(btn,
+        `<div style="font-weight:700;color:${rc};margin-bottom:4px">${perk.emoji} ${perk.name}</div>` +
+        `<div style="color:rgba(255,255,255,0.85);margin-bottom:6px">${perk.desc || ''}</div>` +
+        `<div style="color:rgba(255,255,255,0.55);font-size:0.62rem">Base cost: <b style="color:#ffd166">${perk.price || 0}</b> 🪙 · ${perk.rarity}${perk.stackable?' · stackable':''}</div>`
+      );
+      list.appendChild(btn);
+    }
+  }
+
+  // ── Column 4: Upgraded Perks ──
+  const upPerkList = document.getElementById('dbg-upperk-list');
+  if(upPerkList) {
+    upPerkList.innerHTML = '';
+    if(typeof PERK_UPGRADES !== 'undefined') {
+      for(const [basePerkId, branches] of Object.entries(PERK_UPGRADES)) {
+        if(typeof INACTIVE_PERKS !== 'undefined' && INACTIVE_PERKS.has(basePerkId)) continue;
+        const basePerk = ALL_PERKS.find(p => p.id === basePerkId);
+        if(!basePerk) continue;
+        for(const branchKey of ['a','b']) {
+          const up = branches[branchKey];
+          if(!up) continue;
+          const rc = rarityColor[basePerk.rarity] || '#fff';
+          const btn = document.createElement('button');
+          btn.className = 'dbg-btn';
+          btn.style.cssText = `font-size:0.62rem;padding:4px 6px;border-left:3px solid ${rc};text-align:left;background:linear-gradient(90deg,rgba(255,215,80,0.10),rgba(255,255,255,0.05));`;
+          btn.innerHTML = `✨ ${up.emoji || basePerk.emoji} ${up.name}`;
+          btn.onclick = () => {
+            // Apply both: grant the base perk AND the upgrade in-place
+            // (applyPerkUpgrade mutates the live ALL_PERKS entry).
+            G.modifiers.push({...basePerk});
+            applyPerkEffect(basePerkId);
+            if(typeof applyPerkUpgrade === 'function') applyPerkUpgrade(basePerkId, branchKey);
+            updateHandUI();
+            updateUI();
+            showToast(`✨ ${up.name} granted (upgraded ${basePerk.name})`, 1100);
+            debugRenderPerks();
+          };
+          attachTooltip(btn,
+            `<div style="font-weight:700;color:#ffd166;margin-bottom:4px">✨ ${up.name}</div>` +
+            `<div style="font-size:0.62rem;color:rgba(255,255,255,0.5);margin-bottom:4px">Upgrade of ${basePerk.emoji} ${basePerk.name}</div>` +
+            `<div style="color:rgba(255,255,255,0.85);margin-bottom:6px">${up.desc || ''}</div>` +
+            `<div style="color:rgba(255,255,255,0.55);font-size:0.62rem">Base cost: <b style="color:#ffd166">${basePerk.price || 0}</b> 🪙 · ${basePerk.rarity}</div>`
+          );
+          upPerkList.appendChild(btn);
+        }
+      }
+    }
   }
 }
 
@@ -33651,9 +34586,46 @@ document.getElementById('dbg-close').addEventListener('click', () => {
   document.getElementById('debug-menu').classList.remove('open');
 });
 
+// v0.22d: Special Options collapsible toggle. Closed by default to keep
+// the menu compact; click to reveal Add Life / Coins / Force Elite / etc.
+{
+  const _st = document.getElementById('dbg-special-toggle');
+  const _sp = document.getElementById('dbg-special-panel');
+  if(_st && _sp) {
+    _st.addEventListener('click', () => {
+      const isOpen = _sp.style.display !== 'none';
+      _sp.style.display = isOpen ? 'none' : 'flex';
+      _st.innerHTML = isOpen ? '⚙️ Special Options ▾' : '⚙️ Special Options ▴';
+    });
+  }
+}
+
+// v0.22d: Backtick × 4 to open the debug menu. Per Adam: "Open debug menu
+// by pressing ` four times (keep mobile corner opening intact though)."
+// State machine: track presses + last-press time; require 4 within 1.5s.
+// Single-tilde (Shift+`) still opens immediately so power-users on a
+// proper keyboard don't need to hammer the key.
+let _dbgBacktickPresses = 0;
+let _dbgBacktickFirstAt = 0;
+
 window.addEventListener('keydown', e => {
-  // ~ key toggles debug menu
-  if(e.key === '`' || e.key === '~') { toggleDebugMenu(); return; }
+  // v0.22d: ~ (shift+`) still opens immediately. Bare ` requires 4 taps
+  // within 1.5s — guards against accidental opens during typing/console.
+  if(e.key === '~') { toggleDebugMenu(); return; }
+  if(e.key === '`') {
+    const _now = performance.now();
+    if(_now - _dbgBacktickFirstAt > 1500) {
+      _dbgBacktickPresses = 1;
+      _dbgBacktickFirstAt = _now;
+    } else {
+      _dbgBacktickPresses++;
+    }
+    if(_dbgBacktickPresses >= 4) {
+      _dbgBacktickPresses = 0;
+      toggleDebugMenu();
+    }
+    return;
+  }
   if(e.key === 'Escape') {
     const debugOpen = document.getElementById('debug-menu').classList.contains('open');
     if(debugOpen) { document.getElementById('debug-menu').classList.remove('open'); return; }
@@ -33959,19 +34931,32 @@ function updateKeyboardCamera(dt) {
     // While walking, obstacles within a small radius of the ball get smashed.
     // Throttled to once per ~120ms to avoid sound spam, but the physics check
     // runs every frame so collisions never miss.
-    if((typeof getCardField === 'function') && getCardField('walkies','destroyOnContact',false)) {
-      const _stompR = BALL_R * 2.2;
+    // v0.22c: now reads the snapshotted G._walkiesStompiesActive flag
+    // (captured at activation time when _activeCardInstance was still
+    // valid). Also: BIG radius bump (BALL_R*2.2 → BALL_R*4.5) so the
+    // stomp catches obstacles BEFORE the walk-collision blocks the ball
+    // against them. Without this, the ball's walk-collision pushed it
+    // back BEFORE entering the destroy radius, so Stompies could never
+    // fire (the bug Adam reported: "ball just walks up to the obstacle
+    // and stops there"). Now stomp pre-clears the path: if an obstacle
+    // is within 4.5 ball-radii of the walking ball, it's destroyed,
+    // freeing the next walk step to actually move forward.
+    if(G._walkiesStompiesActive) {
+      const _stompR = BALL_R * 4.5;
       const _now = performance.now();
-      if((_now - (G._lastStompTime||0)) > 120) {
-        if(typeof collectObstaclesInRadius === 'function' && typeof destroyObstacles === 'function') {
-          const _hits = collectObstaclesInRadius(G.ballPos.x, G.ballPos.z, _stompR);
-          if(_hits.length > 0) {
+      // Run the destroy check every frame so the path stays clear (no
+      // per-frame audio spam — destroyObstacles handles its own SFX
+      // and the throttling on _lastStompTime gates the screen shake).
+      if(typeof collectObstaclesInRadius === 'function' && typeof destroyObstacles === 'function') {
+        const _hits = collectObstaclesInRadius(G.ballPos.x, G.ballPos.z, _stompR);
+        if(_hits.length > 0) {
+          destroyObstacles(_hits, G.ballPos.x, G.ballPos.y, G.ballPos.z);
+          // Coin payout per stomped obstacle (matches Bounce & Boom feel).
+          for(let bk=0;bk<_hits.length;bk++){ G.coins++; }
+          updateCoinHUD();
+          if((_now - (G._lastStompTime||0)) > 120) {
             G._lastStompTime = _now;
-            destroyObstacles(_hits, G.ballPos.x, G.ballPos.y, G.ballPos.z);
             if(typeof triggerShake === 'function') triggerShake('light');
-            // Coin payout per stomped obstacle (matches Bounce & Boom feel).
-            for(let bk=0;bk<_hits.length;bk++){ G.coins++; }
-            updateCoinHUD();
           }
         }
       }
@@ -34258,6 +35243,7 @@ function endWalkies() {
   G.walkiesTimer = 0;
   G._walkTarget = null;
   G._walkDir = null; // v0.20i: clear sustained walk direction
+  G._walkiesStompiesActive = false; // v0.22c: clear Stompies snapshot
   // Remove leg geometry
   if(G._walkieLegs) { scene.remove(G._walkieLegs); G._walkieLegs = null; }
   // Restore ball material (respecting shrink ray)
@@ -34441,7 +35427,7 @@ function updateHint(msg) {
 const ALL_PERKS = [
   // COMMON — base weight 8
   { id:'strengthen_swing', name:'Stronger Swing',      emoji:'💪', rarity:'common',    price:10,  stackable:true,  weight:4,
-    desc:'+20% shot power. Stacks every purchase — no cap.' },
+    desc:'+30% shot power. Stacks every purchase — no cap.' },
   { id:'bouncy_walls',     name:'Rubber Walls',        emoji:'🧱', rarity:'common',    price:15,  stackable:true,  weight:3,
     desc:'Increased wall and surface restitution — bouncier everything. Stacks!' },
   { id:'hot_streak',       name:'Hot Streak',          emoji:'🔥', rarity:'common',    price:20,  stackable:false, weight:6,
@@ -34468,7 +35454,7 @@ const ALL_PERKS = [
     desc:'[MERGED INTO MONEY BOUNCE v0.17r — auto-migrated on load]' },
   { id:'full_house',      name:'Full House',            emoji:'🂡', rarity:'rare',     price:30, stackable:false, weight:6,
     desc:'Hold 5 cards at a time instead of 4. One more tool in your back pocket.' },
-  { id:'bounce_boom',     name:'Bounce & Boom',        emoji:'🔥', rarity:'rare',     price:20, stackable:false, weight:4,
+  { id:'bounce_boom',     name:'Bounce & Boom',        emoji:'🔥', rarity:'epic',     price:25, stackable:false, weight:4,
     desc:'Every wall/obstacle bounce triggers an explosion that destroys nearby obstacles. Bigger bounce = bigger boom.' },
   { id:'money_bounce',    name:'Money Bounce',         emoji:'💸', rarity:'rare',      price:15, stackable:true,  weight:3,
     desc:'Earn 2 coins per wall bounce, up to 3 bounces per stack. Stack for more bounces!' },
@@ -34637,9 +35623,15 @@ const CARD_UPGRADES = {
   },
   iron_ball: {
     a: { id:'wrecking_ball_iron', name:'Wrecking Ball', emoji:'🔩', archetypes:['demolition'],
-         desc:'+50% shot power and a louder visual punch. (Full 3× size lands when collision-radius scaling ships.)',
-         powerMult: 1.5 },
-    // Branch B left open
+         desc:'3× shot power (vs base 2×). The Earth shall tremble.',
+         powerMult: 3.0 },
+    // v0.22b: Snowball Iron — picks up speed on every destruction.
+    // Reads speedOnDestroy multiplier off the card def in destroyObstacles
+    // (the iron-destruction code path) — applied as an XZ velocity scale
+    // when at least one obstacle is destroyed in this contact.
+    b: { id:'snowball_iron', name:'Snowball Iron', emoji:'❄️🔩', archetypes:['demolition','speed'],
+         desc:'+15% speed on every obstacle destruction. Builds momentum as you smash through.',
+         speedOnDestroy: 1.15 },
   },
   freeze_frame: {
     a: { id:'deep_freeze', name:'Deep Freeze', emoji:'🧊', archetypes:['trick_shot'],
@@ -34693,7 +35685,7 @@ const CARD_UPGRADES = {
   },
   ghost_ball: {
     a: { id:'long_ghost', name:'Long Ghost', emoji:'👻', archetypes:['trick_shot','pinball'],
-         desc:'8s duration (was 4s). The phase lasts twice as long. (1.2× speed + ghostify-touched lands later.)',
+         desc:'6s duration (was 3s). The phase lasts twice as long. (1.2× speed + ghostify-touched lands later.)',
          durationMult: 2.0, speedMult: 1.2, ghostifyTouched: true },
     // speedMult & ghostifyTouched flagged for follow-up wiring
   },
@@ -34725,6 +35717,28 @@ const CARD_UPGRADES = {
          desc:'12s but ball is 2× speed at launch. The bounce friction is already zero, so the kick persists.',
          speedMult: 2.0 },
   },
+  // v0.22d: Beat 'Em Up upgrades. Final Fight (a) doubles your punches per
+  // swing from 3 to 6 and pays a bigger bonus if all 6 land. Bigger ring (b)
+  // grows the punch radius for easier mid-roll target acquisition.
+  beat_em_up: {
+    a: { id:'final_fight', name:'Final Fight', emoji:'🥊', archetypes:['demolition','trick_shot'],
+         desc:'6 punches per swing (was 3). FINAL FIGHT bonus if all 6 land — +1500 style.',
+         punchCount: 6, finalFightBonus: 1500 },
+    b: { id:'big_ring', name:'Big Ring', emoji:'🥊', archetypes:['demolition'],
+         desc:'1.5× punch radius. Bigger reach, more targets in range.',
+         radiusMult: 1.5 },
+  },
+  // v0.22b: Portal Grenade upgrades. Trebuchet (a) doubles the lob distance
+  // so portals can span big fairways. Read by the lobDist formula in
+  // armPortalGrenade / fireGrenade when isPortal — see lobMult lookup.
+  portal_grenade: {
+    a: { id:'portal_trebuchet', name:'Portal Trebuchet', emoji:'🟣', archetypes:['speed','trick_shot'],
+         desc:'Throw the portal 2× as far. For when the green and the cup are on different planets.',
+         lobMult: 2.0 },
+    b: { id:'wider_portal', name:'Wider Portal', emoji:'🟣', archetypes:['trick_shot','pinball'],
+         desc:'Portal mouth is 50% wider — easier to thread shots through. Forgiving aim.',
+         portalRadiusMult: 1.5 },
+  },
   // v0.21h: Inbounds card → Healthy Boundaries. SPECIAL TRANSFORMATION:
   // _grantsPerk + _perkUpgradeBranch flags signal the upgrade flow to:
   //   (1) remove this card instance from the deck,
@@ -34752,11 +35766,11 @@ const PERK_UPGRADES = {
   // v0.21h: Stronger Swing
   strengthen_swing: {
     a: { id:'mighty_swing', name:'Mighty Swing', emoji:'💪', archetypes:['demolition','speed'],
-         desc:'+35% per stack instead of +20%.',
-         pctPerStack: 0.35 },
+         desc:'+45% per stack instead of +30%.',
+         pctPerStack: 0.45 },
     b: { id:'tactical_swing', name:'Tactical Swing', emoji:'💪', archetypes:['trick_shot'],
-         desc:'+20% power AND +20% trick combo points per stack.',
-         pctPerStack: 0.20, comboPctPerStack: 0.20 },
+         desc:'+30% power AND +20% trick combo points per stack.',
+         pctPerStack: 0.30, comboPctPerStack: 0.20 },
   },
   // v0.21h: Rubber Walls — bouncy_walls
   bouncy_walls: {
@@ -35725,6 +36739,77 @@ function computeSoloAwards() {
     </div>`;
   }
   return html;
+}
+
+// v0.22c: Cinematic fade-to-black before game-over screen. Called from
+// applyDamage when HP transitions to 0. Sequence:
+//   t=0      add .visible to #gameover-fade (begin 1.2s opacity ramp)
+//   t=0      stop the world: G.state = 'gameover' so physics halt
+//   t=1.2s   render full game-over summary into #overlay (under the black)
+//   t=1.7s   add .lift to #gameover-fade — black fades out over 0.7s
+//   t=2.4s   remove the fade element entirely
+// Multiplayer skips this (legacy per-hole flow). The function is idempotent
+// via G._gameOverScheduled — only ever fires once per run.
+function startGameOverFade() {
+  if(G._gameOverFading) return;
+  G._gameOverFading = true;
+  // Halt physics immediately. The current swing's animation frame may
+  // still be in flight; setting state to 'gameover' is the agreed signal
+  // for animate() and updatePhysics() to no-op.
+  G.state = 'gameover';
+  // Death sting — short low rumble + tone drop
+  if(typeof AC !== 'undefined' && AC) {
+    try {
+      const ac = getAC ? getAC() : AC;
+      const t0 = ac.currentTime;
+      // Sub-bass swell
+      const sub = ac.createOscillator(); sub.type = 'sine';
+      sub.frequency.setValueAtTime(80, t0);
+      sub.frequency.exponentialRampToValueAtTime(28, t0 + 1.0);
+      const subG = ac.createGain();
+      subG.gain.setValueAtTime(0.0, t0);
+      subG.gain.linearRampToValueAtTime(0.45, t0 + 0.15);
+      subG.gain.exponentialRampToValueAtTime(0.001, t0 + 1.2);
+      sub.connect(subG); subG.connect(ac.destination);
+      sub.start(t0); sub.stop(t0 + 1.3);
+      // Detuned organ-of-doom chord
+      [220, 165, 110].forEach((freq, i) => {
+        const o = ac.createOscillator(); o.type = 'sawtooth';
+        o.frequency.value = freq;
+        const g = ac.createGain();
+        g.gain.setValueAtTime(0, t0);
+        g.gain.linearRampToValueAtTime(0.06, t0 + 0.2 + i*0.05);
+        g.gain.exponentialRampToValueAtTime(0.001, t0 + 1.2);
+        const lp = ac.createBiquadFilter(); lp.type = 'lowpass';
+        lp.frequency.value = 600;
+        o.connect(lp); lp.connect(g); g.connect(ac.destination);
+        o.start(t0 + 0.05); o.stop(t0 + 1.3);
+      });
+    } catch(e){}
+  }
+  // Apply the fade-in class
+  const fade = document.getElementById('gameover-fade');
+  if(fade) fade.classList.add('visible');
+  // After 1.2s of black, paint the full game-over summary BENEATH the
+  // black overlay. Pass false unless this came from a busted budget
+  // (which uses a different path that doesn't go through applyDamage).
+  setTimeout(() => {
+    if(typeof showGameOver === 'function') {
+      showGameOver(false);
+    }
+  }, 1200);
+  // Then fade the black down so the summary is visible.
+  setTimeout(() => {
+    if(fade) fade.classList.add('lift');
+  }, 1700);
+  // Cleanup
+  setTimeout(() => {
+    if(fade) {
+      fade.classList.remove('visible');
+      fade.classList.remove('lift');
+    }
+    G._gameOverFading = false;
+  }, 2500);
 }
 
 function showGameOver(bustedBudget=false){
@@ -36760,6 +37845,7 @@ function initHole() {
   G.coinMeshes = [];
   G.heartMeshes = [];
   G.holeBeacon = null;
+  G._holeTractorBeam = null;
   // v0.19t: cleanup last hole's defense meshes and reset live offset.
   if(G._holeDefenseGroup && G._holeDefenseGroup.parent) {
     G._holeDefenseGroup.parent.remove(G._holeDefenseGroup);
@@ -37013,6 +38099,8 @@ function initHole() {
   G._catapultGroundBounce = false;
   G._catapultLaunchGrace = false;
   G._jumpPreloadLaunchGrace = false;
+  G._frisbeeLaunchGrace = false;
+  G._explosivoImmunity = null;       // v0.22c: clear explosivo immunity zone
   // v0.21c: clear new pre-swing/during card flags at hole start
   G._frisbeeActive = false;
   G._frisbeeArmed = false;
@@ -41377,6 +42465,18 @@ function animate(now) {
       // Subtle pulse on the tall beacon column
       if(G.holeBeacon.beaconCol && G.holeBeacon.beaconCol.material) {
         G.holeBeacon.beaconCol.material.opacity = 0.25 + 0.15 * Math.sin(t * 2.5);
+      }
+      // v0.22b: pulse the BIG blue tractor beam too, slower than the thin
+      // yellow beacon so the two read as separate visual layers. Range
+      // 0.12–0.28 outer, 0.22–0.40 core. The mesh is added to courseGroup
+      // so it inherits hole-defense translation already.
+      if(G._holeTractorBeam) {
+        if(G._holeTractorBeam.mesh && G._holeTractorBeam.mesh.material) {
+          G._holeTractorBeam.mesh.material.opacity = 0.20 + 0.08 * Math.sin(t * 1.3);
+        }
+        if(G._holeTractorBeam.core && G._holeTractorBeam.core.material) {
+          G._holeTractorBeam.core.material.opacity = 0.30 + 0.10 * Math.sin(t * 1.3 + 0.6);
+        }
       }
 
       // Gravity well rings — animate only when perk is active
