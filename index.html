@@ -4198,8 +4198,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.22d1';
-const CHANGE_NOTE = 'v0.22d1 fix: debug menu — adding an upgraded card no longer breaks the deal mechanism on subsequent hands. Root cause: deck entries must be string ids with per-index upgrades in G.deckUpgrades; pushing {id, upgradeBranch} as a raw deck entry corrupted drawPile records and produced silent empty hand slots.';
+const GAME_VERSION = '0.22e';
+const CHANGE_NOTE = 'v0.22e: 8-card starter decks (incentivize card removal); difficulty unlock skip fix (resume + bonus-hole drift); Crowded House 6th-card opening draw fix; Portal Grenade & Ghost rarity/price bumps; keyboard shortcuts for slots 6-8 (z, x, c); flatter Trebuchet arc.';
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
@@ -12724,7 +12724,12 @@ function updateAimArrow() {
   // v0.21c2: Frisbee — 0.75× horizontal range (nerfed from 1.5×).
   // Mirror in the preview so the arc lands where the disc will actually land.
   const frisbeeBoost = G._frisbeeArmed ? 0.75 : 1.0;
-  const spd    = power * BASE_LAUNCH_FACTOR * boost * ironWeight * _ironPwrMul * powerMult * catapultSoloDamp * frisbeeBoost;
+  // v0.22e: Trebuchet horizontal speed mult — preview must mirror the
+  // fireShot horizMult bump so the arc visualization keeps landing where
+  // the ball actually lands. Default 1.0 = no effect on bare catapult.
+  const _catapultHorizMul = (hasCatapult && typeof getCardField === 'function')
+    ? getCardField('catapult','horizMult',1.0) : 1.0;
+  const spd    = power * BASE_LAUNCH_FACTOR * boost * ironWeight * _ironPwrMul * powerMult * catapultSoloDamp * frisbeeBoost * _catapultHorizMul;
   const c      = new THREE.Color();
   c.setHSL(0.33 - power * 0.33, 0.9, 0.52);
   // Catapult: bold magenta arc for max readability, overriding the power-color ramp
@@ -16339,11 +16344,18 @@ function updatePhysics(dt) {
 
     // --- (c) SLAT RING — pillar cylinder reflection. ---------------
     // Each pillar is a thin box in local space oriented to face the center.
-    // We approximate as circles for collision (radius = max(halfW, halfD)+BALL_R)
-    // since the ball rolls past the corner curvatures fine at these sizes.
+    // We approximate as circles for collision since the ball rolls past
+    // the corner curvatures fine at these sizes.
+    // v0.22e: Adam reported invisible barriers in the gaps between
+    // Stonehenge pillars. Root cause: collision radius was 0.30m but the
+    // visible pillar's tangential half-width is only 0.25m (pillarW=0.5).
+    // The 0.05m extra "padding" extended the collision circle past the
+    // visible stone, creating an ~10cm invisible buffer in each gap that
+    // could block shots threading the visible openings. Tighten to 0.25m
+    // so collision matches what the player sees.
     if((hd.kind === 'slat_ring_4' || hd.kind === 'slat_ring_6') && hds.pillars) {
       const cxR = hds.cx, czR = hds.cz, ringAng = hds.ringAngle || 0;
-      const pillarR = 0.30; // approximate pillar collision radius
+      const pillarR = 0.25; // matches visible pillarW/2 (0.5/2)
       for(const p of hds.pillars) {
         const ang = p.baseAngle + ringAng;
         const px = cxR + Math.cos(ang) * hd.radius;
@@ -23046,7 +23058,7 @@ const CARD_DEFS = {
   boulder:      { id:'boulder',      emoji:'🪨', name:'Boulder',         desc:'Summon an unstoppable boulder that smashes everything.',          rarity:'epic',      price:32,  context:'pre',    holdable:false, weight:2 },
   dodgeball:    { id:'dodgeball',    emoji:'🔴', name:'Dodgeball',       desc:'Fire a super-bouncy red ball that ricochets off everything.',     rarity:'epic',      price:42,  context:'pre',    holdable:false, weight:2 },
   explosivo:    { id:'explosivo',    emoji:'💥', name:'Explosivo',       desc:'Detonate a huge explosion at the ball\'s position.',              rarity:'epic',      price:21,  context:'any',    holdable:false },
-  ghost_ball:   { id:'ghost_ball',   emoji:'👻', name:'Ghost Ball',      desc:'Tap to phase through walls, rocks and obstacles for 3s. Tap again to end early.', rarity:'epic',      price:21,  context:'any',    holdable:false },
+  ghost_ball:   { id:'ghost_ball',   emoji:'👻', name:'Ghost Ball',      desc:'Tap to phase through walls, rocks and obstacles for 3s. Tap again to end early.', rarity:'epic',      price:26,  context:'any',    holdable:false, weight:1 },
   backspin:     { id:'backspin',     emoji:'🔄', name:'Backspin',        desc:'Slam the brakes mid-roll for precise placement.',                rarity:'common',    price:8,   context:'during', holdable:false, weight:4 },
   jumper:       { id:'jumper',       emoji:'🦘', name:'Jumper',          desc:'Jump over obstacles mid-roll — OR pre-load before your swing to launch on fire.', rarity:'common',    price:12,  context:'any',    holdable:false },
   slow_mo:      { id:'slow_mo',      emoji:'🐌', name:'Slow Mo',         desc:'25% speed for 6 seconds. See the chaos in detail.',              rarity:'rare',      price:20,  context:'any',    holdable:false },
@@ -23068,9 +23080,12 @@ const CARD_DEFS = {
   // throw the exit (purple) first, entry (green) auto-places in front of
   // ball facing the exit. Portals persist after pass-through (close on
   // hole-out only). OOB lobs snap to nearest in-bounds cell.
+  // v0.22e: Adam reported Portal Grenade as "too cheap and slightly too
+  // frequent" — bump price 25% (30→38), drop weight 2→1 to halve its shop
+  // appearance rate.
   portal_grenade: { id:'portal_grenade', emoji:'🟣', name:'Portal Grenade',
     desc:'Lob a grenade — wherever it lands becomes a purple exit portal. A green entry portal auto-places in front of your ball, facing the exit. Ball + missiles + dodgeballs + grenades + boulders all teleport through. Stays open until hole-out.',
-    rarity:'legendary', price:30, context:'pre', holdable:false, weight:2 },
+    rarity:'legendary', price:38, context:'pre', holdable:false, weight:1 },
   holy_hand_grenade: { id:'holy_hand_grenade', emoji:'⛪', name:'Holy Hand Grenade', desc:'And the Lord did grin. Lob a sanctified grenade — 2× blast radius. Spares corner walls (the Lord is merciful).', rarity:'legendary', price:25, context:'pre', holdable:false, weight:1 },
   airstrike:    { id:'airstrike',    emoji:'✈️', name:'Air Strike',       desc:'Call in a Top Gun-style bombing run. A pill-shaped target oscillates near→far in front of you — tap to lock distance. A jet drops 8 bombs across the strike zone, destroying everything inside.', rarity:'epic', price:35, context:'pre', holdable:false, weight:2 },
   pinball:      { id:'pinball',      emoji:'🎰', name:'Pinball',         desc:'12 seconds of invulnerable, frictionless, perfectly bouncy ball. The walls cannot hurt you. The walls cannot hold you.', rarity:'legendary', price:32, context:'pre', holdable:false, weight:1 },
@@ -23114,8 +23129,8 @@ const CARD_DEFS = {
 const STARTER_DECKS = {
   classic: {
     name: 'Classic Ball', emoji: '🏌️',
-    desc: 'Balanced starter — two nudges, two power shots, one missile.',
-    cards: ['lil_scootch','jumper','power_shot','shooter'],
+    desc: 'Balanced 8-card starter — two of each opening card. Trim it down via card removal.',
+    cards: ['lil_scootch','lil_scootch','jumper','jumper','power_shot','power_shot','shooter','shooter'],
   },
 };
 
@@ -23147,7 +23162,11 @@ const CHARACTERS = {
     blessings: ['No special modifiers — pure golf'],
     curses: [],
     starter: {
-      deck: ['lil_scootch','jumper','power_shot','shooter'],
+      // v0.22e: 8-card starter (2× each opening card) — incentivizes card
+      // removal as a build path. Larger deck = more dilution from cheap
+      // shop adds, but card removal feels like a real arc rather than
+      // instant deck-thinning.
+      deck: ['lil_scootch','lil_scootch','jumper','jumper','power_shot','power_shot','shooter','shooter'],
       perks: [],
     },
     bannedCards: [],
@@ -23168,7 +23187,9 @@ const CHARACTERS = {
       '🚫 Cannot use airborne cards (Jumper, Catapult, Arc Shot, Sharpshooter, Frisbee)',
     ],
     starter: {
-      deck: ['iron_ball','iron_ball','explosivo','power_shot'],
+      // v0.22e: 8-card Smashy starter — 2 iron / 2 power / 2 explosivo / 2 grenade.
+      // The dominant Smashy build pre-loaded; card removal trims it down.
+      deck: ['iron_ball','iron_ball','power_shot','power_shot','explosivo','explosivo','grenade','grenade'],
       perks: ['scorched_earth'],
     },
     bannedCards: ['jumper','catapult','arc_shot','sharpshooter','frisbee'],
@@ -23191,7 +23212,9 @@ const CHARACTERS = {
       '🚫 No Bounce & Boom perk',
     ],
     starter: {
-      deck: ['power_shot','power_shot','jumper','parkour'],
+      // v0.22e: 8-card Speedy starter — 3 power / 2 jumper / 2 parkour / 1 reverse.
+      // Reverse is the THPS-style 1200pt combo engine that compounds with speed.
+      deck: ['power_shot','power_shot','power_shot','jumper','jumper','parkour','parkour','reverse'],
       perks: ['strengthen_swing','strengthen_swing'],
     },
     bannedCards: ['shooter','sniper','grenade','boulder','dodgeball','explosivo','iron_ball','airstrike','cannonball','wrecking_ball','floomba','holy_hand_grenade'],
@@ -23211,7 +23234,9 @@ const CHARACTERS = {
       '📉 Par is reduced by 1 on every hole (floor: par 2)',
     ],
     starter: {
-      deck: ['goal_oriented','sharpshooter','freeze_frame','perpetual_motion'],
+      // v0.22e: 8-card Precision starter — 2 freeze / 1 perp / 1 goal / 2 sharp / 1 power / 1 backspin.
+      // Backspin = pure Precision (control/brake tool). Reverse moved to Speedy.
+      deck: ['freeze_frame','freeze_frame','perpetual_motion','goal_oriented','sharpshooter','sharpshooter','power_shot','backspin'],
       perks: [],
     },
     bannedCards: [],
@@ -23237,8 +23262,12 @@ Object.keys(CARD_DEFS).forEach(id => {
 
 // ── Card slot system (4 active slots with keyboard mapping) ──
 let CARD_SLOT_KEYS = ['S0','S1','S2','S3'];
-const CARD_SLOT_LABELS = { S0:'Shift', S1:'Ctrl', S2:'Space', S3:'Alt', S4:'Tab' };
-const CARD_SLOT_CODES  = { S0:'Shift', S1:'Control', S2:' ', S3:'Alt', S4:'Tab' };
+// v0.22e: extend slot labels/keycodes to S5-S7 for Crowded House stacks.
+// Mapped to z/x/c (the keys directly above the left Shift/Ctrl row), so
+// a player with 8 cards in hand still has reachable shortcuts without
+// awkward thumb gymnastics. Display labels match for readability.
+const CARD_SLOT_LABELS = { S0:'Shift', S1:'Ctrl', S2:'Space', S3:'Alt', S4:'Tab', S5:'Z', S6:'X', S7:'C' };
+const CARD_SLOT_CODES  = { S0:'Shift', S1:'Control', S2:' ', S3:'Alt', S4:'Tab', S5:'z', S6:'x', S7:'c' };
 
 // ── Deck/Hand/Draw functions ──────────────────────────
 
@@ -24476,9 +24505,20 @@ function updateHandUI() {
 // Keyboard mapping for card slots
 function handleCardKey(keyCode, isDown) {
   if(G.state !== 'playing') return false;
+  // v0.22e: lowercase ONLY single ASCII letters (so Shift-z still triggers
+  // slot 5). Don't touch multi-char keys ('Shift', 'Control', 'Tab') — those
+  // are event.key values that ARE case-sensitive matches as-is, and lowering
+  // them would break the modifier slots.
+  let _keyMatch = keyCode;
+  if(typeof keyCode === 'string' && keyCode.length === 1) {
+    const _c = keyCode.charCodeAt(0);
+    if((_c >= 65 && _c <= 90) || (_c >= 97 && _c <= 122)) {
+      _keyMatch = keyCode.toLowerCase();
+    }
+  }
   for(let i = 0; i < CARD_SLOT_KEYS.length; i++) {
     const k = CARD_SLOT_KEYS[i];
-    if(CARD_SLOT_CODES[k] !== keyCode) continue;
+    if(CARD_SLOT_CODES[k] !== _keyMatch) continue;
     const card = G.cardSlots[i];
     if(!card) return false;
     // Space during aim mode: only capture if the card is playable right now,
@@ -33810,7 +33850,12 @@ function fireShot() {
   // enough that Iron Ball preview-vs-actual diverged ~2-3×.
   const _ironPwrMul = (G._ironBallActive && typeof getCardField === 'function')
     ? getCardField('iron_ball','powerMult',1.0) : 1.0;
-  const speed = G.shotPower * BASE_LAUNCH_FACTOR * boost * ironWeight * _ironPwrMul * powerMult * catapultSoloDamp * frisbeeBoost;
+  // v0.22e: Trebuchet horizontal speed mult — preserves distance after the
+  // arc-height drop (2.0×→1.3×). Reads off CARD_DEFS.catapult.horizMult,
+  // default 1.0 (no effect on bare catapult).
+  const _catapultHorizMul = (G._catapultActive && typeof getCardField === 'function')
+    ? getCardField('catapult','horizMult',1.0) : 1.0;
+  const speed = G.shotPower * BASE_LAUNCH_FACTOR * boost * ironWeight * _ironPwrMul * powerMult * catapultSoloDamp * frisbeeBoost * _catapultHorizMul;
   const firedPower = G.shotPower;
   G.ballVel.set(G.shotDir.x * speed, 2.5 + arcExtra, G.shotDir.z * speed);
   // Screen shake on shot — proportional to power
@@ -35598,8 +35643,12 @@ const CARD_UPGRADES = {
   },
   catapult: {
     a: { id:'trebuchet', name:'Trebuchet', emoji:'🪤', archetypes:['demolition','speed'],
-         desc:'2× arc height. Landings explode on impact.',
-         arcHeightMult: 2.0, landingExplodes: true },
+         // v0.22e: Adam — "arc is accurate now but way too high (distance is
+         // fine)". Was 2.0× arc height which sent the ball ~10m up; cut to
+         // 1.3× (peak ~5m) and add a 1.3× horizontal speed mult to keep
+         // roughly the same range. Net: half the height, same distance.
+         desc:'Loftier arc with a longer, flatter trajectory. Landings explode on impact.',
+         arcHeightMult: 1.3, horizMult: 1.3, landingExplodes: true },
     // Branch B left open
   },
   mighty_egg: {
@@ -37005,10 +37054,22 @@ function showGameOver(bustedBudget=false){
       }
       // v0.21f: use the run's STARTING difficulty for unlock evaluation,
       // NOT the live G.difficulty (which gets bumped +1 per bonus hole).
-      // Falls back to current value for runs that started pre-v0.21f.
-      const _unlockBaseStar = (G._runStartingDifficulty != null)
-        ? (G._runStartingDifficulty | 0)
-        : (G.difficulty || 3);
+      // v0.22e: defensive clamp. If _runStartingDifficulty is missing (page
+      // refresh + resume) or stale (carried over from a prior run that was
+      // never properly torn down), the old code happily handed a too-high
+      // value to evaluateDifficultyUnlock, which then unlocked a star several
+      // levels above what the player actually beat (Adam reported beating ★4
+      // 18-hole on Speedball and unlocking ★7 — consistent with 3 bonus
+      // holes' worth of G.difficulty drift). Belt-and-braces: also recompute
+      // a sane base from (live difficulty - endless bonus holes) and use the
+      // MINIMUM of the two. This makes it impossible to over-unlock no
+      // matter what state vars happen to be stale.
+      const _bonusHoles = (_endlessHolesPlayedSnapshot | 0);
+      const _liveDeBumped = Math.max(1, (G.difficulty || 3) - _bonusHoles);
+      const _storedStart = (G._runStartingDifficulty != null) ? (G._runStartingDifficulty | 0) : null;
+      const _unlockBaseStar = (_storedStart != null)
+        ? Math.min(_storedStart, _liveDeBumped)
+        : _liveDeBumped;
       const newStar = evaluateDifficultyUnlock(G.totalHoles || 9, _unlockBaseStar, {
         holesPlayed,
         totalHoles: G.totalHoles || 9,
@@ -37041,8 +37102,11 @@ function showGameOver(bustedBudget=false){
       // v0.20a4: character chain — completing ★3+ with the chain's current
       // tail unlocks the next character. Independent from star unlocks; both
       // can fire on the same run.
+      // v0.22e: use _unlockBaseStar (de-bumped) so a player who climbed via
+      // bonus holes from ★2 → live ★4 doesn't silently auto-pass the ★3
+      // gate they didn't actually start at.
       if(typeof evaluateCharacterUnlock === 'function') {
-        const newChar = evaluateCharacterUnlock(_charForUnlock, G.difficulty || 3, {
+        const newChar = evaluateCharacterUnlock(_charForUnlock, _unlockBaseStar, {
           holesPlayed,
           totalHoles: G.totalHoles || 9,
           bustedBudget,
@@ -37590,6 +37654,11 @@ function initHole() {
         _speedballTimerActive: !!G._speedballTimerActive,
         // v0.20h: Dealer's Choice picked card persists across saves
         _dealersChoiceCardId: G._dealersChoiceCardId || null,
+        // v0.22e: persist the run's STARTING difficulty so resume after a page
+        // refresh doesn't lose track of it. Without this, _runStartingDifficulty
+        // is undefined on resume, the unlock fallback uses live G.difficulty,
+        // and bonus-hole bumps cause stars to skip.
+        _runStartingDifficulty: (G._runStartingDifficulty != null) ? (G._runStartingDifficulty | 0) : null,
         timestamp: Date.now(),
       };
       const json = JSON.stringify(saveData);
@@ -38147,8 +38216,20 @@ function initHole() {
   // Derive initial draw count from modifiers directly — single source of truth.
   // This makes it impossible for G._initialDraw to drift out of sync with the perk state
   // (which was breaking Full House's 5-card opening after resume-from-save).
-  const hasFullHouse = G.modifiers && G.modifiers.some(m => m.id === 'full_house');
-  const initialDrawCount = hasFullHouse ? 5 : 4;
+  // v0.22e: respect the Crowded House upgrade (handSize: 6) AND additional
+  // stacks (each +1 up to 8). Previously hardcoded to 5, which meant a player
+  // with Crowded House started every hole with only 5 cards in hand even
+  // though their slots could hold 6+. The 6th-8th slots sat empty until
+  // either a draw event or the next hole's perk-effect re-run.
+  const fhStacks = G.modifiers ? G.modifiers.filter(m => m.id === 'full_house').length : 0;
+  const hasFullHouse = fhStacks > 0;
+  let initialDrawCount;
+  if(hasFullHouse) {
+    const _baseSize = (typeof getPerkField === 'function') ? getPerkField('full_house','handSize',5) : 5;
+    initialDrawCount = Math.min(8, _baseSize + Math.max(0, fhStacks - 1));
+  } else {
+    initialDrawCount = 4;
+  }
   G._initialDraw = initialDrawCount; // keep in sync for any downstream readers
   // v0.20h: Dealer's Choice — if perk owned + chosen card id picked + a copy
   // is present in the just-shuffled drawPile, pull it out, draw the rest
@@ -40504,6 +40585,14 @@ function resumeGame() {
     // v0.18a: refresh difficulty mods on resume so all runtime reads are consistent.
     G._diffMods = getDifficultyMods(G.difficulty);
     G.difficultyBudgetMult = Math.max(0.5, 1.3 - (G.difficulty - 1) * 0.08);
+    // v0.22e: restore the run's STARTING difficulty so the post-run unlock
+    // doesn't see undefined → fall back to live G.difficulty (which has
+    // already absorbed bonus-hole bumps). Legacy saves that predate this
+    // field don't have it; backfill with G.difficulty as a best guess —
+    // worse case the unlock still gets clamped by the live-de-bumped path.
+    G._runStartingDifficulty = (save._runStartingDifficulty != null)
+      ? (save._runStartingDifficulty | 0)
+      : (G.difficulty | 0);
     G.hole = save.hole;
     G.totalStrokes = save.totalStrokes || 0;
     G.scorecard = save.scorecard || [];
@@ -40586,12 +40675,27 @@ function resumeGame() {
     G.discard = [];
     G.drawPile = [];
     // Reset to 4 slots, then re-extend if Full House modifier was in save
+    // v0.22e: respect Crowded House upgrade + stacks. Previously assumed 5
+    // slots for Full House, which collapsed Crowded (6) and Really/Truly
+    // Crowded (7/8) back down to 5 on resume — leaving the extra slots
+    // hidden until next purchase.
     CARD_SLOT_KEYS = ['S0','S1','S2','S3'];
-    const _s4el = document.getElementById('card-slot-S4');
-    if(_s4el) _s4el.style.display = 'none';
-    if(G.modifiers.some(m => m.id === 'full_house')) {
-      CARD_SLOT_KEYS = ['S0','S1','S2','S3','S4'];
-      if(_s4el) _s4el.style.display = '';
+    const _SLOT_NAMES_R = ['S0','S1','S2','S3','S4','S5','S6','S7'];
+    for(let _i = 4; _i < 8; _i++) {
+      const _el = document.getElementById('card-slot-' + _SLOT_NAMES_R[_i]);
+      if(_el) _el.style.display = 'none';
+    }
+    const _fhStacks = G.modifiers.filter(m => m.id === 'full_house').length;
+    if(_fhStacks > 0) {
+      const _baseSize = (typeof getPerkField === 'function') ? getPerkField('full_house','handSize',5) : 5;
+      const _targetSize = Math.min(8, _baseSize + Math.max(0, _fhStacks - 1));
+      CARD_SLOT_KEYS = _SLOT_NAMES_R.slice(0, _targetSize);
+      for(let _i = 4; _i < _targetSize; _i++) {
+        const _el = document.getElementById('card-slot-' + _SLOT_NAMES_R[_i]);
+        if(_el) _el.style.display = '';
+      }
+      const _handEl = document.getElementById('card-hand');
+      if(_handEl) _handEl.setAttribute('data-handsize', String(_targetSize));
     }
     G.cardSlots = new Array(CARD_SLOT_KEYS.length).fill(null);
     G._cardInstanceCounter = 0;
