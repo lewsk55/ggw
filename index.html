@@ -4198,12 +4198,15 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.22e';
-const CHANGE_NOTE = 'v0.22e: 8-card starter decks (incentivize card removal); difficulty unlock skip fix (resume + bonus-hole drift); Crowded House 6th-card opening draw fix; Portal Grenade & Ghost rarity/price bumps; keyboard shortcuts for slots 6-8 (z, x, c); flatter Trebuchet arc.';
+const GAME_VERSION = '0.22f';
+const CHANGE_NOTE = 'v0.22f: Iron Ball reverted to 1× base power (Wrecking Ball upgrade now 2×, was 3×); global pro shop prices +25% (PRICE_MULTIPLIER 1.25 → 1.5625) — economic squeeze to make coin scarcity tighter at the per-shop level without touching per-hole difficulty inflation.';
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
-const PRICE_MULTIPLIER = 1.25;
+// v0.22f: 1.25 → 1.5625 (+25% on top). Adam wants tighter coin scarcity at the
+// per-shop level — make players actually feel the cost of every pick instead
+// of casually buying everything they see.
+const PRICE_MULTIPLIER = 1.5625;
 
 // ── Elite Holes (v0.20j) ──────────────────────────────
 // "Elite" holes appear every 3rd hole (player-facing 3, 6, 9, 12...).
@@ -23065,7 +23068,7 @@ const CARD_DEFS = {
   walkies:      { id:'walkies',      emoji:'🦵', name:'Walkies',         desc:'Sprout legs and walk anywhere for 12 seconds.',                  rarity:'rare',      price:22,  context:'pre',    holdable:false },
   // arc_shot hidden — may revisit later
   // arc_shot:     { id:'arc_shot',     emoji:'🌈', name:'Arc Shot',        desc:'This swing: high arc trajectory, sail over obstacles.',           rarity:'rare',      price:12,  context:'pre',    holdable:false },
-  iron_ball:    { id:'iron_ball',    emoji:'🔩', name:'Iron Ball',       desc:'Plow through obstacles, destroying them on contact. 2× shot power. Play anytime!', rarity:'rare',      price:18,  context:'any',    holdable:false, powerMult: 2.0 },
+  iron_ball:    { id:'iron_ball',    emoji:'🔩', name:'Iron Ball',       desc:'Plow through obstacles, destroying them on contact. Play anytime!', rarity:'rare',      price:18,  context:'any',    holdable:false },
   mulligan:     { id:'mulligan',     emoji:'↩️', name:'Mulligan',        desc:'Undo your last swing. Ball returns, stroke refunded.',            rarity:'rare',      price:22,  context:'post',   holdable:false },
   airstrike:    { id:'airstrike',    emoji:'🎯', name:'Airstrike',       desc:'Tap a spot. After 2s, massive explosion rains down.',             rarity:'epic',      price:28,  context:'pre',    holdable:false },
   cannonball:   { id:'cannonball',   emoji:'💣', name:'Cannonball',      desc:'This swing: blast through walls AND spikes — both shatter on contact. Great for off-roading.',     rarity:'epic',      price:25,  context:'pre',    holdable:false },
@@ -24262,9 +24265,11 @@ function _executeCardAbilityInner(id) {
       if(consumeCloneDurationMult('iron_ball') > 1) G._ironBallExtraShot = true;
       applyIronBallVisual();
       // v0.21d: Wrecking Ball upgrade — distinct toast.
+      // v0.22f: base Iron Ball reverted to 1× (no powerMult); Wrecking Ball
+      // is now the 2× upgrade. Toast updated accordingly.
       {
         const _wbUp = (typeof getCardField === 'function') ? getCardField('iron_ball','powerMult',1.0) : 1.0;
-        showToast(_wbUp > 1 ? '🔩 Wrecking Ball armed — +50% power!' : '🔩 Iron Ball armed!', 800);
+        showToast(_wbUp > 1 ? '🔩 Wrecking Ball armed — 2× power!' : '🔩 Iron Ball armed!', 800);
       }
       break;
     case 'power_shot':   G._powerShotStacks = (G._powerShotStacks||0) + 1; G._powerShotTensionActive = true; showToast('💪 Power Shot' + (G._powerShotStacks > 1 ? ' ×'+G._powerShotStacks+'!' : ' armed!'), 800); break;
@@ -33846,8 +33851,9 @@ function fireShot() {
   const frisbeeBoost = G._frisbeeArmed ? 0.75 : 1.0;
   // v0.22b: pull iron_ball powerMult here too — preview was already
   // multiplying it in (line 12618), but the actual fireShot speed wasn't.
-  // With the new 2.0 base + 3.0 Wrecking Ball upgrade this gap was big
-  // enough that Iron Ball preview-vs-actual diverged ~2-3×.
+  // v0.22f: base Iron Ball reverted to 1× (default); Wrecking Ball
+  // upgrade = 2×. Preview parity is still important — without this the
+  // Wrecking Ball preview would overshoot the actual landing point.
   const _ironPwrMul = (G._ironBallActive && typeof getCardField === 'function')
     ? getCardField('iron_ball','powerMult',1.0) : 1.0;
   // v0.22e: Trebuchet horizontal speed mult — preserves distance after the
@@ -35672,8 +35678,8 @@ const CARD_UPGRADES = {
   },
   iron_ball: {
     a: { id:'wrecking_ball_iron', name:'Wrecking Ball', emoji:'🔩', archetypes:['demolition'],
-         desc:'3× shot power (vs base 2×). The Earth shall tremble.',
-         powerMult: 3.0 },
+         desc:'2× shot power. The Earth shall tremble.',
+         powerMult: 2.0 },
     // v0.22b: Snowball Iron — picks up speed on every destruction.
     // Reads speedOnDestroy multiplier off the card def in destroyObstacles
     // (the iron-destruction code path) — applied as an XZ velocity scale
