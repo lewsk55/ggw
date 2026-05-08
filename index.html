@@ -4220,8 +4220,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.23a5';
-const CHANGE_NOTE = 'v0.23a5: Multi-fix pass. Ball drag back to 0.70 (sweet spot). Lap mode: par 16→8, corner triangles 1.5×→0.6× bounce (no more flying-off-track). Wrecking Ball upgrade 2×→1.5× power (was OP). Beat Em Up arming mid-swing now correctly stays in slot for re-tap punches (isCardArmedPreSwing was rejecting on G.rolling). Card Removal screen now shows upgraded card art (was reading rec.upgradeBranch, but upgrades live in G.deckUpgrades[i] parallel array).';
+const GAME_VERSION = '0.23a6';
+const CHANGE_NOTE = 'v0.23a6: Multi-fix pass. Trees in EMPTY cells outside the fairway now collide (woody bounce, foliage shake, no destroy). Walkies picks up coins + blocks against ground-level crates. OOB combo bonus now flushes at hole-in (going OOB and dropping into the cup awards full trick payout). Trebuchet upgrade boost halved (1.3→1.15 on both arc height and horizontal speed) — landing-explosion intact. U-shape layouts banned on No Walls elite, removed from holeRamp<5 pool entirely, dropped from late-pool complex weighting; when a U IS picked, defense probability floored at 85% with 4× weight bias toward slat_ring guards, plus +50% trees with placement biased into the inner gap.';
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
@@ -6525,6 +6525,10 @@ function generatePuttPuttCourse(holeNum) {
   const L = Math.max(14,Math.floor((18 + Math.floor(rng() * 8)) * diffMult * holeMult));
 
   // All layouts guaranteed to have at least one turn (no pure straights).
+  // v0.23a6: U-shape indices [6,7,11] are tagged for special handling — they're
+  // hole-in-one factories on no-walls elites, and benefit from extra in-path
+  // tree placement + biased hole defenses on regular holes.
+  const U_SHAPE_INDICES = new Set([6, 7, 11]);
   const allLayouts = [
     // L-shape right
     [{dir:'H',len:M},{dir:'V',len:M}],
@@ -6564,36 +6568,42 @@ function generatePuttPuttCourse(holeNum) {
     [{dir:'V',len:L+S},{dir:'H',len:1},{dir:'V',len:M}],
   ];
 
+  // v0.23a6: U-shapes are auto-banned on No Walls elites — without a
+  // perimeter, the player can just yeet the ball straight across the gap
+  // for a trivial hole-in-one. Detected via _activeElite (set at fork
+  // commit), checked when filtering the layout pool below.
+  const _bannedNoWallsU = !!(_activeElite && _activeElite.archetype.flag === 'eliteNoWalls');
+
   // Hole 0-1: shape-varied early holes (par 3-5 mix). Was: only the 4
   // single-turn L-shapes → every first hole was a turn-3 par. Per Adam:
   // "Need more variation on first 2 holes — right now we're only getting
   // a single turn 3 par. Feel free to add different course shapes as
-  // long as it's lighter on obstacles." Pool now includes:
-  //   - L-shapes (shorter — par 3 territory)
-  //   - U-turns (medium length — par 4)
-  //   - Z-shapes (longer — par 4)
-  //   - Long straights with kinks (par 4-5)
+  // long as it's lighter on obstacles."
+  // v0.23a6: U-shapes (indices 6, 7) removed from early-hole pool — too
+  // hole-in-one-friendly when paired with light obstacle density. They
+  // stay in the late pool but at reduced weight.
   // Density stays low because obstacle-spawn weights also key off
   // holeRamp; only the SHAPE pool is broadened here.
-  // v0.21k6: was 4 layouts (L-shapes only); now 10 with explicit
-  // par 3-5 spread.
+  // v0.21k6: was 4 layouts (L-shapes only); now 8 with explicit
+  // par 3-5 spread (was 10 incl. 2 U-turns).
   // Hole 2-4: moderate variety. 5+: full pool.
   let pool;
   if(holeRamp < 2) {
     pool = [
       allLayouts[0], allLayouts[1], allLayouts[2], allLayouts[3], // 4 L-shapes (par 3)
-      allLayouts[6], allLayouts[7],                                // 2 U-turns (par 4)
       allLayouts[8], allLayouts[9],                                // 2 Z-shapes (par 4)
       allLayouts[14], allLayouts[15],                              // 2 long straights w/ kink (par 4-5)
     ];
   } else if(holeRamp < 5) {
     pool = [allLayouts[0],allLayouts[1],allLayouts[2],allLayouts[3],
-       allLayouts[6],allLayouts[7],allLayouts[8],allLayouts[9],
-       allLayouts[14],allLayouts[15]]; // add long straights
+       allLayouts[8],allLayouts[9],
+       allLayouts[14],allLayouts[15]]; // no U-turns yet
   } else {
     pool = [...allLayouts];
-    // Weight complex/long layouts more heavily on later holes and harder difficulties
-    const complexLayouts = [allLayouts[4],allLayouts[5],allLayouts[10],allLayouts[11],
+    // Weight complex/long layouts more heavily on later holes and harder difficulties.
+    // v0.23a6: U-shapes (6, 7, 11) explicitly NOT in complexLayouts so they don't
+    // accumulate weight on later holes — they appear at base weight only.
+    const complexLayouts = [allLayouts[4],allLayouts[5],allLayouts[10],
       allLayouts[12],allLayouts[13],allLayouts[16],allLayouts[17]];
     // Add extra copies of complex layouts based on hole + difficulty
     const extraWeight = Math.floor(holeRamp / 3) + (diff >= 3 ? 2 : 0) + (diff >= 4 ? 2 : 0);
@@ -6601,7 +6611,21 @@ function generatePuttPuttCourse(holeNum) {
     // Very long layouts from ~mid-early run onward
     if(holeRamp >= 5) { pool.push(allLayouts[16], allLayouts[17]); }
   }
+  // v0.23a6: filter out U-shapes entirely on No Walls elite — open perimeter
+  // turns U layouts into trivial cross-gap HIO machines. Done after pool
+  // construction so we strip from the late-game full pool too.
+  if(_bannedNoWallsU) {
+    const uSet = new Set([allLayouts[6], allLayouts[7], allLayouts[11]]);
+    pool = pool.filter(p => !uSet.has(p));
+  }
   let segments = pool[Math.floor(rng() * pool.length)];
+
+  // v0.23a6: Detect U-shape selection (matches by reference against the
+  // tagged indices). Used downstream to (a) bias holeDefense toward
+  // slat_ring guards and (b) force in-path tree placement between the
+  // U's parallel arms so a straight-line hole-in-one can't skip the
+  // turn.
+  const _isUShape = segments === allLayouts[6] || segments === allLayouts[7] || segments === allLayouts[11];
 
   // v0.20i: Balance first-turn direction. The layout list above is biased
   // toward H-first (11 H-first, 7 V-first; complex layouts skew further:
@@ -7394,6 +7418,11 @@ function generatePuttPuttCourse(holeNum) {
       const base = 0.50 + (diff - 3) * 0.10;
       defenseP = Math.max(0.20, Math.min(0.85, base));
     }
+    // v0.23a6: U-shape holes get a guaranteed-or-near-guaranteed defense —
+    // pairs with the slat_ring weight bias below to make hole-in-ones via
+    // straight-line cross-gap shots much harder. Floor at 0.85 even on the
+    // softest difficulties.
+    if(_isUShape) defenseP = Math.max(defenseP, 0.85);
 
     if(rng() < defenseP || _isSpeedHoleElite) {
       // Candidate pool marked with tier. `spike_ring` is the new rotating-
@@ -7450,6 +7479,13 @@ function generatePuttPuttCourse(holeNum) {
         if(inBackHalf && halfProg >= 0.35 && p.tier === 'H') w *= 1.3;
         if(inBackHalf && halfProg >= 0.70 && p.tier === 'H') w *= 1.3;
         if(diff >= 4 && p.tier === 'H') w *= 1.2;
+        // v0.23a6: U-shape holes are vulnerable to straight-line HIO across
+        // the gap. Heavily bias toward slat_ring defenses (the "stone walls
+        // around the hole" Adam called out) — these break up the line of
+        // sight to the cup so a straight power shot can't just thread it.
+        if(_isUShape && (p.kind === 'slat_ring_4' || p.kind === 'slat_ring_6')) {
+          w *= 4.0;
+        }
         return w;
       };
       const totalW = eligible.reduce((s,p) => s + weightOf(p), 0);
@@ -7899,6 +7935,8 @@ function generatePuttPuttCourse(holeNum) {
           speedHoopData, chasmAirborneData,
           // v0.22a: physics crates
           crateData,
+          // v0.23a6: U-shape flag for downstream consumers (defense bias, tree placement)
+          isUShape: _isUShape,
           ...eliteFlags};
 }
 
@@ -9774,18 +9812,42 @@ function buildCourse(data) {
   // Trees must never overlap the fairway. We place them in
   // EMPTY cells that are at least 1 cell away from any WALL,
   // so they're clearly outside the playable area.
-  const treeCount = 4 + Math.floor(rng()*6);
+  // v0.23a6: Trees are now COLLIDABLE — we register their world position
+  // + radius in G.trees so the physics step can bounce the ball off
+  // them. This catches OOB excursions on U-shapes (where the ball would
+  // otherwise sail through the gap untouched) and gives general OOB
+  // travel some shape. Trees are immovable: no destruction, no coin
+  // payout, no iron-ball smash-through. Just a hard wall.
+  // v0.23a6: U-shape holes get +50% trees and a forced placement bias
+  // toward the inner gap (cells with the highest WALL-neighbour count).
+  G.trees = [];
+  const _isUShapeHole = !!data.isUShape;
+  const _treeCountBase = 4 + Math.floor(rng()*6);
+  const treeCount = _isUShapeHole ? Math.ceil(_treeCountBase * 1.5) : _treeCountBase;
   const emptyCells = [];
   for(let y=0;y<H;y++) for(let x=0;x<W;x++) {
     if(grid[y][x]!==CELL.EMPTY) continue;
-    // Must have at least one WALL neighbour (close to course)
-    const nearWall = [[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[-1,1],[1,-1],[1,1]].some(([dy,dx])=>{
+    // Count WALL neighbours — used both as the "near course" gate AND as
+    // a U-shape gap-density score (higher = deeper inside a U gap).
+    let wallNbrs = 0;
+    const offsets = [[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[-1,1],[1,-1],[1,1]];
+    for(const [dy,dx] of offsets) {
       const ny=y+dy,nx=x+dx;
-      return ny>=0&&ny<H&&nx>=0&&nx<W&&grid[ny][nx]===CELL.WALL;
-    });
-    if(nearWall) emptyCells.push({x,y});
+      if(ny>=0&&ny<H&&nx>=0&&nx<W&&grid[ny][nx]===CELL.WALL) wallNbrs++;
+    }
+    if(wallNbrs > 0) emptyCells.push({x,y,wallNbrs});
   }
-  const shuffledEmpty = [...emptyCells].sort(()=>rng()-0.5);
+  // For U-shapes, sort by wallNbrs DESC first (gap cells go to front of
+  // the placement queue) then random; otherwise pure random.
+  let shuffledEmpty;
+  if(_isUShapeHole) {
+    shuffledEmpty = [...emptyCells].sort((a,b) => {
+      if(a.wallNbrs !== b.wallNbrs) return b.wallNbrs - a.wallNbrs;
+      return rng() - 0.5;
+    });
+  } else {
+    shuffledEmpty = [...emptyCells].sort(()=>rng()-0.5);
+  }
   let treesPlaced = 0;
   const treePosCache = [];
   for(let i=0; i<shuffledEmpty.length && treesPlaced<treeCount; i++) {
@@ -9808,6 +9870,8 @@ function buildCourse(data) {
     tm.position.set(tx, trunkH/2, tz);
     tm.castShadow=true;
     group.add(tm);
+    // v0.23a6: collect meshes for the collider record
+    const _treeMeshes = [tm];
 
     // 2-layer foliage cone
     const layers = 2 + Math.floor(rng()*2);
@@ -9821,7 +9885,19 @@ function buildCourse(data) {
       cm.position.set(tx+(rng()-0.5)*0.15, yOff, tz+(rng()-0.5)*0.15);
       cm.castShadow=true;
       group.add(cm);
+      _treeMeshes.push(cm);
     }
+    // v0.23a6: register the collider. Radius matches the trunk + a small
+    // skin so the ball clearly clatters off bark rather than the visual
+    // dead-center. Trees are immovable so no _destroyed flag needed at
+    // spawn time, but we leave the field reserved in case of future
+    // chainsaw-card shenanigans.
+    G.trees.push({
+      wx: tx, wz: tz,
+      r: trunkR + 0.18,
+      meshes: _treeMeshes,
+      _destroyed: false,
+    });
     treesPlaced++;
   }
 
@@ -14781,6 +14857,109 @@ function updatePhysics(dt) {
     }
   }
 
+  // ── Tree obstacle collision ───────────────────────────
+  // v0.23a6: Trees are placed in EMPTY cells outside the playable course
+  // (see buildCourse tree section). Used to be pass-through; now they
+  // bounce the ball off them like a hard cylinder. Immovable: no
+  // destruction, no coin payout, no iron-ball/cannonball/freeze
+  // shatter — even a wrecking ball respects a sturdy oak. Ghost ball
+  // and parkour/vacuum immunities still allow pass-through.
+  // Height gate: trees are tall (~2.5-5m), trunk starts at y=0. We
+  // forgive jumps that clear the LOWER trunk (under ~2m) since the
+  // ball's airborne arc usually peaks well above that. Above ~2m of
+  // trunk the foliage cones still bounce — that's intentional, the
+  // canopy is not nothing.
+  if(G.trees && G.trees.length && !ghostActive) {
+    const _treeForgiveY = 2.0; // ball cleanly above trunk-bottom = clearance jump
+    for(const tree of G.trees) {
+      if(tree._destroyed) continue;
+      if(G._parkourImmunity || G._vacuumImmunity) continue;
+      // Allow clean over-the-trunk jumps but still bounce off canopy
+      // when ball is at typical roll/low-arc heights.
+      if(G.ballPos.y - BALL_R > _treeForgiveY && G.ballVel.y > -0.5) continue;
+      const dx = G.ballPos.x - tree.wx;
+      const dz = G.ballPos.z - tree.wz;
+      const dist = Math.hypot(dx, dz);
+      const minDist = tree.r + BALL_R;
+      if(dist < minDist && dist > 0.001) {
+        const nx = dx/dist, nz = dz/dist;
+        // Push ball out to clear the trunk
+        G.ballPos.x += nx*(minDist-dist);
+        G.ballPos.z += nz*(minDist-dist);
+        // Sticky card respects trees the same way it does walls
+        if(G._stickyCardActive && !G._stickyCardTriggered && !hasIronBall) {
+          G._stickyCardTriggered = true;
+          G._stickyCardSquash = { timer: 0, duration: 0.55, nx, nz };
+          enterStickyAttached({ kind: 'wall', nx, nz });
+          _stickyShared('tree');
+          continue;
+        }
+        // Bounce — slightly less elastic than rocks (wood absorbs more
+        // than stone). 0.6 vs rock's 0.7.
+        const dot = G.ballVel.x*nx + G.ballVel.z*nz;
+        if(dot < 0) {
+          G.ballVel.x -= (1+BOUNCE*0.6)*dot*nx;
+          G.ballVel.z -= (1+BOUNCE*0.6)*dot*nz;
+        }
+        spawnHitParticles(G.ballPos);
+        triggerShake(Math.min(0.5, Math.hypot(G.ballVel.x, G.ballVel.z) / 30));
+        // Subtle wood-thunk SFX — woody, not stoney.
+        if(AC) {
+          const ac = getAC(), t0 = ac.currentTime;
+          const o = ac.createOscillator(); o.type = 'square';
+          o.frequency.setValueAtTime(180, t0);
+          o.frequency.exponentialRampToValueAtTime(80, t0+0.10);
+          const g = ac.createGain();
+          g.gain.setValueAtTime(0.15, t0);
+          g.gain.exponentialRampToValueAtTime(0.001, t0+0.14);
+          o.connect(g); g.connect(getACDest());
+          o.start(t0); o.stop(t0+0.16);
+        }
+        // Foliage shake juice — nudge the tree's mesh group (cheap visual)
+        if(tree.meshes && tree.meshes.length) {
+          tree._shake = 0.18;
+        }
+        recordStyleEvent('tree_thwack');
+        G._challengeObstacleTouched = true;
+        trackStat('totalBounces', 1);
+        if(G._allBounceTarget > 0) G._allBounceCount = (G._allBounceCount||0) + 1;
+        // Bounce & Boom on tree hit (parity with rocks/bumpers)
+        if(G.modifiers.some(m=>m.id==='bounce_boom')) {
+          const boomSpd = Math.hypot(G.ballVel.x, G.ballVel.z);
+          const boomR = Math.min(4.0, 1.0 + boomSpd * 0.15) * getBounceBoomScale();
+          spawnExplosion(G.ballPos.x, G.ballPos.y, G.ballPos.z, getBounceBoomScale());
+          const boomHits = collectObstaclesInRadius(G.ballPos.x, G.ballPos.z, boomR);
+          if(boomHits.length > 0) { destroyObstacles(boomHits, G.ballPos.x, G.ballPos.y, G.ballPos.z); for(let bk=0;bk<boomHits.length;bk++){G.coins++;updateCoinHUD();} }
+          destroyWallChunksInRadius(G.ballPos.x, G.ballPos.z, boomR);
+          blastIdleBalls(G.ballPos.x, G.ballPos.z, boomR, 15);
+        }
+      }
+      // Per-frame foliage-shake decay (cheap visual juice on hit)
+      if(tree._shake && tree._shake > 0) {
+        tree._shake -= dt * 1.8;
+        if(tree._shake < 0) tree._shake = 0;
+        const wobble = Math.sin(performance.now() * 0.04) * tree._shake * 0.12;
+        // Skip the trunk (mesh[0]) — only wobble the canopy cones
+        for(let mi = 1; mi < tree.meshes.length; mi++) {
+          const m = tree.meshes[mi];
+          if(m && m.position) {
+            // Stash original X if not already stashed
+            if(m._origX === undefined) m._origX = m.position.x;
+            m.position.x = m._origX + wobble;
+          }
+        }
+      } else if(tree._shake === 0 && tree.meshes) {
+        // Restore neutral position
+        for(let mi = 1; mi < tree.meshes.length; mi++) {
+          const m = tree.meshes[mi];
+          if(m && m.position && m._origX !== undefined) {
+            m.position.x = m._origX;
+          }
+        }
+      }
+    }
+  }
+
   // ── Spike hemisphere collision ─────────────────────────
   // Dangerous! Hitting one = heavy shake + lose a life. Strong bounce-back.
   // v0.20c: cannonball is now spike-immune. Description updated to match.
@@ -15852,7 +16031,11 @@ function updatePhysics(dt) {
   }
 
   // ── Coin pickup ────────────────────────────────────────
-  if(G.coinMeshes && G.coinMeshes.length && G.rolling && !ghostActive) {
+  // v0.23a6: Walkies-mode pickup parity — coins were "ghosting through" the
+  // ball during walkies because this loop only ran while G.rolling was
+  // true. Walkies sets rolling=false but the player is still legitimately
+  // moving the ball around the course; pickups should land the same.
+  if(G.coinMeshes && G.coinMeshes.length && (G.rolling || G.walkiesActive) && !ghostActive) {
     // v0.20r: coin pickup radius scales with TILE_SIZE so coins on Giant Hole
     // (visually 4× bigger) collect at their rendered footprint.
     const COIN_R = 0.55 * (TILE_SIZE / TILE_SIZE_BASE);
@@ -17277,6 +17460,10 @@ const STYLE_PTS = {
   // v0.22a: ON THE BOX — flagship combo for landing the ball on top of a
   // physics crate. High-skill tactical landing; rare and chaotic.
   on_the_box: 1200,
+  // v0.23a6: Tree thwack — ricochet off an in-course tree. Sits between
+  // wall_bounce (50) and rock_ricochet (100) — woodier feel, mid-tier
+  // points for an OOB save off the bark.
+  tree_thwack: 75,
 };
 
 // Named tricks: [condition_fn(events, shotCtx), name, bonusPts]
@@ -18695,6 +18882,42 @@ function onHoled() {
   if(G.inHole) return; // guard against double-call
   G.inHole = true;
   G.rolling = false;
+  // v0.23a6: Flush pending OOB combo at hole-in. Adam: "When I go OOB on
+  // a u shaped hole to get a hole in one, I don't get any oob-related
+  // trick points which feels off." Root cause: the OOB bonus is awarded
+  // only when the ball re-enters bounds. A ball that goes OOB and then
+  // directly into the cup never re-enters bounds, so the bonus was
+  // silently dropped. Mirror the bonus payout from the OOB-recovery
+  // branch (5 coins/sec linear + superlinear (oobSecs^1.6)*2; Reckless
+  // upgrade mult applies) and the same toast/SFX/style hooks.
+  if(G._wasOOB) {
+    const oobSecs = G._oobComboTimer || 0;
+    if(oobSecs > 0.35) {
+      let oobCoins = Math.floor(oobSecs * 5 + Math.pow(oobSecs, 1.6) * 2);
+      const _orMult = (typeof getPerkField === 'function') ? getPerkField('off_roading','oobComboMult',1.0) : 1.0;
+      if(_orMult > 1.0) oobCoins = Math.ceil(oobCoins * _orMult);
+      if(oobCoins > 0) {
+        G.coins += oobCoins;
+        if(typeof updateCoinHUD === 'function') updateCoinHUD();
+        for(let k=0;k<Math.min(5, Math.floor(oobSecs)+1);k++) recordStyleEvent('trick_shot');
+        const tier = oobSecs < 1.5 ? '🎪' : oobSecs < 3 ? '🎪🔥' : oobSecs < 5 ? '🎪💥🔥' : '👑💥🔥';
+        showToast(`${tier} OOB→CUP! +${oobCoins} (${oobSecs.toFixed(1)}s)`, 1800);
+        if(typeof triggerShake === 'function') triggerShake(oobSecs < 2 ? 'med' : 'heavy');
+      }
+    }
+    if(G._oobWasGhost) {
+      recordStyleEvent('ghost_oob');
+      G._reckessActiveThisShot = true;
+    }
+    if(G._oobWasJump) {
+      recordStyleEvent('jump_oob');
+      G._reckessActiveThisShot = true;
+    }
+    G._wasOOB = false;
+    G._oobWasGhost = false;
+    G._oobWasJump = false;
+    G._oobComboTimer = 0;
+  }
   // v0.20u: Portal Grenade despawns at hole-out (rule "D" — earliest of
   // hole-out OR first ball pass-through). Safe to call even if no
   // portals are active.
@@ -35020,6 +35243,9 @@ function updateKeyboardCamera(dt) {
         if(G.rocks)   for(const o of G.rocks)   { if(!o._destroyed) checkCircle(o.wx, o.wz, o.r||0.5); }
         if(G.bumpers) for(const o of G.bumpers) { if(!o._destroyed) checkCircle(o.wx, o.wz, o.r||0.4); }
         if(G.spikes)  for(const o of G.spikes)  { if(!o._destroyed) checkCircle(o.wx, o.wz, o.r||0.45); }
+        // v0.23a6: trees are also solid during walkies — wandering OOB and
+        // bonking into a tree is intentional now.
+        if(G.trees)   for(const o of G.trees)   { if(!o._destroyed) checkCircle(o.wx, o.wz, o.r||0.3); }
         // Slide blocks (AABB)
         if(G.slideBlocks) {
           for(const sb of G.slideBlocks) {
@@ -35031,6 +35257,32 @@ function updateKeyboardCamera(dt) {
             if(px > bx-hw && px < bx+hw && pz > bz-hd && pz < bz+hd) {
               const dL = px - (bx-hw), dR = (bx+hw) - px;
               const dF = pz - (bz-hd), dB = (bz+hd) - pz;
+              const oX = Math.min(dL, dR), oZ = Math.min(dF, dB);
+              if(oX < oZ) { pushX += dL < dR ? -oX : oX; }
+              else        { pushZ += dF < dB ? -oZ : oZ; }
+              hit = true;
+            }
+          }
+        }
+        // v0.23a6: Crate AABB during walkies. Adam: "Can also walk through
+        // boxes. Fix this." Only block against ground-level crates (bottom
+        // within ~half a ball-radius of the floor) — stacked crates higher
+        // up are skipped because the walking ball runs at floor height and
+        // shouldn't be tripped by a crate floating above its head. Teeter
+        // offsets are honored so the visual edge matches collision.
+        if(G.crates) {
+          for(const cr of G.crates) {
+            if(cr._destroyed) continue;
+            const crBot = cr.y - cr.size;
+            // Walking ball is at floor height — skip elevated crates entirely
+            if(crBot > BALL_R * 1.2) continue;
+            const cWx = cr.wx + (cr._teeterDx || 0);
+            const cWz = cr.wz + (cr._teeterDz || 0);
+            const hw = cr.size + WALK_BALL_R;
+            const hd = cr.size + WALK_BALL_R;
+            if(px > cWx-hw && px < cWx+hw && pz > cWz-hd && pz < cWz+hd) {
+              const dL = px - (cWx-hw), dR = (cWx+hw) - px;
+              const dF = pz - (cWz-hd), dB = (cWz+hd) - pz;
               const oX = Math.min(dL, dR), oZ = Math.min(dF, dB);
               if(oX < oZ) { pushX += dL < dR ? -oX : oX; }
               else        { pushZ += dF < dB ? -oZ : oZ; }
@@ -35592,8 +35844,13 @@ const CARD_UPGRADES = {
          // fine)". Was 2.0× arc height which sent the ball ~10m up; cut to
          // 1.3× (peak ~5m) and add a 1.3× horizontal speed mult to keep
          // roughly the same range. Net: half the height, same distance.
+         // v0.23a6: Adam — "too much power by default, becoming a hole-in-one
+         // machine". Halve the boost over baseline catapult: 1.3→1.15 on both
+         // arc height and horizontal speed. Net: same arc shape, ~50% less
+         // bonus range. landingExplodes still does the heavy lifting on
+         // demolition feel.
          desc:'Loftier arc with a longer, flatter trajectory. Landings explode on impact.',
-         arcHeightMult: 1.3, horizMult: 1.3, landingExplodes: true },
+         arcHeightMult: 1.15, horizMult: 1.15, landingExplodes: true },
     // Branch B left open
   },
   mighty_egg: {
@@ -37793,6 +38050,8 @@ function initHole() {
   G.spikes = [];
   G.angledWalls = [];
   G.wallChunks = [];
+  // v0.23a6: tree colliders — registered in buildCourse, pass-through unless populated
+  G.trees = [];
   // v0.22a: physics crates — Half-Life-style breakable crates that absorb
   // ball momentum, bounce around, and drop coins/hearts/upgrade vouchers
   // when destroyed. See spawnCrates / updateCratePhysics for the full
