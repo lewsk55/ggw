@@ -3641,6 +3641,28 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<!-- v0.23a: Cannon-es rigid body physics for crates + static obstacle bodies.
+     Cannon-es ships as ESM only, so we import it via a module script and
+     attach to window.CANNON for use by non-module game code. The
+     window.cannonReady promise lets the game wait for it before init.
+     Cache-friendly pinned version. -->
+<script>
+  window.cannonReady = new Promise((resolve, reject) => {
+    window._cannonReadyResolve = resolve;
+    window._cannonReadyReject = reject;
+  });
+</script>
+<script type="module">
+  try {
+    const CANNON = await import('https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js');
+    window.CANNON = CANNON;
+    window._cannonReadyResolve(CANNON);
+  } catch(err) {
+    console.error('[v0.23a] Cannon-es load failed:', err);
+    window.CANNON = null;
+    window._cannonReadyReject(err);
+  }
+</script>
 <script>var _origLog=console.log,_origWarn=console.warn;console.log=function(){};console.warn=function(){};</script>
 <script src="https://cdn.jsdelivr.net/npm/webaudiofont@3.0.4/npm/dist/WebAudioFontPlayer.js"></script>
 <script>console.log=_origLog;console.warn=_origWarn;</script>
@@ -4198,8 +4220,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.22f';
-const CHANGE_NOTE = 'v0.22f: Iron Ball reverted to 1× base power (Wrecking Ball upgrade now 2×, was 3×); global pro shop prices +25% (PRICE_MULTIPLIER 1.25 → 1.5625) — economic squeeze to make coin scarcity tighter at the per-shop level without touching per-hole difficulty inflation.';
+const GAME_VERSION = '0.23a5';
+const CHANGE_NOTE = 'v0.23a5: Multi-fix pass. Ball drag back to 0.70 (sweet spot). Lap mode: par 16→8, corner triangles 1.5×→0.6× bounce (no more flying-off-track). Wrecking Ball upgrade 2×→1.5× power (was OP). Beat Em Up arming mid-swing now correctly stays in slot for re-tap punches (isCardArmedPreSwing was rejecting on G.rolling). Card Removal screen now shows upgraded card art (was reading rec.upgradeBranch, but upgrades live in G.deckUpgrades[i] parallel array).';
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
@@ -5908,10 +5930,14 @@ function buildLapModeCourseData() {
   // hypotenuse cutting across the fair cell diagonally so the ball
   // deflects smoothly around the outside of the turn.
   //
-  // v0.20t: Corners are now 2× normal size with 1.5× bounce. Legs span
-  // ~1.9 tiles each so the triangle covers a meaningful portion of the
-  // turn area. Bounce factor reduced from 2× to 1.5× to compensate for
-  // the bigger surface area (more frequent + bigger hits).
+  // v0.20t: Corners are 2× normal size with a custom bounce factor.
+  // Legs span ~1.9 tiles each so the triangle covers a meaningful portion
+  // of the turn area.
+  // v0.23a5: bounceMul dropped from 1.5 → 0.6 per Adam — the prior 1.5
+  // (= 3× the global triangle bounce factor) was sending the ball flying
+  // off the track in ways that read as broken. 0.6 makes the corners
+  // *softer* than a normal triangle, so they smoothly deflect around the
+  // turn instead of launching the ball at the inner wall.
   const T = TILE_SIZE_BASE; // lap mode ALWAYS uses base scale (no Giant Hole)
   const angledWallData = [];
   // Triangle leg length — 2× the previous value, spans ~1.9 cells
@@ -5931,7 +5957,7 @@ function buildLapModeCourseData() {
     const hz1 = rcz;
     const hx2 = rcx;
     const hz2 = rcz - rOZ * _LEG;
-    angledWallData.push({ gx, gy, rcx, rcz, hx1, hz1, hx2, hz2, bounceMul: 1.5 });
+    angledWallData.push({ gx, gy, rcx, rcz, hx1, hz1, hx2, hz2, bounceMul: 0.6 });
   };
   // OUTER fair corners — the corners of the fairway ring closest to the
   // outer wall corners. For the top-left corner: fair cell at (PAD, PAD),
@@ -6115,9 +6141,12 @@ function buildLapModeCourseData() {
   // ── Tee direction (toward right — first leg) ──
   const teeDir = { x: 1, z: 0 };
 
-  // ── Par: 16 — bumped from 12 for the longer rectangular track.
-  // Long left/right straights take more strokes per lap.
-  const par = 16;
+  // ── Par: 8 — v0.23a5: dropped from 16 per Adam.
+  // The 16-stroke par was set when lap mode was a long marathon track;
+  // with the current racing-line / boost-hoop tuning the realistic
+  // sub-par on a clean 3-lap run is much tighter, so 8 makes the
+  // par-bonus economy hit at a more meaningful skill threshold.
+  const par = 8;
 
   // ── Speed hoops — shifting (oscillating) hoops along each straight.
   // v0.21k5: one hoop per straight, oscillating perpendicular to travel so
@@ -9143,6 +9172,17 @@ function buildCourse(data) {
   G._crateDrops = [];
   G._holeUpgradeVouchers = 0;
   if(typeof G._stackIdCounter !== 'number') G._stackIdCounter = 0;
+
+  // ── v0.23a: Build Cannon static + kinematic bodies for the level ──
+  // All obstacle arrays (walls, angledWalls, bumpers, spinBars, slideBlocks,
+  // popupWalls) are populated above; ground is registered here. Crates
+  // spawn IMMEDIATELY AFTER, so they collide against this static geometry
+  // from frame 1. Defensive: ensureCannonWorld returns null if the module
+  // hasn't loaded yet — the body builders all early-return safely in that
+  // case. resetCannonBodies clears any leftover state from the previous hole.
+  if(typeof resetCannonBodies === 'function') resetCannonBodies();
+  if(typeof buildCannonObstacleBodies === 'function') buildCannonObstacleBodies();
+
   if(data.crateData && data.crateData.length) {
     for(const cd of data.crateData) {
       try {
@@ -15517,52 +15557,55 @@ function updatePhysics(dt) {
 
       const dot = G.ballVel.x*nx + G.ballVel.z*nz;
       if(dot < 0) {
-        // v0.22a3: ball does NOT reflect off the crate. Instead, the
-        // ball's velocity component ALONG the contact normal is reduced
-        // multiplicatively (CRATE_BALL_DRAG = 0.55 keeps 55%) and its
-        // direction is preserved. The ball plows through the crate's
-        // old position, slowed but still moving forward.
+        // v0.23a: "ball plows through, crate goes flying" — preserved from
+        // v0.22a3, now bridged to Cannon. Ball drag is unchanged (custom
+        // velocity decomposition). Crate kick is now an IMPULSE on the
+        // Cannon body at the contact point — Cannon derives proper angular
+        // velocity from the offset, so we don't need to manually compute
+        // pitchVel / rollVel / angleVel scalars.
         //
-        // Decompose ball velocity into normal + tangent components:
-        //   v_normal  = dot * (nx, nz)        — along contact normal
-        //   v_tangent = v - v_normal          — perpendicular to normal
-        // Apply drag only to the normal component (the part the crate
-        // resisted). Tangent component (sliding along the face) is
-        // unaffected.
+        // Decompose ball velocity into normal + tangent components, drag the
+        // normal component (the part the crate resists), preserve tangent
+        // (sliding along the face).
         const vNx = dot * nx, vNz = dot * nz;
         const vTx = G.ballVel.x - vNx, vTz = G.ballVel.z - vNz;
-        // Apply drag to normal component (no flip — multiply by DRAG, not -DRAG)
         const drag = CRATE_BALL_DRAG;
         G.ballVel.x = vTx + vNx * drag;
         G.ballVel.z = vTz + vNz * drag;
 
-        // Kick the crate with mass-scaled momentum.
-        const kickMag = -dot * CRATE_BALL_TO_CRATE / cr.mass;
-        cr.vx += -nx * kickMag;
-        cr.vz += -nz * kickMag;
-        // v0.22a6: pop considerably less per Adam. Was min(7.5, dot×0.65);
-        // now min(5.0, dot×0.40). Crates lift off the ground but stay
-        // close to it instead of flying overhead. Combined with the
-        // 0.75× time scale, this reads as "punted" not "yeeted".
-        cr.vy += Math.min(5.0, Math.abs(dot) * 0.40);
-        // Pitch + roll on impact (same mapping as before)
-        const tumbleMag = Math.abs(dot) * 0.55;
-        cr.pitchVel = (cr.pitchVel || 0) + (-nz) * tumbleMag * (1 + (Math.random() - 0.5) * 0.4);
-        cr.rollVel  = (cr.rollVel  || 0) + ( nx) * tumbleMag * (1 + (Math.random() - 0.5) * 0.4);
-        // Yaw spin
-        cr.angleVel += (Math.random() - 0.5) * Math.abs(dot) * 0.5;
+        // Apply Cannon impulse to the crate body at the contact point.
+        // v0.23a1: vertical pop is now 0 by default. Cannon derives natural
+        // lift from the ball's contact point being below the crate's
+        // center of mass (ball Y is typically near the crate's lower
+        // half). The torque from that off-center hit produces a tumble
+        // arc that includes a satisfying skyward component — without the
+        // double-counted manual impulse that made crates fly overhead.
+        if(cr.body && window.CANNON) {
+          const C = window.CANNON;
+          const force = -dot * CRATE_BALL_TO_CRATE; // positive when normal points toward ball
+          const horizMag = force; // mass already factored by Cannon's impulse model
+          const vertPop = Math.min(5.0, Math.abs(dot) * CRATE_BALL_VERTICAL);
+          // Contact point in WORLD coordinates relative to crate center.
+          // The ball is at G.ballPos; offset points FROM crate center TO ball.
+          // Pushing FROM that offset INTO the crate = standard impulse-at-point.
+          const cpx = G.ballPos.x - cr.body.position.x;
+          const cpy = G.ballPos.y - cr.body.position.y;
+          const cpz = G.ballPos.z - cr.body.position.z;
+          // Impulse direction = -normal (pushes crate AWAY from ball)
+          // Note: Cannon's applyImpulse expects worldspace impulse + worldspace
+          // contact point relative to body center. Mass scaling is automatic.
+          cr.body.wakeUp();
+          cr.body.applyImpulse(
+            new C.Vec3(-nx * horizMag, vertPop, -nz * horizMag),
+            new C.Vec3(cpx, cpy, cpz)
+          );
+        }
 
-        // v0.22a5: if this crate was locked in a stack, unlock it AND
-        // trigger the stack's chain-collapse path so its neighbors
-        // start tumbling too. This makes hitting a stacked crate feel
-        // like knocking a wooden tower over instead of nudging a
-        // glued sculpture.
-        if(cr._inStack) {
-          cr._inStack = false;
-          cr._inTower = false;
-          if(typeof _onStackCrateImpacted === 'function') {
-            _onStackCrateImpacted(cr);
-          }
+        // Stack release: when a stacked crate is hit, fire the chain-collapse
+        // path so neighbors get their own kicks too. The stack lock is now
+        // implicit via Cannon sleep — wakeUp above starts integration.
+        if(cr.stackId && typeof _onStackCrateImpacted === 'function') {
+          _onStackCrateImpacted(cr);
         }
 
         // Impact FX + audio
@@ -15580,11 +15623,9 @@ function updatePhysics(dt) {
           } catch(e){}
         }
         triggerShake(Math.min(0.4, Math.abs(dot) / 28));
-        // v0.22b: dedicated 'crate_bump' style event (formerly reused
-        // rock_ricochet). Per Adam: "Bumping boxes should be a combo item
-        // ('Boxer')." Each individual crate impact pays small style points
-        // and contributes toward the BOXER trick (3+ crates bumped this
-        // shot) and HEAVYWEIGHT trick (5+ crates bumped this shot).
+        // v0.22b: dedicated 'crate_bump' style event. Bumping boxes is a
+        // combo item ('Boxer'). Each impact pays small style points and
+        // contributes toward BOXER (3+) and HEAVYWEIGHT (5+) tricks.
         if(typeof recordStyleEvent === 'function') recordStyleEvent('crate_bump');
       }
     }
@@ -20185,8 +20226,15 @@ function openCardRemoval() {
     if(!cardId) continue;
     const def = CARD_DEFS[cardId];
     if(!def) continue;
-    // Show upgrade marker if this specific instance is upgraded.
-    const upBranch = (typeof rec === 'object' && rec && rec.upgradeBranch) ? rec.upgradeBranch : null;
+    // v0.23a5: upgrade branch lives in G.deckUpgrades[i] (parallel array
+    // indexed by deck position), NOT on the rec object — G.deck mostly
+    // holds plain card-id strings. Reading rec.upgradeBranch never found
+    // the upgrade for upgraded cards, so the removal screen always showed
+    // the base art. Per Adam: "Remove a card should feature the cards in
+    // their upgraded state if they were upgraded (currently just shows
+    // base models at all times)."
+    const upBranch = (G.deckUpgrades && G.deckUpgrades[i]) ? G.deckUpgrades[i]
+                   : ((typeof rec === 'object' && rec && rec.upgradeBranch) ? rec.upgradeBranch : null);
     const upDef = upBranch && (typeof CARD_UPGRADES !== 'undefined') && CARD_UPGRADES[cardId] && CARD_UPGRADES[cardId][upBranch];
     const dispEmoji = (upDef && upDef.emoji) || def.emoji;
     const dispName  = (upDef && upDef.name)  || def.name;
@@ -20572,34 +20620,38 @@ function destroyWallChunksInRadius(cx, cz, radius) {
 }
 
 // ─────────────────────────────────────────────────────
-// v0.22a: PHYSICS CRATES — Half-Life-style breakable crates that absorb
-// ball momentum, bounce around the level, collide with obstacles +
-// other crates, and drop coins/hearts/upgrade-voucher pickups when
-// destroyed by projectiles, explosions, or iron ball.
+// v0.23a: PHYSICS CRATES — Half-Life-style breakable crates with proper
+// rigid-body simulation via Cannon-es. Crates absorb ball momentum, tumble,
+// stack, settle on corners-then-flop-flat, and drop coins/hearts/upgrade-
+// voucher pickups when destroyed by projectiles, explosions, or iron ball.
+//
+// REWRITE NOTE (v0.22f → v0.23a): the entire ~640-line custom integrator
+// (manual pitch/roll Euler scalars, tower teeter, ground-bounce corner-strike
+// redirection, 3-iteration AABB solver, settle/snap pass) is gone. Cannon
+// owns all integration, collision, and contact resolution. The crate record
+// keeps its original fields for compatibility with destroy/drop/style code,
+// but linear/angular velocity and rotation now live on crate.body (Cannon).
 //
 // Architecture:
-//   - G.crates is a flat list of crate records. Each has:
-//       wx, wz, y           — current world position (y = floor + halfH)
-//       size                — half-extent (cube), drives mass + visual scale
-//       mass                — slightly heavier when bigger
-//       vx, vz, vy          — linear velocity
-//       angle               — Y rotation (for tumble visual)
-//       angleVel            — Y angular velocity
-//       hp                  — 1; explosions/projectiles/iron-ball destroy
-//       _destroyed          — true once removed from play
-//       group               — THREE.Group containing the crate mesh
-//       stackId             — link back to crate stack for chain collapse
-//       stackIndex          — position within stack (0 = bottom)
+//   - G.physWorld         — Cannon.World, gravity (0,-11,0), allowSleep
+//   - G.physMaterials     — Cannon.Material registry (crate, ground, bumper)
+//   - G.physBumperBodies  — Cannon static bodies for bumpers (cylinders)
+//   - G.physWallBodies    — Cannon static bodies for walls + angled walls
+//   - G.physSpinBodies    — kinematic bodies for spin bars (rotating)
+//   - G.physSlideBodies   — kinematic bodies for slide blocks (translating)
+//   - G.physPopupBodies   — kinematic bodies for popup walls (Y-translating)
+//   - G.physGroundBody    — single static plane at terrain level
+//   - G.physKillBody      — sensor at y = -10 catching crates that fall off
 //
-//   - G._crateStacks holds stack metadata: { id, formation, size,
-//     crates: [...], topple: { active, dir, t } }. Formations:
-//       'pyramid'   — 3-2-1 (6 crates, base 3 wide × 2 deep, top 1)
-//       'tower'     — N-tall single column (3-5 crates)
+//   - G.crates[]          — same shape as before, plus crate.body (CANNON.Body)
+//   - G._crateStacks[]    — stack metadata (only used for chain-collapse hooks
+//                           into _onStackCrateDestroyed). The "lock until
+//                           touched" behavior is now Cannon's body.sleep()
+//                           — far cleaner and self-consistent on impact.
 //
-//   - Per-frame: updateCratePhysics(dt) integrates all live crates,
-//     resolves crate-vs-wall, crate-vs-obstacle (spinner/slider/fan/
-//     conveyor/popup-wall/bumper), crate-vs-crate, and applies tower
-//     teeter/sway when relevant.
+//   - Per-frame: updateCratePhysics(dt) syncs kinematic bodies → applies
+//     conveyor/fan force fields → world.step() → syncs crate records and
+//     Three.js groups back from body state → kill-floor cleanup.
 //
 //   - Pillar #2: crates can never be the cause of damage to the player
 //     (no spikes, no explosion on contact). They only redirect/slow.
@@ -20607,81 +20659,378 @@ function destroyWallChunksInRadius(cx, cz, radius) {
 //     Suck. Each destroyed crate has a 10% drop chance (5-coin / heart /
 //     upgrade voucher), so demolition builds get sustain + crit pickups.
 //   - Pillar #5: crate drop SFX + world-space toast = juice.
+//   - Sleep-on-spawn: idle stacks consume zero CPU. Wake propagates on
+//     ball/projectile/explosion contact via Cannon's auto-wake.
 // ─────────────────────────────────────────────────────
 
 // Crate sizing — sliding scale within these bounds.
 //   half-extent (h) range: 0.225 .. 0.525m (so 0.45m to 1.05m cubes)
-//   mass scales gently with size: 0.25 + (h - min)/(max-min) * 0.15 (range 0.25 .. 0.40)
 // v0.22a1: was 0.30..0.70 half-extent; cut 25% per Adam — crates were
-// reading too big on screen and dominated the hole footprint. Now max
-// crate is roughly the size of a slide block, min is bumper-cap-sized.
+// reading too big on screen and dominated the hole footprint.
 const CRATE_H_MIN = 0.225;
 const CRATE_H_MAX = 0.525;
 
-// Crate-vs-ball coupling — how much of the ball's velocity gets transferred
-// to the crate, and how much the ball loses on impact.
-// v0.22a1: per Adam — "crates should be 75% lighter; currently they slow
-// the ball down too much and don't travel very far to cause much chaos."
-// Two-front fix:
-//   1. Mass cut to ~25% of original (1.0-1.6 → 0.25-0.40) — see _crateParams
-//   2. CRATE_BALL_BOUNCE bumped from 0.65 to 0.85 — ball keeps more of its
-//      momentum on impact (was losing ~35%, now ~15%). Ball follows
-//      through better, crate still gets a satisfying boot.
-//   3. CRATE_BALL_TO_CRATE bumped from 0.55 to 0.80 — paired with the
-//      lower mass, this means crates fly noticeably farther on a kick.
-// v0.22a3: "ball plows through, crate goes flying" model. Per Adam:
-// "Make them even lighter compared to the ball. I'd like the ball to
-// slow down when they hit a crate, not reflect off them."
+// ── v0.23a tuning constants ─────────────────────────────────────────
+// These replace the entire v0.22a-b constant zoo. The bulk of the old
+// "feel" was buried in compensating-for-broken-physics hacks; with a real
+// rigid-body solver we only need three knobs to dial in the heavy-ball/
+// light-box feeling Adam tuned over v0.22a1-b.
 //
-// v0.22a4: re-tuned per Adam — crates were "far too light (bouncing
-// too far away after a light touch). They should go airborne more as
-// well." Two fixes:
-//   - Mass partially restored (was 0.12-0.20, now 0.18-0.28 — halfway
-//     between v0.22a2 and v0.22a3) so light touches don't yeet crates
-//     across the level.
-//   - Horizontal impulse coefficient cut (1.4 → 0.9) so each unit of
-//     ball momentum produces less sideways crate velocity.
-//   - Upward pop coefficient INCREASED (0.55 → 0.85, cap 7.0 → 9.0) so
-//     the same impact lofts the crate higher. Net read: ball hit
-//     "punts" the crate skyward instead of "skidding" it sideways.
-const CRATE_BALL_BOUNCE = 0.0;        // ball does NOT reflect
-// v0.22b: drag relaxed 0.55 → 0.75 per Adam ("boxes should slow you down
-// no more than 25% — power shots crawl after hitting them"). Ball keeps
-// 75% of its normal-component speed; tangent component still unchanged.
-const CRATE_BALL_DRAG   = 0.75;       // ball keeps 75% of speed in normal direction
-const CRATE_BALL_TO_CRATE = 0.9;      // v0.22a4: 1.4 → 0.9 (less horizontal)
-const CRATE_FRICTION = 0.94;          // per-tick decay of crate horizontal velocity
-const CRATE_REST_THRESHOLD = 0.25;    // m/s — below this, crate is considered at rest
+// CRATE_BALL_DRAG     — fraction of ball normal-component velocity preserved
+//                       on contact. 0.75 = ball loses ~25% on a head-on hit.
+//                       Carries over directly from v0.22b.
+// CRATE_BALL_TO_CRATE — impulse coefficient applied to the crate body when
+//                       the ball hits it. Combined with mass-derived inertia
+//                       this gives the "ball plows through, crate goes
+//                       flying" v0.22a3 model. We keep the old value (0.9)
+//                       and tune mass first — they interact cleanly now.
+// CRATE_BALL_VERTICAL — v0.23a was 0.35 (carryover from v0.22a4 manual
+//                       "punted skyward" tuning). v0.23a1: dialed to 0
+//                       because Cannon already derives natural lift from
+//                       the ball's contact point being below the crate's
+//                       center of mass — adding manual upward impulse
+//                       double-counts and reads as crates flying overhead
+//                       instead of getting punted. Per Adam: "the pop up
+//                       behavior is too much; can you pull back so Cannon
+//                       handles interactions more realistically?" Kept as
+//                       a tunable constant for fine adjustment later
+//                       (e.g. 0.05 for slight extra airtime).
+const CRATE_BALL_DRAG     = 0.70; // v0.23a5: 0.65 → 0.70 ("just right" per Adam)
+const CRATE_BALL_TO_CRATE = 0.9;
+const CRATE_BALL_VERTICAL = 0.0;
 
-// v0.22a2: lower gravity + slower XZ time so crates feel chunky and read
-// as heavier-than-life wooden boxes instead of skidding hockey pucks.
-// Per Adam: "crates move too fast in response to impacts and they should
-// go airborne slightly. Lower their gravity slightly and have them pop up
-// and spin appropriately. Slow down their motion by 50% compared to the
-// rest of the world."
-//
-// Two-knob approach:
-//   - CRATE_GRAVITY halved (-22 → -11) — crates fall slower, hang time
-//     stays long, airborne moments register visually
-//   - CRATE_TIME_SCALE 0.5 — XZ position integration runs at half-speed
-//     while ANGULAR velocity stays at full-speed. Net visual: crates
-//     translate slowly but spin/tumble fast, reading as heavy chunks
-//     of wood rather than light pucks. The tradeoff is that the crate
-//     "world" runs slower than the ball world — crates stop in a
-//     reasonable distance instead of flying into the next county.
-const CRATE_GRAVITY = -11;            // v0.22a2: halved from -22
-const CRATE_TIME_SCALE = 0.75;        // v0.22a6: 0.5 → 0.75 per Adam ("slow their speed to 30% [meant 75%] not 50%")
-const CRATE_BOUNCE_RESTITUTION = 0.50; // v0.22a2: 0.35 → 0.50, more bounce off ground/walls
+// World gravity & material properties. Gravity matches the v0.22a2 value
+// (-11) so crate hang-time still reads as heavy-and-floaty. Friction +
+// restitution replace the old per-system bounce/friction constants.
+const CRATE_GRAVITY = -11;
+const CRATE_FRICTION_GROUND = 1.5;  // v0.23a3: 0.55 → 1.5, crates skid much less. Per Adam: "still feel too light and fly too far when struck." Friction was the lever — same impact strength, just slows down sooner.
+const CRATE_FRICTION_CRATE  = 0.80; // v0.23a3: 0.40 → 0.80, stacks settle quicker
+const CRATE_FRICTION_WALL   = 0.80; // v0.23a3: 0.50 → 0.80, sliding-along-walls also damps
+const CRATE_RESTITUTION_GROUND = 0.15; // wood is barely bouncy
+const CRATE_RESTITUTION_CRATE  = 0.10;
+const CRATE_RESTITUTION_WALL   = 0.25;
+const CRATE_RESTITUTION_BUMPER = 1.15; // bumpers ARE bouncy (energy added)
 
-// Tower physics — taller stacks teeter more
-const TOWER_TEETER_AMPLITUDE = 0.018;  // base radians at top of stack
-const TOWER_TEETER_FREQ = 1.2;         // hz
-
-// Drop chance + composition
-const CRATE_DROP_CHANCE = 0.10;        // 10% per destroyed crate
-// Of drops: 75% coin (5), 24% heart, 1% upgrade voucher
+// Drop chance + composition (unchanged from v0.22a)
+const CRATE_DROP_CHANCE = 0.10;
 const CRATE_DROP_COIN_CUTOFF = 0.75;
-const CRATE_DROP_HEART_CUTOFF = 0.99;  // 0.75 .. 0.99 = heart, > 0.99 = voucher
+const CRATE_DROP_HEART_CUTOFF = 0.99;
+
+// Kill floor — crates falling below this Y get cleaned up silently.
+// Set well below playable terrain so legitimate airborne arcs aren't culled.
+const CRATE_KILL_Y = -10;
+
+// ─────────────────────────────────────────────────────
+// v0.23a: Cannon-es physics world setup
+// ─────────────────────────────────────────────────────
+// One Cannon.World owns rigid-body simulation for crates + static obstacles.
+// The ball is NOT a Cannon body — its physics still run through the existing
+// custom integrator; we bridge ball-vs-crate impacts by applying impulses to
+// crate bodies in the existing collision code (see line ~15440).
+//
+// Init is lazy: world is built on first call to ensureCannonWorld() once
+// CANNON has loaded. If the import fails, the function returns null and
+// the crate spawn paths gracefully no-op the body creation (game still
+// runs, crates just won't have physics — visible regression but not crash).
+
+function ensureCannonWorld() {
+  if(typeof window === 'undefined') return null;
+  if(!window.CANNON) return null;
+  if(G.physWorld) return G.physWorld;
+
+  const C = window.CANNON;
+  const world = new C.World({
+    gravity: new C.Vec3(0, CRATE_GRAVITY, 0),
+    allowSleep: true,
+  });
+  // SAPBroadphase scales O(n) for small worlds vs naive O(n²) NaiveBroadphase.
+  // With ~15 dynamic bodies + ~30 static this is negligible either way, but
+  // SAP is the recommended default in Cannon.
+  world.broadphase = new C.SAPBroadphase(world);
+  world.solver.iterations = 10;
+  world.defaultContactMaterial.contactEquationStiffness = 1e7;
+  world.defaultContactMaterial.contactEquationRelaxation = 4;
+
+  // Materials — one per surface type so we can tune contact pairs.
+  const matCrate  = new C.Material('crate');
+  const matGround = new C.Material('ground');
+  const matWall   = new C.Material('wall');
+  const matBumper = new C.Material('bumper');
+  const matKine   = new C.Material('kine'); // spin bars, slide blocks, popup walls
+
+  // Contact pairs.
+  world.addContactMaterial(new C.ContactMaterial(matCrate, matGround, {
+    friction: CRATE_FRICTION_GROUND,
+    restitution: CRATE_RESTITUTION_GROUND,
+  }));
+  world.addContactMaterial(new C.ContactMaterial(matCrate, matCrate, {
+    friction: CRATE_FRICTION_CRATE,
+    restitution: CRATE_RESTITUTION_CRATE,
+  }));
+  world.addContactMaterial(new C.ContactMaterial(matCrate, matWall, {
+    friction: CRATE_FRICTION_WALL,
+    restitution: CRATE_RESTITUTION_WALL,
+  }));
+  world.addContactMaterial(new C.ContactMaterial(matCrate, matBumper, {
+    friction: 0.05,
+    restitution: CRATE_RESTITUTION_BUMPER,
+  }));
+  world.addContactMaterial(new C.ContactMaterial(matCrate, matKine, {
+    friction: 0.4,
+    restitution: 0.30,
+  }));
+
+  G.physWorld = world;
+  G.physMaterials = {
+    crate: matCrate, ground: matGround, wall: matWall,
+    bumper: matBumper, kine: matKine,
+  };
+  G.physBumperBodies = [];
+  G.physWallBodies   = [];
+  G.physSpinBodies   = [];   // [{bar, body}]
+  G.physSlideBodies  = [];   // [{slide, body}]
+  G.physPopupBodies  = [];   // [{wall, body}]
+  G.physGroundBody   = null;
+  G._physBallContacts = [];  // queued ball→crate impacts for this frame
+
+  return world;
+}
+
+// Tear down all bodies for the current hole/run. Called from the same
+// reset sites that clear G.crates / G.bumpers / etc. Keeps the world
+// itself alive so we don't have to rebuild materials each hole.
+function resetCannonBodies() {
+  const world = G.physWorld;
+  if(!world) return;
+  // Remove every body in the world. This is safe because we own all of
+  // them — there's no Cannon usage outside this module.
+  // NOTE: cannon-es removes during iteration cleanly, but copy the list
+  // first to be defensive.
+  const bodies = world.bodies.slice();
+  for(const b of bodies) world.removeBody(b);
+  G.physBumperBodies = [];
+  G.physWallBodies   = [];
+  G.physSpinBodies   = [];
+  G.physSlideBodies  = [];
+  G.physPopupBodies  = [];
+  G.physGroundBody   = null;
+  G._physBallContacts = [];
+}
+
+// Build the static ground plane + kill-floor sensor. Called after the
+// hole geometry is known (terrain heights vary per hole, but for crate
+// physics we use Y=0 as the nominal floor — terrain heights for crate
+// drops are handled at spawn time via crate.y baseline).
+function buildCannonGround() {
+  const world = ensureCannonWorld();
+  if(!world) return;
+  const C = window.CANNON;
+  // Ground: infinite plane at Y=0, normal +Y. Crates spawn with
+  // body.position.y = terrainBaseY + size, so the plane underneath is
+  // a fallback for crates that get knocked off the playfield onto open
+  // terrain — they roll instead of falling forever.
+  // We DON'T use this as the primary "floor" because the actual playable
+  // terrain has variation. Instead, each crate's spawn position already
+  // accounts for terrain height, and contact resolution against the
+  // ground plane catches the long-tail "crate flies off the level" case.
+  const groundShape = new C.Plane();
+  const groundBody = new C.Body({
+    mass: 0,
+    material: G.physMaterials.ground,
+    type: C.Body.STATIC,
+  });
+  groundBody.addShape(groundShape);
+  // Rotate to face +Y up (Plane's default normal is +Z)
+  groundBody.quaternion.setFromAxisAngle(new C.Vec3(1, 0, 0), -Math.PI / 2);
+  groundBody.position.set(0, 0, 0);
+  world.addBody(groundBody);
+  G.physGroundBody = groundBody;
+}
+
+// Build a static box body for a wall segment. ax/az → bx/bz is the segment;
+// we make a thin tall box centered on the midpoint, oriented along the
+// segment axis. Height = 3m so airborne crates can't sail over.
+function _addWallSegmentBody(ax, az, bx, bz) {
+  const world = G.physWorld;
+  if(!world) return null;
+  const C = window.CANNON;
+  const dx = bx - ax, dz = bz - az;
+  const len = Math.hypot(dx, dz);
+  if(len < 0.05) return null;
+  const cx = (ax + bx) * 0.5;
+  const cz = (az + bz) * 0.5;
+  // Box half-extents: (length/2, 1.5, 0.05). The box's local X axis
+  // runs along the segment; we yaw it to match.
+  const shape = new C.Box(new C.Vec3(len * 0.5, 1.5, 0.05));
+  const body = new C.Body({
+    mass: 0,
+    material: G.physMaterials.wall,
+    type: C.Body.STATIC,
+  });
+  body.addShape(shape);
+  body.position.set(cx, 1.5, cz);
+  body.quaternion.setFromAxisAngle(new C.Vec3(0, 1, 0), Math.atan2(dz, dx));
+  world.addBody(body);
+  G.physWallBodies.push(body);
+  return body;
+}
+
+// Build static box bodies from G.wallPolylines. Called after the polylines
+// are populated (after course build).
+function buildCannonWallBodies() {
+  const world = ensureCannonWorld();
+  if(!world || !G.wallPolylines) return;
+  for(const poly of G.wallPolylines) {
+    for(let i = 0; i < poly.length - 1; i++) {
+      _addWallSegmentBody(poly[i].x, poly[i].z, poly[i+1].x, poly[i+1].z);
+    }
+  }
+}
+
+// Build static box bodies from G.angledWalls (corner triangles). Each aw
+// has aw.edges[]; only the hypotenuse edge is solid for the ball but we
+// register all edges as walls so crates can't squeeze through corners.
+function buildCannonAngledWallBodies() {
+  const world = ensureCannonWorld();
+  if(!world || !G.angledWalls) return;
+  for(const aw of G.angledWalls) {
+    if(aw._destroyed) continue;
+    if(!aw.edges) continue;
+    for(const e of aw.edges) {
+      _addWallSegmentBody(e.x0, e.z0, e.x1, e.z1);
+    }
+  }
+}
+
+// Build static cylinder bodies for bumpers.
+function buildCannonBumperBodies() {
+  const world = ensureCannonWorld();
+  if(!world || !G.bumpers) return;
+  const C = window.CANNON;
+  for(const bmp of G.bumpers) {
+    if(bmp._destroyed) continue;
+    // Cannon Cylinder is closed-top + bottom, oriented along Y by default
+    // when we rotate it with the right quaternion. Default Cylinder axis is Z.
+    const r = bmp.r || 0.4;
+    const h = bmp.bumperH || 0.7;
+    const shape = new C.Cylinder(r, r * 1.05, h, 12);
+    const body = new C.Body({
+      mass: 0,
+      material: G.physMaterials.bumper,
+      type: C.Body.STATIC,
+    });
+    body.addShape(shape);
+    // Cannon Cylinder default axis = Z; rotate -90° around X to make it Y-up.
+    body.quaternion.setFromAxisAngle(new C.Vec3(1, 0, 0), -Math.PI / 2);
+    body.position.set(bmp.wx, (bmp.baseH || 0) + h * 0.5, bmp.wz);
+    world.addBody(body);
+    G.physBumperBodies.push({ bumper: bmp, body });
+    bmp._physBody = body;
+  }
+}
+
+// Build kinematic box bodies for spin bars. Bars rotate around their pivot
+// at bar.speed rad/s. We expose this as body.angularVelocity each frame in
+// the pre-step sync (see updateCratePhysics step 1). Static-shape: thin
+// box centered on the pivot, length = 2*bar.len.
+function buildCannonSpinBarBodies() {
+  const world = ensureCannonWorld();
+  if(!world || !G.spinBars) return;
+  const C = window.CANNON;
+  for(const bar of G.spinBars) {
+    if(bar._destroyed) continue;
+    const halfLen = bar.len || 0.6;
+    const shape = new C.Box(new C.Vec3(halfLen, 0.18, 0.10));
+    const body = new C.Body({
+      mass: 0,
+      material: G.physMaterials.kine,
+      type: C.Body.KINEMATIC,
+    });
+    body.addShape(shape);
+    body.position.set(bar.wx, 0.45, bar.wz);
+    body.quaternion.setFromAxisAngle(new C.Vec3(0, 1, 0), bar.angle || 0);
+    world.addBody(body);
+    G.physSpinBodies.push({ bar, body });
+    bar._physBody = body;
+  }
+}
+
+// Build kinematic box bodies for slide blocks.
+function buildCannonSlideBlockBodies() {
+  const world = ensureCannonWorld();
+  if(!world || !G.slideBlocks) return;
+  const C = window.CANNON;
+  for(const sb of G.slideBlocks) {
+    if(sb._destroyed) continue;
+    const hw = sb.halfW || 0.225;
+    const hd = sb.halfD || 0.225;
+    const shape = new C.Box(new C.Vec3(hw, 0.30, hd));
+    const body = new C.Body({
+      mass: 0,
+      material: G.physMaterials.kine,
+      type: C.Body.KINEMATIC,
+    });
+    body.addShape(shape);
+    body.position.set(sb.wx, 0.30, sb.wz);
+    world.addBody(body);
+    G.physSlideBodies.push({ slide: sb, body });
+    sb._physBody = body;
+  }
+}
+
+// Build kinematic box bodies for popup walls. Y position follows
+// pw.currentTopY each frame.
+function buildCannonPopupWallBodies() {
+  const world = ensureCannonWorld();
+  if(!world || !G.popupWalls) return;
+  const C = window.CANNON;
+  for(const pw of G.popupWalls) {
+    if(pw._destroyed) continue;
+    const hw = pw.halfW || 0.5;
+    const hd = pw.halfD || 0.5;
+    const shape = new C.Box(new C.Vec3(hw, 0.50, hd));
+    const body = new C.Body({
+      mass: 0,
+      material: G.physMaterials.kine,
+      type: C.Body.KINEMATIC,
+    });
+    body.addShape(shape);
+    body.position.set(pw.wx, -1.0, pw.wz); // start retracted
+    world.addBody(body);
+    G.physPopupBodies.push({ wall: pw, body });
+    pw._physBody = body;
+  }
+}
+
+// Wire up all static + kinematic obstacle bodies in one call. Run AFTER all
+// G.* obstacle arrays are populated by buildCourse.
+function buildCannonObstacleBodies() {
+  if(!ensureCannonWorld()) return;
+  buildCannonGround();
+  buildCannonWallBodies();
+  buildCannonAngledWallBodies();
+  buildCannonBumperBodies();
+  buildCannonSpinBarBodies();
+  buildCannonSlideBlockBodies();
+  buildCannonPopupWallBodies();
+}
+
+// Remove a kinematic body when its underlying obstacle is destroyed. Called
+// from destroyObstacles for each affected obstacle type. Safe to call
+// when the body never existed (early return on null).
+function removeCannonBodyFor(obstacleRef) {
+  if(!obstacleRef || !obstacleRef._physBody) return;
+  const world = G.physWorld;
+  if(!world) return;
+  try { world.removeBody(obstacleRef._physBody); } catch(e) {}
+  obstacleRef._physBody = null;
+  // Drop from tracking arrays (defensive — usually fine to leave but
+  // prevents stale refs growing unboundedly across many holes).
+  if(G.physBumperBodies)  G.physBumperBodies  = G.physBumperBodies.filter (e => e.body !== obstacleRef._physBody);
+  if(G.physSpinBodies)    G.physSpinBodies    = G.physSpinBodies.filter   (e => e.body !== obstacleRef._physBody);
+  if(G.physSlideBodies)   G.physSlideBodies   = G.physSlideBodies.filter  (e => e.body !== obstacleRef._physBody);
+  if(G.physPopupBodies)   G.physPopupBodies   = G.physPopupBodies.filter  (e => e.body !== obstacleRef._physBody);
+}
 
 // Build a single crate mesh (a cube with painted "wood crate" sides + visible
 // edges). Half-Life cliché aesthetic — orange/tan wood with dark X bracing.
@@ -20731,14 +21080,20 @@ function buildCrateMesh(size) {
 
 // Compute per-crate physical params from size
 function _crateParams(size) {
-  // v0.22a6: touch heavier per Adam. Was 0.24-0.36 (v0.22a5); now
-  // 0.32-0.48. Combined with the much lower upward pop, hits feel
-  // notably weighty without going back to "ball stops dead" territory.
+  // v0.23a4: another mass bump per Adam — boxes still flying a bit too
+  // far in v0.23a3 even with the friction increase. Was 0.64-0.96; now
+  // 1.0-1.4 (≈1.5×). Combined with the v0.23a3 friction tuning, this
+  // should land crates at noticeably shorter distances and let the ball
+  // lose more momentum on contact.
   const t = Math.min(1, Math.max(0, (size - CRATE_H_MIN) / (CRATE_H_MAX - CRATE_H_MIN)));
-  return { mass: 0.32 + t * 0.16 };
+  return { mass: 1.0 + t * 0.4 };
 }
 
 // Place a single crate on the field. wx/wz = world center; size = half-extent.
+// v0.23a: also creates a Cannon dynamic body and links it to crate.body.
+// The crate spawns ASLEEP — Cannon's auto-wake on contact handles activation
+// when ball/projectile/explosion touches. Solo crates and stacks both benefit
+// from zero-cost idle simulation when the player hasn't disturbed them.
 function spawnCrate(wx, wz, size, opts = {}) {
   const params = _crateParams(size);
   const baseY = (G.heightMap && G.heightMap.length) ? getTerrainHeight(wx, wz) : 0;
@@ -20746,33 +21101,48 @@ function spawnCrate(wx, wz, size, opts = {}) {
   const group = buildCrateMesh(size);
   group.position.set(wx, y, wz);
   if(G.courseGroup) G.courseGroup.add(group);
+
+  // Cannon body — same dimensions as the visual mesh, mass from _crateParams.
+  // sleepSpeedLimit / sleepTimeLimit tuned so settled crates park quickly
+  // without dropping a slow tumble mid-arc.
+  let body = null;
+  const world = ensureCannonWorld();
+  if(world) {
+    const C = window.CANNON;
+    const shape = new C.Box(new C.Vec3(size, size, size));
+    body = new C.Body({
+      mass: params.mass,
+      material: G.physMaterials.crate,
+      shape,
+      linearDamping:  0.20, // v0.23a3: 0.05 → 0.20, gentle air drag so airborne crates don't sail forever
+      angularDamping: 0.10,
+      allowSleep: true,
+      sleepSpeedLimit: 0.20,
+      sleepTimeLimit:  0.30,
+    });
+    body.position.set(wx, y, wz);
+    if(opts.angle) body.quaternion.setFromAxisAngle(new C.Vec3(0,1,0), opts.angle);
+    body.userData = { crate: null }; // back-pointer set after crate is created
+    world.addBody(body);
+    body.sleep(); // start asleep — wakes on first contact
+  }
+
   const crate = {
     wx, wz, y, size,
     mass: params.mass,
-    vx: 0, vz: 0, vy: 0,
-    angle: opts.angle || 0,
-    angleVel: 0,
-    // v0.22a2: pitch (X-axis rotation) + roll (Z-axis rotation) for proper
-    // tumbling. On ball impact, the ball's incoming direction maps to a
-    // pitch/roll vector perpendicular to the hit, so a face-on hit pitches
-    // the crate forward and a side-on hit rolls it. Friction decays these
-    // alongside angleVel so the crate eventually settles flat.
-    pitch: 0, pitchVel: 0,
-    roll: 0,  rollVel: 0,
     hp: 1,
     _destroyed: false,
     group,
+    body,
     stackId: opts.stackId || null,
     stackIndex: opts.stackIndex || 0,
-    teeterPhase: Math.random() * Math.PI * 2,
-    _restTimer: 0,
-    // Compatibility shims for the existing destroy/iron-ball pipeline:
+    // Compatibility shims for destroy/iron-ball pipeline:
     // collectObstaclesInRadius / destroyObstacles work on records with
-    // wx, wz, type, physRef, meshes. We expose ours via the helper
-    // collectCratesInRadius.
+    // wx, wz, type, physRef, meshes. We expose ours via collectCratesInRadius.
     type: 'crate',
     meshes: [group],
   };
+  if(body) body.userData.crate = crate;
   G.crates.push(crate);
   return crate;
 }
@@ -21115,6 +21485,13 @@ function playCrateDropChime(kind) {
 function destroyCrate(crate, autoCollect, ironBallSmashed) {
   if(!crate || crate._destroyed) return;
   crate._destroyed = true;
+  // v0.23a: remove the Cannon body from the world. Body lifetime is tied
+  // to crate lifetime — once destroyed, body is dropped immediately so
+  // it stops contributing to contact iteration.
+  if(crate.body && G.physWorld) {
+    try { G.physWorld.removeBody(crate.body); } catch(e) {}
+    crate.body = null;
+  }
   // Remove mesh from scene
   if(crate.group && crate.group.parent) crate.group.parent.remove(crate.group);
   // Splintery wood-style explosion FX
@@ -21185,6 +21562,12 @@ function destroyCrate(crate, autoCollect, ironBallSmashed) {
 // Each crate gets a small randomized upward+outward kick scaled by
 // distance from the impact site, plus stagger delays so the collapse
 // reads as a chain reaction rather than a simultaneous explosion.
+// v0.23a: Stack-collapse on impact. Most of the chain reaction now happens
+// automatically through Cannon's contact propagation — when a stacked crate
+// gets hit, its neighbors react via real contacts. We KEEP the staggered
+// "wave up the stack" timing because it adds juice that pure physics can't
+// replicate (a real stack collapses ~instantly). The kicks are now Cannon
+// impulses + body.wakeUp() instead of direct velocity writes.
 function _onStackCrateImpacted(impactedCrate) {
   if(!G._crateStacks || !impactedCrate) return;
   const stack = G._crateStacks.find(s => s.id === impactedCrate.stackId);
@@ -21193,54 +21576,52 @@ function _onStackCrateImpacted(impactedCrate) {
   if(stack.topple && stack.topple.active) return;
   if(stack.topple) stack.topple.active = true;
 
+  const C = window.CANNON;
   const ix = impactedCrate.wx, iz = impactedCrate.wz, iy = impactedCrate.y;
   for(const cr of stack.crates) {
     if(cr._destroyed) continue;
-    if(cr === impactedCrate) continue; // already released by caller
-    if(!cr._inStack) continue;          // already loose (e.g. mid-collapse)
+    if(cr === impactedCrate) continue;
 
     const dx = cr.wx - ix;
     const dz = cr.wz - iz;
     const dy = cr.y - iy;
     const horizDist = Math.hypot(dx, dz) || 0.01;
-    // Above-impact crates: bigger kick, fall down toward gap. Same-level
-    // neighbors: small lateral nudge. Below-impact crates: barely
-    // affected (they're supporting the weight, ride out the tremor).
     const isAbove = dy > impactedCrate.size * 0.5;
     const isSameLevel = Math.abs(dy) <= impactedCrate.size * 0.5;
 
     let kickDelay = 0;
     if(isAbove) {
-      // Higher = later. Approximate "wave traveling up the stack".
       kickDelay = Math.max(0, dy / impactedCrate.size) * 50;
     } else if(isSameLevel) {
       kickDelay = 30 + horizDist * 20;
     }
 
     setTimeout(() => {
-      if(cr._destroyed) return;
-      cr._inStack = false;
-      cr._inTower = false;
+      if(cr._destroyed || !cr.body || !C) return;
+      // Wake the body so the next physics step picks up the impulse.
+      cr.body.wakeUp();
+      const m = cr.body.mass;
+      let ix2 = 0, iy2 = 0, iz2 = 0;
       if(isAbove) {
-        // Above: random tumble + slight outward drift
-        cr.vx += (dx / horizDist) * (1.0 + Math.random() * 1.2);
-        cr.vz += (dz / horizDist) * (1.0 + Math.random() * 1.2);
-        cr.vy += 0.4 + Math.random() * 0.8;
-        cr.angleVel += (Math.random() - 0.5) * 5;
-        cr.pitchVel = (cr.pitchVel || 0) + (Math.random() - 0.5) * 4;
-        cr.rollVel  = (cr.rollVel  || 0) + (Math.random() - 0.5) * 4;
+        ix2 = (dx / horizDist) * (1.0 + Math.random() * 1.2) * m;
+        iz2 = (dz / horizDist) * (1.0 + Math.random() * 1.2) * m;
+        iy2 = (0.4 + Math.random() * 0.8) * m;
       } else if(isSameLevel) {
-        // Same level: nudged outward, slight rotation
-        cr.vx += (dx / horizDist) * (0.6 + Math.random() * 0.8);
-        cr.vz += (dz / horizDist) * (0.6 + Math.random() * 0.8);
-        cr.vy += 0.2;
-        cr.angleVel += (Math.random() - 0.5) * 2;
-        cr.pitchVel = (cr.pitchVel || 0) + (Math.random() - 0.5) * 1.5;
-        cr.rollVel  = (cr.rollVel  || 0) + (Math.random() - 0.5) * 1.5;
+        ix2 = (dx / horizDist) * (0.6 + Math.random() * 0.8) * m;
+        iz2 = (dz / horizDist) * (0.6 + Math.random() * 0.8) * m;
+        iy2 = 0.2 * m;
       } else {
-        // Below: minimal — just unlock and let gravity hold
-        cr.angleVel += (Math.random() - 0.5) * 0.5;
+        // Below: minimal — just wake; gravity holds it in place.
+        return;
       }
+      // Apply impulse at a slightly off-center contact point so Cannon
+      // derives natural angular velocity instead of pure translation.
+      const offset = new C.Vec3(
+        (Math.random() - 0.5) * cr.size * 0.5,
+        (Math.random() - 0.5) * cr.size * 0.5,
+        (Math.random() - 0.5) * cr.size * 0.5,
+      );
+      cr.body.applyImpulse(new C.Vec3(ix2, iy2, iz2), offset);
     }, kickDelay);
   }
 }
@@ -21252,6 +21633,7 @@ function _onStackCrateDestroyed(crate) {
   if(!G._crateStacks) return;
   const stack = G._crateStacks.find(s => s.id === crate.stackId);
   if(!stack) return;
+  const C = window.CANNON;
   if(stack.formation === 'tower') {
     // Tower: levels above the destroyed one tip over in a random direction.
     // Stagger by 60ms per level so it reads as a chain.
@@ -21265,49 +21647,41 @@ function _onStackCrateDestroyed(crate) {
       if((cr._towerLevel | 0) > destroyedLevel) {
         const delay = ((cr._towerLevel | 0) - destroyedLevel) * 60;
         setTimeout(() => {
-          if(cr._destroyed) return;
-          // Inherit a horizontal kick + slight upward bounce — the higher,
-          // the more energy.
+          if(cr._destroyed || !cr.body || !C) return;
           const heightAbove = ((cr._towerLevel | 0) - destroyedLevel);
-          cr.vx += tDx * (1.5 + heightAbove * 1.0);
-          cr.vz += tDz * (1.5 + heightAbove * 1.0);
-          cr.vy += 1.2 + heightAbove * 0.4;
-          cr.angleVel += (Math.random() - 0.5) * 6;
-          cr._inTower = false; // detach from tower stacking constraint
-          cr._inStack = false; // v0.22a5: release physics lock
+          const m = cr.body.mass;
+          const ix = tDx * (1.5 + heightAbove * 1.0) * m;
+          const iz = tDz * (1.5 + heightAbove * 1.0) * m;
+          const iy = (1.2 + heightAbove * 0.4) * m;
+          cr.body.wakeUp();
+          cr.body.applyImpulse(
+            new C.Vec3(ix, iy, iz),
+            new C.Vec3((Math.random() - 0.5) * cr.size * 0.5, cr.size * 0.5, (Math.random() - 0.5) * cr.size * 0.5)
+          );
           cr._towerLevel = -1;
         }, delay);
       }
     }
     stack.topple.active = true;
   } else if(stack.formation === 'pyramid') {
-    // Pyramid: when a base crate dies, the supported crate above tumbles.
-    // Cheap heuristic: any non-destroyed crate above (higher Y) gets a
-    // small kick toward the gap. Plus side neighbors at same level
-    // tumble inward toward the gap.
-    // v0.22a5: also release _inStack so the kicked crates start
-    // integrating again — without this, the lock would keep them
-    // frozen in mid-air.
     setTimeout(() => {
       for(const cr of stack.crates) {
-        if(cr._destroyed) continue;
-        // Crates above the destroyed one OR adjacent at same level
+        if(cr._destroyed || !cr.body || !C) continue;
         const dy = cr.y - crate.y;
         const dxFromDestroyed = cr.wx - crate.wx;
         const dzFromDestroyed = cr.wz - crate.wz;
         const horizDist = Math.hypot(dxFromDestroyed, dzFromDestroyed);
-        // Above (higher y) → falls into gap
-        // Same level (dy ≈ 0) and within ~2× size horizontally → bumped slightly
         if(dy > crate.size * 1.2 || horizDist < crate.size * 2.5) {
           const d = horizDist || 0.01;
-          cr.vx += (dxFromDestroyed / d) * 1.5 + (Math.random() - 0.5) * 0.6;
-          cr.vz += (dzFromDestroyed / d) * 1.5 + (Math.random() - 0.5) * 0.6;
-          cr.vy += dy > crate.size ? 0.6 : 0.2;
-          cr.angleVel += (Math.random() - 0.5) * 4;
-          cr.pitchVel = (cr.pitchVel || 0) + (Math.random() - 0.5) * 2;
-          cr.rollVel  = (cr.rollVel  || 0) + (Math.random() - 0.5) * 2;
-          cr._inTower = false;
-          cr._inStack = false; // release physics lock
+          const m = cr.body.mass;
+          const ix = ((dxFromDestroyed / d) * 1.5 + (Math.random() - 0.5) * 0.6) * m;
+          const iz = ((dzFromDestroyed / d) * 1.5 + (Math.random() - 0.5) * 0.6) * m;
+          const iy = (dy > crate.size ? 0.6 : 0.2) * m;
+          cr.body.wakeUp();
+          cr.body.applyImpulse(
+            new C.Vec3(ix, iy, iz),
+            new C.Vec3((Math.random() - 0.5) * cr.size * 0.5, 0, (Math.random() - 0.5) * cr.size * 0.5)
+          );
         }
       }
     }, 80);
@@ -21315,648 +21689,184 @@ function _onStackCrateDestroyed(crate) {
 }
 
 // ─────────────────────────────────────────────────────
-// Per-frame crate physics. Runs after obstacle motion and before ball
-// collision — order matters because the at-rest-ball logic in spin bars /
-// slide blocks should resolve against current crate positions.
+// v0.23a: Per-frame crate physics — Cannon-es bridge.
+// Replaces the old ~640-line custom integrator. The flow is:
+//   1. Sync kinematic body state (spin bars, slide blocks, popup walls)
+//      so crates collide against current obstacle positions.
+//   2. Apply per-step force fields (conveyors, fans) to dynamic crates.
+//   3. world.step() — Cannon owns gravity, contact solving, friction,
+//      restitution, sleep states, and angular dynamics.
+//   4. Sync awake-crate records (wx/y/wz) and Three.js meshes back from
+//      body state. Quaternion replaces the old yaw/pitch/roll Euler trio.
+//   5. Kill-floor cleanup for crates that fell off the world.
+//
+// Skipped entirely vs v0.22b:
+//   - Tower teeter (per Adam: delete; natural contact-stability gives
+//     similar visual without the manual offset)
+//   - Manual ground bounce / corner-strike redirection
+//   - Manual crate-vs-wall reflection
+//   - Manual crate-vs-spin-bar / slide-block / popup-wall response
+//   - Manual crate-vs-crate AABB resolution (Cannon does proper 3D)
+//   - Settle/snap pass to π/2 multiples (no longer needed — quaternions
+//     don't drift toward ill-defined rest poses the way Euler scalars do)
 // ─────────────────────────────────────────────────────
 function updateCratePhysics(dt) {
-  if(!G.crates || !G.crates.length) return;
-  // Cap dt so a paused tab + resume doesn't shotput crates off the level
-  const _dt = Math.min(0.05, dt);
+  const world = G.physWorld;
+  if(!world) return;
+  if(!G.crates) return;
 
-  // ── 1. Tower teeter — passive sway when standing still ──
-  if(G._crateStacks) {
-    const t = performance.now() * 0.001;
-    for(const stack of G._crateStacks) {
-      if(stack.formation !== 'tower') continue;
-      if(stack.topple.active) continue;
-      // Sum of un-destroyed crates in this stack still "in tower" formation
-      let activeTowerCount = 0;
-      for(const cr of stack.crates) if(!cr._destroyed && cr._inTower) activeTowerCount++;
-      if(activeTowerCount < 2) continue;
-      // Apply sway: each level above the base gets a proportional offset
-      for(const cr of stack.crates) {
-        if(cr._destroyed || !cr._inTower) continue;
-        const lvl = cr._towerLevel | 0;
-        if(lvl === 0) continue; // base doesn't sway
-        const ampX = TOWER_TEETER_AMPLITUDE * lvl * stack.size * 4;
-        const ampZ = TOWER_TEETER_AMPLITUDE * lvl * stack.size * 4 * 0.7;
-        const phase = stack.id.length * 0.1; // unique phase per stack
-        // Apply a tiny lateral shift to the crate position so the visual
-        // is a sway, not a rotation. Cleared each frame via the base offset.
-        cr._teeterDx = Math.sin(t * TOWER_TEETER_FREQ + phase) * ampX;
-        cr._teeterDz = Math.cos(t * TOWER_TEETER_FREQ * 0.8 + phase) * ampZ;
+  // Cap dt so a paused tab resume doesn't shotput everything off the level.
+  const _dt = Math.min(1/30, dt);
+  const C = window.CANNON;
+  if(!C) return;
+
+  // ── 1. Sync kinematic obstacle bodies to their current visual state ──
+  // Spin bars rotate around Y at bar.speed rad/s. Cannon's KINEMATIC bodies
+  // honor angularVelocity for proper contact-momentum transfer.
+  if(G.physSpinBodies) {
+    const _shMul = G._speedHoleMul || 1;
+    for(const e of G.physSpinBodies) {
+      const bar = e.bar, body = e.body;
+      if(!bar || bar._destroyed) continue;
+      // Position is fixed; rotation follows bar.angle each frame.
+      body.position.set(bar.wx, 0.45, bar.wz);
+      body.quaternion.setFromAxisAngle(new C.Vec3(0, 1, 0), bar.angle || 0);
+      body.angularVelocity.set(0, (bar.speed || 0) * _shMul, 0);
+    }
+  }
+
+  // Slide blocks translate along their axis. Compute velocity from the
+  // current vs previous offset so contact transfer is correct.
+  if(G.physSlideBodies) {
+    for(const e of G.physSlideBodies) {
+      const sb = e.slide, body = e.body;
+      if(!sb || sb._destroyed) continue;
+      const soff = Math.sin(sb.phase || 0) * (sb.range || 0);
+      const sx = sb.wx + (sb.axis === 'X' ? soff : 0);
+      const sz = sb.wz + (sb.axis === 'Z' ? soff : 0);
+      body.position.set(sx, 0.30, sz);
+      // Estimate velocity for momentum transfer (frame-over-frame delta).
+      const pbx = body._lastX != null ? body._lastX : sx;
+      const pbz = body._lastZ != null ? body._lastZ : sz;
+      body.velocity.set((sx - pbx) / Math.max(0.001, _dt), 0, (sz - pbz) / Math.max(0.001, _dt));
+      body._lastX = sx; body._lastZ = sz;
+    }
+  }
+
+  // Popup walls translate along Y. Body Y = currentTopY (the top of the
+  // wall as it rises/retracts). When fully retracted, drop body well below
+  // floor so it can't accidentally collide.
+  if(G.physPopupBodies) {
+    for(const e of G.physPopupBodies) {
+      const pw = e.wall, body = e.body;
+      if(!pw || pw._destroyed) continue;
+      const topY = pw.currentTopY || 0;
+      const halfH = 0.50;
+      // If retracted (top below floor), park body at -2 to disable contact.
+      if(topY < 0.05) {
+        body.position.set(pw.wx, -2.0, pw.wz);
+      } else {
+        body.position.set(pw.wx, topY - halfH, pw.wz);
       }
     }
   }
 
-  // ── 2. Integrate dynamic crates (those with velocity) ──
-  for(const cr of G.crates) {
-    if(cr._destroyed) continue;
-    // v0.22a5: locked stack crates (pyramids + towers) skip integration
-    // until impacted. The _inStack flag is set at spawn and cleared on
-    // ball/projectile/blast contact OR when the stack collapse path
-    // releases them. Without this, vertically-stacked crates fall
-    // through each other (crate-vs-crate collision skips Y-separated
-    // pairs) and the stack disintegrates into a horizontal line at
-    // frame 1. Per Adam: "Maybe make stacks and pyramids 'locked'
-    // until the player touches them?"
-    if(cr._inStack) continue;
-
-    // v0.22a7: compute ground level FIRST so air vs grounded friction
-    // can be applied differently. Per Adam: "the first 75% of the arc
-    // usually looks fine but then the box's airborne momentum will
-    // often come to a sudden stop before it falls down to the ground."
-    //
-    // Root cause: friction (Math.pow(0.94, dt*60)) was running every
-    // frame regardless of whether the crate was on the ground. A crate
-    // mid-air would lose ~97% of its horizontal velocity in 1 second,
-    // killing the arc before gravity could finish bringing it down.
-    // Real-world: airborne objects only lose to air drag (negligible).
-    // Now: full friction only when grounded; minimal drag when airborne.
-    const baseY = (G.heightMap && G.heightMap.length) ? getTerrainHeight(cr.wx, cr.wz) : 0;
-    const floorY = baseY + FLOOR_H/2 + cr.size;
-    const isAirborne = cr.y > floorY + 0.05;
-
-    // Apply gravity + appropriate friction
-    cr.vy += CRATE_GRAVITY * _dt;
-    if(isAirborne) {
-      // Air drag — very small, just enough to bleed extreme spins/throws.
-      // Was 0.94 (lost 97%/sec); now 0.995 (lost ~26%/sec).
-      cr.vx *= Math.pow(0.995, _dt * 60);
-      cr.vz *= Math.pow(0.995, _dt * 60);
-    } else {
-      // Ground friction — full effect, lets sliding crates settle.
-      cr.vx *= Math.pow(CRATE_FRICTION, _dt * 60);
-      cr.vz *= Math.pow(CRATE_FRICTION, _dt * 60);
-    }
-    // v0.22a2: angular velocity decays slower (0.92 → 0.96) so the crate
-    // keeps tumbling visibly while it slides — was settling too fast.
-    // v0.22a7: also lighter angular damp when airborne so tumbles
-    // continue cleanly through the whole arc.
-    const angDamp = isAirborne ? 0.99 : 0.96;
-    cr.angleVel *= Math.pow(angDamp, _dt * 60);
-    cr.pitchVel = (cr.pitchVel || 0) * Math.pow(angDamp, _dt * 60);
-    cr.rollVel  = (cr.rollVel  || 0) * Math.pow(angDamp, _dt * 60);
-
-    // Integrate position. v0.22a2: XZ runs at CRATE_TIME_SCALE so
-    // crates translate slower than the rest of the world. Y (gravity) and
-    // angular velocity stay at 1× — the crate hangs in the air longer
-    // and spins fast while moving slow, reading as heavy-and-tumbly.
-    cr.wx += cr.vx * _dt * CRATE_TIME_SCALE;
-    cr.wz += cr.vz * _dt * CRATE_TIME_SCALE;
-    cr.y  += cr.vy * _dt;
-    cr.angle += cr.angleVel * _dt;
-    cr.pitch = (cr.pitch || 0) + (cr.pitchVel || 0) * _dt;
-    cr.roll  = (cr.roll  || 0) + (cr.rollVel  || 0) * _dt;
-
-    // Ground clamp uses the floorY we already computed above
-    if(cr.y <= floorY) {
-      cr.y = floorY;
-      if(cr.vy < -0.3) {
-        // v0.22a2: corner-strike redirection. If the crate has noticeable
-        // pitch/roll velocity when it hits the ground, it's mid-tumble
-        // and would bounce off a CORNER, not the flat bottom face. Real-
-        // world result: the bounce deflects sideways. We simulate that
-        // by converting some downward Y velocity into XZ velocity in the
-        // direction the crate is rotating. Cheap, sells the visual.
-        // v0.22a4: also damp pitch/roll accumulation a bit during the
-        // bounce — without this, a crate could bounce flat repeatedly
-        // while preserving its 30° pitch and never reach the settle
-        // pass at non-zero vy. Damping at each bounce ensures the
-        // pitch trends back toward π/2 multiples even mid-bounce.
-        const tumbleMag = Math.hypot(cr.pitchVel || 0, cr.rollVel || 0);
-        if(tumbleMag > 1.0) {                                    // v0.22a4: 1.5 → 1.0
-          // Pitch axis rotates in XZ via pitch around X — so positive
-          // pitchVel means crate spins forward, contact point lands
-          // ahead, deflects backward. Roll around Z deflects sideways.
-          // Simplification: deflect in -X direction proportional to
-          // pitchVel, +Z to rollVel.
-          const deflectMag = Math.min(6, Math.abs(cr.vy) * 0.4);
-          // Choose deflection direction from existing motion when possible,
-          // else pure pitch/roll axes
-          const speed = Math.hypot(cr.vx, cr.vz);
-          let dDx, dDz;
-          if(speed > 0.5) {
-            // Continue in current motion direction with kick added
-            dDx = cr.vx / speed; dDz = cr.vz / speed;
-          } else {
-            // Pure pitch → +X, pure roll → +Z; sign random for chaos
-            dDx = (cr.pitchVel || 0) * 0.5 + (Math.random() - 0.5) * 1;
-            dDz = (cr.rollVel  || 0) * 0.5 + (Math.random() - 0.5) * 1;
-            const m = Math.hypot(dDx, dDz) || 1;
-            dDx /= m; dDz /= m;
-          }
-          cr.vx += dDx * deflectMag;
-          cr.vz += dDz * deflectMag;
-          // Eat half the upward bounce to "spend" the energy on the deflect
-          cr.vy = -cr.vy * CRATE_BOUNCE_RESTITUTION * 0.6;
-          // Crate also picks up new spin from the corner impact
-          cr.angleVel += (Math.random() - 0.5) * 4;
-          cr.pitchVel *= -0.4; cr.rollVel *= -0.4;
-        } else {
-          // Flat-on bounce — standard reflection
-          cr.vy = -cr.vy * CRATE_BOUNCE_RESTITUTION;
-          // v0.22a4: also damp angular velocity during a flat bounce so
-          // landing crates progressively settle their rotation rather
-          // than preserving it across multiple bounces.
-          cr.pitchVel *= 0.65;
-          cr.rollVel  *= 0.65;
-          cr.angleVel *= 0.85;
-        }
-        // Ground impact thunk
-        if(AC && Math.abs(cr.vy) > 1.5) {
-          try {
-            const ac = getAC(), tt = ac.currentTime;
-            const o = ac.createOscillator(); o.type='sine';
-            o.frequency.setValueAtTime(120, tt);
-            o.frequency.exponentialRampToValueAtTime(50, tt + 0.10);
-            const g = ac.createGain();
-            g.gain.setValueAtTime(0.18, tt);
-            g.gain.exponentialRampToValueAtTime(0.001, tt + 0.12);
-            o.connect(g); g.connect(getACDest()); o.start(tt); o.stop(tt + 0.13);
-          } catch(e){}
-        }
-        // Friction kick on landing
-        cr.vx *= 0.85; cr.vz *= 0.85;
-      } else {
-        cr.vy = 0;
-        // v0.22a4: removed inline pitch/roll snap logic from this
-        // branch. The snap now runs every frame in the settle pass at
-        // the end of the integration loop (see "Settle/rest pass"
-        // below), independent of the bounce branch. This is the fix
-        // for: "crates resting on corners with a face tilted up" —
-        // the old code only snapped when vy was already zero, which
-        // missed the common case of a crate landing with high pitch
-        // velocity and bouncing several times before vy settled.
-        // Per Adam: "they don't come to rest flat on the ground
-        // correctly — the rotation is off (some are angled off the
-        // ground unnaturally)."
-        cr.pitchVel *= 0.85;
-        cr.rollVel *= 0.85;
-        cr.angleVel *= 0.85;
+  // ── 2. Per-step force fields on crates: conveyors + fans ──
+  // These are NOT body-based; they apply impulses each tick to crates in
+  // their volume. We only consider crates that are awake (sleeping crates
+  // shouldn't get disturbed by passive belts/fans).
+  if(G.crates && G.crates.length && !G._freezeFrameActive) {
+    for(const cr of G.crates) {
+      if(cr._destroyed || !cr.body) continue;
+      if(cr.body.sleepState === C.Body.SLEEPING) {
+        // Conveyors & fans are noisy enough to keep awake crates moving;
+        // they shouldn't randomly wake settled stacks. If a crate is on
+        // a conveyor and has come to rest, it stays at rest by design.
+        continue;
       }
-    }
 
-    // Wall bounce — perimeter walls + angled walls. Treat crate as an
-    // axis-aligned box matching its current XZ position; reflect velocity.
-    if(G.wallPolylines && G.wallPolylines.length) {
-      for(const poly of G.wallPolylines) {
-        for(let pi = 0; pi < poly.length - 1; pi++) {
-          const ax = poly[pi].x, az = poly[pi].z;
-          const bx = poly[pi+1].x, bz = poly[pi+1].z;
-          const ex = bx - ax, ez = bz - az;
-          const lsq = ex*ex + ez*ez;
-          if(lsq < 0.0001) continue;
-          const tw = Math.max(0, Math.min(1, ((cr.wx - ax)*ex + (cr.wz - az)*ez) / lsq));
-          const cwx = ax + tw*ex, cwz = az + tw*ez;
-          const wdx = cr.wx - cwx, wdz = cr.wz - cwz;
-          const wd = Math.hypot(wdx, wdz);
-          const reach = cr.size + 0.18;
-          if(wd < reach && wd > 0.001) {
-            const wnx = wdx/wd, wnz = wdz/wd;
-            cr.wx += wnx * (reach - wd);
-            cr.wz += wnz * (reach - wd);
-            const dot = cr.vx*wnx + cr.vz*wnz;
-            if(dot < 0) {
-              cr.vx -= (1 + CRATE_BOUNCE_RESTITUTION) * dot * wnx;
-              cr.vz -= (1 + CRATE_BOUNCE_RESTITUTION) * dot * wnz;
-              cr.angleVel += (Math.random() - 0.5) * 2;
+      // Conveyor push — same field selection as the old code, applied as
+      // velocity delta (force × dt / mass simplified to direct delta).
+      if(G.conveyors) {
+        for(const cv of G.conveyors) {
+          if(cr.body.position.x > cv.minX - cr.size && cr.body.position.x < cv.maxX + cr.size &&
+             cr.body.position.z > cv.minZ - cr.size && cr.body.position.z < cv.maxZ + cr.size) {
+            // Y-gate: only push grounded crates (within 1m of the belt surface).
+            if(cr.body.position.y < 1.5) {
+              const conveyorPush = 1.5 / Math.max(0.18, cr.mass);
+              cr.body.velocity.x += (cv.dvx || 0) * _dt * conveyorPush;
+              cr.body.velocity.z += (cv.dvz || 0) * _dt * conveyorPush;
             }
           }
         }
       }
-    }
-    // Angled walls (corner triangles)
-    if(G.angledWalls && G.angledWalls.length) {
-      for(const aw of G.angledWalls) {
-        if(aw._destroyed) continue;
-        for(const edge of aw.edges) {
-          const eax = edge.x0, eaz = edge.z0;
-          const ebx = edge.x1, ebz = edge.z1;
-          const eex = ebx - eax, eez = ebz - eaz;
-          const elsq = eex*eex + eez*eez;
-          if(elsq < 0.0001) continue;
-          const ett = Math.max(0, Math.min(1, ((cr.wx - eax)*eex + (cr.wz - eaz)*eez) / elsq));
-          const ecx = eax + ett*eex, ecz = eaz + ett*eez;
-          const edx = cr.wx - ecx, edz = cr.wz - ecz;
-          const ed = Math.hypot(edx, edz);
-          const reach2 = cr.size + 0.18;
-          if(ed < reach2 && ed > 0.001) {
-            const enx = edx/ed, enz = edz/ed;
-            cr.wx += enx * (reach2 - ed);
-            cr.wz += enz * (reach2 - ed);
-            const dot = cr.vx*enx + cr.vz*enz;
-            if(dot < 0) {
-              cr.vx -= (1 + CRATE_BOUNCE_RESTITUTION) * dot * enx;
-              cr.vz -= (1 + CRATE_BOUNCE_RESTITUTION) * dot * enz;
-            }
-          }
-        }
-      }
-    }
 
-    // Bumper interaction — bumpers reflect crates like they reflect balls.
-    if(G.bumpers && G.bumpers.length) {
-      for(const bmp of G.bumpers) {
-        if(bmp._destroyed) continue;
-        const dx = cr.wx - bmp.wx, dz = cr.wz - bmp.wz;
-        const d = Math.hypot(dx, dz);
-        const reach = (bmp.r || 0.4) + cr.size;
-        if(d < reach && d > 0.001) {
-          const nx = dx/d, nz = dz/d;
-          cr.wx += nx * (reach - d);
-          cr.wz += nz * (reach - d);
-          const dot = cr.vx*nx + cr.vz*nz;
-          // Bumpers add energy on hit (like to balls)
-          if(dot < 0) {
-            const restitution = 1.4 + (bmp.variant === 'power' ? 1.0 : 0);
-            cr.vx -= (1 + restitution) * dot * nx;
-            cr.vz -= (1 + restitution) * dot * nz;
-            cr.angleVel += (Math.random() - 0.5) * 4;
-          }
-        }
-      }
-    }
-
-    // Spin bar interaction — sweeps crates aside. Use the at-rest-ball
-    // logic shape: surface velocity stamped onto the crate.
-    if(G.spinBars && G.spinBars.length) {
-      const _shMul = G._speedHoleMul || 1;
-      for(const bar of G.spinBars) {
-        if(bar._destroyed) continue;
-        const ax = bar.wx + Math.cos(bar.angle) * bar.len;
-        const az = bar.wz - Math.sin(bar.angle) * bar.len;
-        const bx = bar.wx - Math.cos(bar.angle) * bar.len;
-        const bz = bar.wz + Math.sin(bar.angle) * bar.len;
-        const ex = bx - ax, ez = bz - az;
-        const lsq = ex*ex + ez*ez;
-        if(lsq < 0.0001) continue;
-        const tw = Math.max(0, Math.min(1, ((cr.wx - ax)*ex + (cr.wz - az)*ez) / lsq));
-        const cpx = ax + tw*ex, cpz = az + tw*ez;
-        const dx = cr.wx - cpx, dz = cr.wz - cpz;
-        const d = Math.hypot(dx, dz);
-        const reach = cr.size + 0.18;
-        if(d < reach && d > 0.001) {
-          const nx = dx/d, nz = dz/d;
-          cr.wx += nx * (reach - d);
-          cr.wz += nz * (reach - d);
-          const rx = cpx - bar.wx, rz = cpz - bar.wz;
-          const _eff = bar.speed * _shMul;
-          const surfVx = _eff * rz;
-          const surfVz = -_eff * rx;
-          // Stamp surface velocity scaled by crate's mass (heavier moves less)
-          const massScale = 1.0 / cr.mass;
-          cr.vx = surfVx * 0.7 * massScale + cr.vx * 0.3;
-          cr.vz = surfVz * 0.7 * massScale + cr.vz * 0.3;
-          cr.angleVel += (Math.random() - 0.5) * 4;
-        }
-      }
-    }
-
-    // Slide block interaction
-    if(G.slideBlocks && G.slideBlocks.length) {
-      for(const sb of G.slideBlocks) {
-        if(sb._destroyed) continue;
-        const soff = Math.sin(sb.phase || 0) * (sb.range || 0);
-        const sx = sb.wx + (sb.axis === 'X' ? soff : 0);
-        const sz = sb.wz + (sb.axis === 'Z' ? soff : 0);
-        const hw = (sb.halfW || 0.225) + cr.size;
-        const hd = (sb.halfD || 0.225) + cr.size;
-        const dx = cr.wx - sx, dz = cr.wz - sz;
-        if(Math.abs(dx) < hw && Math.abs(dz) < hd) {
-          // Push out on shallowest axis
-          const overlapX = hw - Math.abs(dx);
-          const overlapZ = hd - Math.abs(dz);
-          if(overlapX < overlapZ) {
-            const sign = dx >= 0 ? 1 : -1;
-            cr.wx += sign * overlapX;
-            const pbx = sb._prevX != null ? sb._prevX : sx;
-            const blockVelX = (sx - pbx) / Math.max(0.001, _dt);
-            if(sb.axis === 'X' && Math.abs(blockVelX) > 0.3) {
-              cr.vx = blockVelX * 0.9 / cr.mass;
-            } else if((sign > 0 && cr.vx < 0) || (sign < 0 && cr.vx > 0)) {
-              cr.vx = -cr.vx * CRATE_BOUNCE_RESTITUTION;
-            }
-          } else {
-            const sign = dz >= 0 ? 1 : -1;
-            cr.wz += sign * overlapZ;
-            const pbz = sb._prevZ != null ? sb._prevZ : sz;
-            const blockVelZ = (sz - pbz) / Math.max(0.001, _dt);
-            if(sb.axis === 'Z' && Math.abs(blockVelZ) > 0.3) {
-              cr.vz = blockVelZ * 0.9 / cr.mass;
-            } else if((sign > 0 && cr.vz < 0) || (sign < 0 && cr.vz > 0)) {
-              cr.vz = -cr.vz * CRATE_BOUNCE_RESTITUTION;
-            }
-          }
-          cr.angleVel += (Math.random() - 0.5) * 3;
-        }
-        sb._prevX = sx; sb._prevZ = sz;
-      }
-    }
-
-    // Conveyor drift — v0.22a7 fix: was using wrong schema (wx/wz/halfW/halfD/dirX/dirZ/speed)
-    // which doesn't exist on G.conveyors objects. Real schema is {dvx, dvz, strength,
-    // minX/maxX/minZ/maxZ}. The bad field accesses returned NaN/undefined and the
-    // crate-on-conveyor check silently failed every frame. Per Adam: "The boxes
-    // don't move along the conveyor belts."
-    if(G.conveyors && !G._freezeFrameActive) {
-      for(const cv of G.conveyors) {
-        // AABB check using the conveyor's real bounds (minX..maxX, minZ..maxZ)
-        // expanded by the crate's half-extent for tolerance.
-        if(cr.wx > cv.minX - cr.size && cr.wx < cv.maxX + cr.size &&
-           cr.wz > cv.minZ - cr.size && cr.wz < cv.maxZ + cr.size) {
-          // Push along belt direction. Real schema uses dvx/dvz (already
-          // unit-vector × strength baked in elsewhere) — apply same way
-          // the ball-on-conveyor force does, scaled by 1.5 for crates so
-          // they don't feel sluggish on a belt that pushes the ball
-          // strongly. Mass-scaled so heavier crates drift slower.
-          const conveyorPush = 1.5 / cr.mass;
-          cr.vx += (cv.dvx || 0) * _dt * conveyorPush;
-          cr.vz += (cv.dvz || 0) * _dt * conveyorPush;
-        }
-      }
-    }
-
-    // Fan push — v0.22a7 fix: was using f.range (doesn't exist) and pushing
-    // radially outward instead of along fan's blow direction. Real schema
-    // matches the ball-on-fan code: fan.wx, fan.wz, fan.dx, fan.dz (unit
-    // direction the fan blows toward), fan.coneLen (range), fan.coneHalfAngle
-    // (cone width), fan.strength.
-    if(G.fans && !G._freezeFrameActive) {
-      for(const f of G.fans) {
-        if(f._destroyed) continue;
-        if(!f.coneLen) continue;
-        // Y-gate: only push grounded/near-ground crates. Otherwise mid-air
-        // crates get blasted off-course by overhead fans.
-        const heightAboveTerrain = cr.y - ((G.heightMap && G.heightMap.length) ? getTerrainHeight(cr.wx, cr.wz) : 0);
-        if(heightAboveTerrain > cr.size * 2.5 + 0.6) continue;
-        const toCx = cr.wx - f.wx;
-        const toCz = cr.wz - f.wz;
-        const dist = Math.hypot(toCx, toCz);
-        if(dist < 0.01 || dist > f.coneLen) continue;
-        // Inside cone? Compare to fan's blow direction.
-        const dotDir = (toCx/dist)*f.dx + (toCz/dist)*f.dz;
-        if(dotDir < Math.cos(f.coneHalfAngle)) continue;
-        const falloff = 1 - (dist / f.coneLen);
-        // Push along fan's blow direction (NOT radially) — same as ball.
-        // Mass-scaled so heavier crates drift slower.
-        const force = (f.strength || 4) * falloff / cr.mass;
-        cr.vx += f.dx * force * _dt;
-        cr.vz += f.dz * force * _dt;
-      }
-    }
-
-    // Popup wall — block when up
-    if(G.popupWalls && G.popupWalls.length) {
-      for(const pw of G.popupWalls) {
-        if(pw._destroyed) continue;
-        const upBelt = (pw.currentTopY || 0) > cr.size * 0.5;
-        if(!upBelt) continue;
-        const hw = (pw.halfW || 0.5) + cr.size;
-        const hd = (pw.halfD || 0.5) + cr.size;
-        const dx = cr.wx - pw.wx, dz = cr.wz - pw.wz;
-        if(Math.abs(dx) < hw && Math.abs(dz) < hd) {
-          const overlapX = hw - Math.abs(dx);
-          const overlapZ = hd - Math.abs(dz);
-          if(overlapX < overlapZ) {
-            const sign = dx >= 0 ? 1 : -1;
-            cr.wx += sign * overlapX;
-            if((sign > 0 && cr.vx < 0) || (sign < 0 && cr.vx > 0)) cr.vx = -cr.vx * CRATE_BOUNCE_RESTITUTION;
-          } else {
-            const sign = dz >= 0 ? 1 : -1;
-            cr.wz += sign * overlapZ;
-            if((sign > 0 && cr.vz < 0) || (sign < 0 && cr.vz > 0)) cr.vz = -cr.vz * CRATE_BOUNCE_RESTITUTION;
-          }
-        }
-      }
-    }
-
-    // ── Settle/rest pass (v0.22a4) ──
-    // Independent of the bounce path above. If the crate is near the
-    // ground and moving slowly, apply gradual rotation snap toward the
-    // nearest stable orientation (multiples of π/2 on each axis — the
-    // four flat-faced cube poses).
-    //
-    // Per Adam: "they don't come to rest flat on the ground correctly
-    // — the rotation is off (some are angled off the ground unnaturally)"
-    //
-    // The bug: previously snap only ran in the `else` branch of the
-    // ground-bounce check, meaning crates with non-zero vy never reached
-    // the snap path. A crate with pitch=30° landing flat on its bottom
-    // face would bounce a few times without ever damping the pitch,
-    // then settle visually clipped into the ground at 30°. Now snap
-    // runs every frame as long as the crate is grounded.
-    const _grounded = cr.y <= floorY + 0.10;
-    const _hSpeed = Math.hypot(cr.vx, cr.vz);
-    const _angSpeed = Math.abs(cr.angleVel) + Math.abs(cr.pitchVel || 0) + Math.abs(cr.rollVel || 0);
-    // v0.22b: also settle when crate is stacked on top of another crate.
-    // The original "_grounded" gate skipped the snap whenever cr.y didn't
-    // reach the floor, which meant any crate sitting ON another crate
-    // never had its pitch/roll snapped to π/2 multiples. Adam's photo
-    // shows three boxes resting at clearly non-axis-aligned angles —
-    // those are the un-snapped stack members. Approx-rest detection:
-    // small XZ + Y velocity AND slow angular velocity is enough; the
-    // crate doesn't have to be physically on the floor.
-    const _atRest = (_hSpeed < 0.6) && (Math.abs(cr.vy) < 0.5) && (_angSpeed < 1.2);
-    if(_grounded || _atRest) {
-      // If we're grounded and rotating slowly enough that we should be
-      // settling, ease pitch/roll toward nearest π/2 multiple. Strength
-      // of ease scales with how slow the rotation is — fast tumbles
-      // ignore the pull, slow ones get strong correction.
-      const settleFactor = Math.max(0, 1 - _angSpeed / 4); // 0 when fast, 1 when slow
-      if(settleFactor > 0) {
-        const HALF_PI = Math.PI * 0.5;
-        const _easeToward = (cur, factor) => {
-          // Find nearest π/2 multiple, with shortest-path delta
-          const target = Math.round(cur / HALF_PI) * HALF_PI;
-          let delta = target - cur;
-          // Wrap to [-π, π] for shortest path (avoids 2π unwind)
-          while(delta > Math.PI) delta -= 2 * Math.PI;
-          while(delta < -Math.PI) delta += 2 * Math.PI;
-          // Ease — strength scales with both per-frame factor AND the
-          // slow-rotation gate so we don't fight the player mid-tumble
-          const ease = 0.20 * factor;
-          return cur + delta * ease;
-        };
-        cr.pitch = _easeToward(cr.pitch || 0, settleFactor);
-        cr.roll  = _easeToward(cr.roll  || 0, settleFactor);
-        // Bleed angular velocity faster when settling
-        cr.pitchVel = (cr.pitchVel || 0) * Math.pow(0.75, settleFactor);
-        cr.rollVel  = (cr.rollVel  || 0) * Math.pow(0.75, settleFactor);
-      }
-    }
-
-    // Rest threshold — if velocity is tiny, snap to zero so we don't
-    // micro-jitter forever. v0.22a4: also snap pitch/roll EXACTLY to
-    // the target π/2 multiple to kill any floating-point drift that
-    // could leave the crate visually tilted at rest.
-    const speed = Math.hypot(cr.vx, cr.vz);
-    // v0.22b: the floor-contact gate (cr.y <= floorY + 0.05) was missed
-    // by stacked crates; they'd have correct velocities at rest but
-    // never get the hard-snap, leaving their pitch/roll at non-π/2
-    // values (causing the angle-stack visual bug). We now also accept
-    // a rest snapshot when ALL velocities are tiny — even mid-air a
-    // crate balanced on another crate qualifies.
-    const _atFullRest = speed < CRATE_REST_THRESHOLD && Math.abs(cr.vy) < 0.4 && _angSpeed < 0.3;
-    const _onFloor = cr.y <= floorY + 0.05;
-    if(_atFullRest && (_onFloor || _hSpeed < 0.05)) {
-      cr.vx = 0; cr.vz = 0; cr.vy = 0;
-      cr.angleVel = 0;
-      cr.pitchVel = 0;
-      cr.rollVel  = 0;
-      // Hard snap rotations to nearest π/2 — no more drift
-      const HALF_PI = Math.PI * 0.5;
-      cr.pitch = Math.round((cr.pitch || 0) / HALF_PI) * HALF_PI;
-      cr.roll  = Math.round((cr.roll  || 0) / HALF_PI) * HALF_PI;
-    }
-  }
-
-  // ── 3. Crate-vs-crate collisions ──
-  // O(n²) but n is small (typical hole < 12 crates).
-  //
-  // v0.22a6: switched from 2D AABB + Y-separation gate to PROPER 3D
-  // AABB resolution. Per Adam's screenshot showing crates clipping
-  // through each other after a tower collapse:
-  //
-  // The old 2D approach had a fundamental bug. When crate B fell onto
-  // crate A, the Y-gap test (`if(|Δy| > sumSize × 0.9) continue`) was
-  // TRUE while B was still above A, so collision was skipped. Then
-  // gravity kept pulling B down, B's y went BELOW A's top, the gate
-  // passed, and the horizontal AABB pushed B SIDEWAYS into A — never
-  // resolving the Y-axis penetration. Result: crates ended up
-  // interpenetrating with their faces overlapping by ~40%.
-  //
-  // 3D AABB fixes this by resolving on the SHALLOWEST overlap axis.
-  // When B falls onto A from above, the Y overlap is small (just the
-  // amount B has dropped past A's top) while X+Z overlaps are large
-  // (B sits directly above A). Shallowest = Y → push apart on Y →
-  // B lands on top. Once stacked, idle gravity is countered by the
-  // contact resolution every frame, so B stays put.
-  //
-  // v0.22b: iteration pass. Per Adam's photo of crates settling at
-  // mutual non-axis-aligned angles WITH visible interpenetration, the
-  // single-pass resolution can't catch up when 5+ crates land at the
-  // same time — fixing the A-B overlap can introduce a new B-C
-  // overlap, which won't be revisited until next frame, by which
-  // point the visual already shows clipping. 3 iterations is enough
-  // to settle a typical tower without a noticeable perf cost
-  // (n=10 crates, 3 × 45 = 135 pair checks per frame).
-  const n = G.crates.length;
-  const _crateIters = (n >= 4) ? 3 : 1;
-  for(let _it = 0; _it < _crateIters; _it++) {
-  for(let i = 0; i < n; i++) {
-    const a = G.crates[i];
-    if(a._destroyed || a._inStack) continue;
-    for(let j = i + 1; j < n; j++) {
-      const b = G.crates[j];
-      if(b._destroyed || b._inStack) continue;
-      const dx = b.wx - a.wx;
-      const dy = b.y - a.y;
-      const dz = b.wz - a.wz;
-      const sum = a.size + b.size;
-      const overlapX = sum - Math.abs(dx);
-      const overlapY = sum - Math.abs(dy);
-      const overlapZ = sum - Math.abs(dz);
-      if(overlapX <= 0 || overlapY <= 0 || overlapZ <= 0) continue;
-      // Pick the shallowest axis as the contact normal
-      let nx = 0, ny = 0, nz = 0, pen = 0;
-      if(overlapY <= overlapX && overlapY <= overlapZ) {
-        // Vertical contact — one crate landing on / pushing through another
-        ny = dy >= 0 ? 1 : -1;
-        pen = overlapY;
-      } else if(overlapX <= overlapZ) {
-        nx = dx >= 0 ? 1 : -1;
-        pen = overlapX;
-      } else {
-        nz = dz >= 0 ? 1 : -1;
-        pen = overlapZ;
-      }
-      // Push apart along the contact normal — equal split. b moves +n,
-      // a moves -n. For Y axis we update .y (not .wy — crates use .y).
-      const halfPen = pen * 0.5;
-      if(ny !== 0) {
-        a.y -= ny * halfPen;
-        b.y += ny * halfPen;
-      } else {
-        a.wx -= nx * halfPen; a.wz -= nz * halfPen;
-        b.wx += nx * halfPen; b.wz += nz * halfPen;
-      }
-      // Exchange velocity along the contact normal
-      const va = a.vx*nx + (a.vy||0)*ny + a.vz*nz;
-      const vb = b.vx*nx + (b.vy||0)*ny + b.vz*nz;
-      if(va - vb > 0) { // approaching
-        const totalMass = a.mass + b.mass;
-        const newVa = (va * (a.mass - b.mass) + 2 * b.mass * vb) / totalMass;
-        const newVb = (vb * (b.mass - a.mass) + 2 * a.mass * va) / totalMass;
-        const restitution = ny !== 0 ? 0.10 : CRATE_BOUNCE_RESTITUTION; // very dead bounce on stacking
-        a.vx += (newVa - va) * nx * restitution;
-        a.vz += (newVa - va) * nz * restitution;
-        b.vx += (newVb - vb) * nx * restitution;
-        b.vz += (newVb - vb) * nz * restitution;
-        if(ny !== 0) {
-          a.vy = (a.vy || 0) + (newVa - va) * ny * restitution;
-          b.vy = (b.vy || 0) + (newVb - vb) * ny * restitution;
-          // Stack-landing damp: if the upper crate (whichever has +ny side)
-          // was falling fast, kill most of its remaining vy so it doesn't
-          // jitter against gravity every frame. The shallower the contact,
-          // the more we damp — fast slams still bounce a bit.
-          if(ny > 0) {
-            // b is above a: b just landed on top. Damp b's downward vel.
-            if(b.vy < 0) b.vy *= 0.2;
-          } else {
-            // a is above b: a landed on top. Damp a's downward vel.
-            if(a.vy < 0) a.vy *= 0.2;
-          }
-        }
-        // Tumble — only on horizontal contacts. Stacking should
-        // settle, not start them spinning.
-        if(ny === 0) {
-          const tumbleA = (Math.abs(va - vb)) * 0.3;
-          a.angleVel += (Math.random() - 0.5) * tumbleA;
-          b.angleVel += (Math.random() - 0.5) * tumbleA;
-          a.pitchVel = (a.pitchVel || 0) + (-nz) * tumbleA * 0.5;
-          a.rollVel  = (a.rollVel  || 0) + ( nx) * tumbleA * 0.5;
-          b.pitchVel = (b.pitchVel || 0) + ( nz) * tumbleA * 0.5;
-          b.rollVel  = (b.rollVel  || 0) + (-nx) * tumbleA * 0.5;
-        }
-        // Audible tap — wood-on-wood thunk (quieter than ball-impact)
-        // v0.22b: only fire on iter 0 — later iters are penetration cleanup
-        // and shouldn't double-trigger SFX.
-        if(_it === 0 && AC && Math.abs(va - vb) > 1.0) {
-          try {
-            const ac = getAC(), tt = ac.currentTime;
-            const o = ac.createOscillator(); o.type='sine';
-            o.frequency.setValueAtTime(180, tt);
-            o.frequency.exponentialRampToValueAtTime(80, tt + 0.06);
-            const g = ac.createGain();
-            g.gain.setValueAtTime(0.10, tt);
-            g.gain.exponentialRampToValueAtTime(0.001, tt + 0.08);
-            o.connect(g); g.connect(getACDest()); o.start(tt); o.stop(tt + 0.09);
-          } catch(e){}
+      // Fan cone push — direction along fan blow direction, falloff with
+      // distance. Y-gate keeps mid-air crates from being yanked off course.
+      if(G.fans) {
+        for(const f of G.fans) {
+          if(f._destroyed || !f.coneLen) continue;
+          const heightAboveTerrain = cr.body.position.y -
+            ((G.heightMap && G.heightMap.length) ? getTerrainHeight(cr.body.position.x, cr.body.position.z) : 0);
+          if(heightAboveTerrain > cr.size * 2.5 + 0.6) continue;
+          const toCx = cr.body.position.x - f.wx;
+          const toCz = cr.body.position.z - f.wz;
+          const dist = Math.hypot(toCx, toCz);
+          if(dist < 0.01 || dist > f.coneLen) continue;
+          const dotDir = (toCx/dist)*f.dx + (toCz/dist)*f.dz;
+          if(dotDir < Math.cos(f.coneHalfAngle)) continue;
+          const falloff = 1 - (dist / f.coneLen);
+          const force = (f.strength || 4) * falloff / Math.max(0.18, cr.mass);
+          cr.body.velocity.x += f.dx * force * _dt;
+          cr.body.velocity.z += f.dz * force * _dt;
         }
       }
     }
   }
-  } // end iter loop (v0.22b)
 
-  // ── 4. Sync mesh transforms ──
+  // ── 3. Step the physics world ──
+  // Cannon's recommended pattern: fixed-step 1/60 with up to 3 sub-steps
+  // to catch up if the frame ran long. Cap at 1/30 above keeps this bounded.
+  world.step(1/60, _dt, 3);
+
+  // ── 4. Sync crate records and Three.js groups from body state ──
   for(const cr of G.crates) {
     if(cr._destroyed || !cr.group) continue;
-    let renderX = cr.wx, renderZ = cr.wz;
-    if(cr._teeterDx != null) renderX += cr._teeterDx;
-    if(cr._teeterDz != null) renderZ += cr._teeterDz;
-    cr.group.position.set(renderX, cr.y, renderZ);
-    // v0.22a2: apply full 3-axis rotation. Pitch (X), yaw (Y), roll (Z).
-    // Order matters: yaw first, then pitch, then roll, so the crate
-    // tumbles in a way that reads as natural physics rather than gimbal-
-    // locking. Three.js applies in XYZ order by default which matches.
-    cr.group.rotation.y = cr.angle;
-    cr.group.rotation.x = cr.pitch || 0;
-    cr.group.rotation.z = cr.roll  || 0;
+    if(cr.body) {
+      // Update crate.wx / wz / y from body so all the legacy collision
+      // code (ball-vs-crate AABB, projectile-vs-crate, explosion radius)
+      // continues to read correct values without knowing about Cannon.
+      cr.wx = cr.body.position.x;
+      cr.wz = cr.body.position.z;
+      cr.y  = cr.body.position.y;
+      // Apply full 3D rotation via quaternion — replaces yaw/pitch/roll Euler.
+      cr.group.position.set(cr.body.position.x, cr.body.position.y, cr.body.position.z);
+      cr.group.quaternion.set(
+        cr.body.quaternion.x,
+        cr.body.quaternion.y,
+        cr.body.quaternion.z,
+        cr.body.quaternion.w
+      );
+    } else {
+      // Fallback (no Cannon loaded): keep mesh in sync with last-known pos.
+      cr.group.position.set(cr.wx, cr.y, cr.wz);
+    }
+  }
+
+  // ── 5. Kill-floor cleanup ──
+  // Crates that fell below CRATE_KILL_Y are silently destroyed (no FX,
+  // no drops). Prevents physics bodies + meshes accumulating off-world
+  // when a power shot launches a crate clear off the level.
+  for(const cr of G.crates) {
+    if(cr._destroyed) continue;
+    if(cr.body && cr.body.position.y < CRATE_KILL_Y) {
+      cr._destroyed = true;
+      if(cr.group && cr.group.parent) cr.group.parent.remove(cr.group);
+      try { world.removeBody(cr.body); } catch(e) {}
+      cr.body = null;
+    }
   }
 }
-
 function destroyObstacles(hits, epicentreX, epicentreY, epicentreZ) {
   // Analytics: count every destruction for the current hole (all call sites benefit)
   if(hits && hits.length) G._holeObstaclesDestroyed = (G._holeObstaclesDestroyed||0) + hits.length;
@@ -22034,6 +21944,16 @@ function destroyObstacles(hits, epicentreX, epicentreY, epicentreZ) {
     // the same frame (Adam reported HP dock from a spike-ball killed half a
     // second earlier). Setting the flag here makes destruction atomic.
     if(hit.physRef) hit.physRef._destroyed = true;
+    // v0.23a: also remove the Cannon body backing this obstacle, if any.
+    // Walls/angledWalls don't have per-segment refs (they're built as a
+    // batch from polylines/edges) so they're not removable individually
+    // here; that's fine because destroying a wall chunk runs through a
+    // separate path that rebuilds the static body set. For bumpers,
+    // spinBars, slideBlocks, popupWalls — each has obstacle._physBody set
+    // at build time, and removeCannonBodyFor handles null safely.
+    if(hit.physRef && typeof removeCannonBodyFor === 'function') {
+      removeCannonBodyFor(hit.physRef);
+    }
     if(hit.type === 'rock')       G.rocks       = G.rocks.filter(r=>r!==hit.physRef);
     if(hit.type === 'fan')        G.fans        = G.fans.filter(f=>f!==hit.physRef);
     if(hit.type === 'bumper')     G.bumpers     = G.bumpers.filter(b=>b!==hit.physRef);
@@ -22138,17 +22058,19 @@ function destroyObstacles(hits, epicentreX, epicentreY, epicentreZ) {
 
 function spawnExplosion(x, y, z, scale) {
   const sc = scale || 1.0; // 0.5 = small, 1.0 = normal, 2.0 = big
-  // v0.22b: Blast crate stacks. Per Adam: "Explosions should send crate
-  // stacks flying — it shouldn't just impact the box that was hit by the
-  // projectile." Radial impulse with falloff, mass-scaled, with a strong
-  // upward kick so stacks LIFT off the ground (most readable visual).
-  // Radius scales with explosion size; force is generous because crate
-  // mass ranges 0.18-0.28 and we want the chain to actually go airborne.
-  if(G.crates && G.crates.length) {
-    const blastR = 4.5 * sc;        // bigger explosion = wider crate sweep
-    const baseImpulse = 22 * sc;    // tuned vs. crate mass + CRATE_TIME_SCALE
+  // v0.23a: Blast crate stacks via Cannon impulses. Per Adam: "Explosions
+  // should send crate stacks flying — it shouldn't just impact the box that
+  // was hit by the projectile." Each crate in radius gets a radial impulse
+  // outward, mass-scaled (Cannon handles the mass division automatically),
+  // with a strong upward kick so stacks LIFT off the ground (most readable
+  // visual). Off-center impulse offset gives Cannon natural angular spin
+  // — replaces the old manual angleVel/pitchVel/rollVel jitter.
+  if(G.crates && G.crates.length && window.CANNON) {
+    const C = window.CANNON;
+    const blastR = 4.5 * sc;
+    const baseImpulse = 22 * sc;
     for(const cr of G.crates) {
-      if(cr._destroyed) continue;
+      if(cr._destroyed || !cr.body) continue;
       const ddx = cr.wx - x, ddz = cr.wz - z;
       const d = Math.hypot(ddx, ddz);
       if(d > blastR) continue;
@@ -22161,22 +22083,20 @@ function spawnExplosion(x, y, z, scale) {
       } else {
         nx = ddx / d; nz = ddz / d;
       }
-      const massInv = 1 / Math.max(0.18, cr.mass);
-      const horizMag = baseImpulse * falloff * massInv;
-      cr.vx += nx * horizMag;
-      cr.vz += nz * horizMag;
-      // Vertical lift — explosions punt stacks UP. Bigger close, smaller far.
-      cr.vy += (4.5 + 6.0 * falloff) * sc * massInv;
-      // Spin chaos: yaw + pitch + roll all get big random kicks so the
-      // crate tumbles in flight rather than gliding.
-      cr.angleVel += (Math.random() - 0.5) * 8 * falloff;
-      cr.pitchVel = (cr.pitchVel || 0) + (Math.random() - 0.5) * 6 * falloff;
-      cr.rollVel  = (cr.rollVel  || 0) + (Math.random() - 0.5) * 6 * falloff;
-      // Break stack lock so neighbors get the impulse too — chain collapse
-      if(cr._inStack || cr._inTower) {
-        cr._inStack = false;
-        cr._inTower = false;
-      }
+      // Cannon's applyImpulse expects impulse in N·s (kg·m/s). Crate masses
+      // are 0.32-0.48; baseImpulse * falloff * mass gives a velocity delta
+      // matching the old direct-velocity-write feel.
+      const horizMag = baseImpulse * falloff * cr.body.mass;
+      const vertMag  = (4.5 + 6.0 * falloff) * sc * cr.body.mass;
+      // Off-center contact point so Cannon derives natural tumble. Random
+      // offset within the crate's bounds.
+      const off = new C.Vec3(
+        (Math.random() - 0.5) * cr.size,
+        (Math.random() - 0.5) * cr.size,
+        (Math.random() - 0.5) * cr.size,
+      );
+      cr.body.wakeUp();
+      cr.body.applyImpulse(new C.Vec3(nx * horizMag, vertMag, nz * horizMag), off);
     }
   }
   // Fireball shockwave: hot inner + orange outer particles
@@ -24266,10 +24186,10 @@ function _executeCardAbilityInner(id) {
       applyIronBallVisual();
       // v0.21d: Wrecking Ball upgrade — distinct toast.
       // v0.22f: base Iron Ball reverted to 1× (no powerMult); Wrecking Ball
-      // is now the 2× upgrade. Toast updated accordingly.
+      // is now the 1.5× upgrade (was 2× in v0.22f, dropped in v0.23a5).
       {
         const _wbUp = (typeof getCardField === 'function') ? getCardField('iron_ball','powerMult',1.0) : 1.0;
-        showToast(_wbUp > 1 ? '🔩 Wrecking Ball armed — 2× power!' : '🔩 Iron Ball armed!', 800);
+        showToast(_wbUp > 1 ? '🔩 Wrecking Ball armed — 1.5× power!' : '🔩 Iron Ball armed!', 800);
       }
       break;
     case 'power_shot':   G._powerShotStacks = (G._powerShotStacks||0) + 1; G._powerShotTensionActive = true; showToast('💪 Power Shot' + (G._powerShotStacks > 1 ? ' ×'+G._powerShotStacks+'!' : ' armed!'), 800); break;
@@ -24321,6 +24241,18 @@ function _executeCardAbilityInner(id) {
 // (those use card-active). Most "pre"-context cards push a state flag in
 // executeCardAbility; this maps those flags back to the card id.
 function isCardArmedPreSwing(cardId) {
+  // v0.23a5: beat_em_up is special — it can be armed mid-roll AND pre-swing.
+  // The function name is a bit misleading post-this-fix ("PreSwing"), but
+  // it's actually the single source of truth for "should this card stay
+  // in its slot, glowing, instead of being discarded after activation?"
+  // For beat_em_up, the answer is yes whenever _beatEmUpActive is true,
+  // regardless of rolling state. Without this, arming mid-swing routes
+  // through the discard path before the player can re-tap to throw a
+  // punch — Adam's reported bug ("Arming beat em up mid swing doesn't
+  // allow you to punch").
+  if(cardId === 'beat_em_up') {
+    return G.state === 'playing' && !!G._beatEmUpActive;
+  }
   if(G.state !== 'playing' || G.rolling) return false;
   switch(cardId) {
     case 'power_shot':   return (G._powerShotStacks || 0) > 0;
@@ -24340,7 +24272,6 @@ function isCardArmedPreSwing(cardId) {
     // v0.21c: new cards
     case 'frisbee':      return !!G._frisbeeArmed;
     case 'curve_ball':   return !!G._curveBallArmed;
-    case 'beat_em_up':   return !!G._beatEmUpActive;
   }
   return false;
 }
@@ -30177,14 +30108,22 @@ function throwGrenadeAt(power, dir, opts) {
             gz += sgn * oZ;
             if((sgn > 0 && gvz < 0) || (sgn < 0 && gvz > 0)) gvz = -gvz * 0.65;
           }
-          // Optional: kick the crate — small nudge so the grenade impact
-          // reads physically. Mass-scaled, much weaker than ball impact.
-          const kickMag = Math.hypot(gvx, gvz) * 0.15 / Math.max(0.2, cr.mass);
-          if(cdx !== 0 || cdz !== 0) {
+          // v0.23a: kick crate via Cannon impulse — small nudge so the grenade
+          // impact reads physically. Cannon does mass division automatically.
+          if((cdx !== 0 || cdz !== 0) && cr.body && window.CANNON) {
+            const C = window.CANNON;
+            const kickMag = Math.hypot(gvx, gvz) * 0.15 * cr.body.mass;
             const ddist = Math.hypot(cdx, cdz) || 1;
-            cr.vx += -(cdx/ddist) * kickMag;
-            cr.vz += -(cdz/ddist) * kickMag;
-            cr.angleVel += (Math.random()-0.5) * 0.8;
+            const off = new C.Vec3(
+              (Math.random() - 0.5) * cr.size * 0.5,
+              (Math.random() - 0.5) * cr.size * 0.3,
+              (Math.random() - 0.5) * cr.size * 0.5,
+            );
+            cr.body.wakeUp();
+            cr.body.applyImpulse(
+              new C.Vec3(-(cdx/ddist) * kickMag, kickMag * 0.2, -(cdz/ddist) * kickMag),
+              off
+            );
           }
         }
       }
@@ -35678,8 +35617,8 @@ const CARD_UPGRADES = {
   },
   iron_ball: {
     a: { id:'wrecking_ball_iron', name:'Wrecking Ball', emoji:'🔩', archetypes:['demolition'],
-         desc:'2× shot power. The Earth shall tremble.',
-         powerMult: 2.0 },
+         desc:'1.5× shot power. Hard hit; not the apocalypse.',
+         powerMult: 1.5 },
     // v0.22b: Snowball Iron — picks up speed on every destruction.
     // Reads speedOnDestroy multiplier off the card def in destroyObstacles
     // (the iron-destruction code path) — applied as an XZ velocity scale
@@ -37858,6 +37797,10 @@ function initHole() {
   // ball momentum, bounce around, and drop coins/hearts/upgrade vouchers
   // when destroyed. See spawnCrates / updateCratePhysics for the full
   // system. _crateDrops holds spawned pickup items (coins/hearts/voucher).
+  // v0.23a: also tear down all Cannon bodies (crates + static obstacles)
+  // so the next hole starts with a clean physics world. buildCourse will
+  // rebuild static bodies before crates spawn.
+  if(typeof resetCannonBodies === 'function') resetCannonBodies();
   G.crates = [];
   G._crateDrops = [];
   G._crateStacks = [];
@@ -39782,6 +39725,8 @@ function startGame(){
   G.angledWalls = [];
   G.wallChunks = [];
   // v0.22a: crate physics state at run-start (mirrors per-hole init)
+  // v0.23a: also tear down Cannon bodies — fresh run, fresh world.
+  if(typeof resetCannonBodies === 'function') resetCannonBodies();
   G.crates = [];
   G._crateDrops = [];
   G._crateStacks = [];
