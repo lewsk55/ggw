@@ -4222,8 +4222,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.23b21';
-const CHANGE_NOTE = "v0.23b21: Two big simplifications driven by user observation. (1) Triangles now COMPLETELY ignored during grind per Adams suggestion, no more attempting to grind hypotenuse or legs. The skater branch in the angled-wall pass just sets _skaterAngledHandled = true unconditionally when grinding, suppressing the bounce branch. Ball passes through triangles entirely as if they werent there, continuing on the polyline wall. Eliminates the corner-snag-on-triangle case completely. (2) Inside-corner snag fix via clean ball-side test. The previous convex/concave detection used a confused mix of cross-products and tangent projections. Replaced with a simple geometric test: at the corner vertex, project the ball position onto the candidate next-segments chosen outward normal. If the dot product is positive, ball is on the outward side (convex corner can wrap). If negative, ball is on the inside of the bend (concave cant wrap as a sphere on flat ground). When concave detected, lookahead skips the candidate. Plus: when the lookahead exhausts all candidates without finding a valid next segment AND we are past the current segment endpoint, the grind ends cleanly via stale _skaterLastPinnedT instead of pinning to the segment endpoint and stuck-detector firing. Wrong-side penalty also added to main best-segment scoring as defense-in-depth.";
+const GAME_VERSION = '0.23b24';
+const CHANGE_NOTE = "v0.23b24: Reverted the v0.23b22 rail-graph approach — turns out G.wallPolylines is composed of MANY 2-vertex single-segment polylines (one segment per polyline), not the long multi-segment polylines I was assuming. The rail-walking-within-a-polyline approach therefore could only produce single-segment rails, and the END_TOL would catch the entry point and bail immediately. To fix this properly would require a graph-traversal across polylines via shared endpoints, which is a more involved refactor. Reverting to v0.23b21 baseline (per-frame proximity scoring with concave detection, triangles ignored, etc) and tightening the stuck-detector instead: was 350ms/0.30u, now 200ms/0.20u. Inside-corner snags will still happen but will bail much faster and feel less jarring. Trade-off accepted while we plan a proper polyline-graph rail builder.";
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
@@ -14262,18 +14262,17 @@ function tickSkaterBall(dt) {
     return;
   }
   // ── Stuck-at-corner detection ──
-  // v0.23b20: tightened from 600ms/0.25u to 350ms/0.30u. Snag situations
-  // (concave corners where the ball gets wedged) need faster bail —
-  // waiting 600ms makes the snag visible/jarring. Now bails after just
-  // ~6 frames of insufficient movement.
-  if(!G._skaterStuckProbeT || (now - G._skaterStuckProbeT) > 350) {
+  // v0.23b24: tightened to 200ms/0.20u. A real grind at 5 m/s moves ~1u in
+  // 200ms; if it moves less than 0.20u in 200ms it's genuinely stuck (e.g.
+  // wedged at an inside-corner). Bail quickly so the snag isn't visible.
+  if(!G._skaterStuckProbeT || (now - G._skaterStuckProbeT) > 200) {
     G._skaterStuckProbeT = now;
     G._skaterStuckProbeX = G.ballPos.x;
     G._skaterStuckProbeZ = G.ballPos.z;
   } else {
     const _moved = Math.hypot(G.ballPos.x - G._skaterStuckProbeX,
                               G.ballPos.z - G._skaterStuckProbeZ);
-    if(_moved < 0.30 && (now - G._skaterStuckProbeT) > 320) {
+    if(_moved < 0.20 && (now - G._skaterStuckProbeT) > 180) {
       if(typeof showToast === 'function') showToast('🛹 Snag!', 700);
       bailFromSkaterGrind();
       return;
