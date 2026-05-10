@@ -4066,7 +4066,7 @@ renderer.shadowMap.type = _GGW_isMobile ? THREE.PCFShadowMap : THREE.PCFSoftShad
 renderer.setClearColor(0x87CEEB);
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0xb0d8f0, 50, 280);
+scene.fog = new THREE.Fog(0xb0d8f0, 50, 320);
 
 const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 350);
 
@@ -4132,13 +4132,21 @@ const hemiLight = new THREE.HemisphereLight(0x87CEEB, 0x5a8a3a, 0.5);
 scene.add(hemiLight);
 
 // ── Sky dome ──────────────────────────────────────────
+// v0.23c: Sky dome now follows the camera — previously fixed at world origin
+// with radius 250, on very large courses the player could fly past the dome
+// edge and the level would clip through it (Adam: "appears that we reach
+// the edge of the skybox which covers up the hole"). By parenting to the
+// camera (or syncing position each frame), the dome is always 250u away.
 const skyGeo = new THREE.SphereGeometry(250, 16, 8);
 const skyMat = new THREE.MeshBasicMaterial({
   color: 0x87CEEB,
   side: THREE.BackSide,
+  depthWrite: false,
 });
 const skyMesh = new THREE.Mesh(skyGeo, skyMat);
 skyMesh.userData.noOutline = true;
+skyMesh.userData.followCamera = true; // tagged so the render loop tracks it
+skyMesh.frustumCulled = false;
 scene.add(skyMesh);
 
 // Add a few cloud puffs
@@ -4222,8 +4230,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.23b24';
-const CHANGE_NOTE = "v0.23b24: Reverted the v0.23b22 rail-graph approach — turns out G.wallPolylines is composed of MANY 2-vertex single-segment polylines (one segment per polyline), not the long multi-segment polylines I was assuming. The rail-walking-within-a-polyline approach therefore could only produce single-segment rails, and the END_TOL would catch the entry point and bail immediately. To fix this properly would require a graph-traversal across polylines via shared endpoints, which is a more involved refactor. Reverting to v0.23b21 baseline (per-frame proximity scoring with concave detection, triangles ignored, etc) and tightening the stuck-detector instead: was 350ms/0.30u, now 200ms/0.20u. Inside-corner snags will still happen but will bail much faster and feel less jarring. Trade-off accepted while we plan a proper polyline-graph rail builder.";
+const GAME_VERSION = '0.23c';
+const CHANGE_NOTE = "v0.23c batch: (1) Fixed MIRV crash from THREE.CapsuleGeometry (r142+) — composed from cylinder + 2 hemispheres for r128 compat. (2) Removed duplicate 'cancel run?' confirm — btn-start had both onclick and addEventListener firing confirmStartGame twice. (3) Skater Ball description now correctly omits HP loss + double-tap (no longer in code). (4) Yard Sale: shop tile becomes 'Sell a Card / FREE ENTRY' when owned, all card removals now PAY the player at 50% scaled price. (5) Lack of Boundaries: legendary $30 → epic $20. (6) Skybox follows camera (was static r=250, level extended past it on huge courses); fog far 280 → 320. (7) Kickback redesigned as Drone Delivery: cinematic delivery drone arrives, lifts ball with rope, transits to nearest safe spot, lasers any hazards/breakables in drop radius using destroyObstacles, lowers ball gently. Physics suspended via G._droneDeliveryActive during the cinematic. (8) Sequential XP-unlock reveal on the run summary: rows render hidden, bar fills through each unlock's XP threshold, pausing at each to reveal that row with confetti+chime, then resuming. (9) First-jump fly-over: during the FIRST airborne arc of a shot, low (≤3 ball heights / 1.32u) crates AND rocks directly in front of the ball get bypassed entirely. Second jumps don't enable. (10) Skater Ball inside-corner fix: replaced 200ms position probe with 80ms speed-loss probe — detects the SYMPTOM (35%+ speed crash while grinding) and bails immediately with pre-snag velocity restored at 85%, so the ball flies through the corner cleanly instead of visibly sticking.";
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
@@ -12235,6 +12243,241 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
   }
   window.renderCosmoProgress = renderCosmoProgress;
 
+  // v0.23c: Sequential XP-bar driver for the run-summary screen. Animates
+  // the bar fromXp → currentXp, pausing at each provided threshold to
+  // reveal the matching unlock row with confetti before resuming. When
+  // a threshold straddles a tier-cross (the bar would visually fill
+  // past 100%), we run a sub-pass: fill to 100, fire reveal, snap to 0,
+  // fill to next stop. This mirrors the legacy two-pass pattern but
+  // segmented across N reveals rather than just one.
+  //
+  // opts:
+  //   target: 'go' (only target supported right now — uses #go-cp-fill etc.)
+  //   fromXp: starting XP (pre-run)
+  //   reveals: [{ item: {...}, thr: xpThreshold }] sorted ASC by thr
+  //   onAllDone: called once after the final fill segment lands.
+  function animateXpBarSequential(opts) {
+    opts = opts || {};
+    const prefix = opts.target ? (opts.target + '-') : '';
+    const fillEl = document.getElementById(prefix + 'cp-fill');
+    const xpEl   = document.getElementById(prefix + 'cp-xp');
+    const wrap   = document.getElementById(prefix + 'cosmo-progress');
+    if(!fillEl || !wrap) { if(opts.onAllDone) opts.onAllDone(); return; }
+    const meta = (typeof getMeta === 'function') ? getMeta() : null;
+    if(!meta) { if(opts.onAllDone) opts.onAllDone(); return; }
+    const fromXp = opts.fromXp || 0;
+    const toXp = meta.xp || 0;
+    if(toXp <= fromXp) { if(opts.onAllDone) opts.onAllDone(); return; }
+
+    // Build the segment plan. Each segment:
+    //   { startXp, endXp, fillFromPct, fillToPct, reveal: {...} | null }
+    // The bar pct is computed against the prevCost / nextCost window of
+    // whatever cosmetic the bar is showing AT THAT MOMENT in fill. To keep
+    // the maths simple, we compute pct using the live getNextCosmeticUnlock
+    // pretending meta.xp is at each segment endpoint.
+    const _xpPctAt = (xp) => {
+      const fakeMeta = { ...meta, xp };
+      const prog = getNextCosmeticUnlock(fakeMeta);
+      if(!prog) return { pct: 100, label: 'All unlocked 🏆', cost: xp };
+      const cost = prog.nextCost;
+      const prev = prog.prevCost || 0;
+      const span = Math.max(1, cost - prev);
+      const within = Math.max(0, xp - prev);
+      const pct = Math.max(0, Math.min(100, (within / span) * 100));
+      return { pct, label: prog.nextId, cost, prev };
+    };
+
+    // Build stops in fill order: walk through reveals ASC, only those
+    // with thr in (fromXp, toXp] qualify as in-fill stops; the rest are
+    // already-unlocked-or-future, so we just reveal them at the start
+    // (thr ≤ fromXp) or hold them for last (thr > toXp won't happen
+    // since meta.xp is post-deposit).
+    const _alreadyOwned = (opts.reveals || []).filter(r => r.thr <= fromXp);
+    const _willCross = (opts.reveals || []).filter(r => r.thr > fromXp && r.thr <= toXp).sort((a,b) => a.thr - b.thr);
+    const _nonXpRows = (opts.reveals || []).filter(r => !r.thr || r.thr <= 0);
+    // Reveal already-owned items + non-XP unlocks immediately at bar start
+    const _instantSet = new Set();
+    for(const r of _alreadyOwned) _instantSet.add(r.item);
+    for(const r of _nonXpRows) _instantSet.add(r.item);
+
+    const _revealRow = (rowEl, withConfetti) => {
+      if(!rowEl) return;
+      // Expand height first, then opacity/scale on the next frame
+      rowEl.style.visibility = 'visible';
+      rowEl.style.height = '';
+      rowEl.style.padding = '14px 16px';
+      rowEl.style.marginBottom = '8px';
+      rowEl.style.borderWidth = '1px';
+      // Force reflow
+      void rowEl.offsetHeight;
+      requestAnimationFrame(() => {
+        rowEl.style.opacity = '1';
+        rowEl.style.transform = 'scale(1) translateY(0)';
+      });
+      if(withConfetti && typeof spawnConfettiBurst === 'function') {
+        try { spawnConfettiBurst(60); } catch(e){}
+      }
+      // Soft chime for the reveal
+      if(withConfetti && typeof AC !== 'undefined' && AC) {
+        try {
+          const ac = (typeof getAC === 'function') ? getAC() : AC;
+          const t = ac.currentTime;
+          const o = ac.createOscillator(); o.type = 'sine';
+          o.frequency.setValueAtTime(880, t);
+          o.frequency.exponentialRampToValueAtTime(1320, t + 0.18);
+          const g = ac.createGain(); g.gain.setValueAtTime(0.18, t);
+          g.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
+          const dest = (typeof getACDest === 'function') ? getACDest() : ac.destination;
+          o.connect(g); g.connect(dest); o.start(t); o.stop(t + 0.5);
+        } catch(e){}
+      }
+    };
+
+    // Resolve row elements per-item by data-reveal-idx (set on render)
+    const _findRowByItem = (item) => {
+      const rows = document.querySelectorAll('.ggw-unlock-row');
+      for(const r of rows) {
+        const idx = parseInt(r.getAttribute('data-reveal-idx') || '-1', 10);
+        const thr = parseInt(r.getAttribute('data-xp-threshold') || '0', 10);
+        // Match by threshold + label content if needed; for simplicity,
+        // walk reveals[] in original order and use idx position.
+        // We rely on the caller-provided order being stable.
+        const reveals = opts.reveals;
+        if(reveals && reveals[idx] && reveals[idx].item === item) return r;
+      }
+      return null;
+    };
+
+    // Reveal already-owned + non-XP rows at the start (with confetti for
+    // the non-XP ones since they're meaningful unlocks).
+    setTimeout(() => {
+      let _stagger = 0;
+      for(const r of _nonXpRows) {
+        const el = _findRowByItem(r.item);
+        if(el && el.style.visibility !== 'visible') {
+          setTimeout(() => _revealRow(el, true), _stagger);
+          _stagger += 220;
+        }
+      }
+      for(const r of _alreadyOwned) {
+        if(_nonXpRows.includes(r)) continue;
+        const el = _findRowByItem(r.item);
+        if(el && el.style.visibility !== 'visible') {
+          setTimeout(() => _revealRow(el, false), _stagger);
+          _stagger += 120;
+        }
+      }
+    }, 80);
+
+    // Now drive the bar. We split [fromXp, toXp] into segments at each
+    // _willCross threshold. Each segment fills the bar smoothly; on
+    // arriving at a threshold endpoint we pause, reveal, then continue.
+    // Segment timing is proportional to XP delta but capped to 200..900ms
+    // so reveals don't feel rushed or sluggish.
+    const _stops = [..._willCross.map(r => r.thr), toXp];
+    const _stopReveals = [..._willCross.map(r => r.item), null];
+    let curXp = fromXp;
+    let _segIdx = 0;
+
+    const _runSegment = () => {
+      if(_segIdx >= _stops.length) {
+        if(opts.onAllDone) opts.onAllDone();
+        return;
+      }
+      const segEnd = _stops[_segIdx];
+      const reveal = _stopReveals[_segIdx];
+      const startXp = curXp, endXp = segEnd;
+      const xpDelta = Math.max(1, endXp - startXp);
+      // Pace: 1.4ms per XP, clamped 240..900ms
+      const dur = Math.max(240, Math.min(900, xpDelta * 1.4));
+      const startInfo = _xpPctAt(startXp);
+      const endInfo   = _xpPctAt(endXp);
+      const tierCross = startInfo.label !== endInfo.label;
+      const startT = performance.now();
+
+      // Display label/cost — keep showing the current target during fill
+      const _nameEl = document.getElementById(prefix + 'cp-next-name');
+      if(_nameEl && typeof cosmeticDisplayName === 'function') {
+        const labelId = startInfo.label;
+        if(labelId === 'All unlocked 🏆') _nameEl.textContent = labelId;
+        else {
+          // category lookup via _xpTable
+          const _xpTable = (typeof COSMETIC_XP_UNLOCKS !== 'undefined') ? COSMETIC_XP_UNLOCKS : [];
+          const _row = _xpTable.find(r => r.id === labelId);
+          const _cat = _row ? (_row.category === 'hat' ? '🎩' : '⚪') : '';
+          _nameEl.textContent = `${_cat} ${cosmeticDisplayName(labelId)}`;
+        }
+      }
+
+      const _step = () => {
+        const t = Math.min(1, (performance.now() - startT) / dur);
+        const eased = 1 - Math.pow(1 - t, 2);
+        const xpNow = startXp + (endXp - startXp) * eased;
+        // Compute pct using current xp; if we crossed a tier mid-segment
+        // (rare since segments end at thresholds), the pct still makes
+        // sense because we re-eval at the new tier window.
+        const info = _xpPctAt(xpNow);
+        // If startInfo was tier A and we crossed into B mid-segment,
+        // visually the bar should reach 100 then snap to 0 — but our
+        // segments are CHOSEN to end at thresholds, so this case is rare.
+        // Defensive: if the displayed tier changed, snap to 100 then 0.
+        if(info.label !== startInfo.label && !tierCross) {
+          fillEl.style.transition = 'none';
+          fillEl.style.width = info.pct + '%';
+        } else {
+          fillEl.style.transition = 'none';
+          fillEl.style.width = info.pct + '%';
+        }
+        if(xpEl) xpEl.textContent = `${Math.round(xpNow)} / ${info.cost} XP`;
+        if(t < 1) requestAnimationFrame(_step);
+        else {
+          curXp = endXp;
+          // If this segment ended at a threshold tier-cross, run a quick
+          // 100% → 0% reset before the reveal so it feels like the bar
+          // "filled up and tipped over" into the unlock.
+          if(tierCross) {
+            fillEl.style.transition = 'none';
+            fillEl.style.width = '100%';
+            void fillEl.offsetWidth;
+            wrap.classList.remove('cp-unlock');
+            void wrap.offsetWidth;
+            wrap.classList.add('cp-unlock');
+            setTimeout(() => wrap.classList.remove('cp-unlock'), 900);
+          }
+          // Pause for the reveal
+          if(reveal) {
+            const rowEl = _findRowByItem(reveal);
+            _revealRow(rowEl, true);
+            // After tier cross, reset bar to 0 for the next tier window
+            if(tierCross) {
+              setTimeout(() => {
+                fillEl.style.transition = 'none';
+                fillEl.style.width = '0%';
+                void fillEl.offsetWidth;
+                _segIdx++;
+                setTimeout(_runSegment, 700);
+              }, 350);
+            } else {
+              _segIdx++;
+              setTimeout(_runSegment, 1100);
+            }
+          } else {
+            // Final segment — no reveal, just done
+            _segIdx++;
+            _runSegment();
+          }
+        }
+      };
+      // Set start position and kick off
+      fillEl.style.transition = 'none';
+      fillEl.style.width = startInfo.pct + '%';
+      void fillEl.offsetWidth;
+      requestAnimationFrame(_step);
+    };
+    _runSegment();
+  }
+  window.animateXpBarSequential = animateXpBarSequential;
+
   // v0.19z: Confetti burst for XP tier unlocks on the game-over screen.
   // Creates a fixed-position overlay, spawns N confetti divs with randomized
   // colors / start X / drift X / rotation, then removes the layer after
@@ -14262,17 +14505,44 @@ function tickSkaterBall(dt) {
     return;
   }
   // ── Stuck-at-corner detection ──
-  // v0.23b24: tightened to 200ms/0.20u. A real grind at 5 m/s moves ~1u in
-  // 200ms; if it moves less than 0.20u in 200ms it's genuinely stuck (e.g.
-  // wedged at an inside-corner). Bail quickly so the snag isn't visible.
-  if(!G._skaterStuckProbeT || (now - G._skaterStuckProbeT) > 200) {
+  // v0.23c: Replaced the 200ms position probe with a faster speed-loss
+  // detector. The previous approach measured displacement over 180-200ms
+  // window, which was still long enough for the player to see the ball
+  // visibly snag at an inside corner. Inside-corner geometry pins the
+  // ball and its horizontal speed crashes within a frame or two — by
+  // sampling speed every ~80ms and bailing on a 35%+ drop while still
+  // claiming to grind, we exit before the snag is visible. We also
+  // restore the pre-snag velocity vector so the ball flies out of the
+  // corner like the player rode through it cleanly.
+  if(!G._skaterSpeedProbeT || (now - G._skaterSpeedProbeT) > 80) {
+    G._skaterSpeedProbeT = now;
+    G._skaterSpeedProbeSpd = _grindSpd;
+    G._skaterSpeedProbeVx = G.ballVel.x;
+    G._skaterSpeedProbeVz = G.ballVel.z;
+  } else {
+    const _prevSpd = G._skaterSpeedProbeSpd || 0;
+    if(_prevSpd > 3 && _grindSpd < _prevSpd * 0.65 && (now - G._skaterSpeedProbeT) > 60) {
+      // Speed crashed — likely inside-corner snag. Restore the pre-snag
+      // velocity at 85% magnitude so the ball exits cleanly, not abruptly.
+      G.ballVel.x = (G._skaterSpeedProbeVx || G.ballVel.x) * 0.85;
+      G.ballVel.z = (G._skaterSpeedProbeVz || G.ballVel.z) * 0.85;
+      if(typeof showToast === 'function') showToast('🛹 Corner exit!', 700);
+      bailFromSkaterGrind();
+      return;
+    }
+  }
+  // Belt-and-suspenders: also keep a slower position-based check for
+  // genuinely-stalled grinds (e.g. pinned inside a tight pocket). 350ms /
+  // 0.25u is more lenient than the speed probe so it only catches cases
+  // the speed probe missed.
+  if(!G._skaterStuckProbeT || (now - G._skaterStuckProbeT) > 350) {
     G._skaterStuckProbeT = now;
     G._skaterStuckProbeX = G.ballPos.x;
     G._skaterStuckProbeZ = G.ballPos.z;
   } else {
     const _moved = Math.hypot(G.ballPos.x - G._skaterStuckProbeX,
                               G.ballPos.z - G._skaterStuckProbeZ);
-    if(_moved < 0.20 && (now - G._skaterStuckProbeT) > 180) {
+    if(_moved < 0.25 && (now - G._skaterStuckProbeT) > 320) {
       if(typeof showToast === 'function') showToast('🛹 Snag!', 700);
       bailFromSkaterGrind();
       return;
@@ -14325,6 +14595,15 @@ function tickMultiballGhost(dt) {
 }
 
 function updatePhysics(dt) {
+  // v0.23c: Drone Delivery suspends ball physics. The drone's animation
+  // loop manages ballPos directly; if we ran physics here gravity would
+  // pull the carried ball through the floor and collision resolution
+  // would fight the drone's transit path. Crate/perk ticks still run so
+  // the world keeps animating around the cinematic.
+  if(G._droneDeliveryActive) {
+    if(typeof updateCratePhysics === 'function') updateCratePhysics(dt);
+    return;
+  }
   // v0.22a: integrate crate physics first so subsequent ball collisions
   // resolve against current crate positions. updateCratePhysics handles
   // crate-vs-wall, crate-vs-obstacle, crate-vs-crate, ground/gravity,
@@ -14382,6 +14661,15 @@ function updatePhysics(dt) {
     // Mark jump start position for obstacle-over detection
     G._jumpStartX = G.ballPos.x;
     G._jumpStartZ = G.ballPos.z;
+    // v0.23c: enable first-jump fly-over for low forward obstacles ONLY on
+    // the first jump of the shot. A second jump (Double Jump) doesn't
+    // re-enable the bypass — the player has to commit to the line.
+    G._jumpsFiredThisShot = (G._jumpsFiredThisShot|0) + 1;
+    if(G._jumpsFiredThisShot === 1) {
+      G._firstJumpFlyOverActive = true;
+    } else {
+      G._firstJumpFlyOverActive = false;
+    }
   }
 
   // ── Parkour arc driver (v0.19z2, fixed v0.19z3) ─────
@@ -15091,60 +15379,52 @@ function updatePhysics(dt) {
   if(hitGround && isOutside && G.ghostBallActive) {
     // Don't penalize — ghost ball can traverse OOB freely
   } else if(hitGround && isOutside) {
-    // v0.23b: Kickback — once per hole, auto-launch ball back inbounds when
-    // it would be reset due to OOB. Triggers on the FIRST OOB landing of the
-    // hole (before grace expires) so it functions as a true save, not a
-    // mid-grace rescue. Reflects the ball's velocity vector back inward at
-    // ~70% magnitude and nudges position back inside boundary by ~0.6 units.
-    // Skips the +1 stroke OOB penalty.
+    // v0.23c: Drone Delivery (renamed from Kickback) — once per hole, a
+    // delivery drone arrives, picks up the OOB ball, flies it to the
+    // nearest safe spot, and lasers any hazards or breakables within the
+    // drop radius before lowering. Skips the +1 stroke OOB penalty.
     if(!G._kickbackTriggered && (G._kickbackCharges|0) > 0
        && G.modifiers && G.modifiers.some(m => m.id === 'kickback')) {
       G._kickbackCharges = 0;
       G._kickbackTriggered = true;
       G._oobGraceTimer = 0;
-      // Compute inward direction: vector from ball back toward course center
-      // (course center is approximately tee/hole midpoint).
-      const cx = (((G.teePos && G.teePos.x) || 0) + ((G.holePos && G.holePos.x) || 0)) * 0.5;
-      const cz = (((G.teePos && G.teePos.y) || 0) + ((G.holePos && G.holePos.y) || 0)) * 0.5;
-      // Tee/holePos are grid coords; convert to world. cellToWorld may not be
-      // in scope here, so use the same TILE_SIZE multiplier the rest of the
-      // physics path uses. Fallback to direct ball-pos reflection if we can't
-      // compute a sensible center.
-      let _inwardX, _inwardZ;
-      const _wcx = (typeof cellToWorld === 'function') ? cellToWorld(cx, 0).x : cx * TILE_SIZE;
-      const _wcz = (typeof cellToWorld === 'function') ? cellToWorld(0, cz).z : cz * TILE_SIZE;
-      const dx = _wcx - G.ballPos.x;
-      const dz = _wcz - G.ballPos.z;
-      const dlen = Math.hypot(dx, dz);
-      if(dlen > 0.01) {
-        _inwardX = dx / dlen;
-        _inwardZ = dz / dlen;
-      } else {
-        // Fall back to negating velocity direction (deflect backward).
-        const vlen = Math.hypot(G.ballVel.x, G.ballVel.z);
-        _inwardX = vlen > 0.01 ? -G.ballVel.x / vlen : 1;
-        _inwardZ = vlen > 0.01 ? -G.ballVel.z / vlen : 0;
+      // Find nearest safe spot. Use the existing _findSafeBallPosition
+      // helper that probes 16 dirs × 6 radii and returns the closest
+      // playable cell. Fall back to a reflected vector if it returns null.
+      let _safe = null;
+      if(typeof _findSafeBallPosition === 'function') {
+        try { _safe = _findSafeBallPosition(); } catch(e){}
       }
-      // Reflect velocity: take incoming speed, redirect inward at 70% magnitude.
-      const _incomingSpeed = Math.hypot(G.ballVel.x, G.ballVel.z);
-      const _kickSpeed = Math.max(4, _incomingSpeed * 0.7);
-      G.ballVel.x = _inwardX * _kickSpeed;
-      G.ballVel.z = _inwardZ * _kickSpeed;
-      // Pop ball upward a touch and nudge inward to escape OOB region.
-      if(G.ballVel.y < 1.0) G.ballVel.y = 2.5;
-      G.ballPos.x += _inwardX * 0.6;
-      G.ballPos.z += _inwardZ * 0.6;
-      // Clear OOB UI/flash.
+      if(!_safe) {
+        // Fallback: nudge inward toward course center
+        const cx = (((G.teePos && G.teePos.x) || 0) + ((G.holePos && G.holePos.x) || 0)) * 0.5;
+        const cz = (((G.teePos && G.teePos.y) || 0) + ((G.holePos && G.holePos.y) || 0)) * 0.5;
+        const _wcx = (typeof cellToWorld === 'function') ? cellToWorld(cx, 0).x : cx * TILE_SIZE;
+        const _wcz = (typeof cellToWorld === 'function') ? cellToWorld(0, cz).z : cz * TILE_SIZE;
+        const dx = _wcx - G.ballPos.x;
+        const dz = _wcz - G.ballPos.z;
+        const dlen = Math.hypot(dx, dz) || 1;
+        _safe = { x: G.ballPos.x + (dx/dlen) * 1.5, z: G.ballPos.z + (dz/dlen) * 1.5 };
+      }
+      // Clear OOB UI/flash immediately.
       const _tEl = document.getElementById('oob-timer');
       if(_tEl) _tEl.style.display = 'none';
       if(G.ballMesh && G.ballMesh.material && G.ballMesh.material.emissive) {
         G.ballMesh.material.emissive.setRGB(0, 0, 0);
       }
-      // VFX: small kick particles + screen shake + toast.
-      if(typeof spawnHitParticles === 'function') spawnHitParticles(G.ballPos);
-      if(typeof triggerShake === 'function') triggerShake('medium');
-      if(typeof showToast === 'function') showToast('🦵 KICKBACK!', 1400);
-      if(AC && typeof sfxBounce === 'function') sfxBounce(8);
+      // Kick off the cinematic drone — it physics-locks the ball, runs
+      // its animation, and on completion places the ball at _safe with
+      // zero velocity so play resumes naturally.
+      if(typeof spawnDeliveryDrone === 'function') {
+        spawnDeliveryDrone(G.ballPos.x, G.ballPos.z, _safe.x, _safe.z);
+      } else {
+        // Defensive fallback if function missing: just teleport
+        G.ballPos.x = _safe.x;
+        G.ballPos.z = _safe.z;
+        G.ballVel.x = 0; G.ballVel.z = 0;
+        if(G.ballVel.y < 0) G.ballVel.y = 0;
+      }
+      if(typeof showToast === 'function') showToast('🛸 DRONE DELIVERY!', 1400);
       return;
     }
     // Grace period: let ball roll 1.5s in the rough before calling OOB.
@@ -15816,6 +16096,12 @@ function updatePhysics(dt) {
             G._skaterArmed = false;
             G._skaterStartTime = 0;
             G._skaterStyleAccum = 0; G._skaterGrindEventTimer = 0;
+            // v0.23c: reset the speed-loss probe so the first measurement
+            // window starts fresh. Otherwise the probe would compare the
+            // grind's first frame against stale pre-grind speed.
+            G._skaterSpeedProbeT = 0;
+            G._skaterSpeedProbeSpd = 0;
+            G._skaterStuckProbeT = 0;
             // v0.23b16: capture pre-grind position as guaranteed safe respawn
             // point for bail/wipeout. The ball was rolling normally through
             // a valid fairway cell to reach the wall, so this is by definition
@@ -16380,6 +16666,22 @@ function updatePhysics(dt) {
       const rockBaseH = G.heightMap.length ? getTerrainHeight(rock.wx, rock.wz) : 0;
       const rockForgive = rockBaseH + rock.r * 0.55;
       if(G.ballPos.y - BALL_R > rockForgive && G.ballVel.y > -0.5) continue;
+      // v0.23c: First-jump fly-over for low forward rocks. Rock "top" is
+      // approximately rockBaseH + rock.r * 0.8 (squashed sphere). If that's
+      // ≤3 ball-diameters from the terrain AND it's in front of the ball,
+      // skip during the first jump arc.
+      if(G._firstJumpFlyOverActive) {
+        const _rockTopHere = rockBaseH + rock.r * 0.8;
+        if((_rockTopHere - rockBaseH) <= 1.32 && G.ballPos.y > _rockTopHere) {
+          const _toX = rock.wx - G.ballPos.x;
+          const _toZ = rock.wz - G.ballPos.z;
+          const _vmag2 = G.ballVel.x * G.ballVel.x + G.ballVel.z * G.ballVel.z;
+          if(_vmag2 > 0.04) {
+            const _dotFwd = _toX * G.ballVel.x + _toZ * G.ballVel.z;
+            if(_dotFwd > 0) continue;
+          }
+        }
+      }
       const dx = G.ballPos.x - rock.wx;
       const dz = G.ballPos.z - rock.wz;
       const dist = Math.hypot(dx, dz);
@@ -17240,12 +17542,43 @@ function updatePhysics(dt) {
   // v0.22a: also handles "ball comes to rest on top of a crate" — the
   // crate's top is walkable and the ball can settle there for aim,
   // earning a flagship "ON THE BOX" combo if it's the resting spot.
+  // v0.23c: ground-state probe — clears the first-jump fly-over flag so
+  // the next swing's first jump (or a second jump) doesn't inherit
+  // forward-bypass behaviour from a previous airborne arc.
+  if(G._firstJumpFlyOverActive && G.ballPos.y <= BALL_R + 0.05 && G.ballVel.y <= 0.05) {
+    G._firstJumpFlyOverActive = false;
+  }
   if(G.crates && G.crates.length && !ghostActive) {
     for(const cr of G.crates) {
       if(cr._destroyed) continue;
       if(_explosivoSkip(cr.wx, cr.wz)) continue; // v0.22c: explosivo immunity
       // v0.19z: parkour immunity
       if(G._parkourImmunity || G._vacuumImmunity) continue;
+
+      // v0.23c: First-jump fly-over for low forward crates. While
+      // _firstJumpFlyOverActive is true (first jump of the shot), crates
+      // satisfying ALL of:
+      //   (1) top ≤ ground + 1.32u (3 ball diameters tall)
+      //   (2) ball is currently above the crate's top
+      //   (3) crate is forward of the ball (dot(toCrate, ballVel) > 0)
+      // get bypassed entirely. Anything taller still blocks.
+      if(G._firstJumpFlyOverActive) {
+        const _crTopHere = cr.y + cr.size;
+        const _LOW_OBSTACLE_H = 1.32; // 3 × ball diameter (BALL_R 0.22 × 2 × 3)
+        if(_crTopHere <= _LOW_OBSTACLE_H && G.ballPos.y > _crTopHere) {
+          // Forward check: dot product of (crate-from-ball) with ball velocity
+          const _toCrX = cr.wx - G.ballPos.x;
+          const _toCrZ = cr.wz - G.ballPos.z;
+          const _vmag2 = G.ballVel.x * G.ballVel.x + G.ballVel.z * G.ballVel.z;
+          if(_vmag2 > 0.04) { // ball is actually moving horizontally
+            const _dotFwd = _toCrX * G.ballVel.x + _toCrZ * G.ballVel.z;
+            if(_dotFwd > 0) {
+              // In front + low + ball above — bypass collision entirely
+              continue;
+            }
+          }
+        }
+      }
 
       const dx = G.ballPos.x - cr.wx;
       const dz = G.ballPos.z - cr.wz;
@@ -22125,22 +22458,42 @@ function renderShop() {
   // feedback: let players cut as many cards as they want, money is the
   // only limit. Single deck-size guard remains so the deck can't go below
   // a minimum (3 cards = unplayable hand cycle).
+  // v0.23c: when Yard Sale is owned, removal becomes a SELL flow — every
+  // card removed pays you instead of charging. The shop entry switches
+  // tone to reflect that and there's no price gate.
   if(G.deck.length > 3) {
-    const removePrice = getCardRemovePrice();
-    const canAffordRemove = G.coins >= removePrice;
-    grid.innerHTML += `<div class="shop-section-label">✂️ Deck Surgery</div>`;
-    grid.innerHTML += `
-      <div class="shop-card rarity-rare${canAffordRemove ? '' : ' cant-afford'}" onclick="openCardRemoval()">
-        <div class="shop-card-emoji">✂️</div>
-        <div class="shop-card-body">
-          <div class="shop-card-name">Remove a Card</div>
-          <div class="shop-card-desc">Permanently remove one card from your deck. Trim the fat!</div>
-          <div class="shop-card-meta">
-            <span class="rarity-badge">SERVICE</span>
-            <span class="shop-price"><span class="coin-s">🪙</span> ${removePrice}</span>
+    const _hasYardSaleShop = G.modifiers && G.modifiers.some(m => m.id === 'yard_sale');
+    if(_hasYardSaleShop) {
+      grid.innerHTML += `<div class="shop-section-label">🏷️ Yard Sale</div>`;
+      grid.innerHTML += `
+        <div class="shop-card rarity-rare" onclick="openCardRemoval()">
+          <div class="shop-card-emoji">💰</div>
+          <div class="shop-card-body">
+            <div class="shop-card-name">Sell a Card</div>
+            <div class="shop-card-desc">Sell a card from your deck for 50% of its current shop price. Trim AND profit!</div>
+            <div class="shop-card-meta">
+              <span class="rarity-badge">SERVICE</span>
+              <span class="shop-price" style="color:#3c5;font-weight:800">FREE ENTRY</span>
+            </div>
           </div>
-        </div>
-      </div>`;
+        </div>`;
+    } else {
+      const removePrice = getCardRemovePrice();
+      const canAffordRemove = G.coins >= removePrice;
+      grid.innerHTML += `<div class="shop-section-label">✂️ Deck Surgery</div>`;
+      grid.innerHTML += `
+        <div class="shop-card rarity-rare${canAffordRemove ? '' : ' cant-afford'}" onclick="openCardRemoval()">
+          <div class="shop-card-emoji">✂️</div>
+          <div class="shop-card-body">
+            <div class="shop-card-name">Remove a Card</div>
+            <div class="shop-card-desc">Permanently remove one card from your deck. Trim the fat!</div>
+            <div class="shop-card-meta">
+              <span class="rarity-badge">SERVICE</span>
+              <span class="shop-price"><span class="coin-s">🪙</span> ${removePrice}</span>
+            </div>
+          </div>
+        </div>`;
+    }
   }
 
   // Update reroll button label
@@ -22384,8 +22737,13 @@ function getCardRemovePrice() {
 }
 
 function openCardRemoval() {
-  const price = getCardRemovePrice();
-  if(G.coins < price) return;
+  // v0.23c: when Yard Sale is owned, this is a free SELL flow — skip the
+  // coin gate entirely. Otherwise enforce the standard removal price.
+  const _ysActive = G.modifiers && G.modifiers.some(m => m.id === 'yard_sale');
+  if(!_ysActive) {
+    const price = getCardRemovePrice();
+    if(G.coins < price) return;
+  }
   const overlay = document.getElementById('card-remove-overlay');
   const grid = document.getElementById('card-remove-grid');
   if(!overlay || !grid) return;
@@ -22431,8 +22789,14 @@ function openCardRemoval() {
       const _sellPrice = Math.max(1, Math.floor(_scaled * 0.5));
       yardSaleBtn = `<button class="cr-sell-btn" onclick="event.stopPropagation(); sellCardFromDeckByIdx(${i}, this.parentElement)" style="position:absolute;top:4px;right:4px;background:linear-gradient(135deg,#22aa44,#117733);color:#fff;border:1px solid #3c5;border-radius:6px;font-size:0.55rem;font-weight:800;padding:3px 7px;cursor:pointer;box-shadow:0 0 4px rgba(60,200,90,0.45);font-family:inherit">💰 Sell ${_sellPrice}</button>`;
     }
+    // v0.23c: with Yard Sale, the whole row clicks SELL (no costed
+    // remove path while the perk is owned). Without it, click is the
+    // standard pay-to-remove.
+    const _rowAction = _hasYardSale
+      ? `sellCardFromDeckByIdx(${i}, this)`
+      : `removeCardFromDeckByIdx(${i}, this)`;
     grid.innerHTML += `
-      <div class="card-remove-item" data-deck-idx="${i}" onclick="removeCardFromDeckByIdx(${i}, this)" style="position:relative">
+      <div class="card-remove-item" data-deck-idx="${i}" onclick="${_rowAction}" style="position:relative">
         <div class="cr-emoji">${dispEmoji}</div>
         <div class="cr-name">${dispName}${upBadge}</div>
         ${yardSaleBtn}
@@ -22618,7 +22982,10 @@ function _cardRemovalAnim(el, cardId) {
   // trimming duplicates one at a time. Close button + Esc both still
   // exit when the player is done.
   setTimeout(() => {
-    if(typeof openCardRemoval === 'function' && G.coins >= getCardRemovePrice() && G.deck.length > 0) {
+    // v0.23c: with Yard Sale, no coin gate — removing/selling pays you.
+    const _ysActive2 = G.modifiers && G.modifiers.some(m => m.id === 'yard_sale');
+    const _canKeepGoing = _ysActive2 || (G.coins >= getCardRemovePrice());
+    if(typeof openCardRemoval === 'function' && _canKeepGoing && G.deck.length > 0) {
       const overlay = document.getElementById('card-remove-overlay');
       if(overlay && overlay.classList.contains('open')) {
         // Re-render in place — keep overlay open
@@ -24288,6 +24655,299 @@ function destroyObstacles(hits, epicentreX, epicentreY, epicentreZ) {
   return coinsEarned;
 }
 
+// v0.23c: Drone Delivery — replaces Kickback's instant-launch with a
+// cinematic delivery drone. The drone arrives, lifts the ball, flies to
+// the nearest safe spot, optionally lasers any hazards/breakables in the
+// drop radius first, then lowers the ball gently. Ball physics is
+// suppressed while G._droneDeliveryActive is true (handled in the main
+// physics tick — see ball update guard).
+//
+//   srcX, srcZ: world coords where the ball went OOB
+//   dstX, dstZ: nearest safe playable position to drop at
+function spawnDeliveryDrone(srcX, srcZ, dstX, dstZ) {
+  if(!scene) return;
+  // Build drone mesh: flat hex body + 4 spinning rotors + carry hook
+  const drone = new THREE.Group();
+  drone.userData.noOutline = true;
+  // Body — squat dark hex
+  const bodyGeo = new THREE.CylinderGeometry(0.34, 0.34, 0.12, 6);
+  const bodyMat = new THREE.MeshStandardMaterial({ color: 0x2c2c34, roughness: 0.5, metalness: 0.7 });
+  const body = new THREE.Mesh(bodyGeo, bodyMat);
+  drone.add(body);
+  // Yellow accent strip
+  const stripGeo = new THREE.CylinderGeometry(0.345, 0.345, 0.04, 6);
+  const stripMat = new THREE.MeshStandardMaterial({ color: 0xffd24a, roughness: 0.6, metalness: 0.3, emissive:0xffaa00, emissiveIntensity:0.3 });
+  const strip = new THREE.Mesh(stripGeo, stripMat);
+  strip.position.y = 0.04;
+  drone.add(strip);
+  // 4 arms with rotors
+  const armMat = new THREE.MeshStandardMaterial({ color: 0x1a1a22, roughness: 0.6 });
+  const rotorMat = new THREE.MeshBasicMaterial({ color: 0x88aaff, transparent: true, opacity: 0.55 });
+  const rotors = [];
+  for(let i = 0; i < 4; i++) {
+    const ang = (i / 4) * Math.PI * 2 + Math.PI / 4;
+    const armX = Math.cos(ang) * 0.36;
+    const armZ = Math.sin(ang) * 0.36;
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.04, 0.08), armMat);
+    arm.position.set(armX, 0.02, armZ);
+    drone.add(arm);
+    const rotor = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.02, 12), rotorMat);
+    rotor.position.set(armX, 0.10, armZ);
+    rotor.userData.noOutline = true;
+    drone.add(rotor);
+    rotors.push(rotor);
+  }
+  // Hook line (thin cylinder) — created on demand when carrying
+  let hookLine = null;
+  // Spawn drone above source, slightly offset for visible approach
+  const FLY_H = 2.2; // cruise height above ground
+  drone.position.set(srcX - 1.5, FLY_H + 0.5, srcZ - 1.5);
+  scene.add(drone);
+
+  // Mark global state — physics should freeze the ball while this runs.
+  G._droneDeliveryActive = true;
+  G._droneDeliveryDrone = drone;
+  // Stash original ball velocity to zero it; suspend gravity contribution.
+  if(G.ballVel) { G.ballVel.x = 0; G.ballVel.y = 0; G.ballVel.z = 0; }
+
+  // SFX: drone whirr loop
+  let whirrNodes = null;
+  if(AC) {
+    try {
+      const ac = getAC();
+      const o = ac.createOscillator(); o.type = 'sawtooth'; o.frequency.value = 180;
+      const g = ac.createGain(); g.gain.value = 0.0;
+      g.gain.setTargetAtTime(0.06, ac.currentTime, 0.08);
+      const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 700;
+      o.connect(lp); lp.connect(g); g.connect(getACDest());
+      o.start();
+      whirrNodes = { o, g };
+    } catch(e){}
+  }
+
+  // Phase machine
+  // 0 = approach (fly to ball)
+  // 1 = descend & hook (drop down to ball, attach)
+  // 2 = lift (raise ball to cruise height)
+  // 3 = transit (fly to drop spot)
+  // 4 = laser (fire at hazards in radius if any) — may be skipped
+  // 5 = lower (release ball)
+  // 6 = depart (fly away & cleanup)
+  let phase = 0;
+  const startT = performance.now();
+  let phaseStartT = startT;
+  // Cache hazard targets identified in transit, processed in laser phase
+  let _laserTargets = [];
+  let _laserFiredCount = 0;
+  let _laserTimer = 0;
+
+  const APPROACH_MS = 700;
+  const DESCEND_MS = 350;
+  const LIFT_MS = 450;
+  const TRANSIT_MS = 900;
+  const LASER_PER_TARGET_MS = 280;
+  const LOWER_MS = 450;
+  const DEPART_MS = 800;
+
+  const animDrone = () => {
+    if(!drone.parent) return; // already cleaned up
+    const now = performance.now();
+    const dtPhase = now - phaseStartT;
+    // Spin rotors
+    for(const r of rotors) r.rotation.y += 0.9;
+
+    if(phase === 0) {
+      // Approach: lerp from spawn to above source
+      const t = Math.min(1, dtPhase / APPROACH_MS);
+      const e = 1 - Math.pow(1 - t, 2);
+      const sx = srcX - 1.5, sz = srcZ - 1.5;
+      drone.position.x = sx + (srcX - sx) * e;
+      drone.position.z = sz + (srcZ - sz) * e;
+      drone.position.y = (FLY_H + 0.5) + (FLY_H - (FLY_H + 0.5)) * e;
+      if(t >= 1) { phase = 1; phaseStartT = now; }
+    } else if(phase === 1) {
+      // Descend onto ball, spawn hook line
+      const t = Math.min(1, dtPhase / DESCEND_MS);
+      const e = 1 - Math.pow(1 - t, 3);
+      drone.position.y = FLY_H + (0.6 - FLY_H) * e;
+      if(t >= 1) {
+        // Snap ball to under-drone, spawn the rope
+        if(G.ballPos) {
+          G.ballPos.x = drone.position.x;
+          G.ballPos.z = drone.position.z;
+          G.ballPos.y = 0.4;
+        }
+        if(!hookLine) {
+          const lineMat = new THREE.MeshBasicMaterial({ color: 0x222222 });
+          hookLine = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.2, 4), lineMat);
+          hookLine.userData.noOutline = true;
+          drone.add(hookLine);
+        }
+        phase = 2; phaseStartT = now;
+      }
+    } else if(phase === 2) {
+      // Lift drone (and ball) up to cruise height
+      const t = Math.min(1, dtPhase / LIFT_MS);
+      const e = 1 - Math.pow(1 - t, 2);
+      drone.position.y = 0.6 + (FLY_H - 0.6) * e;
+      // Carry ball just below drone
+      if(G.ballPos) {
+        G.ballPos.x = drone.position.x;
+        G.ballPos.z = drone.position.z;
+        G.ballPos.y = drone.position.y - 0.5;
+      }
+      if(hookLine) {
+        const carryDist = drone.position.y - (G.ballPos.y || 0);
+        hookLine.scale.y = carryDist / 0.2;
+        hookLine.position.y = -carryDist * 0.5;
+      }
+      if(t >= 1) { phase = 3; phaseStartT = now; }
+    } else if(phase === 3) {
+      // Transit to drop point
+      const t = Math.min(1, dtPhase / TRANSIT_MS);
+      const e = t < 0.5 ? 2*t*t : 1 - Math.pow(-2*t + 2, 2)/2; // ease-in-out
+      drone.position.x = srcX + (dstX - srcX) * e;
+      drone.position.z = srcZ + (dstZ - srcZ) * e;
+      // Slight bob
+      drone.position.y = FLY_H + Math.sin(now * 0.008) * 0.05;
+      if(G.ballPos) {
+        G.ballPos.x = drone.position.x;
+        G.ballPos.z = drone.position.z;
+        G.ballPos.y = drone.position.y - 0.5;
+      }
+      if(t >= 1) {
+        // Identify hazards/breakables within drop radius for laser phase
+        // Drop radius: 1.6u (slightly larger than ball-radius+wiggle)
+        const DROP_R = 1.6;
+        try {
+          if(typeof collectObstaclesInRadius === 'function') {
+            const _hits = collectObstaclesInRadius(dstX, dstZ, DROP_R) || [];
+            // Filter to types that are dangerous OR breakable. 'tree' and
+            // 'rock' are scenic and not in collectObstaclesInRadius's
+            // domain anyway. We keep crates, walls, pendulums, bumpers,
+            // spikes, fire, etc — anything destroyObstacles can handle.
+            _laserTargets = _hits.filter(h => h && h.type);
+          }
+        } catch(e){}
+        phase = _laserTargets.length > 0 ? 4 : 5;
+        phaseStartT = now;
+        _laserTimer = 0;
+      }
+    } else if(phase === 4) {
+      // Laser phase: fire one shot per target with a short interval
+      _laserTimer += 16; // approx per-frame
+      if(_laserTimer >= LASER_PER_TARGET_MS && _laserFiredCount < _laserTargets.length) {
+        const tgt = _laserTargets[_laserFiredCount];
+        _laserFiredCount++;
+        _laserTimer = 0;
+        // Visual laser: thin red beam from drone to target
+        try {
+          const tgtX = (tgt.physRef && tgt.physRef.wx != null) ? tgt.physRef.wx : (tgt.wx || dstX);
+          const tgtZ = (tgt.physRef && tgt.physRef.wz != null) ? tgt.physRef.wz : (tgt.wz || dstZ);
+          const dx = tgtX - drone.position.x;
+          const dy = 0.3 - drone.position.y;
+          const dz = tgtZ - drone.position.z;
+          const len = Math.hypot(dx, dy, dz);
+          const beamMat = new THREE.MeshBasicMaterial({ color: 0xff3344, transparent: true, opacity: 0.9 });
+          const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, len, 6), beamMat);
+          beam.userData.noOutline = true;
+          // Position beam between drone and target, oriented along the line
+          beam.position.set(drone.position.x + dx*0.5, drone.position.y + dy*0.5, drone.position.z + dz*0.5);
+          // Orient: cylinder default is +Y. Compute axis-angle.
+          const up = new THREE.Vector3(0,1,0);
+          const dir = new THREE.Vector3(dx, dy, dz).normalize();
+          const q = new THREE.Quaternion().setFromUnitVectors(up, dir);
+          beam.quaternion.copy(q);
+          scene.add(beam);
+          // Fade & remove after 200ms
+          setTimeout(() => {
+            try {
+              beam.material.opacity = 0.5;
+              setTimeout(() => { if(beam.parent) beam.parent.remove(beam); }, 100);
+            } catch(e){}
+          }, 100);
+          // Destroy the target via the canonical destroyObstacles pathway —
+          // never bypass it, per the project's "destroyObstacles is sacred"
+          // rule. Single-element list.
+          if(typeof destroyObstacles === 'function') {
+            destroyObstacles([tgt], tgtX, 0.3, tgtZ);
+          }
+          // Small explosion VFX where the laser hits
+          if(typeof spawnExplosion === 'function') spawnExplosion(tgtX, 0.3, tgtZ, 0.55);
+          if(AC) {
+            try {
+              const ac = getAC(), tt = ac.currentTime;
+              const o = ac.createOscillator(); o.type = 'sawtooth';
+              o.frequency.setValueAtTime(900, tt);
+              o.frequency.exponentialRampToValueAtTime(120, tt+0.18);
+              const g = ac.createGain(); g.gain.setValueAtTime(0.18, tt);
+              g.gain.exponentialRampToValueAtTime(0.001, tt+0.2);
+              o.connect(g); g.connect(getACDest()); o.start(tt); o.stop(tt+0.22);
+            } catch(e){}
+          }
+        } catch(e){ console.warn('drone laser failed', e); }
+      }
+      if(_laserFiredCount >= _laserTargets.length && _laserTimer >= 200) {
+        phase = 5; phaseStartT = now;
+      }
+      // Keep ball under drone during laser phase
+      if(G.ballPos) {
+        G.ballPos.x = drone.position.x;
+        G.ballPos.z = drone.position.z;
+        G.ballPos.y = drone.position.y - 0.5;
+      }
+    } else if(phase === 5) {
+      // Lower the ball to ground
+      const t = Math.min(1, dtPhase / LOWER_MS);
+      const e = 1 - Math.pow(1 - t, 2);
+      const startY = FLY_H, endY = 0.6;
+      drone.position.y = startY + (endY - startY) * e;
+      if(G.ballPos) {
+        G.ballPos.x = dstX;
+        G.ballPos.z = dstZ;
+        G.ballPos.y = Math.max(0.18, drone.position.y - 0.5);
+      }
+      if(hookLine) {
+        const carryDist = drone.position.y - (G.ballPos.y || 0);
+        hookLine.scale.y = Math.max(0.2, carryDist / 0.2);
+        hookLine.position.y = -carryDist * 0.5;
+      }
+      if(t >= 1) {
+        // Release: detach hook visually, drop ball to settle
+        if(hookLine && hookLine.parent) hookLine.parent.remove(hookLine);
+        hookLine = null;
+        if(G.ballPos) { G.ballPos.x = dstX; G.ballPos.z = dstZ; G.ballPos.y = 0.18; }
+        if(G.ballVel) { G.ballVel.x = 0; G.ballVel.y = 0; G.ballVel.z = 0; }
+        if(typeof spawnHitParticles === 'function') spawnHitParticles({x: dstX, y: 0.2, z: dstZ});
+        phase = 6; phaseStartT = now;
+        // Re-enable physics now — ball is on a known-safe cell
+        G._droneDeliveryActive = false;
+      }
+    } else if(phase === 6) {
+      // Depart: drone flies up and away
+      const t = Math.min(1, dtPhase / DEPART_MS);
+      const e = 1 - Math.pow(1 - t, 2);
+      drone.position.y = 0.6 + (5.5 - 0.6) * e;
+      drone.position.x += 0.04;
+      if(t >= 1) {
+        // Cleanup
+        if(drone.parent) drone.parent.remove(drone);
+        if(whirrNodes) {
+          try {
+            const ac = getAC();
+            whirrNodes.g.gain.setTargetAtTime(0.0, ac.currentTime, 0.08);
+            setTimeout(() => { try { whirrNodes.o.stop(); } catch(e){} }, 250);
+          } catch(e){}
+        }
+        G._droneDeliveryDrone = null;
+        return; // stop the rAF chain
+      }
+    }
+    requestAnimationFrame(animDrone);
+  };
+  requestAnimationFrame(animDrone);
+}
+
 function spawnExplosion(x, y, z, scale) {
   const sc = scale || 1.0; // 0.5 = small, 1.0 = normal, 2.0 = big
   // v0.23a: Blast crate stacks via Cannon impulses. Per Adam: "Explosions
@@ -24528,7 +25188,17 @@ function spawnMirvSubRocket(px, py, pz, dirX, dirZ, blastR) {
     color: 0xff7733, roughness: 0.35, metalness: 0.4,
     emissive: 0xff4422, emissiveIntensity: 0.7
   });
-  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.07, 0.18, 4, 8), bodyMat);
+  // v0.23c: r128 has no CapsuleGeometry (added in r142+). Compose one from a
+  // cylinder + two hemispheres to keep the visual shape consistent.
+  // Capsule params we want: radius 0.07, body length 0.18 → total length ~0.32.
+  const _CAP_R = 0.07, _CAP_L = 0.18;
+  const bodyCyl = new THREE.Mesh(new THREE.CylinderGeometry(_CAP_R, _CAP_R, _CAP_L, 8, 1, true), bodyMat);
+  const bodyCapA = new THREE.Mesh(new THREE.SphereGeometry(_CAP_R, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2), bodyMat);
+  const bodyCapB = new THREE.Mesh(new THREE.SphereGeometry(_CAP_R, 8, 4, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), bodyMat);
+  bodyCapA.position.y =  _CAP_L / 2;
+  bodyCapB.position.y = -_CAP_L / 2;
+  const body = new THREE.Group();
+  body.add(bodyCyl); body.add(bodyCapA); body.add(bodyCapB);
   body.rotation.z = Math.PI / 2;
   rocketGroup.add(body);
   // Bright trail glow disc
@@ -25282,11 +25952,11 @@ const CARD_DEFS = {
   joker:           { id:'joker',           emoji:'🃏',  name:'Joker',             desc:'Plays a copy of the last card you played this hole. Cannot copy itself or other Jokers.',                                          rarity:'rare',      price:25, context:'any', holdable:false, weight:3 },
   power_steering:  { id:'power_steering',  emoji:'🎮',  name:'Power Steering',    desc:'While ball is in motion, hold ← / → (or canvas edges) to nudge its trajectory. Active until ball stops.',                       rarity:'rare',      price:22, context:'any', holdable:false, weight:3 },
   parachute:       { id:'parachute',       emoji:'🪂',  name:'Parachute',         desc:'Auto-deploys at the apex of any airborne shot. Slows descent and lets you nudge landing position. 1 charge per hole.',         rarity:'epic',      price:26, context:'any', holdable:false, weight:3 },
-  skater_ball:     { id:'skater_ball',     emoji:'🛹',  name:'Skater Ball',       desc:'Ball rides a board for one swing. Hit a wall to grind it for huge style — tap left/right to balance, "release" or double-tap to bail. Wipe out: lose 1 HP. Faster entry = longer grind.', rarity:'rare',      price:24, context:'pre', holdable:false, weight:3 },
+  skater_ball:     { id:'skater_ball',     emoji:'🛹',  name:'Skater Ball',       desc:'Ball rides a board for one swing. Hit a wall to grind it for huge style — tap left/right to balance. Press "release" to bail. Faster entry = longer grind.', rarity:'rare',      price:24, context:'pre', holdable:false, weight:3 },
   multiball:       { id:'multiball',       emoji:'⚪⚪', name:'Multiball',         desc:'Take TWO different shots from your current position on a single swing. Whichever ball ends closer to the hole becomes your next ball.', rarity:'legendary', price:35, context:'pre', holdable:false, weight:1 },
   blackhole_grenade:{ id:'blackhole_grenade', emoji:'🕳️', name:'Blackhole Grenade', desc:'Throw a grenade that creates a black hole on impact. Sucks all coins, hearts, and obstacles within a large radius into the singularity.', rarity:'legendary', price:30, context:'pre', holdable:false, weight:1 },
   tactical_nuke:   { id:'tactical_nuke',   emoji:'☢️',  name:'Tactical Nuke',     desc:'Clears the entire hole of ALL destructible obstacles. 1 use per RUN.',                                                          rarity:'legendary', price:40, context:'pre', holdable:false, weight:1 },
-  lack_of_boundaries:{ id:'lack_of_boundaries', emoji:'🚫', name:'Lack of Boundaries', desc:'Destroys ALL walls on this hole, including the outer course boundary. Anything goes.',                                  rarity:'legendary', price:30, context:'pre', holdable:false, weight:1 },
+  lack_of_boundaries:{ id:'lack_of_boundaries', emoji:'🚫', name:'Lack of Boundaries', desc:'Destroys ALL walls on this hole, including the outer course boundary. Anything goes.',                                  rarity:'epic',      price:20, context:'pre', holdable:false, weight:2 },
 };
 
 // Starter deck definitions
@@ -37304,6 +37974,12 @@ function fireShot() {
   G._swingDestroyCount = 0;
   // v0.22a: reset ON THE BOX dedup — each swing can score one
   G._ballOnCrateThisShot = false;
+  // v0.23c: per-shot first-jump fly-over tracking. While true, low
+  // obstacles (≤3 ball heights = 1.32u) directly in front of the ball
+  // get bypassed during the airborne arc. Cleared once the ball lands
+  // OR a second jump fires.
+  G._firstJumpFlyOverActive = false;
+  G._jumpsFiredThisShot = 0;
   // v0.20o: Belt-and-suspenders — clear chasm respawn-pending flag so a new
   // stroke can trigger a fall again. The XZ-exit clear handles 99% of cases;
   // this is the safety net for any weird edge case where the ball fires
@@ -39030,8 +39706,8 @@ const ALL_PERKS = [
     desc:'Style points 2× while over par OR at 25% HP or less. Multiplies with Showboat.' },
   { id:'mo_money_mo_problems', name:'Mo Money Mo Problems', emoji:'💰', rarity:'epic', price:28, stackable:false, weight:2,
     desc:'Under-par payouts doubled. Par on each hole reduced by 1 (resets each hole).' },
-  { id:'kickback',        name:'Kickback',              emoji:'🦵', rarity:'rare',     price:18, stackable:false, weight:4,
-    desc:'Once per hole, automatically launches your ball back inbounds when it would go OOB.' },
+  { id:'kickback',        name:'Drone Delivery',        emoji:'🛸', rarity:'rare',     price:18, stackable:false, weight:4,
+    desc:'Once per hole, when your ball would go OOB, a delivery drone retrieves it and floats it back to a safe spot — lasering any hazards or obstacles in the drop zone first.' },
   { id:'lucky',           name:'Lucky',                 emoji:'🍀', rarity:'rare',     price:20, stackable:true,  weight:3,
     desc:'Rare, Epic, and Legendary cards/perks appear 25% more often per stack.' },
 ];
@@ -40789,20 +41465,37 @@ function showGameOver(bustedBudget=false){
     meta._pendingCosmeticBacklog = remaining;
     meta._pendingUnlockToasts = pending;
 
-    // v0.23a7: Render unlocks LARGE on the run summary screen.
-    // Adam's spec: "Show your latest unlocks in larger text on the run
-    // summary screen rather than on the main screen."
-    // We pull the same items the toast queue would fire, render them as a
-    // showcase block in #go-unlocks-block, and STRIP them from the toast
-    // queue so the home screen doesn't double-fire. XP is left in the
-    // toast queue (not really an "unlock", just a number).
+    // v0.23c: Render unlocks LARGE on the run summary, but reveal them
+    // ONE AT A TIME as the XP bar fills past their unlock threshold.
+    // Each row is rendered hidden (opacity:0, scale:0.8) and tagged with
+    // a data-xp-threshold attribute. The XP-bar animation segments at
+    // each threshold and pauses there to reveal that row with confetti
+    // before continuing.
     try {
       const _block = document.getElementById('go-unlocks-block');
       if(_block) {
         // Items worth showcasing on the run summary (everything except 'xp').
         const _showcase = pending.filter(p => p && p.kind && p.kind !== 'xp');
         if(_showcase.length > 0) {
-          const _rows = _showcase.map(item => {
+          // Tag each item with its XP threshold for sequential reveal.
+          // Cosmetics map to their COSMETIC_XP_UNLOCKS xpCost; non-cosmetic
+          // unlocks (difficulty, character, runLength) reveal at 0 so they
+          // appear at the START of the bar fill.
+          const _xpTable = (typeof COSMETIC_XP_UNLOCKS !== 'undefined')
+            ? COSMETIC_XP_UNLOCKS
+            : (window._COSMETIC_XP_UNLOCKS_LIST || []);
+          const _withThresh = _showcase.map(item => {
+            let thr = 0;
+            if(item.kind === 'cosmetic' && item.id) {
+              const _row = _xpTable.find(r => r.id === item.id);
+              if(_row) thr = _row.xpCost || 0;
+            }
+            return { item, thr };
+          });
+          // Sort ASC by threshold so they reveal in fill order
+          _withThresh.sort((a, b) => a.thr - b.thr);
+          const _rows = _withThresh.map((entry, idx) => {
+            const item = entry.item;
             let _icon = '🎉', _line1 = 'Unlocked!', _line2 = '';
             if(item.kind === 'difficulty') {
               _icon = '★';
@@ -40828,7 +41521,7 @@ function showGameOver(bustedBudget=false){
               _line2 = 'Long-format unlocked';
             }
             return `
-              <div style="display:flex;align-items:center;gap:14px;padding:14px 16px;background:linear-gradient(135deg, rgba(245,200,66,0.18), rgba(167,139,250,0.10));border:1px solid rgba(245,200,66,0.45);border-radius:14px;margin-bottom:8px;box-shadow:0 4px 16px rgba(245,200,66,0.18)">
+              <div class="ggw-unlock-row" data-xp-threshold="${entry.thr}" data-reveal-idx="${idx}" style="display:flex;align-items:center;gap:14px;padding:14px 16px;background:linear-gradient(135deg, rgba(245,200,66,0.18), rgba(167,139,250,0.10));border:1px solid rgba(245,200,66,0.45);border-radius:14px;margin-bottom:8px;box-shadow:0 4px 16px rgba(245,200,66,0.18);opacity:0;transform:scale(0.7) translateY(8px);transition:opacity 380ms cubic-bezier(0.2,0.9,0.3,1.4), transform 380ms cubic-bezier(0.2,0.9,0.3,1.4);visibility:hidden;height:0;padding-top:0;padding-bottom:0;margin-bottom:0;border-width:0">
                 <div style="font-size:2.6rem;line-height:1;flex-shrink:0">${_icon}</div>
                 <div style="flex:1;min-width:0;text-align:left">
                   <div style="font-size:1.15rem;font-weight:800;color:#fff;letter-spacing:0.5px;line-height:1.15">${_line1}</div>
@@ -40838,9 +41531,11 @@ function showGameOver(bustedBudget=false){
           }).join('');
           _block.innerHTML = `
             <div style="margin:18px auto 8px;max-width:360px">
-              <div style="font-size:0.7rem;letter-spacing:3px;color:rgba(245,200,66,0.95);text-transform:uppercase;text-align:center;margin-bottom:10px;font-weight:700">🎉 Newly Unlocked</div>
+              <div id="ggw-unlock-header" style="font-size:0.7rem;letter-spacing:3px;color:rgba(245,200,66,0.95);text-transform:uppercase;text-align:center;margin-bottom:10px;font-weight:700;opacity:0;transition:opacity 300ms ease">🎉 Newly Unlocked</div>
               ${_rows}
             </div>`;
+          // Stash the threshold-tagged rows for the bar animation to walk
+          _block._ggwSequentialReveal = _withThresh;
           // Strip showcased items from the toast queue so home screen doesn't
           // re-announce them. Keep xp + anything else not showcased.
           const _kept = pending.filter(p => !p || !p.kind || p.kind === 'xp');
@@ -40862,19 +41557,38 @@ function showGameOver(bustedBudget=false){
     // v0.19z: bar now animates from pre-run XP → post-run XP. On a tier
     // cross we also fire confetti + the confetti SFX once, timed to land
     // when the bar hits 100% on its first pass.
+    // v0.23c: bar now segments at each unlock threshold. Walks
+    // fromXp → toXp through every threshold of newly unlocked items, and
+    // at each crossing pauses, reveals the matching row with confetti,
+    // then resumes filling. When no sequential-reveal rows are present,
+    // falls back to the legacy single-pass renderCosmoProgress path.
     try {
       setTimeout(() => {
-        if(typeof renderCosmoProgress === 'function') {
+        const _block = document.getElementById('go-unlocks-block');
+        const _seq = _block && _block._ggwSequentialReveal;
+        if(_seq && _seq.length > 0 && typeof animateXpBarSequential === 'function') {
+          animateXpBarSequential({
+            target: 'go',
+            fromXp: _preXpThisRun,
+            reveals: _seq,
+            onAllDone: () => {
+              // Final state — call the standard render to lock in the
+              // resting bar position + label.
+              if(typeof renderCosmoProgress === 'function') {
+                renderCosmoProgress({ target: 'go', animate: false });
+              }
+            },
+          });
+          // Reveal the header line as the bar starts moving
+          const _hdr = document.getElementById('ggw-unlock-header');
+          if(_hdr) _hdr.style.opacity = '1';
+        } else if(typeof renderCosmoProgress === 'function') {
+          // No sequential rows — original behaviour.
           renderCosmoProgress({
             target: 'go',
             animate: true,
             burst: _tierCrossedThisRun,
             fromXp: _preXpThisRun,
-            // v0.20d: confetti fires the exact frame the bar hits 100%, not
-            // at a fixed setTimeout delay. Previously the bar had already
-            // reset to 0% (Pass 2) by the time confetti rained down — looked
-            // mid-bar. Now we spawn it from inside the animation's tier-cross
-            // callback so it always lines up with peak fill.
             onTierBurst: () => {
               if(typeof spawnConfettiBurst === 'function') spawnConfettiBurst(80);
             },
@@ -44024,7 +44738,9 @@ function confirmStartGame() {
   }
   startGame();
 }
-document.getElementById('btn-start').addEventListener('click', confirmStartGame);
+// v0.23c: btn-start already has inline onclick="confirmStartGame()" in HTML
+// (line ~3629). The addEventListener here was duplicate-firing the confirm
+// dialog on every click — causing the doubled "cancel run?" prompt.
 window.startGame = startGame;
 window.confirmStartGame = confirmStartGame;
 
@@ -46699,6 +47415,9 @@ function animate(now) {
   if(G.state === 'playing') tickPortalPreview();
   updateCamera(dt);
   if(G.state === 'playing') tickPortalRTT();
+  // v0.23c: keep the sky dome centered on the camera so it never gets clipped
+  // on very large courses. Cheap — just a vec3 copy per frame.
+  if(skyMesh) skyMesh.position.copy(camera.position);
   // v0.21a: spring/squash on portal-just-landed (entry door + exit door).
   // Runs regardless of game state so the bounce completes even if the
   // player pauses. Skips when portal is null or animation is done.
