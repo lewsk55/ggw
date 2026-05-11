@@ -4230,8 +4230,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.23c';
-const CHANGE_NOTE = "v0.23c batch: (1) Fixed MIRV crash from THREE.CapsuleGeometry (r142+) — composed from cylinder + 2 hemispheres for r128 compat. (2) Removed duplicate 'cancel run?' confirm — btn-start had both onclick and addEventListener firing confirmStartGame twice. (3) Skater Ball description now correctly omits HP loss + double-tap (no longer in code). (4) Yard Sale: shop tile becomes 'Sell a Card / FREE ENTRY' when owned, all card removals now PAY the player at 50% scaled price. (5) Lack of Boundaries: legendary $30 → epic $20. (6) Skybox follows camera (was static r=250, level extended past it on huge courses); fog far 280 → 320. (7) Kickback redesigned as Drone Delivery: cinematic delivery drone arrives, lifts ball with rope, transits to nearest safe spot, lasers any hazards/breakables in drop radius using destroyObstacles, lowers ball gently. Physics suspended via G._droneDeliveryActive during the cinematic. (8) Sequential XP-unlock reveal on the run summary: rows render hidden, bar fills through each unlock's XP threshold, pausing at each to reveal that row with confetti+chime, then resuming. (9) First-jump fly-over: during the FIRST airborne arc of a shot, low (≤3 ball heights / 1.32u) crates AND rocks directly in front of the ball get bypassed entirely. Second jumps don't enable. (10) Skater Ball inside-corner fix: replaced 200ms position probe with 80ms speed-loss probe — detects the SYMPTOM (35%+ speed crash while grinding) and bails immediately with pre-snag velocity restored at 85%, so the ball flies through the corner cleanly instead of visibly sticking.";
+const GAME_VERSION = '0.23e';
+const CHANGE_NOTE = "v0.23e: Skater Ball corner fix — TRUE ROOT CAUSE. Discovered G.wallPolylines is an array of 2-VERTEX SEGMENTS, not multi-vertex polylines as v0.23d assumed. Corners exist BETWEEN polylines that share an endpoint, not within a single polyline. New approach: (1) global cross-polyline corner index — hash polyline endpoints by rounded (x,z) coord, any vertex shared by 2+ polylines is a corner. (2) For each shared vertex, classify the pair as INSIDE (concave) if polyB extends in polyA's outward direction, OUTSIDE (convex) if polyB extends opposite. (3) Outward normals probed per-polyline via course-cell sampling, pointing TOWARD playable side. (4) Each grind tick checks BOTH endpoints of current polyline against the index — picks closest corner within speed-scaled arrival window. (5) Inside corner: auto-turn always. Outside corner: |balance|>0.7 = wipeout, else smooth turn. (6) Index rebuilt lazily, invalidated on hole init and wall destruction. Velocity snaps to neighbor polyline's tangent, ball pins on neighbor's outward side, sign updated, probes reset.";
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
@@ -14360,6 +14360,187 @@ function _skaterWipeout() {
   }
 }
 
+// v0.23e: Cross-polyline corner index.
+//
+// CRITICAL DATA-STRUCTURE FACT: Each entry in G.wallPolylines is a SINGLE
+// 2-vertex line segment, NOT a multi-segment polyline. A "corner" is two
+// separate polylines that share an endpoint. The v0.23d attempt to scan
+// for corners within a single polyline never matched anything because all
+// polylines have length 2.
+//
+// This builds a hash from "<x>,<z>" (rounded vertex coordinates) → array
+// of {polyIdx, endIdx} where endIdx is 0 or 1 (which end of that polyline
+// is at this vertex). Two or more polylines sharing a coord = corner.
+//
+// For each shared vertex, classify each PAIR of adjacent segments as
+// inside (concave) or outside (convex) using the cross product of their
+// tangents combined with a course-cell outward probe. Cache the result
+// on G._wallCornerIndex, keyed by polyIdx → corner data for either end.
+//
+// The index is invalidated by setting G._wallCornerIndexDirty = true,
+// which happens on hole init and when walls are destroyed.
+function _buildWallCornerIndex() {
+  if(!G.wallPolylines || !G.wallPolylines.length) {
+    G._wallCornerIndex = null;
+    G._wallCornerIndexDirty = false;
+    return;
+  }
+  // Vertex key precision: 0.01u rounding handles floating-point jitter
+  // between polylines that were built from the same grid cell corner.
+  const _key = (x, z) => Math.round(x * 100) + ',' + Math.round(z * 100);
+  const _vertexMap = new Map(); // key → [{polyIdx, endIdx}, ...]
+  for(let pi = 0; pi < G.wallPolylines.length; pi++) {
+    const poly = G.wallPolylines[pi];
+    if(!poly || poly.length < 2) continue;
+    const k0 = _key(poly[0].x, poly[0].z);
+    const k1 = _key(poly[poly.length - 1].x, poly[poly.length - 1].z);
+    if(!_vertexMap.has(k0)) _vertexMap.set(k0, []);
+    _vertexMap.get(k0).push({ polyIdx: pi, endIdx: 0 });
+    if(!_vertexMap.has(k1)) _vertexMap.set(k1, []);
+    _vertexMap.get(k1).push({ polyIdx: pi, endIdx: poly.length - 1 });
+  }
+  // For each polyline endpoint, record which OTHER polyline endpoints it
+  // connects to. Stored as: _wallCornerIndex[polyIdx][endIdx] = array of
+  // { otherPolyIdx, otherEndIdx, type, nextTx, nextTz, nonx, nonz, vertex }
+  const _idx = {};
+  for(const [k, ends] of _vertexMap) {
+    if(ends.length < 2) continue; // No corner if no neighbor
+    for(let a = 0; a < ends.length; a++) {
+      for(let b = 0; b < ends.length; b++) {
+        if(a === b) continue;
+        const ea = ends[a]; // this end
+        const eb = ends[b]; // neighbor end
+        const polyA = G.wallPolylines[ea.polyIdx];
+        const polyB = G.wallPolylines[eb.polyIdx];
+        if(!polyA || !polyB) continue;
+        // Tangent of polyA POINTING INTO the shared vertex (toward this end).
+        // If endIdx is the LAST vertex, tangent goes [n-2 → n-1] (forward).
+        // If endIdx is the FIRST vertex (0), the segment AT the shared vertex
+        // goes [0 → 1] (away from vertex) — so tangent INTO vertex is reversed.
+        let aIntoTx, aIntoTz;
+        let aOtherV; // vertex of polyA OPPOSITE the shared one
+        if(ea.endIdx === polyA.length - 1) {
+          const v0 = polyA[polyA.length - 2];
+          const v1 = polyA[polyA.length - 1];
+          const dx = v1.x - v0.x, dz = v1.z - v0.z;
+          const L = Math.hypot(dx, dz) || 0.0001;
+          aIntoTx = dx / L; aIntoTz = dz / L;
+          aOtherV = v0;
+        } else {
+          // endIdx === 0
+          const v0 = polyA[0];
+          const v1 = polyA[1];
+          const dx = v1.x - v0.x, dz = v1.z - v0.z;
+          const L = Math.hypot(dx, dz) || 0.0001;
+          // Tangent INTO vertex = reversed segment direction
+          aIntoTx = -dx / L; aIntoTz = -dz / L;
+          aOtherV = v1;
+        }
+        // Tangent of polyB POINTING AWAY FROM the shared vertex (continuing
+        // the grind direction). If endIdx is 0, segment [0→1] points away.
+        // If endIdx is last, the segment [n-2 → n-1] points INTO the vertex,
+        // so to get tangent AWAY we reverse it.
+        let bAwayTx, bAwayTz;
+        let bOtherV;
+        if(eb.endIdx === 0) {
+          const v0 = polyB[0];
+          const v1 = polyB[1];
+          const dx = v1.x - v0.x, dz = v1.z - v0.z;
+          const L = Math.hypot(dx, dz) || 0.0001;
+          bAwayTx = dx / L; bAwayTz = dz / L;
+          bOtherV = v1;
+        } else {
+          const v0 = polyB[polyB.length - 2];
+          const v1 = polyB[polyB.length - 1];
+          const dx = v1.x - v0.x, dz = v1.z - v0.z;
+          const L = Math.hypot(dx, dz) || 0.0001;
+          bAwayTx = -dx / L; bAwayTz = -dz / L;
+          bOtherV = v0;
+        }
+        // Turn angle: cos of angle between aInto and bAway. Straight = 1, 90° = 0.
+        const cosAngle = aIntoTx * bAwayTx + aIntoTz * bAwayTz;
+        if(cosAngle > 0.5) continue; // < 60° turn, not a sharp corner
+        const turnAngle = Math.acos(Math.max(-1, Math.min(1, cosAngle)));
+        // Determine outward normal for polyA at the shared vertex via
+        // course-cell probe. Convention matches existing grind code: the
+        // outward normal points TOWARD the ball (i.e. into the playable side),
+        // AWAY from the wall material. So we probe perpendicular and pick
+        // the direction that lands in a PLAYABLE cell.
+        // Use polyA's segment direction (from aOtherV to shared vertex).
+        const sharedX = polyA[ea.endIdx].x;
+        const sharedZ = polyA[ea.endIdx].z;
+        const segMidX = (aOtherV.x + sharedX) * 0.5;
+        const segMidZ = (aOtherV.z + sharedZ) * 0.5;
+        // Perpendicular to aInto
+        const panx = -aIntoTz, panz = aIntoTx;
+        const probe = 0.6;
+        let outNx = panx, outNz = panz;
+        if(typeof getCell === 'function' && typeof CELL !== 'undefined' && typeof isPlayableCell === 'function') {
+          const cellPos = getCell(segMidX + panx * probe, segMidZ + panz * probe);
+          const cellNeg = getCell(segMidX - panx * probe, segMidZ - panz * probe);
+          const posPlayable = isPlayableCell(cellPos);
+          const negPlayable = isPlayableCell(cellNeg);
+          // outward points to the PLAYABLE side (ball side).
+          if(posPlayable && !negPlayable) { outNx = panx; outNz = panz; }
+          else if(!posPlayable && negPlayable) { outNx = -panx; outNz = -panz; }
+          // else: ambiguous (both or neither playable) — keep default
+        }
+        // Classify inside vs outside corner.
+        //
+        // Inside corner (concave, wall juts INTO playable area, ball is in
+        // the open space alongside an "L" or "T" of walls): polyB extends
+        // from the shared vertex IN THE DIRECTION of polyA's outward normal.
+        // Example: ball grinding north along east face of a southward jut,
+        // hits south face of jut, jut's south face extends east — east is
+        // polyA's outward direction.
+        //
+        // Outside corner (convex, wall wraps around a pillar/island, ball
+        // is wrapping around the wall): polyB extends from the shared vertex
+        // OPPOSITE polyA's outward direction. Example: ball wrapping NE
+        // corner of a pillar, A's east face → B's north face. B extends west
+        // from the vertex; outward of A is east.
+        //
+        // Test: dot(bAway, outNa). Positive → inside. Negative → outside.
+        const _classifyDot = bAwayTx * outNx + bAwayTz * outNz;
+        const type = _classifyDot > 0 ? 'inside' : 'outside';
+        // Outward normal for polyB (the next segment the ball will grind on).
+        // At a 90° corner, A's outward and B's outward are typically
+        // perpendicular, so A's outward gives no useful constraint. Probe
+        // B's segment midpoint independently with the same convention as
+        // polyA (outward points toward the playable side).
+        const bpnx = -bAwayTz, bpnz = bAwayTx;
+        let bonx = bpnx, bonz = bpnz;
+        if(typeof getCell === 'function' && typeof CELL !== 'undefined' && typeof isPlayableCell === 'function') {
+          const bMidX = (sharedX + bOtherV.x) * 0.5;
+          const bMidZ = (sharedZ + bOtherV.z) * 0.5;
+          const bCellPos = getCell(bMidX + bpnx * probe, bMidZ + bpnz * probe);
+          const bCellNeg = getCell(bMidX - bpnx * probe, bMidZ - bpnz * probe);
+          const bPosPlayable = isPlayableCell(bCellPos);
+          const bNegPlayable = isPlayableCell(bCellNeg);
+          if(bPosPlayable && !bNegPlayable) { bonx = bpnx; bonz = bpnz; }
+          else if(!bPosPlayable && bNegPlayable) { bonx = -bpnx; bonz = -bpnz; }
+        }
+        if(!_idx[ea.polyIdx]) _idx[ea.polyIdx] = {};
+        if(!_idx[ea.polyIdx][ea.endIdx]) _idx[ea.polyIdx][ea.endIdx] = [];
+        _idx[ea.polyIdx][ea.endIdx].push({
+          otherPolyIdx: eb.polyIdx,
+          otherEndIdx: eb.endIdx,
+          type: type,
+          angle: turnAngle,
+          // The shared corner vertex (the point ball must reach to trigger turn)
+          vx: sharedX, vz: sharedZ,
+          // Tangent of polyB pointing AWAY from corner (new grind direction)
+          nextTx: bAwayTx, nextTz: bAwayTz,
+          // Outward normal of polyB at the new pin point (for ball positioning)
+          nonx: bonx, nonz: bonz
+        });
+      }
+    }
+  }
+  G._wallCornerIndex = _idx;
+  G._wallCornerIndexDirty = false;
+}
+
 // Per-frame: handle balance physics, style accrual, max-duration auto-detach,
 // and wall-destroyed detach. Called from updatePhysics.
 function tickSkaterBall(dt) {
@@ -15890,12 +16071,139 @@ function updatePhysics(dt) {
           }
         }
       }
+      // v0.23e: PRE-CORNER DETECTION (cross-polyline version).
+      //
+      // Each entry in G.wallPolylines is a 2-vertex line segment, so corners
+      // are formed where two SEPARATE polylines share an endpoint. The
+      // global corner index (built lazily on first grind tick) maps
+      // (polyIdx, endIdx) → list of adjacent polylines at that vertex, with
+      // type/tangent/normal pre-computed.
+      //
+      // Inside corners: ALWAYS auto-turn (grind continues onto neighbor wall).
+      // Outside corners: balance-gated — |balance|≤0.7 turns smoothly, else wipeout.
+      let _cornerTurnApplied = false;
+      if(bestSeg && bestPolyIdx >= 0 && G.wallPolylines && G.wallPolylines.length) {
+        // Lazy-build the cross-polyline corner index if needed
+        if(!G._wallCornerIndex || G._wallCornerIndexDirty) {
+          _buildWallCornerIndex();
+        }
+        const _idx = G._wallCornerIndex || {};
+        const _polyEntry = _idx[bestPolyIdx];
+        if(_polyEntry) {
+          // v0.23e: Check BOTH endpoints' corner lists, picking whichever
+          // corner the ball is currently closer to (within the arrival window).
+          // Why both: when the ball is right at a corner vertex, the wall scan
+          // may have already switched to the neighbor polyline, in which case
+          // _skaterSign no longer correctly identifies the "forward" endpoint
+          // — but the corner vertex is still equidistant from both. By scanning
+          // both ends we catch the corner regardless of which polyline is
+          // current.
+          const _spd = Math.hypot(G.ballVel.x, G.ballVel.z);
+          const _perFrameTravel = _spd * (1/60);
+          const _arriveDist = Math.max(0.7, _perFrameTravel * 2.5);
+          let bestCorner = null;
+          let bestCornerDist = Infinity;
+          for(const endIdxKey of Object.keys(_polyEntry)) {
+            const _corners = _polyEntry[endIdxKey];
+            if(!_corners || !_corners.length) continue;
+            for(const c of _corners) {
+              const _d = Math.hypot(
+                G.ballPos.x - c.vx,
+                G.ballPos.z - c.vz
+              );
+              if(_d <= _arriveDist && _d < bestCornerDist) {
+                bestCorner = c;
+                bestCornerDist = _d;
+              }
+            }
+          }
+          if(bestCorner) {
+            const _now = performance.now();
+            // Cooldown so we don't re-fire on the next frame
+            if(!G._skaterLastCornerT || (_now - G._skaterLastCornerT) > 150) {
+              // Outside (convex) corner — balance gate
+              if(bestCorner.type === 'outside') {
+                const _bal = Math.abs(G._skaterBalance || 0);
+                if(_bal > 0.7) {
+                  if(typeof showToast === 'function') {
+                    showToast('🛹 Wiped out on the corner!', 900);
+                  }
+                  if(typeof _skaterWipeout === 'function') {
+                    _skaterWipeout();
+                  }
+                  return;
+                }
+              }
+              // Execute the turn onto the neighbor polyline.
+              const _spdT = Math.max(_spd, 5);
+              const _newTx = bestCorner.nextTx;
+              const _newTz = bestCorner.nextTz;
+              const _nonx = bestCorner.nonx;
+              const _nonz = bestCorner.nonz;
+              // Snap velocity to new tangent at preserved speed
+              G.ballVel.x = _newTx * _spdT;
+              G.ballVel.z = _newTz * _spdT;
+              G.ballVel.y = 0;
+              // Pin ball into the new segment, just past the corner vertex,
+              // on the outward side of the new wall.
+              const _stepIn = 0.35;
+              G.ballPos.x = bestCorner.vx + _newTx * _stepIn + _nonx * (WALL_THICK - 0.02);
+              G.ballPos.z = bestCorner.vz + _newTz * _stepIn + _nonz * (WALL_THICK - 0.02);
+              // Update tracking for next frame's wall scan.
+              // Determine the new _skaterSign for the neighbor polyline:
+              // if neighbor's endIdx is 0, ball is moving 0→1, sign = +1.
+              // if neighbor's endIdx is last, ball is moving last→last-1, sign = -1.
+              const _neighborPoly = G.wallPolylines[bestCorner.otherPolyIdx];
+              if(_neighborPoly) {
+                G._skaterSign = (bestCorner.otherEndIdx === 0) ? +1 : -1;
+              }
+              G._skaterLastSurface = {
+                tx: _newTx, tz: _newTz,
+                onx: _nonx, onz: _nonz
+              };
+              G._skaterLastPinnedT = _now;
+              G._skaterLastCornerT = _now;
+              // Reset speed-loss probe so the snap-velocity doesn't
+              // false-trigger the bail.
+              G._skaterSpeedProbeT = _now;
+              G._skaterSpeedProbeSpd = _spdT;
+              G._skaterSpeedProbeVx = G.ballVel.x;
+              G._skaterSpeedProbeVz = G.ballVel.z;
+              // Reset position-stuck probe too — corner teleport would
+              // false-look like sudden movement otherwise.
+              G._skaterStuckProbeT = _now;
+              G._skaterStuckProbeX = G.ballPos.x;
+              G._skaterStuckProbeZ = G.ballPos.z;
+              // Distinct corner sound — inside higher pitch, outside lower
+              if(typeof AC !== 'undefined' && AC) {
+                try {
+                  const _ac = getAC(), _tt = _ac.currentTime;
+                  const _o = _ac.createOscillator(); _o.type = 'square';
+                  const _isInside = bestCorner.type === 'inside';
+                  _o.frequency.setValueAtTime(_isInside ? 1100 : 850, _tt);
+                  _o.frequency.exponentialRampToValueAtTime(_isInside ? 1900 : 1400, _tt + 0.10);
+                  const _g = _ac.createGain();
+                  _g.gain.setValueAtTime(0.12, _tt);
+                  _g.gain.exponentialRampToValueAtTime(0.001, _tt + 0.12);
+                  _o.connect(_g); _g.connect(getACDest());
+                  _o.start(_tt); _o.stop(_tt + 0.13);
+                } catch(e){}
+              }
+              if(typeof spawnHitParticles === 'function' && Math.random() < 0.8) {
+                spawnHitParticles({ x: bestCorner.vx, y: G.ballPos.y, z: bestCorner.vz });
+              }
+              pushed = true;
+              _cornerTurnApplied = true;
+            }
+          }
+        }
+      }
       // v0.23b18: Wider lookahead window (was tRaw > 0.95). Now triggers at
       // tRaw > 0.7 OR if the next segment is closer than the current. Also
       // handles closed polylines (perimeter loops where poly[last] equals
       // poly[0]) — the wrap-around segment was missed by the (length - 1)
       // bound. New approach: try both i+1 AND wrap-to-0 if polyline is closed.
-      if(bestSeg && bestSeg.isInterior && bestPolyRef) {
+      if(!_cornerTurnApplied && bestSeg && bestSeg.isInterior && bestPolyRef) {
         // Determine if polyline is closed (last vertex equals first).
         const _lastV = bestPolyRef[bestPolyRef.length - 1];
         const _firstV = bestPolyRef[0];
@@ -15976,7 +16284,10 @@ function updatePhysics(dt) {
           }
         }
       }
-      if(bestSeg) {
+      // v0.23d: Skip final bestSeg pin/projection if the corner-turn handler
+      // already set velocity and position — otherwise it would overwrite the
+      // clean post-corner state with the pre-corner segment's data.
+      if(!_cornerTurnApplied && bestSeg) {
         G._skaterLastSurface = { tx: bestSeg.tx, tz: bestSeg.tz, onx: bestSeg.onx, onz: bestSeg.onz };
         G._skaterLastPinnedT = performance.now();
         const _spd = Math.max(Math.hypot(G.ballVel.x, G.ballVel.z), 5);
@@ -16102,6 +16413,9 @@ function updatePhysics(dt) {
             G._skaterSpeedProbeT = 0;
             G._skaterSpeedProbeSpd = 0;
             G._skaterStuckProbeT = 0;
+            // v0.23d: reset corner cooldown so a new grind can immediately
+            // turn the first corner it reaches without stale-state blocking.
+            G._skaterLastCornerT = 0;
             // v0.23b16: capture pre-grind position as guaranteed safe respawn
             // point for bail/wipeout. The ball was rolling normally through
             // a valid fairway cell to reach the wall, so this is by definition
@@ -23094,6 +23408,10 @@ function destroyWallChunk(chunk, epicX, epicZ) {
     const idx = G.wallPolylines.indexOf(polyRef);
     if(idx >= 0) G.wallPolylines.splice(idx, 1);
   }
+  // v0.23e: invalidate the wall-corner index so the next grind tick rebuilds
+  // it. Polyline indices may have shifted after splices, and removed corners
+  // need to be dropped from the lookup.
+  G._wallCornerIndexDirty = true;
 
   // Spawn 4-6 chunky wall fragments that bounce around
   const debrisCount = 4 + Math.floor(Math.random() * 3);
@@ -42254,6 +42572,10 @@ function initHole() {
   G.vmW = data.vmW;
   G.vmH = data.vmH;
   G.wallPolylines = [];
+  // v0.23e: clear the cross-polyline corner index; will be rebuilt lazily
+  // on first Skater Ball grind tick of the new hole.
+  G._wallCornerIndex = null;
+  G._wallCornerIndexDirty = true;
   G.teePos = {x:data.teePos.x, y:data.teePos.y};
   G.holePos = {x:data.holePos.x, y:data.holePos.y};
   G.par = data.par;
