@@ -4230,15 +4230,18 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.23e';
-const CHANGE_NOTE = "v0.23e: Skater Ball corner fix — TRUE ROOT CAUSE. Discovered G.wallPolylines is an array of 2-VERTEX SEGMENTS, not multi-vertex polylines as v0.23d assumed. Corners exist BETWEEN polylines that share an endpoint, not within a single polyline. New approach: (1) global cross-polyline corner index — hash polyline endpoints by rounded (x,z) coord, any vertex shared by 2+ polylines is a corner. (2) For each shared vertex, classify the pair as INSIDE (concave) if polyB extends in polyA's outward direction, OUTSIDE (convex) if polyB extends opposite. (3) Outward normals probed per-polyline via course-cell sampling, pointing TOWARD playable side. (4) Each grind tick checks BOTH endpoints of current polyline against the index — picks closest corner within speed-scaled arrival window. (5) Inside corner: auto-turn always. Outside corner: |balance|>0.7 = wipeout, else smooth turn. (6) Index rebuilt lazily, invalidated on hole init and wall destruction. Velocity snaps to neighbor polyline's tangent, ball pins on neighbor's outward side, sign updated, probes reset.";
+const GAME_VERSION = '0.23g1';
+const CHANGE_NOTE = "v0.23g1: Dash + Sticky fixes. (1) Dash reworked to INSTANT teleport — 3 ball diameters in 80ms, wall-aware (clamps short if a wall is in the way), brief invuln window, dust at both start and end. (2) Sticky shoot-through now works against bumpers: the captured object reference for wall-kind sticks (rocks, bumpers, spikes, popup walls) is preserved and skipped until ball clears, instead of relying only on the outward-normal distance check that wasn't reliable on radial obstacles like bumpers.";
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
 // v0.22f: 1.25 → 1.5625 (+25% on top). Adam wants tighter coin scarcity at the
 // per-shop level — make players actually feel the cost of every pick instead
 // of casually buying everything they see.
-const PRICE_MULTIPLIER = 1.5625;
+// v0.23f: 1.5625 → 1.328125 (−15%). Playtest feedback: prices ran too hot
+// alongside the v0.23f under-par bonus rework. Dialing the per-shop scarcity
+// back so coin income and shop cost rebalance together.
+const PRICE_MULTIPLIER = 1.328125;
 
 // ── Elite Holes (v0.20j) ──────────────────────────────
 // "Elite" holes appear every 3rd hole (player-facing 3, 6, 9, 12...).
@@ -6486,9 +6489,17 @@ function buildChasmZone(args) {
 
 function generatePuttPuttCourse(holeNum) {
   const diff = G.difficulty || 1;
-  const LANE_W = 4;   // fairway width in cells
+  // v0.23g: Variable lane width — per-hole random 1.0×-1.5× of the base 4-cell
+  // width. Generates as 4, 5, or 6 cells (clamped to integer for grid math).
+  // Wider holes spread obstacles out, narrower holes (still ≥ base 4) keep
+  // density tighter. Elite holes always get the FULL widening to ensure
+  // their dense obstacle packs have room to breathe.
+  const _baseLaneW = 4;
+  const _isEliteForWidth = !!(typeof G !== 'undefined' && G._activeElite);
+  const _laneWMul = _isEliteForWidth ? 1.5 : (1.0 + rng() * 0.5);
+  const LANE_W = Math.round(_baseLaneW * _laneWMul);
   const PAD = 6;
-  const HALF = LANE_W / 2;  // 2 — offset from waypoint corner to lane centre
+  const HALF = LANE_W / 2;  // offset from waypoint corner to lane centre
 
   // v0.20t: Elite holes (except Lap Mode) get +35% guaranteed minimum
   // obstacle count. Bumps every per-type N below by 35% via this multiplier.
@@ -7317,6 +7328,38 @@ function generatePuttPuttCourse(holeNum) {
     spikeData.push({ gx: c.x, gy: c.y, wx, wz, radius, variant });
     register(wx, wz, TILE_SIZE * 2);
     sp++;
+  }
+
+  // ── 10b2. Growing spiky ball (v0.23g) ───────────────────
+  // Rare obstacle that ~1 spawns per hole at difficulty 3+ and holeRamp >= 8
+  // (mid-to-late game). Visually a hemisphere with spikes that EXTEND and
+  // RETRACT on a 10-second cycle (5s out, 5s in). Damage only applies while
+  // spikes are extended (phase > 0.5 of the cycle); during retracted state
+  // it's effectively a harmless bump. Wolverine-claw SFX with proximity
+  // attenuation plays at extend phase boundary.
+  const _growSpikeChance = (diff >= 3 && holeRamp >= 8) ? 0.70 : 0; // 70% spawn rate when eligible
+  if(_growSpikeChance > 0 && rng() < _growSpikeChance) {
+    const _gsh = [...fair].sort(() => rng() - 0.5);
+    for(const c of _gsh) {
+      if(grid[c.y][c.x] !== CELL.FAIR) continue;
+      if(teeDist(c) < minHazardDist + 3 || holeDist(c) < minHazardDist + 3) continue;
+      const wx = c.x * TILE_SIZE, wz = c.y * TILE_SIZE;
+      if(tooClose(wx, wz, TILE_SIZE * 3)) continue;
+      if(rockData.some(r => Math.hypot(wx - r.wx, wz - r.wz) < TILE_SIZE * 2.5)) continue;
+      if(spikeData.some(sp => Math.hypot(wx - sp.wx, wz - sp.wz) < TILE_SIZE * 2.5)) continue;
+      const radius = 0.45 + rng() * 0.20; // 0.45–0.65 — slightly bigger than average spike
+      const variant = (rng() < redSpikeP * 1.5) ? 'red' : 'white';
+      // Phase offset randomizes initial extension state so multiple growing
+      // spikes on the same course don't synchronize their cycles.
+      const cyclePhase = rng();
+      spikeData.push({
+        gx: c.x, gy: c.y, wx, wz, radius, variant,
+        growing: true,
+        cyclePhase,
+      });
+      register(wx, wz, TILE_SIZE * 2.5);
+      break; // at most 1 per hole
+    }
   }
 
   // ── 10c. Sliding spike ball data (v0.19r) ──────────────
@@ -9636,6 +9679,26 @@ function buildCourse(data) {
           phase: sd.slide.phase,
           speed: sd.slide.speed,
         };
+      }
+      // v0.23g: growing spiky ball — extend/retract spike cones on a 10s cycle.
+      if(sd.growing) {
+        spikeRec.growing = true;
+        spikeRec.cyclePhase = sd.cyclePhase || 0;
+        // Collect cone meshes from the group so we can scale them per-frame.
+        // Hemisphere body is always the FIRST child; cones are the rest minus
+        // the warning ring (last child added). The slice indices below match
+        // the build order above (body=0, cones=[1..-2], ring=-1).
+        spikeRec._coneMeshes = [];
+        for(let _ci = 1; _ci < spikeGroup.children.length - 1; _ci++) {
+          const _ch = spikeGroup.children[_ci];
+          if(_ch && _ch.geometry && _ch.geometry.type === 'ConeGeometry') {
+            spikeRec._coneMeshes.push(_ch);
+            // Store base scale so we can shrink/grow relative to it
+            _ch.userData._baseScaleY = _ch.scale.y;
+          }
+        }
+        // Track last fired phase boundary for SFX trigger (0 = retracted, 1 = extended)
+        spikeRec._lastBoundary = -1;
       }
       G.spikes.push(spikeRec);
     }
@@ -13629,56 +13692,105 @@ function tickPowerSteering(dt) {
   }
   G._psKeyLeftWasDown = _left;
   G._psKeyRightWasDown = _right;
-  // v0.23b16: dash is a fixed-magnitude lateral velocity injection (was
-  // speed-scaled). Target outcome: a 3-ball-wide displacement (~2.4 units
-  // lateral) over ~0.3 seconds. With friction, that needs ~10-12 m/s of
-  // initial lateral velocity. Independent of forward speed so dashes feel
-  // consistent at any pace.
-  const DASH_MAG = 12.0 * _forceMul;
-  if(G._psDashLeftPending) {
-    _applyStrafeImpulse(vx, vz, spd, +1, DASH_MAG);
-    G._psDashLeftPending = false;
+  // v0.23g1: INSTANT TELEPORT dash. Snaps the ball laterally 3 ball
+  // diameters (1.32u) in 80ms with a brief invuln window, then resumes
+  // normal physics. The teleport is wall-aware: a perpendicular sweep
+  // checks G.wallPolylines along the dash path and clamps the move short
+  // if a wall is in the way (no clipping into a corner triangle either).
+  // Cooldown 800ms blocks dash spam.
+  const DASH_DISTANCE = BALL_R * 2 * 3; // 3 ball diameters = 1.32u
+  const DASH_COOLDOWN_MS = 800;
+  const DASH_INVULN_MS = 80;
+  const _onCooldown = G._psDashCooldownUntil && now < G._psDashCooldownUntil;
+
+  // Wall-aware sweep along (perpX, perpZ) from current ballPos. Returns the
+  // distance the ball can safely travel (capped at DASH_DISTANCE) before
+  // hitting a wall or corner-triangle edge.
+  const _sweepDashDistance = (perpX, perpZ) => {
+    let maxD = DASH_DISTANCE;
+    const _bx = G.ballPos.x, _bz = G.ballPos.z;
+    // Walls — find the closest wall surface along the dash line.
+    if(G.wallPolylines) {
+      const WALL_T = (G.biome === 'puttputt' ? 0.25 : 0.32) + BALL_R;
+      for(const poly of G.wallPolylines) {
+        for(let i = 0; i < poly.length - 1; i++) {
+          const ax = poly[i].x, az = poly[i].z;
+          const bxW = poly[i+1].x, bzW = poly[i+1].z;
+          // Sample along dash path at 0.1u increments — fast enough at <14
+          // samples max, and avoids needing a full ray-vs-segment solver.
+          for(let s = 0.1; s <= maxD; s += 0.1) {
+            const sx = _bx + perpX * s, sz = _bz + perpZ * s;
+            // closest-point on segment ax-bxW
+            const ex2 = bxW - ax, ez2 = bzW - az;
+            const lsq = ex2*ex2 + ez2*ez2;
+            if(lsq < 0.0001) continue;
+            const t = Math.max(0, Math.min(1, ((sx - ax)*ex2 + (sz - az)*ez2) / lsq));
+            const cx = ax + t*ex2, cz = az + t*ez2;
+            if(Math.hypot(sx - cx, sz - cz) < WALL_T) {
+              maxD = Math.max(0, s - 0.05); // back off slightly
+              break;
+            }
+          }
+        }
+      }
+    }
+    return maxD;
+  };
+
+  const _triggerDash = (sign) => {
+    // sign=+1 → left of velocity, sign=-1 → right of velocity
+    const perpX =  vz / spd * sign;
+    const perpZ = -vx / spd * sign;
+    const safeD = _sweepDashDistance(perpX, perpZ);
+    if(safeD < BALL_R * 0.5) {
+      // Wall right against us — refund the cooldown (no toast, no shake)
+      return;
+    }
+    // Snap the ball to the new position
+    G.ballPos.x += perpX * safeD;
+    G.ballPos.z += perpZ * safeD;
+    if(G.ball) G.ball.position.set(G.ballPos.x, G.ballPos.y, G.ballPos.z);
+    if(G.ballShadow) G.ballShadow.position.set(G.ballPos.x, 0.05, G.ballPos.z);
     G._powerSteeringActive = true;
+    G._psDashCooldownUntil = now + DASH_COOLDOWN_MS;
+    // Brief invuln: spike/dodgeball collision branches honor this flag
+    G._dashInvulnUntil = now + DASH_INVULN_MS;
     if(typeof showToast === 'function') showToast('💨 DASH!', 500);
     if(typeof triggerShake === 'function') triggerShake('med');
-    // Whoosh audio
+    // Dust at BOTH ends of the teleport — start (kick-off) and end (landing).
+    if(typeof spawnDashDust === 'function') {
+      const _origX = G.ballPos.x - perpX * safeD;
+      const _origZ = G.ballPos.z - perpZ * safeD;
+      // Start: dust kicked OPPOSITE the dash direction
+      spawnDashDust(_origX, G.ballPos.y, _origZ, -perpX, -perpZ);
+      // End: dust kicked OUTWARD along the dash direction (landing splash)
+      spawnDashDust(G.ballPos.x, G.ballPos.y, G.ballPos.z, perpX, perpZ);
+    }
+    // Whoosh audio — sharper pitch sweep to read as a snap, not a slide
     if(AC) {
       try {
         const ac = getAC(), t = ac.currentTime;
         const o = ac.createOscillator(); o.type = 'sawtooth';
-        o.frequency.setValueAtTime(420, t);
-        o.frequency.exponentialRampToValueAtTime(140, t + 0.18);
+        o.frequency.setValueAtTime(680, t);
+        o.frequency.exponentialRampToValueAtTime(220, t + 0.12);
         const g = ac.createGain();
-        g.gain.setValueAtTime(0.18, t);
-        g.gain.exponentialRampToValueAtTime(0.001, t + 0.20);
+        g.gain.setValueAtTime(0.22, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
         const bp = ac.createBiquadFilter(); bp.type='bandpass';
-        bp.frequency.value = 800; bp.Q.value = 1.5;
+        bp.frequency.value = 1200; bp.Q.value = 2.0;
         o.connect(bp); bp.connect(g); g.connect(getACDest());
-        o.start(t); o.stop(t + 0.22);
+        o.start(t); o.stop(t + 0.16);
       } catch(e){}
     }
+  };
+
+  if(G._psDashLeftPending) {
+    G._psDashLeftPending = false;
+    if(!_onCooldown) _triggerDash(+1);
   }
   if(G._psDashRightPending) {
-    _applyStrafeImpulse(vx, vz, spd, -1, DASH_MAG);
     G._psDashRightPending = false;
-    G._powerSteeringActive = true;
-    if(typeof showToast === 'function') showToast('💨 DASH!', 500);
-    if(typeof triggerShake === 'function') triggerShake('med');
-    if(AC) {
-      try {
-        const ac = getAC(), t = ac.currentTime;
-        const o = ac.createOscillator(); o.type = 'sawtooth';
-        o.frequency.setValueAtTime(420, t);
-        o.frequency.exponentialRampToValueAtTime(140, t + 0.18);
-        const g = ac.createGain();
-        g.gain.setValueAtTime(0.18, t);
-        g.gain.exponentialRampToValueAtTime(0.001, t + 0.20);
-        const bp = ac.createBiquadFilter(); bp.type='bandpass';
-        bp.frequency.value = 800; bp.Q.value = 1.5;
-        o.connect(bp); bp.connect(g); g.connect(getACDest());
-        o.start(t); o.stop(t + 0.22);
-      } catch(e){}
-    }
+    if(!_onCooldown) _triggerDash(-1);
   }
   // ── Continuous strafe while held ──
   // v0.23b16: rate boosted from 35% spd/sec to 80% spd/sec with a 4 m/s
@@ -13714,6 +13826,104 @@ function _applySteerImpulse(vx, vz, spd, sign, force) {
   const newMag = Math.hypot(nvx, nvz) || 1;
   G.ballVel.x = nvx / newMag * spd;
   G.ballVel.z = nvz / newMag * spd;
+}
+
+// ── Near-miss detector (v0.23g) ──────────────────────────
+// Fires the `near_miss` style event when the ball passes within +0.3 of an
+// obstacle's hit radius without actually colliding. Sweaty-tier margin:
+// rewards skill, not luck. Per-obstacle per-shot debounced via
+// G._nearMissDebounce (Set<obstacle_ref>) so each obstacle credits at most
+// once per shot.
+//
+// Trigger conditions (all required):
+//   1. Ball is rolling at > 2 m/s horizontal speed
+//   2. Distance to obstacle center is in (BALL_R + obstacle_r, BALL_R + obstacle_r + 0.3]
+//   3. Velocity vector points AWAY from the obstacle (ball is past, not approaching)
+//   4. Not already debounced for this obstacle in this shot
+//
+// Obstacle types scanned (per Adam's spec):
+//   rocks, spikes (including growing spiky balls), bumpers, spin bars,
+//   slide blocks, crates.
+function tickNearMissDetector(dt) {
+  if(!G.rolling || G.inHole) return;
+  if(G.ghostBallActive) return; // ghost phase doesn't count as a "miss"
+  if(G._nudgeOnlyRoll) return;  // pre-swing pushes shouldn't credit near miss
+  const vx = G.ballVel.x, vz = G.ballVel.z;
+  const spd = Math.hypot(vx, vz);
+  if(spd < 2.0) return;
+  if(!G._nearMissDebounce) G._nearMissDebounce = new Set();
+  const bx = G.ballPos.x, bz = G.ballPos.z;
+  const MARGIN = 0.3;
+  const _check = (ref, ox, oz, hitR) => {
+    if(!ref || ref._destroyed) return;
+    if(G._nearMissDebounce.has(ref)) return;
+    const dx = bx - ox, dz = bz - oz;
+    const d = Math.hypot(dx, dz);
+    const inner = BALL_R + hitR;
+    const outer = inner + MARGIN;
+    if(d <= inner || d > outer) return;
+    // Velocity points AWAY from obstacle = dot(ball_to_obstacle, vel) < 0
+    // (ball_to_obstacle = -dx, -dz; so dot = -dx*vx + -dz*vz, < 0 means
+    // (dx*vx + dz*vz) > 0 — i.e. ball is moving in same direction as the
+    // outward-from-obstacle vector). Simplify to: dx*vx + dz*vz > 0.
+    if(dx * vx + dz * vz <= 0) return;
+    // Fire the combo
+    G._nearMissDebounce.add(ref);
+    if(typeof recordStyleEvent === 'function') recordStyleEvent('near_miss');
+    // Tiny whoosh — soft, brief, doesn't pollute the soundscape
+    if(AC) {
+      try {
+        const ac = getAC(), t = ac.currentTime;
+        const o = ac.createOscillator(); o.type = 'sine';
+        o.frequency.setValueAtTime(680, t);
+        o.frequency.exponentialRampToValueAtTime(240, t + 0.14);
+        const g = ac.createGain();
+        g.gain.setValueAtTime(0.06, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
+        o.connect(g); g.connect(getACDest());
+        o.start(t); o.stop(t + 0.18);
+      } catch(e){}
+    }
+  };
+  if(G.rocks) for(const o of G.rocks) _check(o, o.wx, o.wz, 0.65);
+  if(G.bumpers) for(const o of G.bumpers) _check(o, o.wx, o.wz, o.r || 0.55);
+  if(G.spinBars) {
+    // For spin bars use the bar tip closest to ball (segment endpoint) so a
+    // near miss credits the rotating arm, not the pivot.
+    for(const o of G.spinBars) {
+      if(!o || o._destroyed) continue;
+      const _len = o.length || 1.6;
+      const _ca = Math.cos(o.angle), _sa = Math.sin(o.angle);
+      const _ax = o.wx + _ca * _len, _az = o.wz - _sa * _len;
+      const _bxS = o.wx - _ca * _len, _bzS = o.wz + _sa * _len;
+      const dA = Math.hypot(bx - _ax, bz - _az);
+      const dB = Math.hypot(bx - _bxS, bz - _bzS);
+      if(dA < dB) _check(o, _ax, _az, 0.3);
+      else        _check(o, _bxS, _bzS, 0.3);
+    }
+  }
+  if(G.slideBlocks) {
+    for(const o of G.slideBlocks) {
+      if(!o || o._destroyed) continue;
+      const _off = Math.sin(o.phase) * o.range;
+      const _ox = o.wx + (o.axis === 'X' ? _off : 0);
+      const _oz = o.wz + (o.axis === 'Z' ? _off : 0);
+      const _hr = Math.max(o.halfW || 0.4, o.halfD || 0.4);
+      _check(o, _ox, _oz, _hr);
+    }
+  }
+  if(G.spikes) {
+    for(const o of G.spikes) {
+      if(!o || o._destroyed) continue;
+      _check(o, o.wx, o.wz, o.r || 0.55);
+    }
+  }
+  if(G.crates) {
+    for(const o of G.crates) {
+      if(!o || o._destroyed) continue;
+      _check(o, o.wx, o.wz, o.size || 0.4);
+    }
+  }
 }
 
 // ── Parachute ──
@@ -14790,6 +15000,58 @@ function updatePhysics(dt) {
   // crate-vs-wall, crate-vs-obstacle, crate-vs-crate, ground/gravity,
   // tower teeter, and rest-snapping.
   if(typeof updateCratePhysics === 'function') updateCratePhysics(dt);
+  // v0.23g: Sticky shoot-through clear-check. Once the ball has physically
+  // cleared the attached object's hit envelope, drop the skip state so
+  // normal collisions resume. For 'wall' kind we use signed distance along
+  // the stored outward normal; for radial objects (spinner/slideBlock) we
+  // measure direct distance to the object's current center.
+  if(G._stickyShootThrough && G.ballPos) {
+    const _st = G._stickyShootThrough;
+    let _cleared = false;
+    if(_st.kind === 'wall' || _st.kind === 'popupWall') {
+      // v0.23g1: If a ref was captured (bumper/rock/tree/corner triangle),
+      // prefer the radial distance from that ref's anchor — bumpers bulge
+      // outward and the normal-from-ball-anchor check releases too early,
+      // causing the bumper to immediately bounce the ball on shoot-through.
+      // Falls back to outward-normal-from-anchor for true wall sticks.
+      if(_st.ref && typeof _st.refAnchorX === 'number') {
+        const _d = Math.hypot(G.ballPos.x - _st.refAnchorX, G.ballPos.z - _st.refAnchorZ);
+        if(_d > _st.clearR) _cleared = true;
+        if(_st.ref._destroyed) _cleared = true;
+      } else if(typeof _st.nx === 'number' && typeof _st.nz === 'number') {
+        // Released when ball has moved at least _st.clearR units along the
+        // outward normal from the anchor point.
+        const _dx = G.ballPos.x - (_st.anchorX || 0);
+        const _dz = G.ballPos.z - (_st.anchorZ || 0);
+        const _along = _dx * _st.nx + _dz * _st.nz;
+        if(_along > _st.clearR) _cleared = true;
+      } else {
+        _cleared = true; // can't measure, drop state next frame
+      }
+    } else if(_st.ref) {
+      let _ox = 0, _oz = 0;
+      if(_st.kind === 'slideBlock') {
+        const _off = Math.sin(_st.ref.phase) * _st.ref.range;
+        _ox = _st.ref.wx + (_st.ref.axis === 'X' ? _off : 0);
+        _oz = _st.ref.wz + (_st.ref.axis === 'Z' ? _off : 0);
+      } else {
+        // spinner / generic — use ref.wx/wz
+        _ox = _st.ref.wx; _oz = _st.ref.wz;
+      }
+      const _d = Math.hypot(G.ballPos.x - _ox, G.ballPos.z - _oz);
+      if(_d > _st.clearR) _cleared = true;
+      // Also drop if ref was destroyed mid-flight
+      if(_st.ref._destroyed) _cleared = true;
+    } else {
+      _cleared = true;
+    }
+    if(_cleared) G._stickyShootThrough = null;
+  }
+  // Helper: returns true if the given object reference is the current
+  // shoot-through target — collision branches use this to skip their own
+  // resolution path while the ball is still "phasing out" of the stuck
+  // surface. Cheap pointer compare.
+  const _stickyThroughSkip = (ref) => !!(G._stickyShootThrough && G._stickyShootThrough.ref === ref);
   // v0.23b: per-frame physics for new cards. Each tick is a no-op when its
   // armed/active flag is false, so the cost is one boolean check per tick
   // when these cards aren't in play. Order matters: tick power steering
@@ -14799,6 +15061,8 @@ function updatePhysics(dt) {
   if(typeof tickSkaterBall === 'function') tickSkaterBall(dt);
   if(typeof tickSkaterBoardMesh === 'function') tickSkaterBoardMesh(dt);
   if(typeof tickMultiballGhost === 'function') tickMultiballGhost(dt);
+  // v0.23g: Near-miss detector — runs per-frame while ball is rolling.
+  if(typeof tickNearMissDetector === 'function') tickNearMissDetector(dt);
   // ── Jump — process before rolling guard so grace-window taps always fire ──
   if(G._jumpPending && !G.inHole) {
     G._jumpPending = false;
@@ -15356,6 +15620,107 @@ function updatePhysics(dt) {
     }
   }
 
+  // v0.23g: PRE-SWING MOVER WAKE-UP ──────────────────────
+  // While the ball is stationary in aim mode, the early-return below skips
+  // ALL collision branches — so movers (sliders, spinners, conveyors,
+  // bumpers, fans, spikes, dodgeballs) pass right through the ball without
+  // touching it. Fix: when ball is stationary in aim mode and a mover
+  // overlaps it, transition into rolling mode WITH `_nudgeOnlyRoll = true`
+  // (the existing flag for "this wasn't a real swing"). The natural
+  // physics then handle the push/damage normally, and when the ball comes
+  // to rest the rolling-slow → aim pipeline restores aim mode without
+  // counting it as a stroke.
+  //
+  // Detection is intentionally conservative: a single proximity test
+  // against each mover's CURRENT position is enough — we don't need
+  // sweep tests because pre-swing means ball is stationary. If a mover
+  // is overlapping the ball this frame, wake up; otherwise idle.
+  if(!G.rolling && !G.inHole && G.aimMode && !G._stickyAttached && !G.walkiesActive
+     && !G._sharpshooterActive && !G._cannonballActive) {
+    const _psBx = G.ballPos.x, _psBz = G.ballPos.z;
+    let _psWake = false;
+    // Slide blocks — AABB check at current phase
+    if(G.slideBlocks && G.slideBlocks.length) {
+      for(const sb of G.slideBlocks) {
+        if(sb._destroyed) continue;
+        const _off = Math.sin(sb.phase) * sb.range;
+        const _bx = sb.wx + (sb.axis === 'X' ? _off : 0);
+        const _bz = sb.wz + (sb.axis === 'Z' ? _off : 0);
+        if(_psBx >= _bx - sb.halfW - BALL_R && _psBx <= _bx + sb.halfW + BALL_R
+           && _psBz >= _bz - sb.halfD - BALL_R && _psBz <= _bz + sb.halfD + BALL_R) {
+          _psWake = true; break;
+        }
+      }
+    }
+    // Spin bar tips — segtest against the rotating arm
+    if(!_psWake && G.spinBars && G.spinBars.length) {
+      for(const s of G.spinBars) {
+        if(s._destroyed) continue;
+        const _len = s.length || 1.6;
+        const _ca = Math.cos(s.angle), _sa = Math.sin(s.angle);
+        const _ax = s.wx + _ca * _len, _az = s.wz - _sa * _len;
+        const _bxS = s.wx - _ca * _len, _bzS = s.wz + _sa * _len;
+        // closest point on segment AB to (ballPos)
+        const _ex = _bxS - _ax, _ez = _bzS - _az;
+        const _lsq = _ex*_ex + _ez*_ez;
+        if(_lsq < 0.0001) continue;
+        const _t = Math.max(0, Math.min(1, ((_psBx - _ax)*_ex + (_psBz - _az)*_ez) / _lsq));
+        const _cx2 = _ax + _t*_ex, _cz2 = _az + _t*_ez;
+        if(Math.hypot(_psBx - _cx2, _psBz - _cz2) < BALL_R + 0.32) {
+          _psWake = true; break;
+        }
+      }
+    }
+    // Bumpers — radial proximity check
+    if(!_psWake && G.bumpers && G.bumpers.length) {
+      for(const b of G.bumpers) {
+        if(b._destroyed) continue;
+        if(Math.hypot(_psBx - b.wx, _psBz - b.wz) < BALL_R + 0.55) {
+          _psWake = true; break;
+        }
+      }
+    }
+    // Conveyors — AABB containment
+    if(!_psWake && G.conveyors && G.conveyors.length && !G._freezeFrameActive) {
+      for(const cv of G.conveyors) {
+        if(_psBx >= cv.minX && _psBx <= cv.maxX && _psBz >= cv.minZ && _psBz <= cv.maxZ) {
+          _psWake = true; break;
+        }
+      }
+    }
+    // Fans — proximity to mouth
+    if(!_psWake && G.fans && G.fans.length) {
+      for(const f of G.fans) {
+        if(f._destroyed) continue;
+        if(Math.hypot(_psBx - f.wx, _psBz - f.wz) < BALL_R + 0.8) {
+          _psWake = true; break;
+        }
+      }
+    }
+    // Spikes (any variant — including growing spiky balls) and dodgeballs
+    // trigger wake too, so damage applies in pre-swing.
+    if(!_psWake && G.spikes && G.spikes.length) {
+      for(const sp of G.spikes) {
+        if(sp._destroyed) continue;
+        // Sliding spikes use baseWx/baseWz + slide offset
+        const _spx = sp.wx, _spz = sp.wz;
+        // For growing spikes, use base hemisphere radius (spikes only damage
+        // when extended; that's handled in the normal collision branch).
+        if(Math.hypot(_psBx - _spx, _psBz - _spz) < BALL_R + (sp.r || 0.55) + 0.1) {
+          _psWake = true; break;
+        }
+      }
+    }
+    if(_psWake) {
+      G.rolling = true;
+      G.rollingSlowTimer = 0;
+      G._nudgeOnlyRoll = true; // don't count as a swing on settle
+      G.aimMode = false;
+      // Hide aim arrow during the bump
+      if(G.aimArrow) { scene.remove(G.aimArrow); G.aimArrow = null; }
+    }
+  }
+
   if(!G.rolling||G.inHole) return;
   dt = Math.min(dt, 0.05);
 
@@ -15566,7 +15931,10 @@ function updatePhysics(dt) {
     // drop radius before lowering. Skips the +1 stroke OOB penalty.
     if(!G._kickbackTriggered && (G._kickbackCharges|0) > 0
        && G.modifiers && G.modifiers.some(m => m.id === 'kickback')) {
-      G._kickbackCharges = 0;
+      // v0.23g: stackable — decrement, don't zero out. _kickbackTriggered
+      // still gates per-shot so the drone doesn't fire multiple times on a
+      // single OOB event; it resets on next swing via finalizeShot.
+      G._kickbackCharges = Math.max(0, (G._kickbackCharges|0) - 1);
       G._kickbackTriggered = true;
       G._oobGraceTimer = 0;
       // Find nearest safe spot. Use the existing _findSafeBallPosition
@@ -16791,6 +17159,7 @@ function updatePhysics(dt) {
   }
   if(G.angledWalls && G.angledWalls.length && !ghostActive && !G._skaterAngledHandled) {
     for(const aw of G.angledWalls) {
+      if(_stickyThroughSkip(aw)) continue; // v0.23g1: sticky shoot-through
       const bx = G.ballPos.x, bz = G.ballPos.z;
       const minDist = BALL_R_EFF + 0.08;
       // v0.17s: Y-ceiling gate — ball clearly above the triangle top can fly over.
@@ -16847,7 +17216,8 @@ function updatePhysics(dt) {
         if(G._stickyCardActive && !G._stickyCardTriggered) {
           G._stickyCardTriggered = true;
           G._stickyCardSquash = { timer: 0, duration: 0.55, nx, nz };
-          enterStickyAttached({ kind: 'wall', nx, nz });
+          // v0.23g1: pass `ref: aw` for shoot-through on corner triangles.
+          enterStickyAttached({ kind: 'wall', ref: aw, nx, nz });
           aw.squashT = 0.18;
           _stickyShared('corner');
           continue; // handled — skip bounce + edge tests
@@ -16907,7 +17277,8 @@ function updatePhysics(dt) {
         if(G._stickyCardActive && !G._stickyCardTriggered) {
           G._stickyCardTriggered = true;
           G._stickyCardSquash = { timer: 0, duration: 0.55, nx: bestNx, nz: bestNz };
-          enterStickyAttached({ kind: 'wall', nx: bestNx, nz: bestNz });
+          // v0.23g1: pass `ref: aw` for shoot-through.
+          enterStickyAttached({ kind: 'wall', ref: aw, nx: bestNx, nz: bestNz });
           aw.squashT = 0.18;
           _stickyShared('corner');
           continue; // skip the regular bounce
@@ -16973,6 +17344,7 @@ function updatePhysics(dt) {
     for(const rock of G.rocks) {
       if(rock._destroyed) continue;
       if(_explosivoSkip(rock.wx, rock.wz)) continue; // v0.22c: explosivo immunity
+      if(_stickyThroughSkip(rock)) continue; // v0.23g1: sticky shoot-through
       // v0.19z: parkour immunity — skip entirely during vault window
       if(G._parkourImmunity || G._vacuumImmunity) continue;
       // Jump-over forgiveness: skip collision when ball is clearly above the rock
@@ -17009,7 +17381,8 @@ function updatePhysics(dt) {
         if(G._stickyCardActive && !G._stickyCardTriggered && !hasIronBall) {
           G._stickyCardTriggered = true;
           G._stickyCardSquash = { timer: 0, duration: 0.55, nx, nz };
-          enterStickyAttached({ kind: 'wall', nx, nz });
+          // v0.23g1: pass `ref: rock` for shoot-through.
+          enterStickyAttached({ kind: 'wall', ref: rock, nx, nz });
           _stickyShared('rock');
           continue; // skip reflection
         }
@@ -17066,6 +17439,7 @@ function updatePhysics(dt) {
     const _treeForgiveY = 2.0; // ball cleanly above trunk-bottom = clearance jump
     for(const tree of G.trees) {
       if(tree._destroyed) continue;
+      if(_stickyThroughSkip(tree)) continue; // v0.23g1: sticky shoot-through
       if(G._parkourImmunity || G._vacuumImmunity) continue;
       // Allow clean over-the-trunk jumps but still bounce off canopy
       // when ball is at typical roll/low-arc heights.
@@ -17083,7 +17457,8 @@ function updatePhysics(dt) {
         if(G._stickyCardActive && !G._stickyCardTriggered && !hasIronBall) {
           G._stickyCardTriggered = true;
           G._stickyCardSquash = { timer: 0, duration: 0.55, nx, nz };
-          enterStickyAttached({ kind: 'wall', nx, nz });
+          // v0.23g1: pass `ref: tree` for shoot-through.
+          enterStickyAttached({ kind: 'wall', ref: tree, nx, nz });
           _stickyShared('tree');
           continue;
         }
@@ -17157,6 +17532,11 @@ function updatePhysics(dt) {
   // Dangerous! Hitting one = heavy shake + lose a life. Strong bounce-back.
   // v0.20c: cannonball is now spike-immune. Description updated to match.
   if(G.spikes && G.spikes.length && !ghostActive && !G._cannonballActive && !G._skaterActive) {
+    // v0.23g1: Dash invuln — brief window after a teleport-dash where the
+    // ball can pass through spikes/dodgeballs without damage. Lets players
+    // dash AROUND or THROUGH a spike that would otherwise have killed them.
+    const _dashInvuln = G._dashInvulnUntil && performance.now() < G._dashInvulnUntil;
+    if(!_dashInvuln) {
     for(const spike of G.spikes) {
       if(spike._destroyed) continue;
       if(_explosivoSkip(spike.wx, spike.wz)) continue; // v0.22c: explosivo immunity
@@ -17177,6 +17557,21 @@ function updatePhysics(dt) {
         const nxS = dxS/distS, nzS = dzS/distS;
         G.ballPos.x += nxS*(minDistS-distS);
         G.ballPos.z += nzS*(minDistS-distS);
+        // v0.23g: Growing spiky ball — when spikes are retracted, treat as
+        // a soft bumper. Push the ball out (already done above), reflect
+        // velocity with low restitution, and do NOT apply damage, sticky,
+        // or destruction. The spike remains in play for the next cycle.
+        if(spike.growing && !spike._spikesActive) {
+          const _dotR = G.ballVel.x * nxS + G.ballVel.z * nzS;
+          if(_dotR < 0) {
+            const _SOFT_REST = 0.5;
+            G.ballVel.x -= (1 + _SOFT_REST) * _dotR * nxS;
+            G.ballVel.z -= (1 + _SOFT_REST) * _dotR * nzS;
+          }
+          spawnHitParticles(G.ballPos);
+          if(AC) sfxBounce(Math.max(2, Math.hypot(G.ballVel.x, G.ballVel.z) * 0.5));
+          continue; // skip the damage/destruction/sticky path
+        }
         // v0.21a6: Sticky card on spike. Player still takes HP damage + the
         // spike still destructs — but the ball stops at the contact point
         // rather than ricocheting off. The free re-aim from a stuck-on-spike
@@ -17276,6 +17671,7 @@ function updatePhysics(dt) {
         }
       }
     }
+    } // end if(!_dashInvuln)
   }
 
   // ── Cannonball spike blast (v0.20c) ────────────────────
@@ -17386,6 +17782,7 @@ function updatePhysics(dt) {
     for(const bmp of G.bumpers) {
       if(bmp._destroyed) continue;
       if(_explosivoSkip(bmp.wx, bmp.wz)) continue; // v0.22c: explosivo immunity
+      if(_stickyThroughSkip(bmp)) continue; // v0.23g: sticky shoot-through
       // v0.19z: parkour immunity — skip entirely during vault window
       if(G._parkourImmunity || G._vacuumImmunity) continue;
       // Height gate: skip collision if ball is clearly above the bumper (jump-over forgiveness).
@@ -17408,7 +17805,9 @@ function updatePhysics(dt) {
         if(G._stickyCardActive && !G._stickyCardTriggered && !hasIronBall) {
           G._stickyCardTriggered = true;
           G._stickyCardSquash = { timer: 0, duration: 0.55, nx: nx3, nz: nz3 };
-          enterStickyAttached({ kind: 'wall', nx: nx3, nz: nz3 });
+          // v0.23g1: pass `ref: bmp` so shoot-through can identify this
+          // specific bumper and skip it until the ball clears.
+          enterStickyAttached({ kind: 'wall', ref: bmp, nx: nx3, nz: nz3 });
           _stickyShared('bumper');
           continue; // skip reflection
         }
@@ -17503,6 +17902,8 @@ function updatePhysics(dt) {
       // (angle advance above runs regardless), but collision is skipped so
       // the ball phases through. Mirrors rocks/sliders/bumpers behavior.
       if(ghostActive) continue;
+      // v0.23g: sticky shoot-through — skip the bar we're phasing out of.
+      if(_stickyThroughSkip(bar)) continue;
 
       // Y gate: ball must actually be at the height of the bar
       const ballTop = G.ballPos.y + BALL_R;
@@ -17710,6 +18111,7 @@ function updatePhysics(dt) {
     for(const sb of G.slideBlocks) {
       if(sb._destroyed) continue;
       if(_explosivoSkip(sb.wx, sb.wz)) continue; // v0.22c: explosivo immunity
+      if(_stickyThroughSkip(sb)) continue; // v0.23g: sticky shoot-through
       // v0.19z: parkour immunity — skip entirely during vault window
       if(G._parkourImmunity || G._vacuumImmunity) continue;
       const offset = Math.sin(sb.phase)*sb.range;
@@ -18121,6 +18523,7 @@ function updatePhysics(dt) {
   if(G.popupWalls && G.popupWalls.length && !ghostActive) {
     for(const pw of G.popupWalls) {
       if(pw._destroyed) continue;
+      if(_stickyThroughSkip(pw)) continue; // v0.23g: sticky shoot-through
       // Only collide when the wall top is actually above the terrain surface
       // enough to meaningfully block the ball (at least BALL_R above floor)
       const floorY2 = pw.baseH + FLOOR_H/2 + BALL_R;
@@ -19239,6 +19642,9 @@ function updatePhysics(dt) {
         G._catapultLaunchGrace = false;
         G._jumpPreloadLaunchGrace = false;
         G._frisbeeLaunchGrace = false;
+        // v0.23g: reset drone delivery per-shot gate so each new swing can
+        // trigger another recovery if charges remain.
+        G._kickbackTriggered = false;
         if(G._ironBallActive || G._cannonballActive) {
           // Reset ball material from chrome back to normal
           if(G.ball) {
@@ -19884,6 +20290,11 @@ const STYLE_PTS = {
   // wall_bounce (50) and rock_ricochet (100) — woodier feel, mid-tier
   // points for an OOB save off the bark.
   tree_thwack: 75,
+  // v0.23g: Near miss — fires when the ball passes within +0.3 of an
+  // obstacle's hit radius without colliding. Sweaty tier: deliberately
+  // tight margin so it rewards skill, not luck. Per-obstacle per-shot
+  // debounced (see tickNearMissDetector).
+  near_miss: 175,
 };
 
 // Named tricks: [condition_fn(events, shotCtx), name, bonusPts]
@@ -20019,6 +20430,8 @@ const STYLE_NAMES = {
   portal_traverse:'🟣 PORTAL',
   // v0.22a: Landed on top of a physics crate
   on_the_box:'📦 ON THE BOX',
+  // v0.23g: near-miss style event — tight pass-by without contact.
+  near_miss:'💨 NEAR MISS',
 };
 
 // v0.19z5: events that render with flagship styling — big purple glow,
@@ -20843,17 +21256,22 @@ function calcHoleEarnings(strokes, par, coinsPickedUp, wallCoins = 0) {
     total += wallCoins;
   }
 
-  // Score bonus: under-par pays 15 coins per stroke under (v0.22c — was 10)
+  // Score bonus: under-par pays 20 coins per stroke under (v0.23f — was 15)
   // v0.19j: scales with par (Par-5 HIO = 60, Par-4 eagle = 30, Par-3 birdie = 15, etc.)
   // v0.20a: Precision's underParMult doubles this.
-  // v0.22c: base bumped 10 → 15 per Adam ("Let's increase payouts by 50%
-  // for under par on normal runs"). Elite/Lap/Chasm courses don't go
-  // through this path for their own scoring multipliers; the bump is
-  // localized to standard hole completion.
+  // v0.22c: base bumped 10 → 15.
+  // v0.23f: 15 → 20 per stroke under. PLUS stacking bonuses on top:
+  //   • Hole in One: +30 coins (stacks with the per-stroke total)
+  //   • Hole in Two: +20 coins (stacks with the per-stroke total)
+  // So a Par-4 HIO = 3 strokes × 20 + 30 HIO = 90 coins (was 45).
+  //    A Par-4 eagle (hole in 2) = 2 strokes × 20 + 20 = 60 coins (was 30).
+  //    A Par-5 birdie = 1 stroke × 20 = 20 coins (was 15).
+  // The two stacking bonuses are shown as separate rows so the breakdown
+  // reads clearly in the hole-out scorecard.
   let scoreBonus = 0;
   const underPar = par - strokes;  // positive when under par
   if(underPar > 0) {
-    let perStroke = 15;
+    let perStroke = 20;
     try {
       if(typeof getCurrentCharacter === 'function') {
         const _char = getCurrentCharacter();
@@ -20872,6 +21290,36 @@ function calcHoleEarnings(strokes, par, coinsPickedUp, wallCoins = 0) {
     else if(underPar === 2) label = `🦅 Eagle bonus (2 under)`;
     else                    label = `🐦 Birdie bonus (1 under)`;
     rows.push({ label, amount: scoreBonus });
+
+    // v0.23f: Stacking finish bonuses. Hole-in-one gets +30 ON TOP of the
+    // per-stroke under-par payout; hole-in-two gets +20 ON TOP. Same
+    // character/modifier multipliers as the per-stroke base so the bonus
+    // scales consistently with the rest of the under-par pipeline.
+    if(strokes === 1) {
+      let hioBonus = 30;
+      try {
+        if(typeof getCurrentCharacter === 'function') {
+          const _char = getCurrentCharacter();
+          const mult = (_char && _char.traits && _char.traits.underParMult) || 1;
+          if(mult > 1) hioBonus *= mult;
+        }
+      } catch(e){}
+      if(G.modifiers && G.modifiers.some(m => m.id === 'mo_money_mo_problems')) hioBonus *= 2;
+      rows.push({ label: '🎯 Hole-in-One bonus', amount: hioBonus });
+      scoreBonus += hioBonus;
+    } else if(strokes === 2) {
+      let h2Bonus = 20;
+      try {
+        if(typeof getCurrentCharacter === 'function') {
+          const _char = getCurrentCharacter();
+          const mult = (_char && _char.traits && _char.traits.underParMult) || 1;
+          if(mult > 1) h2Bonus *= mult;
+        }
+      } catch(e){}
+      if(G.modifiers && G.modifiers.some(m => m.id === 'mo_money_mo_problems')) h2Bonus *= 2;
+      rows.push({ label: '🎯 Hole-in-Two bonus', amount: h2Bonus });
+      scoreBonus += h2Bonus;
+    }
   } else if(diff === 0) {
     scoreBonus = 1;
     rows.push({ label:'⛳ Par bonus', amount: scoreBonus });
@@ -25819,7 +26267,12 @@ function spawnClusterMiniGrenade(px, py, pz, dirX, dirZ, blastR) {
   requestAnimationFrame(tick);
 }
 
-function fireProjectile({ blastRadius = 4.0, travelSpeed = 22, color = 0xff4400, emissive = 0xff2200, maxDist = 40, scale = 1.0, hitRadius = null, spiral = 0, accel = 0, maxSpeed = 140, piercing = false, splitCount = 0 } = {}) {
+// v0.23f: missile now travels further (default maxDist 40 → 80) and lives
+// up to 4 seconds before forced detonation, mirroring the MIRV sub-rocket
+// safety cap pattern. Sniper/Sharpshooter override maxDist and inherit the
+// 4s time cap implicitly — at 140 m/s max speed it covers 560m in 4s, well
+// past the 500m geometric cap, so timing is never the limiter for that path.
+function fireProjectile({ blastRadius = 4.0, travelSpeed = 22, color = 0xff4400, emissive = 0xff2200, maxDist = 80, scale = 1.0, hitRadius = null, spiral = 0, accel = 0, maxSpeed = 140, piercing = false, splitCount = 0, maxTimeMs = 4000 } = {}) {
   if(G.rolling || G.inHole) return;
   // Guard: ensure shotDir is valid
   if(!G.shotDir || G.shotDir.length() < 0.01) {
@@ -25871,6 +26324,12 @@ function fireProjectile({ blastRadius = 4.0, travelSpeed = 22, color = 0xff4400,
   scene.add(missileGroup);
   // Expose for Sharpshooter cinematic camera tracking
   G._activeMissileGroup = missileGroup;
+
+  // v0.23f: Flight start timestamp for the 4s time-out safety cap. Independent
+  // of dt accumulation so slow-mo doesn't extend missile lifetime past the
+  // wall-clock limit (which would let Sharpshooter freeze time and exit the
+  // arena entirely while time-dilated).
+  const _missileFlightStartT = performance.now();
 
   // Squash-stretch launch: start squashed wide then elongate (respects the overall scale)
   const s = scale;
@@ -26026,13 +26485,19 @@ function fireProjectile({ blastRadius = 4.0, travelSpeed = 22, color = 0xff4400,
     const hits = sweptHit ? [sweptHit] : [];
     const wallHit = sweptWallHit;
 
-    if(hits.length > 0 || wallHit || travelled >= maxDist) {
+    // v0.23f: 4s wall-clock time cap. Independent of slow-mo so the missile
+    // can't loiter forever during a freeze frame or Sharpshooter cinematic.
+    // Behaves identically to maxDist for stop-reason routing — treated as
+    // "ran out of time" so piercing missiles still terminate cleanly.
+    const _timedOut = (performance.now() - _missileFlightStartT) >= maxTimeMs;
+
+    if(hits.length > 0 || wallHit || travelled >= maxDist || _timedOut) {
       // v0.21d: Railgun upgrade — when piercing is on and the stop reason is
       // an obstacle hit (not a wall, not maxDist), do the boom but DON'T
       // remove the missile or null the anim. The blast destroys the obstacle
       // so it won't trigger missileInFlightHitCheck again next frame.
       const _piercing = !!piercing;
-      const _stoppedByMaxDist = !(hits.length > 0) && !wallHit && travelled >= maxDist;
+      const _stoppedByMaxDist = !(hits.length > 0) && !wallHit && (travelled >= maxDist || _timedOut);
       const _stoppedByWall = wallHit;
       const _shouldStop = !_piercing || _stoppedByWall || _stoppedByMaxDist;
       if(_shouldStop) {
@@ -26388,7 +26853,14 @@ const CHARACTERS = {
     starter: {
       // v0.22e: 8-card Precision starter — 2 freeze / 1 perp / 1 goal / 2 sharp / 1 power / 1 backspin.
       // Backspin = pure Precision (control/brake tool). Reverse moved to Speedy.
-      deck: ['freeze_frame','freeze_frame','perpetual_motion','goal_oriented','sharpshooter','sharpshooter','power_shot','backspin'],
+      // v0.23g: −1 freeze_frame, −1 sharpshooter; +1 jumper, +1 sticky.
+      // Rationale: Precision wanted a tactical-bypass toolkit on top of pure
+      // brake/scope. Jump and sticky are both controlled-bypass plays that
+      // fit the "Tighter par. Bigger payouts. Focus." identity. Keeping
+      // singles of freeze_frame + sharpshooter preserves the signature feel
+      // without doubling those two specific cards (which were arguably the
+      // strongest pair in the deck).
+      deck: ['freeze_frame','perpetual_motion','goal_oriented','sharpshooter','power_shot','backspin','jumper','sticky'],
       perks: [],
     },
     bannedCards: [],
@@ -36642,6 +37114,32 @@ function spawnHitParticles(pos) {
   }
 }
 
+// v0.23g: Dash dust cloud — 10 tan/grey particles puffed OUT from the dash
+// kick-off point, low to the ground. dustDirX/dustDirZ is the unit direction
+// the dust should spread (opposite to dash direction, so the "kicked up
+// from beneath the ball" reads correctly).
+function spawnDashDust(x, y, z, dustDirX, dustDirZ) {
+  for(let i = 0; i < 10; i++) {
+    const sz = 0.06 + Math.random() * 0.08;
+    const g = new THREE.SphereGeometry(sz, 5, 4);
+    // Mix between tan and light grey — reads as kicked-up dirt
+    const col = Math.random() < 0.6 ? 0xc8b890 : 0xb0a890;
+    const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({
+      color: col, roughness: 1.0, transparent: true, opacity: 0.85,
+    }));
+    m.userData.noOutline = true;
+    m.position.set(x, Math.max(y - 0.05, BALL_R), z);
+    scene.add(m);
+    // Velocity: strong push in dust direction + spread + small upward kick
+    const spread = 1.2;
+    const fwdSpd = 2.5 + Math.random() * 2.0;
+    const vx = dustDirX * fwdSpd + (Math.random() - 0.5) * spread;
+    const vz = dustDirZ * fwdSpd + (Math.random() - 0.5) * spread;
+    const vy = 0.8 + Math.random() * 1.5;
+    G.particles.push({ mesh: m, vel: new THREE.Vector3(vx, vy, vz), life: 0.45, maxLife: 0.45 });
+  }
+}
+
 function spawnSplash(pos) {
   for(let i=0;i<12;i++){
     const g=new THREE.SphereGeometry(0.05+Math.random()*0.05,4,4);
@@ -38146,6 +38644,9 @@ function fireShot() {
   // apply anymore.
   aimManualOverride = false;
   G._shotJustFired = performance.now();
+  // v0.23g: clear per-shot near-miss debounce so each new shot has a fresh
+  // set of obstacles that can credit the combo.
+  G._nearMissDebounce = new Set();
   // v0.20h: Pinball armed -> active. The 12s timer starts now (on swing).
   if(G._pinballArmed) {
     startPinballActive();
@@ -38215,6 +38716,64 @@ function fireShot() {
   // count strokes as usual.
   const _stickyFreeSwing = !!G._stickyFreeSwing;
   if(_stickyFreeSwing) {
+    // v0.23g: Sticky shoot-through — capture the attached object reference
+    // BEFORE clearing _stickyAttached, so collision branches can skip that
+    // specific object until the ball physically clears its hit radius.
+    // Without this, firing from the back of a bumper or slide block ricochets
+    // the ball straight back at zero forward progress. The shoot-through
+    // state self-clears once Math.hypot(ballPos - object) > BALL_R + obstacle_r.
+    // Pattern mirrors the launch grace + first-jump fly-over.
+    if(G._stickyAttached) {
+      G._stickyShootThrough = {
+        kind: G._stickyAttached.kind,
+        ref: G._stickyAttached.ref,
+        // Cache approximate hit radius for clear-check (per kind below)
+        clearR: 0.9,
+      };
+      // Tune clearR per attachment kind so the check matches each obstacle's
+      // actual collision envelope. The +0.3 margin guarantees a clean exit.
+      const _a = G._stickyAttached;
+      if(_a.kind === 'spinner' && _a.ref) {
+        const _len = _a.ref.length || 1.6;
+        G._stickyShootThrough.clearR = _len + BALL_R + 0.3;
+      } else if(_a.kind === 'slideBlock' && _a.ref) {
+        // For slide blocks use max-of-halfWidth/halfDepth + BALL_R + margin
+        const _hw = _a.ref.halfW || 0.4, _hd = _a.ref.halfD || 0.4;
+        G._stickyShootThrough.clearR = Math.max(_hw, _hd) + BALL_R + 0.3;
+      } else if(_a.kind === 'wall' || _a.kind === 'popupWall') {
+        // Wall sticks aren't a single-point object; clearance is fast (a
+        // half-cell sideways suffices). Set a smaller clear so the skip
+        // releases as soon as the ball is past the wall surface.
+        G._stickyShootThrough.clearR = BALL_R + 0.6;
+        // Store the wall's outward normal so we can release based on
+        // signed distance along the normal rather than radial distance.
+        if(typeof _a.nx === 'number' && typeof _a.nz === 'number') {
+          G._stickyShootThrough.nx = _a.nx;
+          G._stickyShootThrough.nz = _a.nz;
+          G._stickyShootThrough.anchorX = G.ballPos.x;
+          G._stickyShootThrough.anchorZ = G.ballPos.z;
+        }
+        // v0.23g1: If the wall-kind stick has a ref (bumper, rock, tree,
+        // corner triangle), set clearR off the obstacle's actual hit radius
+        // so the ref-based check in updatePhysics releases at the right
+        // point. Without this the +0.6 normal-distance check fires before
+        // the ball has cleared a radial bumper that bulges outward.
+        if(_a.ref) {
+          let _objR = 0.55;
+          // Rocks/bumpers/spikes use .r; trees use .r too; corner triangles
+          // don't have a single radius — fall back to legs' avg.
+          if(typeof _a.ref.r === 'number') _objR = _a.ref.r;
+          // Override clearR to obstacle hit envelope + ball + margin
+          G._stickyShootThrough.clearR = _objR + BALL_R + 0.4;
+          // Also stash the ref's position as the anchor for radial check
+          // (used in updatePhysics when ref is present alongside normal).
+          if(typeof _a.ref.wx === 'number' && typeof _a.ref.wz === 'number') {
+            G._stickyShootThrough.refAnchorX = _a.ref.wx;
+            G._stickyShootThrough.refAnchorZ = _a.ref.wz;
+          }
+        }
+      }
+    }
     // v0.23a7: Double Stick upgrade — read maxSticks off CARD_DEFS.sticky
     // (default 1, Double Stick = 2). On the first free swing, if we still
     // have a stick remaining, keep the card armed and increment the counter.
@@ -40024,8 +40583,8 @@ const ALL_PERKS = [
     desc:'Style points 2× while over par OR at 25% HP or less. Multiplies with Showboat.' },
   { id:'mo_money_mo_problems', name:'Mo Money Mo Problems', emoji:'💰', rarity:'epic', price:28, stackable:false, weight:2,
     desc:'Under-par payouts doubled. Par on each hole reduced by 1 (resets each hole).' },
-  { id:'kickback',        name:'Drone Delivery',        emoji:'🛸', rarity:'rare',     price:18, stackable:false, weight:4,
-    desc:'Once per hole, when your ball would go OOB, a delivery drone retrieves it and floats it back to a safe spot — lasering any hazards or obstacles in the drop zone first.' },
+  { id:'kickback',        name:'Drone Delivery',        emoji:'🛸', rarity:'rare',     price:18, stackable:true,  weight:4,
+    desc:'Recovery drones save your ball from OOB. 2 recoveries per hole, +1 per stack. Upgrade chain: Drone Fleet → Drone Armada → Drone Cavalry (each +1 recovery).' },
   { id:'lucky',           name:'Lucky',                 emoji:'🍀', rarity:'rare',     price:20, stackable:true,  weight:3,
     desc:'Rare, Epic, and Legendary cards/perks appear 25% more often per stack.' },
 ];
@@ -40558,6 +41117,21 @@ const PERK_UPGRADES = {
   },
   // existing holy_hand_grenade card-side upgrade lives in CARD_UPGRADES;
   // pinball card-side upgrades likewise.
+  // v0.23g: Drone Delivery — endlessly upgradeable chain. Fleet → Armada →
+  // Cavalry. Each upgrade adds +1 recovery per hole on top of the base 2 +
+  // stack count. Upgrades chain by upgrading the same perk repeatedly; the
+  // runtime reads `droneBonus` off the active upgrade-merged perk def.
+  kickback: {
+    a: { id:'drone_fleet', name:'Drone Fleet', emoji:'🛸', archetypes:[],
+         desc:'+1 recovery per hole (3 base) — a coordinated fleet of recovery drones.',
+         droneBonus: 1 },
+    b: { id:'drone_armada', name:'Drone Armada', emoji:'🛸', archetypes:[],
+         desc:'+2 recoveries per hole (4 base) — a full armada at your service.',
+         droneBonus: 2 },
+    c: { id:'drone_cavalry', name:'Drone Cavalry', emoji:'🛸', archetypes:[],
+         desc:'+3 recoveries per hole (5 base) — the elite Drone Cavalry rides out for any OOB.',
+         droneBonus: 3 },
+  },
 };
 
 // Runtime state — cleared on run start.
@@ -42287,7 +42861,21 @@ function initHole() {
   if(typeof clearAirStrikeState === 'function') clearAirStrikeState();
   // v0.23b: per-hole state resets for new perks/cards.
   // — Kickback: 1 charge per hole (granted only if perk owned, but harmless to set).
-  G._kickbackCharges = (G.modifiers && G.modifiers.some(m => m.id === 'kickback')) ? 1 : 0;
+  // v0.23g: Drone Delivery now stackable + endlessly upgradeable.
+  // Base 2 recoveries/hole, +1 per stack (each duplicate perk owned),
+  // +1 per upgrade tier (Fleet/Armada/Cavalry — each adds 1).
+  const _kickbackStacks = (G.modifiers || []).filter(m => m.id === 'kickback').length;
+  if(_kickbackStacks > 0) {
+    let _drones = 2 + (_kickbackStacks - 1); // base 2 + 1 per extra stack
+    // Upgrade bonus — read upgrade branch off the perk-def field.
+    // Fleet (a) = +1, Armada (b) = +2, Cavalry (c) = +3. Read via getPerkField.
+    const _droneBonus = (typeof getPerkField === 'function')
+      ? (getPerkField('kickback','droneBonus',0)|0) : 0;
+    _drones += _droneBonus;
+    G._kickbackCharges = _drones;
+  } else {
+    G._kickbackCharges = 0;
+  }
   G._kickbackTriggered = false;
   // — Time Bomb: per-shot flag (set in finalizeShot, reset on each new swing).
   //   Reset here too in case a hole ends mid-finalize.
@@ -47553,6 +48141,73 @@ function animate(now) {
           spike.wx = newWx;
           spike.wz = newWz;
           if(spike.mesh) spike.mesh.position.set(newWx, spike.baseH + FLOOR_H/2, newWz);
+        }
+        // v0.23g: Growing spiky ball — extend/retract spike cones on a 10s
+        // cycle (5s extend, 5s retract). Phase advances 0→1 over 10s and
+        // wraps. extension(0..1) = sin²(phase * π) — peaks at 0.5 (fully
+        // extended), zero at 0/1 (fully retracted). Halted by freeze frame.
+        if(spike.growing && !spike._destroyed) {
+          const CYCLE_S = 10;
+          spike.cyclePhase = (spike.cyclePhase + (dt / CYCLE_S) * _freezeMult) % 1.0;
+          // Sin-squared gives smooth extend/retract: 0 at phase 0/1, max 1 at 0.5
+          const ext = Math.sin(spike.cyclePhase * Math.PI);
+          const ext2 = ext * ext;
+          // Damage threshold — spikes "active" when extended ≥ 0.35 (about
+          // the upper 50% of the cycle). Below this they're decorative bumps.
+          spike._extension = ext2;
+          spike._spikesActive = ext2 >= 0.35;
+          // Scale all cone meshes Y-axis (cone height) by extension.
+          // Min 0.05 (visible nubs) → max 1.0 (full).
+          if(spike._coneMeshes) {
+            const _yScale = 0.05 + ext2 * 0.95;
+            for(const cone of spike._coneMeshes) {
+              const _base = cone.userData._baseScaleY || 1;
+              cone.scale.y = _base * _yScale;
+            }
+          }
+          // SFX trigger at extend onset — wolverine-claw "shink".
+          // Phase boundary 0 = retracted (phase near 0), 1 = extended (phase near 0.5).
+          // Trigger SFX once per half-cycle as we cross into extended.
+          const _curBoundary = (spike.cyclePhase < 0.5) ? 0 : 1;
+          if(spike._lastBoundary !== _curBoundary) {
+            // Only fire SFX when we cross INTO extended (0→1 transition).
+            if(spike._lastBoundary === 0 && _curBoundary === 1 && AC && G.ballPos) {
+              // Proximity attenuation: full vol within 4u, fades to 0 by 16u.
+              const _bd = Math.hypot(G.ballPos.x - spike.wx, G.ballPos.z - spike.wz);
+              const _vol = Math.max(0, Math.min(1, (16 - _bd) / 12));
+              if(_vol > 0.05) {
+                try {
+                  const ac = getAC(), t = ac.currentTime;
+                  // Wolverine-claw "shink": high-passed noise burst + downward chirp
+                  const sr = ac.sampleRate, bufSec = 0.22;
+                  const buf = ac.createBuffer(1, Math.floor(sr * bufSec), sr);
+                  const d = buf.getChannelData(0);
+                  for(let i = 0; i < d.length; i++) {
+                    const tt = i / d.length;
+                    d[i] = (Math.random() * 2 - 1) * Math.exp(-tt * 4.0) * 0.9;
+                  }
+                  const src = ac.createBufferSource(); src.buffer = buf;
+                  const hp = ac.createBiquadFilter(); hp.type = 'highpass';
+                  hp.frequency.value = 2800;
+                  const ng = ac.createGain();
+                  ng.gain.setValueAtTime(0.20 * _vol, t);
+                  ng.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+                  src.connect(hp); hp.connect(ng); ng.connect(getACDest());
+                  src.start(t);
+                  // Downward pitch chirp on top
+                  const o = ac.createOscillator(); o.type = 'sawtooth';
+                  o.frequency.setValueAtTime(1400, t);
+                  o.frequency.exponentialRampToValueAtTime(280, t + 0.18);
+                  const og = ac.createGain();
+                  og.gain.setValueAtTime(0.10 * _vol, t);
+                  og.gain.exponentialRampToValueAtTime(0.001, t + 0.20);
+                  o.connect(og); og.connect(getACDest());
+                  o.start(t); o.stop(t + 0.22);
+                } catch(e){}
+              }
+            }
+            spike._lastBoundary = _curBoundary;
+          }
         }
       }
     }
