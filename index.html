@@ -1602,6 +1602,27 @@ pointer-events:none;
     inset 0 0 16px rgba(255,230,140,0.30);
 }
 }
+/* v0.23h8: GGW logo image — replaces the text "Golf Gone Wrong" h1 on the
+   profile picker, main menu, and post-run rebuilt main menu. The data URL
+   lives ONCE here so all three call sites share a cached resource. Sized to
+   roughly the same vertical footprint as the old h1 (~3.2rem ≈ 51px font
+   with 2 lines + leading), and the same negative margin to tighten the
+   tagline + button stack.
+   v0.23h82: Logo now has real baked-in 3D extrusion (sourced from PSD).
+   CSS drop-shadow softened from (0 4px 12px / 0.45) to (0 2px 6px / 0.35)
+   so the asset's own extrusion isn't fighting a heavy CSS shadow. */
+.ggw-logo {
+  display: block;
+  margin: 0 auto 8px;
+  width: clamp(180px, 55vw, 320px);
+  height: auto;
+  user-select: none;
+  -webkit-user-drag: none;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 6px rgba(0,0,0,0.35));
+  content: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAWgAAAGCCAMAAAD65KkDAAAAP1BMVEUAAAACAwP8/Pz5BQP8+/tbWlqfnp9dNDJycXGfNTRTUVFoZmWhnp4uLCyVkpKfT04AAAAAAAAAAAAAAAAAAACfvdWIAAAAEHRSTlMA/v7+Bvz+/Qb+nGQpplH+8fSkzwAAG5dJREFUeNrtnYmSozoMRU3iFQP5/7+dQBYg8SLJMkl67KpX82a6m4YTIV/JsiyEEFKK/3PUefD/Fmcb7T1pSBro30bSJsNj2DVbZwUdx9k4t9FGG20mbET/e9BNdTSLbqONZtFttNFs/SCaDTQr6Iazjeah22iYfxB0895tfI8tWnv9Pytls8paDtUuiNe/NtA8Glg+pPD8n938++S9n3b/iNfR7UPag5Yry8EOcho71T2Gl4sHacqjbNjVUcwwJ9G9jytqKxpoBrc8m3XfK9VFxigbTmJK4mnGgxj81lFExtDwgbzwY8KTi/XZ1Q6nDjgaaZAl32A//fFgpR971WHG9Euu4zPi/yopNlp4iMx4r0OpF5/tm4/OYF5VxVUYewVBrE/L0KgpEaew/5x8uz1wP/Y9yI71nXEAdDc2s01xHnwPIdxtCYdBzzZtG9OI6wRQ1ioAOQS6E410zKCzkE8RyMt4+/YeSfqv+OhZxlw12/ucswhm2YOmPAzoG2n5P4GWc8b4qSjec5lWDAnIecYR0LOf/n+0xCbZJodBDjJkPGF7vpyAjGOgu9Deij+ZbNswFn5aaKreB56VasYZ0LP3+LsmLbd2M1xDj/EqjF8ffzdPyTEqjwtBX2PEPyk9bosf9hlA91042aa2Vn2dsLbKgjqiGSb7Nznbh1WnRXE/PM1+OxWeTtyg4cH4L/mY2ZivEsP3Jh96PGWuFf5p6fygX53Hn9haMd+qBycz1yB5rAl6/HuqY05W9Ii0sXo8dF8T9IuXhq+CH2Tiaz5ayn3B1P1/lwT99nuuvnZMBdBa6PfXerlEXz4VJkCPQIn3DaBvKx6P6O76x2Dv/Hd6I/icZo48YjT8Q5xUBP0zwuMaPgdX4YYZ+/ppBMO718hDBUjb1Uf/x6BXUTwMYpqW4OP657yU9xDLj9BPvOXl37mpgCgQXwL6G6bJ0MpdP22TRFbYHhBAq6DMq6o6rr9BkCbDI0XE/NvHPvUIw43yDBpiliosqOuCHr8Y9BJHSzvl1do4zqztJo4+IUF364+K+hb9dYpYSA/VxEvmQk5k0Jsr1bHob03hLek332HGtNFonwGtE5f90tVDK5ILS2/VKvcqzvGzoFUSNDAjdrA5h6xZva3b6VhFZwFoevYuubL7ja7DhooJdSwXr9V3gNbp634B6H3d8ZKv6F/jDuwjHgxaq2zl2Aa0rKvVHiDtLVPxTFnYZ0ZD3itmB7TTFOpDoK/vGbDIVO5zMnVFsbWxJdRN+m3vNqArpPpw0Do8Ixe5DsngdfeJCztM0yT8NA32lrCwz7W7nqgA1IGgcaXSCNAFpLdW7L0PlHP33j8+zRfOmiyuaoGGu4pjJsNHlnihLMUgxjEd4o3DnBjaVwupgnihEmjRkYes5JGvPnm4Z4RgUXS/zJZlcYOqbtFkzqOsN/UtmWL4zg8zCWkK4zP1n4FeVkOGtzR8bvixOA7+WtDVFkSQCSGufIP+VtC+Tj4IteLPmtf5VtATV/Ju44LmPeiJgnmtc49dkhFWAInGCHqphoRMQ2yLs1LeKgJiufr4Gp7m5Py4mq4OeptJPBz0cq3cHrHcq1zE+fHQVUHPa+sCc8WXeEUySLrpHTIyTVHIuTZoRbnivGRoOcWGHCleQHNyrgyadkXeWnT7Wo5FSrydfhG0AMhoy8d5IGHeP7j+SdCn4wxavqaRaS9eseP4TtA90xa4ZYlkZ8+C6OFOfxI0YluWzOqNgvympn0+PwMaxPlR8J2Nugv8rGb00F8I2i+7n7eug+xGdvaMd7Oa03N8G2h/2yTGAnrHmWCUinEqfDyz+g7QXrLqusK9kIrTcwBAn44DLZmKOORr9wUSKgN+Qq3y8vyrQEcwS0pudLMVsivbQK2ArvyXQBdkm98chy0VDSDQ4Kjmq0BPbKDlxkHrUz3QqoPqx68C3TNmksr3UEMu0P3noFmaAvxh0IxFBn0xZ/GHQXc8E+E29FYNNMNSYTxm9AzR8++D1tVBP9eu9H8NOl5vYIsjcLksEnIYtPp50Im6DgxomSjMZTBo3f0yaJ2p+i8HvcsmEVKj+n2HzS+B1idYQfrAAXrVdriVq1jR/I+Avt6/7qCDYzJc2+Mo+GumiKWNWNBdHdC6Q26s4AB9jQoV0EPDNn78AGj0/hWmvD/sXYPeXQMdM3IP8Rxwf/b/gJa4fNJjZUXzcP6ToMsDlrmTFMRzdA00V4ZUnZju7C+CnnCuI5zr8PDHTtBVSn8etJiV5+MLPI6Qb+uKBDx2wgK2Lek+B1ppsSnfV+ygy3dUrPE3waA1OprjBK2jv01/FLSMgJ7wNUGxIzYOBq1U8oc5QWO32oe+e8StXevEjqGDXUeGI2Q1CDh6QvaZAhpaKvYzoE+fAJ3PKMFSzX8ZNMt+2Xxc+N+D7surDdbSxlMDnZgK+eJCWBz1f4L2R+VI/3PQLJ0j1gXwBrom5zVeEQ10eB60tJmPou42oDWohObjoE9coOfT5SwHaAnK+iMt+k+AVv3ob11BWdoIWiEVP2j946B7L7x8a11ZtJK1qrtPgD59IWg/PPmFT4yhlRt8FHT6YuYjoOVjQ4/k7Vr8Uddx+j6L7sW2PfMfAQ2rbqgDWnHlnX8BdPpSqp6OTtVboUDjVIf5DOhc+Vkl0Jne8siDkiViMnwceXQc6OujAsqw+UFDCge5DlnhUh2aDBp8DHrHCVorYFtuW4Yz6TwIoHXsu/m6G2gu0FdfIZAZJFnFRw+oybC7/1XVBl3WkoLYVf5OWlZRHQJXPqP0JeGr2UAXdQ0SBZyZsqKhyRClOjKPzwa6I4NGHfVxr7Pa/wQ8YSdRoBUF9KkuaAUNa7aaAnUMxf64rv1PiqHYRxNBa6RFKzbHAbqWxllx6PxamvhAgYb4aI206I7NceTb2SARA1MfgvvQwrXvDKodV+5+NRvnyH1hz6tRmRZOir96lAN0nSgjbF2q1FMkiwXjs5DlJb1piAK/D10V9OtLXCSQNWFWYPEe8cmwA37iBrLGrdg4Py+FP9uK2CiYJe8h44uzoKxl7iVUxSYdNkpcGH2b98g653kJ5gix51EKPKCDzOCQyYG7rrUVK9B7hq9DLvliuiByVnoxYkX79Tq2oUJwncO5loQpTtCq6H3Ajq2uoL1QOrphlgBaHgi6qCkyJo4WoVtg/OUT02S4cR28oLFvL+W8zOh+JU6nlS5VgoMGCmn+2Lnca+jTEaCTxdGYhdxV32k+0YG8IO1g0vhnrVn9FlsFAh9oWshA1Rrxe+CdIFhq7zbb38qddOigPcGF+T2/cRRotr6kPU/OLXKzqRPjQGH1mqGv6DoUM2gZmg0nJtCoJKW+AFJwLx+Shk6GivHeaXvfAqC3Hbq5HUfJ0FkcfKD1EVU12zMU9JdwjmWEdAXQAPfFtPtt4zvUl3CGveHFoKErCExz4bBphq6/m/PepAtA4+JQQk1NIASXW99hvsE/Q3fPUUBrfSsAql1SEwZdegCLxnpg/Uy3BfuDAn9VHHTHaw+eI9chXo7IqmvOsZYxe18J/GV40N1hoGPf3ZNJI7yd0kUE30z6Cywa+QHsTzGsgxlz2DXwA/k90HJ/bLJm9xkKdz1IO6HoVVGgYfrOC8ZRMemmsd5ew3KqhaDv8b06TEcL0kngFTBDl1bpoEOPpw+16O0Re5AZidtp7FEI2GdMseh32aOPtOjZpEdYLhlX+IaW5aBPhwya+GrW2WKx/xXrWyYWxLhFJ6ImV0A2x4Hmq6ORdqulmQY1qa1OMJM+CLQiLBrGj3B6mw8BgbTi5wwDrRhB58PFxAqLxCvpVzGdDvC2Kx86XBtHPOwexulY0DwbOuMaL7R6Bw5diJyBnFS6gIYX9MS/zUJStn8EPV3ZcarAbzsItOQGHScNKDbm8M8ITuo40ImFLHKd6S5hihPDTJzBnA4D7XmaV+UDF024XV0ftD4INDX8lplihEHs9bSm3G5JyROY0yGgcyUdkgh6d1YnjhiP40Bw0rVB997LIruFbbTAegAmg0Zwqgy6LyUJlh3qRLzdtA7crMyWcVKVLVouve/YNhq+fHWk2iVyEVuXg9aVQY8loHOt88icYaABZo/gFL5HLOiiE6olSWFvasPwfhYCGiK1EZwUB2hVVOkvKY5jm1UqqXtVsGcqB61LXUemB16tpo4bBU3QDQDQoEDoIH2oAWsYA3uO4zX8FqcaoDUo7VQZtEY0+qBV6+bzH6viOJ0OsOgPgEbWCI5sWzkZq6T1L4DujgCd1319iUH/BGhkRZiv46HLtgypXwatQrXDhBPfYCZdZNCgVMfHQYtE6Yk+xnVsJEd5L9By0LoQtIJMhi+dEZgtWuYMGjsTKvFauvQFFh259mXrK/IzZV+ycCVzWTugMSXkqKkEGtglKXFtFT8s9zDQE9xD56rvGEALeA4J5ToU9IAYIGj84iy4lQRk73YlH6260skQmS3lVx2bdFLyXmAVjvVA64NBS2bKm+poXCfYGqBVAnR3LOhrwJJJ/eO99ojb4fcp0PojFi0poAMbOjdtMxXqRl4L8+qD7g4FvRxQRk2VyuTSt6bNgndZqjlA6yRodSzoXBt6KYmg8Y5Dv99rTdDd0aDTMyLWRwP6wIZKeCPBFQNoFQWtjga9tM1kkR9ybSOhYAatYpUZoj7o/OoPO+hbFwmGtpmQU5xgZTXqANDqeNCLzmPw0Wv8DQCtTh8GnZV4FUDPjtoyFDnmXTTwuOq6oIEnSdYAPe8Xsnzxt/4N0LoK6Fw8Vl57gAOt8jdbGzTkqFrNzfnes5ungvTLQQMPeaGABpV6TGygIf7rG0B3nKDD67LlNi0D3dgmhIr+CtCaCbRWuJKaqUh1PHOkB4PWdNAdB2hK2x//Kp1xYcx4EGgBqSYFgdYloEHOwphYn4OCMyyOAg1owwgE3eVAq/h6ZwawW8b5Oq5/GN7qpf4g0KAqGxholZu40cpCKbPg3Q9e0oeBFoB3Hwa6Q1h0vlDXuADjZTjWirzDQD/2ZGVXJvOgFciiIX2JYoxjoAtIHwgaGKLlQWe2dXWwnkTmnBmOtcXSr4AG7YGBF0Ebdz6TQJNtGgO6AyQMikArKGhdtlZvzpDhoq1Slo2ESKn3VaA7KOju1fujum+7cwnoazR+Ay3+B9Ddqo3RB22dz2WgafuXe6A2hdYyFXuOyMJgoIWr1opy/NO5GPS9iEnWA909znnQNUAnV1HI/e3NS0B9LgdNWgjIg1awBkDloJPvDQG0ecTThsQ5Abon7KvNV3WEHjFuj6KYcxC0xjI+uyCxMwtoiknnQWtYKaMu7KgUvzryrGoj3pBh9UYW9ISvMwUUoYMMOlt8B1+H3jWKVFifIQLIcPoZALqX6DrTEZrlzak8YEEA4FeoR8KNoilCnM8UxxHK3pWUikFAn8DLUFTf8TLVInyFeWnJbBKgHR9oSU38Z17555PHd9wACwLyqy/4ONoAQeM4n5MvDrquo2zPbAi0psUpKGUcR5IAzWjQHTbXsdn6JrhAd9Sfg1G+BHhdQKAx82BqJpxhYXMd+M2cAGA1j6p2OeuLgwam7IwzJnsbPVbebfa+KTbQiEtpsl+OOY846PRqioPw3eloidF3bEeh7k0TfHYjW0LIJL8l/bPOoSfiuX23xEUskusYZeA2uCdkktQASAQ0aMp94JdZeI5CDTmB1FGbaVM264CDdikvnvpZkrREb2CWLEehRia1YMN6kSwVMu5l8f+ljgWgemOgDSNn0pFwUnGYtI5Vpiix0lZCpezY5QUtQPbGQDu8WOaLV17OjdRcHhp/48ACC0AgFwONNOhZ5fFm/re5AmZ75lv6VwDQhgDapNYLEp8DOvEvd76D6jyKOCtQHCEAwV06TQow6PfYPmbTFlu2K/dtdmmkS46rNrjMAyB/jLHoLUcnEK6F2IGmKyFddCo4Is8DSFeY2EcX+1GT9V6Gbc3w9dxIdSBmVD7NRNP6eRmXA31BpvBuoLGNureH3SOzeIVn3OPTwwLwYeBBO3Su9NauQKJAz+VNElaruY88VCFmbB7e5H/EIUHD1TmH63g/oRNwui8IcjSSpuThF4qO9mFEPIrLT8iGFIFLQD90CGrIfhu3n1/ed4SYMwG0APiX8L86TtDkcvQXN51irfMeI7JZwRU5DiBoc4hF0+v+Q6TveaHNyCF2mRjPFTgOmOuYA5sDQCv6UQtSvB8OjlNqzgGVA9GgYaDPh4BeTmmR+HNYHl+oHt6lk5mAnzWAj8OBVQcdtC/oK7HtY1Uv7DiTDRoI+izCoAUraHIDD2kF3qjdLb1MKWgz9UArdQBoUlcJ+4A8DMOELGExHa3+J7kc7YpAh5JDFVwH0ZKl9z3Mb4idtBB40C71aCb16AL2Jqj6kSEW9C2rKifRQ6PpS4AaH2iRdvuG6HLguQ7B5KMDBTSDN5BAOibKCKDjHsBkdEw10Ob5V8cTgr/1n8la8mPFlBO0AYDujgHtNp+rC2akgqBHZLTiM854MytdjgDtDge9qSSLvEmGQXJ4zEreHwV9zmVuE6BhS1k2Y8/hGzKEHPF3g3aZ0Msk1sAhpO1Lrv+ZdXOXFOgL/Anq+OiOG3RuBjbhuRARF/Z7XSFeNBYMtPsh0NE+M1dNNQsrhyiwAUfgm9Ox3u/AxJzxF4AO/KBTZaDBid2X3W9Ig74I2AqnCxanuEzdMbuP7oBZJODqOBU03KQfJ58K6FIy1qLv9fPuANAAhOSEoemK0qTP4iRzhoIO3+slna0Jk2YH3VUDnWokAQvBPRq0iU6RSUMw9UGbRP1LIeh0NalEBCvR5y0DnWwnAALtMKC7SqANcdN9YC6Eq04TMk8AaHeARWcrUmmrZ46h4p8GWkAf4GjQHQS0YXMciPTdhAbtQqXMx4OOtBA1EGR8nJ+gZW4V3KcS7OGbCoAWMUup56MddPKGZGrInG+gIbkOn9tnCgJt8qDNQaANBBqPf376aImIwHGgL3jQ54NAdyDrZNAbK2hQmvRRwWFiDxy8WYEG7TBLWUTQgKkOWx+VXd4Dg87KDtA/5kAbuEwvBp1Ub7hKNMDWcKDryMyGLgYPDNrkOj6QVYcheWBUEStkj+cEDMHXvH+IxiVmOPDJXFCiNFMG+gJTEKYcc7a7QaBKNzIbgkBfKKrJJOs2SkB3MNApJ+OgO5YtME0qn3nSyBOBQDsCaJd61kLQAqqJg6spziH2hSOWWKbkrFMLtEsaFaBhjyFpimylsUNuvp/wa1lw0KYctOmAoKMfkiFpChNvWkFrb0BZNASDdqWgTdZNJmscAaAdKZ4mDAteylqLzukWbdhBL0tgyWNRDEm8CW7Q8D0sawHNhQwavbHC0Pe+AUGbEs1WpQGNTeWVXNh1iNIMQtFeofSW+lxE+UHQU+KZwyv4l2LQxEbOmZRGKhwxhh8zsg796aQdNLCLWbRDvv703W+Asq3nTQrhulojd6yyDOaVApwUChq6GQTJSRtgfdwt+BCmqzeQR6EmnLRCTW2U7W8dzXNAChFNTcaP8plkt10ZqSd9t9WKoB0RNLbis+YYMAfepECfL8Wgncj8mKE4jng3jiMHbkuWXfNKpDrLbUOiM1QhEhfwtg2iHSFN/7a0WuahJcpFy03NPw10lwbdZZwHJRf1cq/UVIWfCh1HDrSMdCUlcXZpTZwg6bAvknmPSFyRQB58Tc4vpId143cN0CZB0qB+rXvbU1o++0lbk3M0ZLmUgY7WpOa8jsCaM9sYpR2JnCkNDaaCFE8uQ5SsH3Jg0qKWdFgPRqlgz7HZMPW8AjlBZVNAu0/JFS/8x4TFlCeNFh89rb8PTHYowCsdZ5TNxJsqmOfFpilvnUib9oLSDkVKmJMWjlYr4dIfocvl8VypbxY2TxojPrxEsd3/pc+/wVGbAyxZw0gHfrvjmAGlz3sPqKBWvb2ZM7E52Jh/gWNfczCLzrvp5zLpfbCpjFEASFvIbDt6avM1RGwI2URN88LVcxJ50kqKrProh8WMbQFpuzZDT6m4QtAQ31MpWeGzpBdZPIVRm368mrLMNRuFdUbJZzoN4LiHDEfHLim2O6zTdS59dqnE3lpKCe/nvlLL8H7yK1xryyBLmJOOfa3LgU7Jv2JHPEho/UWfT3gmQFrkOU0R00+v0D4Nrxj0S8qNJfcOs+lRppomPuc4aZex6VAH2K8pmZL/cND5XgXmzJFzo6SFfLw9pS91vKR2PynQrhh0l2rYXU0m3xWctO8tuno/HInZrtFTqg7LZJI9ANBV0kIeBnrfc/U61929Qukkh5wQH4oyEVYYoGM4GPQIIT134796SH9LNHm7SglZlyuiMGz1EMjqoHL5xiWT1zYEUsoBpCVYOMvEQVkp0A4F2rkDIN8pTqCobiMm5GGu4uXvQ5dO4MVAB08ZdIWqou/RpBPqrfe7MuWHS5afAS16AGiTiZ/ds7VPqYkiF01HGU7fP2NnCzuz44gxpn1HLLSrtsCE/PZZou6OFfb+6SOPlBWI/ncp0I5BUvQSpCQwqx73kENO/ex2/DTwJSj4lXQ6NgyXYFxIS6ZWgmwU7Kf7YdsF+60v9vGOOLOXJVed8fIpFDhjEGkPI60m+dbW3dqPO+IU6qQafn5xWQy/mK5oyrOQYzEGAOl+CaA3Ws2KLx+bWTsXaPOEGCDSIlNJIH8B7dtyVqJHyqWCqgAIOBmLQ67K2N/zFFL8GOhUqWOdbTZ50nPWx7+Y/rys9Ei4fT9lmZwNzTaKrpYS8oAl/lvbkduBJWJeWhrkV0pjTK5jG1q5RxhdNUEx5Rf8/AOolJt7/jbI6PfKb9Lzx6SC5JiL96QUu6Ul+Ws+ORmyHDRGKZKrI359AReD/n3GD9L9waRnkoOKZ+r/6LDQIgmQA4akKsbX5aV1lWmWyD+jkLEHR1p4Iidr+16OIN+xFAipvUaebjPf71g0/k7BB0aOWY6QiGQ5VVuuYrmfnot51oo/PCQn6TGfUt40JJLDupZnfw4bZUD9dD5hnF2c9o9bXM3X/qK2IEpOqFHnE8Zp0vsW1/YvKGSk9oAadd4LezFEzH70/wdWmf4a0KjzGxJs6FLGe/u/mK3MGTVsEbrP7cMZX45zH/tpGHgquv/K5zCMMNKZ71v0sB9vZd1ikN+ZFfos7B4WRCe/z19DD/sy6TXIJPeR+kju2Qq5FW9thGBDjFqK8EfSD80LA1W4BbkPcXfDuzlw8rZNeKh4x0JMevYN0k63CU886iyan0Cpj6xR90tW/mbA63pTm/LwsNNz4vgsPLb/L2MOF2nT4Z9vlsiVb5Jxo+6FbK44w1nijDrgqcepaQpO1/FAPayoVf/UyI01M4ZbMaG/ijfvfUtYVA7JN77dNlOujfp7IX/lCk0zyGNwygb6mHepgW4Ooo022mijjTbaaKONNtpooUxD0EYbbbTRRhtttNHkXRsRmrKBbqONNpqPbj66gW6gG+g/D/ofs+Ks9Vi6z14AAAAASUVORK5CYII=");
+}
+
 /* v0.23h7: Goal Oriented lock badge — a pulsing 🔒 emoji overlay shown
    while the card is armed pre-swing. Visual signal that yaw is frozen. */
 @keyframes goalOrientedLockPulse {
@@ -3585,7 +3606,7 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
 <!-- Profile picker — shown before main menu -->
 <div id="profile-picker" class="hidden">
   <div class="tagline">Who's playing?</div>
-  <h1 style="font-size:clamp(2rem,7vw,3.2rem);margin-bottom:8px">Golf Gone<br>Wrong</h1>
+  <img class="ggw-logo" alt="Golf Gone Wrong" aria-label="Golf Gone Wrong">
   <div id="profile-slots"></div>
   <div id="profile-hint" style="font-size:0.7rem;color:rgba(255,255,255,0.75);letter-spacing:1.5px;text-transform:uppercase;margin-top:12px">Tap a slot to begin</div>
 </div>
@@ -3618,7 +3639,7 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
     <span id="profile-chip-name">—</span> ⇄
   </div>
   <div class="tagline">A Minigolf Roguelike</div>
-  <h1>Golf Gone<br>Wrong</h1>
+  <img class="ggw-logo" alt="Golf Gone Wrong" aria-label="Golf Gone Wrong">
 
   <div class="seed-row">
     <input class="seed-input" id="seed-input" placeholder="Seed (optional)" maxlength="12" spellcheck="false" autocomplete="off"/>
@@ -3668,7 +3689,7 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
   <button class="play-btn" onclick="openAchievements()" style="margin-top:6px;background:rgba(245,200,66,0.18);border:1px solid rgba(245,200,66,0.5);color:#f5c842;font-size:0.85rem;padding:10px 28px">🏆 Achievements</button>
   <button class="play-btn" id="btn-import-save" style="margin-top:6px;background:rgba(120,120,120,0.6);font-size:0.7rem;padding:8px 20px" onclick="importSaveFile()">📂 Import Save</button>
   <input type="file" id="import-save-input" accept=".ggwsave,application/json" style="display:none">
-  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.23a9</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Mega Floomba +30% size & 1.75× speed; all Floombas now pick up 5- and 10-coin specials at full value</div></div>
+  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.23h82</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">GGW logo extrusion fixed (sourced from PSD) · Earth skin uses real world map · Goal Oriented arm now locks aim · Trees destructible · Prices +10% · Wall ramp 3× → 2× · XP unlock bar paces slower</div></div>
 
   <!-- v0.19j: Inline profile picker — skip the separate slot-picks screen -->
   <div class="section-label" style="margin-top:14px">Save Slot</div>
@@ -4266,8 +4287,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.23h7';
-const CHANGE_NOTE = "v0.23h7: Big batch — Pro shop now offers ONE randomized upgrade per shop (3 picks, 4 with Four!) and locks out after purchase. Course walls now ramp 1×→3× across the run so late holes are harder to hole-in-one. Hole beacon doubled in height. Skater Ball promoted to epic, +20% price, and now bleeds energy mid-grind so it can't trivialize whole holes. Yard Sale limited to one sale per removal shop. Card removals are now undoable (matches shop-purchase undo). Upgraded cards in the removal grid get the same gold border + ★ as in-hand. Conveyor+wall stuck balls can now tap-to-stop (added a position-displacement detector that catches the trapped state). Goal Oriented gained pre-swing arming: lock aim at the hole, freeze yaw, show a 🔒 emoji. Combos with Power Shot. Global prices +10% across difficulties. Run-summary XP bar fix: bar now actually displays during the segmented fill (was hidden by display:none until onAllDone).";
+const GAME_VERSION = '0.23h82';
+const CHANGE_NOTE = "v0.23h82: GGW logo extrusion FOR REAL this time. Previous attempts worked from the flattened PNG export (which had baked-out alpha and a black background), so the extrusion shape was indistinguishable from the bg and got eaten by transparency detection. Now sourced directly from the PSD's RGBA composite, which has the black extrusion as a real shape with its own alpha mask. 16-color palette PNG, 7.2KB.";
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
@@ -4277,7 +4298,7 @@ const CHANGE_NOTE = "v0.23h7: Big batch — Pro shop now offers ONE randomized u
 // v0.23f: 1.5625 → 1.328125 (−15%). Playtest feedback: prices ran too hot
 // alongside the v0.23f under-par bonus rework. Dialing the per-shop scarcity
 // back so coin income and shop cost rebalance together.
-const PRICE_MULTIPLIER = 1.328125;
+const PRICE_MULTIPLIER = 1.4609375;
 
 // ── Elite Holes (v0.20j) ──────────────────────────────
 // "Elite" holes appear every 3rd hole (player-facing 3, 6, 9, 12...).
@@ -8763,13 +8784,15 @@ function buildCourse(data) {
       // the playfield post-jump — players need confidence the ramp won't
       // hurl them out of bounds. Per Adam's design spec.
       // v0.23h7: Walls now ALSO ramp with run progress. Hole 1 = 1.0×, last
-      // hole = 3.0× — makes hole-in-ones progressively harder as the run
+      // hole = 2.0× — makes hole-in-ones progressively harder as the run
       // wears on. Chasm's 3× still stacks on top.
+      // v0.23h8: ramp cap lowered 3× → 2× — late holes should still tighten
+      // up but the previous 3× cap felt punitively claustrophobic.
       const _ppCurbScale = data.eliteChasm ? 3.0 : 1.0;
       const _ppHoleIdx = (G.hole | 0);
       const _ppTotalHoles = Math.max(2, G.totalHoles || 9);
-      // Linear ramp: hole 0 → 1.0×, hole (totalHoles-1) → 3.0×
-      const _ppRunScale = 1.0 + (_ppHoleIdx / (_ppTotalHoles - 1)) * 2.0;
+      // Linear ramp: hole 0 → 1.0×, hole (totalHoles-1) → 2.0×
+      const _ppRunScale = 1.0 + (_ppHoleIdx / (_ppTotalHoles - 1)) * 1.0;
       const PP_CURB_H   = 0.75 * _ppCurbScale * _ppRunScale;
       const PP_CURB_BOT = -0.5;   // reaches below world ground level
       const PP_CURB_W   = 0.25;  // top-cap inset (toward fairway)
@@ -9950,8 +9973,11 @@ function buildCourse(data) {
   // + radius in G.trees so the physics step can bounce the ball off
   // them. This catches OOB excursions on U-shapes (where the ball would
   // otherwise sail through the gap untouched) and gives general OOB
-  // travel some shape. Trees are immovable: no destruction, no coin
-  // payout, no iron-ball smash-through. Just a hard wall.
+  // travel some shape.
+  // v0.23h8: Trees are now also DESTRUCTIBLE — iron ball / freeze
+  // shatter plow through them, and missiles / grenades / Bounce & Boom
+  // pick them up via collectObstaclesInRadius. The _destroyed flag is
+  // checked by the collision loop above and by the blast collector.
   // v0.23a6: U-shape holes get +50% trees and a forced placement bias
   // toward the inner gap (cells with the highest WALL-neighbour count).
   G.trees = [];
@@ -12498,6 +12524,11 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
   // standard equirectangular UV mapping. All image-based skins use this
   // identical structure; the only thing that varies is the data URL and a
   // baseline tint color used while the image is still decoding.
+  // v0.23h8: Earth skin uses a real equirectangular world-map texture
+  // (replaces the v0.23h2 decal-blob version). Heavily compressed JPEG
+  // wraps onto the sphere via the standard image-skin helper below.
+  const _SKIN_IMG_EARTH = 'data:image/jpeg;base64,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';
+
   function _buildImageSkin(key, dataUrl, fallbackTint) {
     const g = new THREE.Group();
     const tex = _imageSkinTex(key, dataUrl);
@@ -12538,40 +12569,11 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
   }
 
   // Earth — blue base with green continent blobs
+  // v0.23h8: Earth skin now uses the equirectangular texture-map path
+  // (same helper as tiger/cow/zebra/baseball/etc.). Old decal-based
+  // version with 7 hand-placed continent circles is gone.
   function buildSkin_earth() {
-    const g = new THREE.Group();
-    const ball = new THREE.Mesh(
-      new THREE.SphereGeometry(BALL_R, 20, 16),
-      toonFlat({color: 0x2080d0})
-    );
-    ball.userData.isSkinBall = true;
-    g.add(ball);
-    // Green continent decals — placed at approximate continent positions
-    // around the sphere. Sizes/orientations roughly match Pangaea-ish layout.
-    const greenMat = new THREE.MeshBasicMaterial({color: 0x3aa845});
-    const continents = [
-      // [theta(lon), phi(lat from equator), radius, scaleX, scaleY, rotZ]
-      [-1.2,  0.5, 0.085, 1.4, 1.6, 0.2],   // N. America
-      [-1.0, -0.3, 0.060, 0.9, 1.4, -0.3],  // S. America
-      [ 0.2,  0.5, 0.075, 1.3, 1.4, 0.0],   // Europe/Asia top
-      [ 1.2,  0.4, 0.090, 1.7, 1.5, 0.1],   // Asia
-      [ 0.2, -0.3, 0.075, 1.1, 1.5, 0.2],   // Africa
-      [ 2.2, -0.6, 0.055, 1.0, 0.8, 0.0],   // Australia
-      [ 0.0, -1.3, 0.085, 1.6, 0.9, 0.0],   // Antarctica
-    ];
-    for(const [theta, phi, r, sx, sy, rz] of continents) {
-      const wx = Math.cos(phi) * Math.cos(theta) * (BALL_R + 0.001);
-      const wy = Math.sin(phi) * (BALL_R + 0.001);
-      const wz = Math.cos(phi) * Math.sin(theta) * (BALL_R + 0.001);
-      const dec = new THREE.Mesh(new THREE.CircleGeometry(r, 10), greenMat);
-      dec.position.set(wx, wy, wz);
-      dec.lookAt(wx*3, wy*3, wz*3);
-      dec.scale.set(sx, sy, 1.0);
-      dec.rotation.z = rz;
-      dec.userData.skipOutline = true;
-      g.add(dec);
-    }
-    return g;
+    return _buildImageSkin('earth', _SKIN_IMG_EARTH, 0x2080d0);
   }
 
   // Soccer ball — black-and-white pentagonal panel pattern. Approximated
@@ -12662,8 +12664,9 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
 
   // Cow print — white with black blob splotches
   // (cow_print, zebra_stripes, and earth builders are defined above
-  // the soccer_ball builder in v0.23h2; their old decal-based versions
-  // were replaced with canvas-painted texture map versions.)
+  // the soccer_ball builder; v0.23h2 moved cow/zebra to canvas-painted
+  // texture maps, v0.23h8 likewise replaced earth's decal version with
+  // a real equirectangular world-map JPEG.)
 
   // Moon — grey with crater bumps
   function buildSkin_moon() {
@@ -13744,8 +13747,12 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
       const reveal = _stopReveals[_segIdx];
       const startXp = curXp, endXp = segEnd;
       const xpDelta = Math.max(1, endXp - startXp);
-      // Pace: 1.4ms per XP, clamped 240..900ms
-      const dur = Math.max(240, Math.min(900, xpDelta * 1.4));
+      // Pace: 1.4ms per XP, clamped 700..1400ms
+      // v0.23h8: per-segment minimum bumped 240 → 700 (and max 900 → 1400)
+      // so each unlock fill actually registers visually. Previously,
+      // small XP deltas between back-to-back milestones rendered as a
+      // 240ms blip — players reported "blink and you'll miss it".
+      const dur = Math.max(700, Math.min(1400, xpDelta * 1.4));
       const startInfo = _xpPctAt(startXp);
       const endInfo   = _xpPctAt(endXp);
       const tierCross = startInfo.label !== endInfo.label;
@@ -13804,6 +13811,10 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
           if(reveal) {
             const rowEl = _findRowByItem(reveal);
             _revealRow(rowEl, true);
+            // v0.23h8: pause durations bumped — reveal+confetti chime needs
+            // more breathing room before the bar resumes filling. Tier-cross
+            // path: 350+700 → 500+1100 (≈1.6s total hold). Non-tier-cross:
+            // 1100 → 1500.
             // After tier cross, reset bar to 0 for the next tier window
             if(tierCross) {
               setTimeout(() => {
@@ -13811,11 +13822,11 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
                 fillEl.style.width = '0%';
                 void fillEl.offsetWidth;
                 _segIdx++;
-                setTimeout(_runSegment, 700);
-              }, 350);
+                setTimeout(_runSegment, 1100);
+              }, 500);
             } else {
               _segIdx++;
-              setTimeout(_runSegment, 1100);
+              setTimeout(_runSegment, 1500);
             }
           } else {
             // Final segment — no reveal, just done
@@ -18826,10 +18837,12 @@ function updatePhysics(dt) {
   // ── Tree obstacle collision ───────────────────────────
   // v0.23a6: Trees are placed in EMPTY cells outside the playable course
   // (see buildCourse tree section). Used to be pass-through; now they
-  // bounce the ball off them like a hard cylinder. Immovable: no
-  // destruction, no coin payout, no iron-ball/cannonball/freeze
-  // shatter — even a wrecking ball respects a sturdy oak. Ghost ball
-  // and parkour/vacuum immunities still allow pass-through.
+  // bounce the ball off them like a hard cylinder.
+  // v0.23h8: Trees are no longer immovable — iron ball / freeze shatter
+  // plow through them (Timber!), and the blast-radius helpers
+  // (missiles, grenades, Bounce & Boom) pick them up via
+  // collectObstaclesInRadius. Ghost ball and parkour/vacuum immunities
+  // still allow pass-through.
   // Height gate: trees are tall (~2.5-5m), trunk starts at y=0. We
   // forgive jumps that clear the LOWER trunk (under ~2m) since the
   // ball's airborne arc usually peaks well above that. Above ~2m of
@@ -18860,6 +18873,27 @@ function updatePhysics(dt) {
           // v0.23g1: pass `ref: tree` for shoot-through.
           enterStickyAttached({ kind: 'wall', ref: tree, nx, nz });
           _stickyShared('tree');
+          continue;
+        }
+        // v0.23h8: iron ball / freeze shatter plows through trees the same
+        // way they plow through rocks. Mirrors the rock branch above —
+        // routes through destroyObstacles so debris flings naturally and
+        // the standard coin reward / explosion VFX fire. (Trees used to
+        // be marked "immovable, even a wrecking ball respects a sturdy
+        // oak" but that read more annoying than thematic.)
+        if(hasIronBall || hasFreezeShatter) {
+          G.ballVel.multiplyScalar(0.85);
+          const ironHits = [{wx:tree.wx, wz:tree.wz, type:'tree', physRef:tree, meshes:tree.meshes||[]}];
+          destroyObstacles(ironHits, G.ballPos.x, G.ballPos.y, G.ballPos.z);
+          spawnExplosion(tree.wx, G.ballPos.y, tree.wz);
+          G.coins++; updateCoinHUD();
+          showToast(hasIronBall ? '🌲 Timber!' : '🧊 Frozen solid!', 600);
+          spawnHitParticles(G.ballPos);
+          triggerShake(Math.min(0.6, Math.hypot(G.ballVel.x, G.ballVel.z) / 28));
+          recordStyleEvent('tree_thwack');
+          G._challengeObstacleTouched = true;
+          trackStat('totalBounces', 1);
+          if(G._allBounceTarget > 0) G._allBounceCount = (G._allBounceCount||0) + 1;
           continue;
         }
         // Bounce — slightly less elastic than rocks (wood absorbs more
@@ -25339,6 +25373,15 @@ function collectObstaclesInRadius(cx, cz, blastR) {
   if(G.spikes)      G.spikes.forEach(s       => check(s.wx, s.wz, 'spike',     s, ()=>s.mesh?[s.mesh]:[]));
   if(G.angledWalls) G.angledWalls.forEach(a  => { if(!a._indestructible) check((a.ax+a.bx)/2, (a.az+a.bz)/2, 'angledWall', a, ()=>a.mesh?[a.mesh]:[]); });
   if(G.pendulums)   G.pendulums.forEach(p    => check(p.wx, p.wz, 'pendulum',   p, ()=>p.pendGroup?[p.pendGroup]:[]));
+  // v0.23h8: trees join the destructible obstacle list. Previously they
+  // were treated as permanent hard walls (no iron-ball/missile/grenade
+  // damage). Now blast radius picks them up like rocks — the meshes
+  // array bundles the trunk + every canopy cone so destroyObstacles
+  // can fling them all as debris.
+  if(G.trees) G.trees.forEach(tr => {
+    if(tr._destroyed) return;
+    check(tr.wx, tr.wz, 'tree', tr, ()=>tr.meshes||[]);
+  });
   // v0.22a: crates participate in blast-radius destruction. We use the
   // crate's effective radius (size + small padding) so big crates feel
   // like big targets.
@@ -39928,7 +39971,14 @@ function onPointerMove(x, y) {
     worldDir.addScaledVector(camRight, -dx);
     worldDir.addScaledVector(camFwd,   dy);
     worldDir.y = 0;
-    if(worldDir.length()>0.01) {
+    // v0.23h8: Goal Oriented pre-swing arm locks aim TOWARD the hole — the
+    // ball-pull drag must NOT overwrite shotDir/shotAngle while armed.
+    // (This was the real culprit behind "arm doesn't lock the angle":
+    // drag-yaw was already blocked at onPointerMove's input.dragging path,
+    // but the ball-pull path here was still rewriting the shot direction
+    // from the drag vector. Power still tracks the drag distance; only
+    // the directional write is suppressed.)
+    if(worldDir.length()>0.01 && !G._goalOrientedArmed) {
       worldDir.normalize();
       G.shotDir.copy(worldDir);
       G.shotAngle = Math.atan2(G.shotDir.x, G.shotDir.z);
@@ -41962,14 +42012,18 @@ function updateKeyboardCamera(dt) {
     if(G._airstrikeAiming) {
       syncAimToCamera();
     } else {
-      if(keys['ArrowLeft'] || keys['ArrowRight']) {
+      // v0.23h8: Goal Oriented pre-swing arm also blocks keyboard arrow-key
+      // aim rotation — symmetric with the touch/drag block, otherwise
+      // ArrowLeft/Right would bypass the lock the same way ball-pull drag
+      // used to.
+      if((keys['ArrowLeft'] || keys['ArrowRight']) && !G._goalOrientedArmed) {
         aimManualOverride = true;
         const delta = (keys['ArrowLeft'] ? -1 : 1) * AIM_ROT_SPEED * dt;
         G.shotAngle = (G.shotAngle || 0) + delta;
         G.shotDir.set(Math.sin(G.shotAngle), 0, Math.cos(G.shotAngle)).normalize();
         updateAimArrow();
       }
-      if(!aimManualOverride) { syncAimToCamera(); updateAimArrow(); }
+      if(!aimManualOverride && !G._goalOrientedArmed) { syncAimToCamera(); updateAimArrow(); }
     }
   }
 
@@ -46370,7 +46424,7 @@ function escMainMenu() {
       <span id="profile-chip-name">—</span> ⇄
     </div>
     <div class="tagline">A Minigolf Roguelike</div>
-    <h1>Golf Gone<br>Wrong</h1>
+    <img class="ggw-logo" alt="Golf Gone Wrong" aria-label="Golf Gone Wrong">
     <div class="seed-row">
       <input class="seed-input" id="seed-input" placeholder="Seed (optional)" maxlength="12" spellcheck="false" autocomplete="off"/>
       <button class="seed-btn" id="btn-random-seed">🎲 Random</button>
