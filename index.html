@@ -3689,7 +3689,7 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
   <button class="play-btn" onclick="openAchievements()" style="margin-top:6px;background:rgba(245,200,66,0.18);border:1px solid rgba(245,200,66,0.5);color:#f5c842;font-size:0.85rem;padding:10px 28px">🏆 Achievements</button>
   <button class="play-btn" id="btn-import-save" style="margin-top:6px;background:rgba(120,120,120,0.6);font-size:0.7rem;padding:8px 20px" onclick="importSaveFile()">📂 Import Save</button>
   <input type="file" id="import-save-input" accept=".ggwsave,application/json" style="display:none">
-  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.23h82</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">GGW logo extrusion fixed (sourced from PSD) · Earth skin uses real world map · Goal Oriented arm now locks aim · Trees destructible · Prices +10% · Wall ramp 3× → 2× · XP unlock bar paces slower</div></div>
+  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.23h83</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Parkour no longer fires when flying 3-4 ball heights above obstacle · Mo Money &amp; Precision 2× → 1.5× · HIO/HIT flat bonuses removed</div></div>
 
   <!-- v0.19j: Inline profile picker — skip the separate slot-picks screen -->
   <div class="section-label" style="margin-top:14px">Save Slot</div>
@@ -4287,8 +4287,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.23h82';
-const CHANGE_NOTE = "v0.23h82: GGW logo extrusion FOR REAL this time. Previous attempts worked from the flattened PNG export (which had baked-out alpha and a black background), so the extrusion shape was indistinguishable from the bg and got eaten by transparency detection. Now sourced directly from the PSD's RGBA composite, which has the black extrusion as a real shape with its own alpha mask. 16-color palette PNG, 7.2KB.";
+const GAME_VERSION = '0.23h83';
+const CHANGE_NOTE = "v0.23h83: Parkour no longer triggers when ball is well above the obstacle (3-4 ball heights overhead) — added per-tag vertical clearance gate. Mo Money Mo Problems and Precision under-par mult both 2× → 1.5× (too OP). Hole-in-One (+30) and Hole-in-Two (+20) flat bonuses removed.";
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
@@ -16579,6 +16579,20 @@ function updatePhysics(dt) {
       // distance (center-to-center minus BALL_R and obstacle R) drops below
       // CONTACT_MARGIN, vault.
       const OBST_R = { rock: 0.65, bumper: 0.55, spin_bar: 0.8, slide_block: 0.7, spike: 0.55, spike_ring_ball: 0.32 };
+      // v0.23h83: per-tag approximate obstacle TOP height above terrain.
+      // Used to skip parkour when the ball is flying well above the obstacle
+      // — previously parkour fired even when the ball was 3-4 ball heights
+      // above a bouncer (Adam's report). Heights mirror real obstacle Y in
+      // create code: bumpers 0.7 (power 0.95), spike 0.5, rocks ~0.7,
+      // spin_bar ~0.8, slide_block ~0.8, popup wall up to 1.2, crates 0.7
+      // per crate (stack adds more — handled below). Conservative slight
+      // over-estimates so we never block legitimate ground-skim vaults.
+      const OBST_TOP_Y = { rock: 0.8, bumper: 1.0, spin_bar: 0.9, slide_block: 0.9, spike: 0.6, spike_ring_ball: 0.5, popup_wall: 1.3 };
+      // Vertical clearance: if ball-bottom is more than VAULT_CLEAR_MAX above
+      // the obstacle's top, the ball is clearly flying over — no parkour. This
+      // is ~2 ball heights of slack so a low arc still vaults but a tall hop
+      // doesn't consume a charge on something it was going to clear anyway.
+      const VAULT_CLEAR_MAX = BALL_R * 2.0; // 0.44m
       // v0.21a8: was 0.25 — wider trigger window.
       // v0.23a7: speed-scale the margin so a Power-Shot (or stacked Power
       // Shot) launch doesn't blow past the trigger window in a single frame.
@@ -16597,7 +16611,12 @@ function updatePhysics(dt) {
       const DIR_DOT_MIN = 0.7;
       let bestTarget = null, bestClear = Infinity;
       // Generic point-test (used for cylindrical obstacles)
-      const ptest = (tx, tz, tag, customR) => {
+      const ptest = (tx, tz, tag, customR, customTopY) => {
+        // v0.23h83: vertical clearance — bail out if ball is flying well
+        // above this obstacle's top. Ball-bottom = ballPos.y - BALL_R.
+        const obstTop = (customTopY != null) ? customTopY : (OBST_TOP_Y[tag] || 1.0);
+        const obstTopWorldY = _terrAtBall + FLOOR_H/2 + obstTop;
+        if((G.ballPos.y - BALL_R) > obstTopWorldY + VAULT_CLEAR_MAX) return;
         const odx = tx - G.ballPos.x, odz = tz - G.ballPos.z;
         const d = Math.hypot(odx, odz);
         if(d < 0.01) return;
@@ -16614,6 +16633,10 @@ function updatePhysics(dt) {
       // hitting the SIDES (tips) of a spinner did not trigger parkour because
       // the old code only tested distance to the bar's pivot center.
       const segtest = (ax, az, bx2, bz2, radius, tag) => {
+        // v0.23h83: vertical clearance — bail out if ball is flying well
+        // above this obstacle's top.
+        const obstTopWorldY = _terrAtBall + FLOOR_H/2 + (OBST_TOP_Y[tag] || 1.0);
+        if((G.ballPos.y - BALL_R) > obstTopWorldY + VAULT_CLEAR_MAX) return;
         const ex = bx2-ax, ez = bz2-az, segLenSq = ex*ex + ez*ez;
         let cx, cz;
         if(segLenSq < 0.0001) { cx = ax; cz = az; }
@@ -16635,7 +16658,14 @@ function updatePhysics(dt) {
       // half-extents (hw, hd), finds closest point on the rectangle to the
       // ball. Fixes parkour failing on slide blocks (which have long
       // half-extents along their slide axis) and adds parkour to pop-up walls.
-      const recttest = (rx, rz, hw, hd, tag) => {
+      const recttest = (rx, rz, hw, hd, tag, customTopY) => {
+        // v0.23h83: vertical clearance — bail out if ball is flying well
+        // above this obstacle's top. Crates pass a customTopY computed from
+        // their stack height so a 3-stack still gets vaulted but a tall hop
+        // above an idle 1-stack does not.
+        const obstTop = (customTopY != null) ? customTopY : (OBST_TOP_Y[tag] || 1.0);
+        const obstTopWorldY = _terrAtBall + FLOOR_H/2 + obstTop;
+        if((G.ballPos.y - BALL_R) > obstTopWorldY + VAULT_CLEAR_MAX) return;
         const dx = G.ballPos.x - rx, dz = G.ballPos.z - rz;
         const cdx = Math.max(-hw, Math.min(hw, dx));
         const cdz = Math.max(-hd, Math.min(hd, dz));
@@ -16703,7 +16733,7 @@ function updatePhysics(dt) {
           const wallTopY = pw.currentTopY || ((pw.baseH || 0) + (pw.wallH || 0));
           const minLipY = (pw.baseH || 0) + 0.4; // wall must be at least 0.4m up
           if(wallTopY < minLipY) continue;
-          recttest(pw.wx, pw.wz, (pw.halfW || 0.4), (pw.halfD || 0.4), 'popup_wall');
+          recttest(pw.wx, pw.wz, (pw.halfW || 0.4), (pw.halfD || 0.4), 'popup_wall', wallTopY);
         }
       }
       // v0.22b: parkour over crates. Per Adam: "Parkour should work on
@@ -16728,7 +16758,11 @@ function updatePhysics(dt) {
               stackH++;
             }
           }
-          recttest(cr.wx, cr.wz, cr.size, cr.size, 'crate_stack_' + stackH);
+          // v0.23h83: pass stack-aware top Y so a tall stack stays vaultable
+          // from above. Crate size is half-extent (so full side = 2*size).
+          // Stack top above terrain ≈ stackH * 2 * size.
+          const crateStackTopY = stackH * cr.size * 2;
+          recttest(cr.wx, cr.wz, cr.size, cr.size, 'crate_stack_' + stackH, crateStackTopY);
         }
       }
       tryList(G.spikes, 'spike');   // v0.19z6: vault ground spikes too
@@ -22693,9 +22727,10 @@ function calcHoleEarnings(strokes, par, coinsPickedUp, wallCoins = 0) {
         if(mult > 1) perStroke *= mult;
       }
     } catch(e){}
-    // v0.23b: Mo Money Mo Problems — under-par payouts 2×.
+    // v0.23b: Mo Money Mo Problems — under-par payouts boosted.
+    // v0.23h83: 2× → 1.5× (50% higher, was OP per Adam).
     if(G.modifiers && G.modifiers.some(m => m.id === 'mo_money_mo_problems')) {
-      perStroke *= 2;
+      perStroke *= 1.5;
     }
     scoreBonus = underPar * perStroke;
     let label;
@@ -22705,35 +22740,10 @@ function calcHoleEarnings(strokes, par, coinsPickedUp, wallCoins = 0) {
     else                    label = `🐦 Birdie bonus (1 under)`;
     rows.push({ label, amount: scoreBonus });
 
-    // v0.23f: Stacking finish bonuses. Hole-in-one gets +30 ON TOP of the
-    // per-stroke under-par payout; hole-in-two gets +20 ON TOP. Same
-    // character/modifier multipliers as the per-stroke base so the bonus
-    // scales consistently with the rest of the under-par pipeline.
-    if(strokes === 1) {
-      let hioBonus = 30;
-      try {
-        if(typeof getCurrentCharacter === 'function') {
-          const _char = getCurrentCharacter();
-          const mult = (_char && _char.traits && _char.traits.underParMult) || 1;
-          if(mult > 1) hioBonus *= mult;
-        }
-      } catch(e){}
-      if(G.modifiers && G.modifiers.some(m => m.id === 'mo_money_mo_problems')) hioBonus *= 2;
-      rows.push({ label: '🎯 Hole-in-One bonus', amount: hioBonus });
-      scoreBonus += hioBonus;
-    } else if(strokes === 2) {
-      let h2Bonus = 20;
-      try {
-        if(typeof getCurrentCharacter === 'function') {
-          const _char = getCurrentCharacter();
-          const mult = (_char && _char.traits && _char.traits.underParMult) || 1;
-          if(mult > 1) h2Bonus *= mult;
-        }
-      } catch(e){}
-      if(G.modifiers && G.modifiers.some(m => m.id === 'mo_money_mo_problems')) h2Bonus *= 2;
-      rows.push({ label: '🎯 Hole-in-Two bonus', amount: h2Bonus });
-      scoreBonus += h2Bonus;
-    }
+    // v0.23h83: Hole-in-One (+30) and Hole-in-Two (+20) flat bonuses removed
+    // per Adam — the per-stroke under-par payout already rewards low strokes
+    // proportionally, and the stacking flat bonuses inflated short-hole income
+    // beyond intent.
   } else if(diff === 0) {
     scoreBonus = 1;
     rows.push({ label:'⛳ Par bonus', amount: scoreBonus });
@@ -28431,7 +28441,7 @@ const CHARACTERS = {
     color: 0x5a9ef2, // cool blue
     tagline: 'Tighter par. Bigger payouts. Focus.',
     blessings: [
-      '🏆 Double coins for every stroke under par',
+      '🏆 +50% coins for every stroke under par',
     ],
     curses: [
       '📉 Par is reduced by 1 on every hole (floor: par 2)',
@@ -28454,7 +28464,9 @@ const CHARACTERS = {
     // v0.23h: glasses moved from a character trait to a universal accessory
     // (Buddy Hollies). Precision keeps its identity through parOffset +
     // underParMult; players can equip the glasses accessory on any character.
-    traits: { parOffset: -1, underParMult: 2 },
+    // v0.23h83: underParMult 2 → 1.5 (50% higher, was OP — mirrors the
+    // same nerf applied to Mo Money Mo Problems).
+    traits: { parOffset: -1, underParMult: 1.5 },
   },
 };
 
@@ -42361,7 +42373,7 @@ const ALL_PERKS = [
   { id:'risk_taker',      name:'Risk Taker',            emoji:'🎲', rarity:'rare',     price:20, stackable:false, weight:4,
     desc:'Style points 2× while over par OR at 25% HP or less. Multiplies with Showboat.' },
   { id:'mo_money_mo_problems', name:'Mo Money Mo Problems', emoji:'💰', rarity:'epic', price:28, stackable:false, weight:2,
-    desc:'Under-par payouts doubled. Par on each hole reduced by 1 (resets each hole).' },
+    desc:'Under-par payouts +50%. Par on each hole reduced by 1 (resets each hole).' },
   { id:'kickback',        name:'Drone Delivery',        emoji:'🛸', rarity:'rare',     price:18, stackable:true,  weight:4,
     desc:'Recovery drones save your ball from OOB. 2 recoveries per hole, +1 per stack. Upgrade chain: Drone Fleet → Drone Armada → Drone Cavalry (each +1 recovery).' },
   { id:'lucky',           name:'Lucky',                 emoji:'🍀', rarity:'rare',     price:20, stackable:true,  weight:3,
