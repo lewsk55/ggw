@@ -1602,6 +1602,12 @@ pointer-events:none;
     inset 0 0 16px rgba(255,230,140,0.30);
 }
 }
+/* v0.23h7: Goal Oriented lock badge — a pulsing 🔒 emoji overlay shown
+   while the card is armed pre-swing. Visual signal that yaw is frozen. */
+@keyframes goalOrientedLockPulse {
+0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.95; }
+50%      { transform: translate(-50%, -50%) scale(1.18); opacity: 1; }
+}
 /* v0.21f: airstrike launch button pulse — calls attention without being noisy. */
 @keyframes airstrike-launch-pulse {
 0%, 100% {
@@ -2466,6 +2472,34 @@ text-align:center; cursor:pointer; transition:all 0.15s;
 .card-remove-item:active { transform:scale(0.92); }
 .card-remove-item .cr-emoji { font-size:1.5rem; }
 .card-remove-item .cr-name { font-size:0.5rem; color:rgba(255,255,255,0.7); margin-top:2px; }
+/* v0.23h7: upgraded cards in the removal grid get the same gold treatment
+   as in-hand upgraded cards — gold border, glow, and corner ★ — so the
+   player can spot upgraded copies before deciding what to remove. Mirrors
+   .card-slot.card-upgraded styles but at the removal-grid size. */
+.card-remove-item.cr-upgraded {
+border-color:#ffd750;
+box-shadow:
+  0 0 12px rgba(255,215,80,0.5),
+  inset 0 0 10px rgba(255,215,80,0.18);
+animation: card-gold-pulse 2.4s ease-in-out infinite;
+isolation:isolate;
+}
+.card-remove-item.cr-upgraded::before {
+content:'★';
+position:absolute;
+top:2px;
+left:4px;
+color:#ffd750;
+font-size:0.7rem;
+font-weight:900;
+text-shadow:0 0 5px rgba(255,215,80,0.9), 0 0 2px rgba(60,40,0,0.8);
+z-index:4;
+pointer-events:none;
+}
+.card-remove-item.cr-upgraded .cr-name {
+color:#ffe580;
+font-weight:700;
+}
 .card-remove-cancel {
 margin-top:12px; padding:10px 30px; border-radius:50px;
 background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.2);
@@ -3476,6 +3510,7 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
   <div class="card-remove-title">✂️ Remove a Card</div>
   <div class="card-remove-subtitle">Tap a card to remove it from your deck permanently</div>
   <div class="card-remove-grid" id="card-remove-grid"></div>
+  <button class="shop-undo-btn" id="card-removal-undo-btn" onclick="undoLastCardRemoval()" style="display:none;margin-bottom:8px">↶ Undo Last Removal</button>
   <button class="card-remove-cancel" onclick="closeCardRemoval()">Never mind</button>
 </div>
 
@@ -4231,8 +4266,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.23h6';
-const CHANGE_NOTE = "v0.23h6: Run-summary XP bar fix — bar now fills level-by-level with confetti on each unlock instead of ticking up to a single point. Root cause: by the time the run-end animation kicked off, meta.unlocks.cosmetics had ALREADY been updated with everything earned this run (checkXpUnlocks + setMeta ran first), so getNextCosmeticUnlock saw all the new unlocks as 'already owned' and always returned the next-tier-up cosmetic. That meant _xpPctAt(start) and _xpPctAt(end) returned the same window for every segment, tierCross was never detected, and the bar filled smoothly past every unlock without resets. Fix: build a virtual unlocks snapshot per xp probe — only include cosmetics whose xpCost <= the simulated xp — so the bar correctly sees each unlock as 'not yet earned' until xp crosses it. Each crossing now triggers the 100%-flash + reveal-with-confetti + reset-to-0% + fill-again sequence the original code was designed for.";
+const GAME_VERSION = '0.23h7';
+const CHANGE_NOTE = "v0.23h7: Big batch — Pro shop now offers ONE randomized upgrade per shop (3 picks, 4 with Four!) and locks out after purchase. Course walls now ramp 1×→3× across the run so late holes are harder to hole-in-one. Hole beacon doubled in height. Skater Ball promoted to epic, +20% price, and now bleeds energy mid-grind so it can't trivialize whole holes. Yard Sale limited to one sale per removal shop. Card removals are now undoable (matches shop-purchase undo). Upgraded cards in the removal grid get the same gold border + ★ as in-hand. Conveyor+wall stuck balls can now tap-to-stop (added a position-displacement detector that catches the trapped state). Goal Oriented gained pre-swing arming: lock aim at the hole, freeze yaw, show a 🔒 emoji. Combos with Power Shot. Global prices +10% across difficulties. Run-summary XP bar fix: bar now actually displays during the segmented fill (was hidden by display:none until onAllDone).";
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
@@ -4591,43 +4626,43 @@ const DIFFICULTY_TABLE = {
   1:  { name:'Casual',     pathMult:0.70, shopRate:0.10, startingHp:14, startingCoins:35, overParDmg:1, spikeDmg:1,
         oobGrace:2.0, coinMult:1.40, styleMult:1.00, bogeyDmgExtra:0, rerollCostMult:1.0,
         cardRemoveCostMult:1.0, lateHoleExtraPath:0, healReduction:0, forcedHardShopCards:false,
-        priceBaseMult:1.20, winReq:'finish' },
+        priceBaseMult:1.32, winReq:'finish' },
   2:  { name:'Easy',       pathMult:0.85, shopRate:0.15, startingHp:12, startingCoins:35, overParDmg:1, spikeDmg:1,
         oobGrace:2.0, coinMult:1.20, styleMult:1.00, bogeyDmgExtra:0, rerollCostMult:1.0,
         cardRemoveCostMult:1.0, lateHoleExtraPath:0, healReduction:0, forcedHardShopCards:false,
-        priceBaseMult:1.35, winReq:'finish' },
+        priceBaseMult:1.49, winReq:'finish' },
   3:  { name:'Standard',   pathMult:1.00, shopRate:0.25, startingHp:10, startingCoins:30, overParDmg:1, spikeDmg:1,
         oobGrace:2.0, coinMult:1.00, styleMult:1.00, bogeyDmgExtra:0, rerollCostMult:1.0,
         cardRemoveCostMult:1.0, lateHoleExtraPath:0, healReduction:0, forcedHardShopCards:false,
-        priceBaseMult:1.50, winReq:'finish' },
+        priceBaseMult:1.65, winReq:'finish' },
   4:  { name:'Hard',       pathMult:1.15, shopRate:0.30, startingHp:8,  startingCoins:25, overParDmg:1, spikeDmg:1,
         oobGrace:2.0, coinMult:1.10, styleMult:1.05, bogeyDmgExtra:0, rerollCostMult:1.0,
         cardRemoveCostMult:1.0, lateHoleExtraPath:0, healReduction:0, forcedHardShopCards:false,
-        priceBaseMult:1.50, winReq:'noHpLoss' },
+        priceBaseMult:1.65, winReq:'noHpLoss' },
   5:  { name:'Nightmare',  pathMult:1.30, shopRate:0.30, startingHp:7,  startingCoins:20, overParDmg:2, spikeDmg:1,
         oobGrace:2.0, coinMult:1.20, styleMult:1.10, bogeyDmgExtra:0, rerollCostMult:1.0,
         cardRemoveCostMult:1.0, lateHoleExtraPath:0, healReduction:0, forcedHardShopCards:false,
-        priceBaseMult:1.50, winReq:'noHpLoss' },
+        priceBaseMult:1.65, winReq:'noHpLoss' },
   6:  { name:'Cursed',     pathMult:1.40, shopRate:0.35, startingHp:7,  startingCoins:15, overParDmg:2, spikeDmg:1,
         oobGrace:2.0, coinMult:1.30, styleMult:1.15, bogeyDmgExtra:0, rerollCostMult:1.0,
         cardRemoveCostMult:1.0, lateHoleExtraPath:0.20, healReduction:0, forcedHardShopCards:false,
-        priceBaseMult:1.50, winReq:'noHpLoss' },
+        priceBaseMult:1.65, winReq:'noHpLoss' },
   7:  { name:'Punishing',  pathMult:1.40, shopRate:0.35, startingHp:7,  startingCoins:15, overParDmg:2, spikeDmg:2,
         oobGrace:2.0, coinMult:1.40, styleMult:1.20, bogeyDmgExtra:0, rerollCostMult:1.0,
         cardRemoveCostMult:2.0, lateHoleExtraPath:0.20, healReduction:0, forcedHardShopCards:false,
-        priceBaseMult:1.50, winReq:'underPar' },
+        priceBaseMult:1.65, winReq:'underPar' },
   8:  { name:'Brutal',     pathMult:1.40, shopRate:0.35, startingHp:7,  startingCoins:15, overParDmg:2, spikeDmg:2,
         oobGrace:2.0, coinMult:1.50, styleMult:1.25, bogeyDmgExtra:0, rerollCostMult:1.0,
         cardRemoveCostMult:2.0, lateHoleExtraPath:0.20, healReduction:0, forcedHardShopCards:true,
-        priceBaseMult:1.50, winReq:'underPar' },
+        priceBaseMult:1.65, winReq:'underPar' },
   9:  { name:'Masochist',  pathMult:1.40, shopRate:0.35, startingHp:5,  startingCoins:15, overParDmg:2, spikeDmg:2,
         oobGrace:2.0, coinMult:1.60, styleMult:1.30, bogeyDmgExtra:0, rerollCostMult:1.0,
         cardRemoveCostMult:2.0, lateHoleExtraPath:0.20, healReduction:1, forcedHardShopCards:true,
-        priceBaseMult:1.50, winReq:'underPar' },
+        priceBaseMult:1.65, winReq:'underPar' },
   10: { name:'Impossible', pathMult:1.40, shopRate:0.35, startingHp:5,  startingCoins:15, overParDmg:2, spikeDmg:2,
         oobGrace:2.0, coinMult:1.75, styleMult:1.40, bogeyDmgExtra:1, rerollCostMult:2.0,
         cardRemoveCostMult:2.0, lateHoleExtraPath:0.20, healReduction:1, forcedHardShopCards:true,
-        priceBaseMult:1.50, winReq:'underPar' },
+        priceBaseMult:1.65, winReq:'underPar' },
 };
 function getDifficultyMods(star) {
   const s = Math.max(1, Math.min(10, star|0));
@@ -8535,13 +8570,15 @@ function buildCourse(data) {
 
         // Tall thin beacon column — a vertical emissive cylinder visible from any distance.
         // Skip outline so it glows naturally without an awkward silhouette line.
-        const beaconColG = new THREE.CylinderGeometry(0.04, 0.04, 5.0, 8);
+        // v0.23h7: doubled height (5.0 → 10.0) so the top exits the camera
+        // frame even at top-down zoom-outs — players never see a capped ceiling.
+        const beaconColG = new THREE.CylinderGeometry(0.04, 0.04, 10.0, 8);
         const beaconColMat = new THREE.MeshStandardMaterial({
           color: 0xffee80, emissive: 0xffcc40, emissiveIntensity: 1.8,
           transparent: true, opacity: 0.35, depthWrite: false,
         });
         const beaconCol = new THREE.Mesh(beaconColG, beaconColMat);
-        beaconCol.position.set(cx, cY + FLOOR_H/2 + 2.5, cz);
+        beaconCol.position.set(cx, cY + FLOOR_H/2 + 5.0, cz);
         beaconCol.userData.noOutline = true;
         group.add(beaconCol);
 
@@ -8725,8 +8762,15 @@ function buildCourse(data) {
       // v0.20n: Chasm holes get 3× wall height to keep launched balls in
       // the playfield post-jump — players need confidence the ramp won't
       // hurl them out of bounds. Per Adam's design spec.
+      // v0.23h7: Walls now ALSO ramp with run progress. Hole 1 = 1.0×, last
+      // hole = 3.0× — makes hole-in-ones progressively harder as the run
+      // wears on. Chasm's 3× still stacks on top.
       const _ppCurbScale = data.eliteChasm ? 3.0 : 1.0;
-      const PP_CURB_H   = 0.75 * _ppCurbScale;
+      const _ppHoleIdx = (G.hole | 0);
+      const _ppTotalHoles = Math.max(2, G.totalHoles || 9);
+      // Linear ramp: hole 0 → 1.0×, hole (totalHoles-1) → 3.0×
+      const _ppRunScale = 1.0 + (_ppHoleIdx / (_ppTotalHoles - 1)) * 2.0;
+      const PP_CURB_H   = 0.75 * _ppCurbScale * _ppRunScale;
       const PP_CURB_BOT = -0.5;   // reaches below world ground level
       const PP_CURB_W   = 0.25;  // top-cap inset (toward fairway)
       const T2 = T / 2;          // half tile = 1.0 wu
@@ -13506,11 +13550,27 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
     const xpEl   = document.getElementById(prefix + 'cp-xp');
     const wrap   = document.getElementById(prefix + 'cosmo-progress');
     if(!fillEl || !wrap) { if(opts.onAllDone) opts.onAllDone(); return; }
+    // v0.23h7: BUG FIX — the wrap element ships display:none in the run-summary
+    // markup and was never explicitly un-hidden by this function. Only
+    // renderCosmoProgress sets display='', which here runs from onAllDone
+    // AFTER the animation finishes. Net result: bar invisible during fill
+    // and only appears post-animation, with the player seeing no progressive
+    // fill at all. Show it FIRST so the segment loop is visible from frame 1.
+    wrap.style.display = '';
     const meta = (typeof getMeta === 'function') ? getMeta() : null;
-    if(!meta) { if(opts.onAllDone) opts.onAllDone(); return; }
+    if(!meta) {
+      if(typeof renderCosmoProgress === 'function') renderCosmoProgress({ target: opts.target || 'go', animate: false });
+      if(opts.onAllDone) opts.onAllDone();
+      return;
+    }
     const fromXp = opts.fromXp || 0;
     const toXp = meta.xp || 0;
-    if(toXp <= fromXp) { if(opts.onAllDone) opts.onAllDone(); return; }
+    if(toXp <= fromXp) {
+      // No XP gained this run, but still SHOW the bar at its resting position.
+      if(typeof renderCosmoProgress === 'function') renderCosmoProgress({ target: opts.target || 'go', animate: false });
+      if(opts.onAllDone) opts.onAllDone();
+      return;
+    }
 
     // Build the segment plan. Each segment:
     //   { startXp, endXp, fillFromPct, fillToPct, reveal: {...} | null }
@@ -13656,6 +13716,24 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
     const _stopReveals = [..._willCross.map(r => r.item), null];
     let curXp = fromXp;
     let _segIdx = 0;
+
+    // v0.23h7: prime the bar's visual state at fromXp BEFORE the first
+    // segment runs. Without this, the bar shows the markup default (width:0%)
+    // for one frame before the first _step kicks in — looks like the bar
+    // "resets" before filling.
+    {
+      const _initInfo = _xpPctAt(fromXp);
+      fillEl.style.transition = 'none';
+      fillEl.style.width = _initInfo.pct + '%';
+      if(xpEl) xpEl.textContent = `${Math.round(fromXp)} / ${_initInfo.cost} XP`;
+      const _nameElInit = document.getElementById(prefix + 'cp-next-name');
+      if(_nameElInit && typeof cosmeticDisplayName === 'function' && _initInfo.label !== 'All unlocked 🏆') {
+        const _xpTable = (typeof COSMETIC_XP_UNLOCKS !== 'undefined') ? COSMETIC_XP_UNLOCKS : [];
+        const _row = _xpTable.find(r => r.id === _initInfo.label);
+        const _cat = _row ? (_row.category === 'hat' ? '🎩' : '⚪') : '';
+        _nameElInit.textContent = `${_cat} ${cosmeticDisplayName(_initInfo.label)}`;
+      }
+    }
 
     const _runSegment = () => {
       if(_segIdx >= _stops.length) {
@@ -16328,6 +16406,36 @@ function updatePhysics(dt) {
   }
   // v0.23g: Near-miss detector — runs per-frame while ball is rolling.
   if(typeof tickNearMissDetector === 'function') tickNearMissDetector(dt);
+  // v0.23h7: Stuck-ball detector for tap-to-stop. When the ball is pinned
+  // against a wall by a conveyor/fan, ballVel can be large (continuously
+  // re-injected by the force field, reflected by the wall) but ballPos
+  // doesn't actually change. The standard tap-to-stop gate is speed < 1.5,
+  // which never fires in this state. Sample position every 0.1s; if the
+  // ball has moved less than BALL_R over a 0.5s window WHILE rolling, mark
+  // it stuck so the canvas-tap handler can treat it as interruptible.
+  if(G.rolling && !G.inHole && G.state === 'playing') {
+    if(!G._stuckSamples) G._stuckSamples = [];
+    G._stuckSampleAccum = (G._stuckSampleAccum || 0) + dt;
+    if(G._stuckSampleAccum >= 0.1) {
+      G._stuckSampleAccum = 0;
+      G._stuckSamples.push({ x: G.ballPos.x, z: G.ballPos.z, t: performance.now() });
+      // Keep only last 0.5s (5 samples)
+      while(G._stuckSamples.length > 5) G._stuckSamples.shift();
+      if(G._stuckSamples.length >= 5) {
+        const first = G._stuckSamples[0];
+        const last = G._stuckSamples[G._stuckSamples.length - 1];
+        const moved = Math.hypot(last.x - first.x, last.z - first.z);
+        // BALL_R ≈ 0.20; require nearly zero displacement across the window
+        G._ballStuckDetected = moved < (BALL_R * 0.8);
+      } else {
+        G._ballStuckDetected = false;
+      }
+    }
+  } else {
+    G._ballStuckDetected = false;
+    G._stuckSamples = null;
+    G._stuckSampleAccum = 0;
+  }
   // ── Jump — process before rolling guard so grace-window taps always fire ──
   if(G._jumpPending && !G.inHole) {
     G._jumpPending = false;
@@ -19901,6 +20009,18 @@ function updatePhysics(dt) {
         G.ballVel.z *= scale;
       }
     }
+  }
+
+  // v0.23h7: Skater Ball grind friction. Base grind was too OP because while
+  // pinned to a wall the ball isn't on the floor, so the normal floor-friction
+  // loop didn't fire and the ball coasted forever. Apply a small per-substep
+  // bleed when grinding so long grinds lose energy and entry speed matters
+  // more than starting velocity alone. Tuned so a clean 3s grind still feels
+  // rewarding but 6s+ grinds don't trivialize whole holes.
+  if(G._skaterActive) {
+    const _skaterGrindFr = Math.pow(0.985, 1 / Math.max(1, SUB_STEPS));
+    G.ballVel.x *= _skaterGrindFr;
+    G.ballVel.z *= _skaterGrindFr;
   }
 
   } // ── End substep loop ──
@@ -24092,6 +24212,22 @@ function openShop() {
   // getEligibleCardUpgrades / getEligiblePerkUpgrades.
   G._thisShopBoughtCardIndices = new Set();
   G._thisShopBoughtPerkIds = new Set();
+  // v0.23h7: upgrade picker now offers a RANDOMIZED subset (3, or 4 with
+  // Four! perk) sampled once per shop visit, with at most ONE purchase per
+  // shop. Per Adam: "You should only be able to choose one upgrade per pro
+  // shop, and it should be randomized so only 3 options are visible (or 4
+  // if you have the Four! Perk)". Reset here; populated lazily when the
+  // upgrade picker first opens this shop; consumed by renderUpgradePicker
+  // and getEligible* filters via _thisShopUpgradeUsed.
+  G._thisShopUpgradeOffers = null;
+  G._thisShopUpgradeUsed = false;
+  // v0.23h7: Yard Sale — only one card sale per removal shop. Per Adam:
+  // "Yard sale too op — should just let you sell one card per removal shop".
+  // Reset on shop open; set in sellCardFromDeckByIdx; consumed in
+  // openCardRemoval (refuses re-entry) and the post-sell re-render path.
+  G._thisShopYardSaleUsed = false;
+  // v0.23h7: also clear any pending card-removal undo from the previous shop.
+  G._lastCardRemoval = null;
   renderShop();
   const sub = document.getElementById('shop-subtitle');
   if(sub) {
@@ -24486,16 +24622,20 @@ function renderShop() {
   if(G.deck.length > 3) {
     const _hasYardSaleShop = G.modifiers && G.modifiers.some(m => m.id === 'yard_sale');
     if(_hasYardSaleShop) {
+      // v0.23h7: one sale per removal shop. Dim the tile when used.
+      const _ysUsed = !!G._thisShopYardSaleUsed;
+      const _dimStyle = _ysUsed ? 'opacity:0.45;pointer-events:none;' : '';
+      const _click = _ysUsed ? '' : 'onclick="openCardRemoval()"';
       grid.innerHTML += `<div class="shop-section-label">🏷️ Yard Sale</div>`;
       grid.innerHTML += `
-        <div class="shop-card rarity-rare" onclick="openCardRemoval()">
+        <div class="shop-card rarity-rare" style="${_dimStyle}" ${_click}>
           <div class="shop-card-emoji">💰</div>
           <div class="shop-card-body">
-            <div class="shop-card-name">Sell a Card</div>
-            <div class="shop-card-desc">Sell a card from your deck for 50% of its current shop price. Trim AND profit!</div>
+            <div class="shop-card-name">Sell a Card${_ysUsed ? ' ✓' : ''}</div>
+            <div class="shop-card-desc">${_ysUsed ? 'Already used this shop. Come back next hole.' : 'Sell a card from your deck for 50% of its current shop price. Trim AND profit!'}</div>
             <div class="shop-card-meta">
               <span class="rarity-badge">SERVICE</span>
-              <span class="shop-price" style="color:#3c5;font-weight:800">FREE ENTRY</span>
+              <span class="shop-price" style="color:#3c5;font-weight:800">${_ysUsed ? 'SOLD OUT' : 'FREE ENTRY'}</span>
             </div>
           </div>
         </div>`;
@@ -24762,6 +24902,12 @@ function openCardRemoval() {
   // v0.23c: when Yard Sale is owned, this is a free SELL flow — skip the
   // coin gate entirely. Otherwise enforce the standard removal price.
   const _ysActive = G.modifiers && G.modifiers.some(m => m.id === 'yard_sale');
+  // v0.23h7: Yard Sale — one sale per shop. If the player already sold a
+  // card this shop visit, refuse to reopen with a friendly toast.
+  if(_ysActive && G._thisShopYardSaleUsed) {
+    if(typeof showToast === 'function') showToast('💰 Yard Sale already used this shop!', 1400);
+    return;
+  }
   if(!_ysActive) {
     const price = getCardRemovePrice();
     if(G.coins < price) return;
@@ -24800,7 +24946,10 @@ function openCardRemoval() {
     const upDef = upBranch && (typeof CARD_UPGRADES !== 'undefined') && CARD_UPGRADES[cardId] && CARD_UPGRADES[cardId][upBranch];
     const dispEmoji = (upDef && upDef.emoji) || def.emoji;
     const dispName  = (upDef && upDef.name)  || def.name;
-    const upBadge = upBranch ? ' <span style="font-size:0.45rem;color:#ffd166">✨</span>' : '';
+    // v0.23h7: upgraded copies render with the same gold+star treatment as
+    // in-hand cards (via the new .cr-upgraded class). Old upBadge sparkle
+    // is dropped — the corner ★ pseudo-element + gold glow replaces it.
+    const _upgradeClass = upBranch ? ' cr-upgraded' : '';
     // v0.23b: Yard Sale — when perk is owned, show a SELL button on each card.
     // Sell price = 50% of the card's CURRENT scaled shop price (not base_price),
     // so cards sell back closer to their inflated late-run cost.
@@ -24818,9 +24967,9 @@ function openCardRemoval() {
       ? `sellCardFromDeckByIdx(${i}, this)`
       : `removeCardFromDeckByIdx(${i}, this)`;
     grid.innerHTML += `
-      <div class="card-remove-item" data-deck-idx="${i}" onclick="${_rowAction}" style="position:relative">
+      <div class="card-remove-item${_upgradeClass}" data-deck-idx="${i}" onclick="${_rowAction}" style="position:relative">
         <div class="cr-emoji">${dispEmoji}</div>
-        <div class="cr-name">${dispName}${upBadge}</div>
+        <div class="cr-name">${dispName}</div>
         ${yardSaleBtn}
       </div>`;
   }
@@ -24831,6 +24980,9 @@ window.openCardRemoval = openCardRemoval;
 function closeCardRemoval() {
   const overlay = document.getElementById('card-remove-overlay');
   if(overlay) overlay.classList.remove('open');
+  // v0.23h7: clear the per-removal undo opportunity when leaving the modal.
+  G._lastCardRemoval = null;
+  if(typeof _hideCardRemovalUndoBtn === 'function') _hideCardRemovalUndoBtn();
 }
 window.closeCardRemoval = closeCardRemoval;
 
@@ -24932,16 +25084,35 @@ window.removeCardFromDeckByIdx = function(idx, el) {
   updateCoinHUD();
   const rec = G.deck[idx];
   const cardId = (typeof rec === 'string') ? rec : (rec && rec.id) || 'unknown';
+  // v0.23h7: snapshot for undo. Captures the card record, upgrade branch,
+  // and price paid so undoLastCardRemoval can restore everything cleanly.
+  // Also captures any matching drawPile entry that got removed alongside.
+  const _removedRec = (typeof rec === 'string') ? rec : { ...rec };
+  const _removedUpgrade = G.deckUpgrades ? G.deckUpgrades[idx] : null;
   // Drop the specific deck slot
   G.deck.splice(idx, 1);
   if(G.deckUpgrades) G.deckUpgrades.splice(idx, 1);
   _shiftDeckIndicesAfterRemove(idx);
   // Drop ONE matching draw-pile entry by id (approximation — drawPile is
   // shuffled and doesn't carry a stable index back to the deck slot).
+  let _drewPileSnapshot = null;
   if(Array.isArray(G.drawPile)) {
     const dpIdx = G.drawPile.findIndex(r => (typeof r === 'string' ? r === cardId : r && r.id === cardId));
-    if(dpIdx >= 0) G.drawPile.splice(dpIdx, 1);
+    if(dpIdx >= 0) {
+      _drewPileSnapshot = { idx: dpIdx, rec: G.drawPile[dpIdx] };
+      G.drawPile.splice(dpIdx, 1);
+    }
   }
+  // Stash snapshot — consumed by undoLastCardRemoval
+  G._lastCardRemoval = {
+    kind: 'remove',
+    deckIdx: idx,
+    rec: _removedRec,
+    upgrade: _removedUpgrade,
+    coinsSpent: price,
+    drawPileSnapshot: _drewPileSnapshot,
+    cardId,
+  };
   _cardRemovalAnim(el, cardId);
 };
 
@@ -24960,20 +25131,104 @@ window.sellCardFromDeckByIdx = function(idx, el) {
   if(!def) return;
   const scaled = (typeof getScaledCardPrice === 'function') ? getScaledCardPrice(def) : (def.price || 10);
   const sellPrice = Math.max(1, Math.floor(scaled * 0.5));
+  // v0.23h7: snapshot for undo (mirrors removeCardFromDeckByIdx). Yard sale
+  // undo also restores the per-shop "yard sale used" flag.
+  const _removedRec = (typeof rec === 'string') ? rec : { ...rec };
+  const _removedUpgrade = G.deckUpgrades ? G.deckUpgrades[idx] : null;
   G.coins += sellPrice;
   if(typeof updateCoinHUD === 'function') updateCoinHUD();
   // Drop the specific deck slot — same teardown as removeCardFromDeckByIdx.
   G.deck.splice(idx, 1);
   if(G.deckUpgrades) G.deckUpgrades.splice(idx, 1);
   if(typeof _shiftDeckIndicesAfterRemove === 'function') _shiftDeckIndicesAfterRemove(idx);
+  let _drewPileSnapshot = null;
   if(Array.isArray(G.drawPile)) {
     const dpIdx = G.drawPile.findIndex(r => (typeof r === 'string' ? r === cardId : r && r.id === cardId));
-    if(dpIdx >= 0) G.drawPile.splice(dpIdx, 1);
+    if(dpIdx >= 0) {
+      _drewPileSnapshot = { idx: dpIdx, rec: G.drawPile[dpIdx] };
+      G.drawPile.splice(dpIdx, 1);
+    }
   }
+  G._lastCardRemoval = {
+    kind: 'sell',
+    deckIdx: idx,
+    rec: _removedRec,
+    upgrade: _removedUpgrade,
+    coinsGained: sellPrice,
+    drawPileSnapshot: _drewPileSnapshot,
+    cardId,
+  };
   if(typeof showToast === 'function') showToast(`💰 Sold ${def.emoji} ${def.name} for ${sellPrice}!`, 1400);
+  // v0.23h7: one sale per removal shop. Mark used; the post-anim re-render
+  // path in _cardRemovalAnim will see this and close the modal instead of
+  // re-opening for another round.
+  G._thisShopYardSaleUsed = true;
   // Use the same drive-off + re-render as removal so the UI flow is identical.
   _cardRemovalAnim(el, cardId);
 };
+
+// v0.23h7: Undo the most recent card removal/sale. Single-step (one removal
+// can be undone, but not the one before that) — same model as the shop
+// purchase undo. Refunds coins on a sell-undo or restores the spent coins
+// on a remove-undo, restores the card at its original deck index, restores
+// the draw-pile entry if one was popped, and clears the per-shop yard-sale-
+// used flag if this was a sell so the player can re-engage the modal.
+window.undoLastCardRemoval = function() {
+  const snap = G._lastCardRemoval;
+  if(!snap) { _hideCardRemovalUndoBtn(); return; }
+  // Restore card at its original deck position. If the index is now past
+  // the end of the deck (other removals shifted things), append.
+  const insertIdx = Math.min(snap.deckIdx | 0, G.deck.length);
+  G.deck.splice(insertIdx, 0, snap.rec);
+  if(!G.deckUpgrades) G.deckUpgrades = [];
+  G.deckUpgrades.splice(insertIdx, 0, snap.upgrade || null);
+  // Reverse the index shift that _shiftDeckIndicesAfterRemove applied: any
+  // live record pointing at or past insertIdx needs to be bumped back up.
+  const _unshift = (arr) => {
+    if(!Array.isArray(arr)) return;
+    for(const r of arr) {
+      if(r && typeof r.deckIndex === 'number' && r.deckIndex >= insertIdx) {
+        r.deckIndex += 1;
+      }
+    }
+  };
+  _unshift(G.hand); _unshift(G.drawPile); _unshift(G.discard);
+  // Restore the draw-pile entry if one was popped alongside the removal.
+  if(snap.drawPileSnapshot && Array.isArray(G.drawPile)) {
+    const dpIdx = Math.min(snap.drawPileSnapshot.idx | 0, G.drawPile.length);
+    G.drawPile.splice(dpIdx, 0, snap.drawPileSnapshot.rec);
+  }
+  if(snap.kind === 'remove') {
+    G.coins += (snap.coinsSpent | 0);
+    if(typeof trackStat === 'function') trackStat('coinsSpent', -(snap.coinsSpent | 0));
+    if(typeof showToast === 'function') showToast('↶ Removal undone', 900);
+  } else if(snap.kind === 'sell') {
+    G.coins -= (snap.coinsGained | 0);
+    // Yard sale gate: this shop is once again eligible for a sale.
+    G._thisShopYardSaleUsed = false;
+    if(typeof showToast === 'function') showToast('↶ Sale undone', 900);
+  }
+  G._lastCardRemoval = null;
+  if(typeof updateCoinHUD === 'function') updateCoinHUD();
+  if(typeof updateHandUI === 'function') updateHandUI();
+  _hideCardRemovalUndoBtn();
+  // Re-render the removal grid in place so the restored card appears.
+  const overlay = document.getElementById('card-remove-overlay');
+  if(overlay && overlay.classList.contains('open')) {
+    openCardRemoval();
+  } else if(typeof renderShop === 'function') {
+    renderShop();
+  }
+};
+
+function _showCardRemovalUndoBtn() {
+  const btn = document.getElementById('card-removal-undo-btn');
+  if(btn) btn.style.display = 'inline-block';
+}
+function _hideCardRemovalUndoBtn() {
+  const btn = document.getElementById('card-removal-undo-btn');
+  if(btn) btn.style.display = 'none';
+}
 
 // Shared animation + re-render helper for both removal entry points.
 function _cardRemovalAnim(el, cardId) {
@@ -25000,13 +25255,22 @@ function _cardRemovalAnim(el, cardId) {
   }
   const def = CARD_DEFS[cardId];
   showToast(`✂️ ${def ? def.emoji + ' ' + def.name : cardId} removed!`, 1200);
+  // v0.23h7: surface the undo button now that a removal/sale has completed
+  // and a snapshot exists. _showCardRemovalUndoBtn no-ops if the overlay
+  // isn't open or the button doesn't exist, so safe to call unconditionally.
+  if(G._lastCardRemoval && typeof _showCardRemovalUndoBtn === 'function') {
+    _showCardRemovalUndoBtn();
+  }
   // v0.22d: re-render the overlay (don't close) so the player can keep
   // trimming duplicates one at a time. Close button + Esc both still
   // exit when the player is done.
   setTimeout(() => {
     // v0.23c: with Yard Sale, no coin gate — removing/selling pays you.
+    // v0.23h7: also force-close if Yard Sale was used this shop (one sale
+    // per removal shop). The flag is set inside sellCardFromDeckByIdx.
     const _ysActive2 = G.modifiers && G.modifiers.some(m => m.id === 'yard_sale');
-    const _canKeepGoing = _ysActive2 || (G.coins >= getCardRemovePrice());
+    const _ysExhausted = _ysActive2 && G._thisShopYardSaleUsed;
+    const _canKeepGoing = !_ysExhausted && (_ysActive2 || (G.coins >= getCardRemovePrice()));
     if(typeof openCardRemoval === 'function' && _canKeepGoing && G.deck.length > 0) {
       const overlay = document.getElementById('card-remove-overlay');
       if(overlay && overlay.classList.contains('open')) {
@@ -27991,7 +28255,7 @@ const CARD_DEFS = {
   sticky:       { id:'sticky',       emoji:'🟢', name:'Sticky',           desc:'Ball sticks to the first surface it hits — wall, bumper, spinner, slide block, rock, corner, spike (still costs HP), or pop-up wall. Take a FREE re-aim shot from the stuck position. Tap card again to unstick.', rarity:'common', price:15, context:'pre', holdable:false, weight:4 },
   parkour:      { id:'parkour',      emoji:'🤸', name:'Parkour',          desc:'This swing: automatically vault the first obstacle in your path with a slow-mo cartwheel.', rarity:'rare', price:20, context:'pre', holdable:false, weight:3 },
   vacuum:       { id:'vacuum',       emoji:'🌪️', name:'Vacuum',            desc:'Suck up coins, hearts, and obstacles in a wide V-shaped cone in front of you. Play anytime — mid-roll briefly slows time.', rarity:'rare', price:30, context:'any', holdable:false, weight:2 },
-  goal_oriented:{ id:'goal_oriented',emoji:'🎯', name:'Goal Oriented',    desc:'Instantly redirect your ball toward the hole mid-swing.', rarity:'epic', price:25, context:'during', holdable:false, weight:3 },
+  goal_oriented:{ id:'goal_oriented',emoji:'🎯', name:'Goal Oriented',    desc:'PRE-SWING: lock aim straight at the hole. MID-SWING: redirect mid-flight toward the hole. Combos with Power Shot.', rarity:'epic', price:25, context:'pre', holdable:false, weight:3 },
   // v0.21c: Frisbee — arc fly-over, then snaps to a hard stop. Pull-distance still
   // controls power; horizontal range is 1.5× normal max but ground friction is 4×
   // normal so it stops in roughly half the post-landing distance. Visual: ball
@@ -28014,7 +28278,7 @@ const CARD_DEFS = {
   joker:           { id:'joker',           emoji:'🃏',  name:'Joker',             desc:'Plays a copy of the last card you played this hole. Cannot copy itself or other Jokers.',                                          rarity:'rare',      price:25, context:'any', holdable:false, weight:3 },
   power_steering:  { id:'power_steering',  emoji:'🎮',  name:'Power Steering',    desc:'While ball is in motion, hold ← / → (or canvas edges) to nudge its trajectory. Active until ball stops.',                       rarity:'rare',      price:22, context:'any', holdable:false, weight:3 },
   parachute:       { id:'parachute',       emoji:'🪂',  name:'Parachute',         desc:'Auto-deploys at the apex of any airborne shot. Slows descent and lets you nudge landing position. 1 charge per hole.',         rarity:'epic',      price:26, context:'any', holdable:false, weight:3 },
-  skater_ball:     { id:'skater_ball',     emoji:'🛹',  name:'Skater Ball',       desc:'Ball rides a board for one swing. Hit a wall to grind it for huge style — tap left/right to balance. Press "release" to bail. Faster entry = longer grind.', rarity:'rare',      price:24, context:'pre', holdable:false, weight:3 },
+  skater_ball:     { id:'skater_ball',     emoji:'🛹',  name:'Skater Ball',       desc:'Ball rides a board for one swing. Hit a wall to grind it for huge style — tap left/right to balance. Press "release" to bail. Faster entry = longer grind.', rarity:'epic',      price:29, context:'pre', holdable:false, weight:3 },
   multiball:       { id:'multiball',       emoji:'⚪⚪', name:'Multiball',         desc:'Take TWO different shots from your current position on a single swing. Whichever ball ends closer to the hole becomes your next ball.', rarity:'legendary', price:35, context:'pre', holdable:false, weight:1 },
   blackhole_grenade:{ id:'blackhole_grenade', emoji:'🕳️', name:'Blackhole Grenade', desc:'Throw a grenade that creates a black hole on impact. Sucks all coins, hearts, and obstacles within a large radius into the singularity.', rarity:'legendary', price:30, context:'pre', holdable:false, weight:1 },
   tactical_nuke:   { id:'tactical_nuke',   emoji:'☢️',  name:'Tactical Nuke',     desc:'Clears the entire hole of ALL destructible obstacles. 1 use per RUN.',                                                          rarity:'legendary', price:40, context:'pre', holdable:false, weight:1 },
@@ -33415,7 +33679,43 @@ function activateReverse() {
 // replaces direction with (hole - ball) unit vector. Y velocity is untouched
 // so airborne balls stay airborne. Respects moving-hole world offset.
 function activateGoalOriented() {
-  if(!G.rolling) return;
+  // v0.23h7: dual-mode card. If pressed pre-swing (aim mode, not rolling),
+  // lock aim toward hole and freeze yaw controls until fire. If pressed
+  // mid-swing (rolling), do the classic mid-flight redirect.
+  if(!G.rolling) {
+    // Pre-swing arm: lock aim to hole.
+    if(G.inHole || G.state !== 'playing') return;
+    if(!G.aimMode) return;
+    const hx = (G.holePos.x * TILE_SIZE) + (G._holeWorldOffset ? G._holeWorldOffset.x : 0);
+    const hz = (G.holePos.y * TILE_SIZE) + (G._holeWorldOffset ? G._holeWorldOffset.z : 0);
+    const dx = hx - G.ballPos.x;
+    const dz = hz - G.ballPos.z;
+    const d = Math.hypot(dx, dz);
+    if(d < 0.05) { showToast('🎯 Already there!', 700); return; }
+    const ndx = dx / d, ndz = dz / d;
+    // Lock both shotAngle and camTheta so the rotate-camera-to-shoot path
+    // (which reads camTheta + π) also points at the hole.
+    G.shotAngle = Math.atan2(ndx, ndz);
+    G.camTheta = G.shotAngle - Math.PI;
+    if(G.shotDir) G.shotDir.set(ndx, 0, ndz);
+    G._goalOrientedArmed = true;
+    if(typeof updateAimArrow === 'function') updateAimArrow();
+    showToast('🔒 Aim locked on hole — power up and fire!', 1800);
+    triggerShake('light');
+    if(AC) {
+      try {
+        const ac = getAC(), t = ac.currentTime;
+        const o = ac.createOscillator(); o.type = 'sine';
+        o.frequency.setValueAtTime(440, t);
+        o.frequency.exponentialRampToValueAtTime(1200, t + 0.18);
+        const g = ac.createGain(); g.gain.setValueAtTime(0.18, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+        o.connect(g); g.connect(getACDest()); o.start(t); o.stop(t + 0.25);
+      } catch(e){}
+    }
+    if(typeof _showGoalOrientedLockBadge === 'function') _showGoalOrientedLockBadge();
+    return;
+  }
+  // Mid-swing redirect (classic behavior).
   // World coordinates for ball + hole. G.holePos is grid-based (tile units);
   // world pos uses TILE_SIZE. Moving-hole systems write the current world
   // offset into G._holeWorldOffset, so we add that when present.
@@ -33446,6 +33746,25 @@ function activateGoalOriented() {
       o.connect(g); g.connect(getACDest()); o.start(t); o.stop(t + 0.25);
     } catch(e){}
   }
+}
+
+// v0.23h7: Lock-on badge for Goal Oriented pre-swing arm. Shows a 🔒 next
+// to the aim arrow root so the player can SEE the lock state. Hidden when
+// the arm is consumed (in fireShot) or canceled.
+function _showGoalOrientedLockBadge() {
+  let badge = document.getElementById('goal-oriented-lock-badge');
+  if(!badge) {
+    badge = document.createElement('div');
+    badge.id = 'goal-oriented-lock-badge';
+    badge.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);font-size:3.5rem;pointer-events:none;z-index:9000;text-shadow:0 0 18px rgba(255,215,80,0.95),0 0 6px rgba(0,0,0,0.6);animation:goalOrientedLockPulse 1.4s ease-in-out infinite;';
+    badge.textContent = '🔒';
+    document.body.appendChild(badge);
+  }
+  badge.style.display = 'block';
+}
+function _hideGoalOrientedLockBadge() {
+  const badge = document.getElementById('goal-oriented-lock-badge');
+  if(badge) badge.style.display = 'none';
 }
 
 // ── Sharpshooter: zoomed-scope missile ─────────────────
@@ -39456,8 +39775,17 @@ function onPointerDown(x, y, id) {
   // Active perks only fire from ability buttons/hotkeys, not canvas taps
   // Allow aiming while ball is nearly stopped (speed < 1.5) — enables speedrunning
   // and escaping spin-trap situations. Ball gets snapped to rest on tap.
+  // v0.23h7: ALSO allow interrupt when the ball is "trapped" — pinned against
+  // a wall by a conveyor/fan, so ballVel is high (pushed into wall, reflected
+  // back) but ballPos hasn't actually moved. The classic case: ball lands on
+  // a conveyor strip and gets shoved against a corner. Speed check alone
+  // never lets the player tap-to-stop because the conveyor keeps re-pumping
+  // velocity. We sample position every ~0.1s and check if the ball is
+  // wedged in place. If displacement over 0.5s is < BALL_R, treat as stuck.
   const speed = G.ballVel.length();
-  const canInterrupt = G.rolling && speed < 1.5 && G.ballPos.y <= (G.heightMap.length ? getTerrainHeight(G.ballPos.x, G.ballPos.z) : 0) + FLOOR_H/2 + BALL_R + 0.15;
+  const _onFloor = G.ballPos.y <= (G.heightMap.length ? getTerrainHeight(G.ballPos.x, G.ballPos.z) : 0) + FLOOR_H/2 + BALL_R + 0.15;
+  const _stuck = !!(G._ballStuckDetected && _onFloor);
+  const canInterrupt = G.rolling && _onFloor && (speed < 1.5 || _stuck);
   if(canInterrupt) {
     G.ballVel.set(0,0,0);
     G.rolling = false;
@@ -39631,7 +39959,13 @@ function onPointerMove(x, y) {
       // anywhere from near-straight-up (0.3) to near-straight-down (π - 0.3 ≈ 2.84).
       G.camPhi   = Math.max(0.3, Math.min(Math.PI - 0.3, G.camPhi - dy * 0.004));
     } else {
-      G.camTheta -= dx * 0.008;
+      // v0.23h7: Goal Oriented pre-swing arm locks aim TOWARD the hole.
+      // When armed, camera rotation is disabled so the locked angle stays
+      // true. Vertical pitch still works (player can adjust trajectory),
+      // but horizontal yaw is frozen. Cleared when fireShot consumes the arm.
+      if(!G._goalOrientedArmed) {
+        G.camTheta -= dx * 0.008;
+      }
       // Wider Y clamp accommodates Shrink Ray's lower seed pitch (1.15) and
       // lets players look further up/down in general.
       G.camPhi   = Math.max(0.15, Math.min(1.45, G.camPhi + dy * 0.006));
@@ -39992,6 +40326,14 @@ function fireShot() {
   G.rolling = true;
   G.rollingSlowTimer = 0;
   G.aimMode = false;
+  // v0.23h7: consume Goal Oriented pre-swing arm. The locked angle is
+  // already baked into shotAngle/shotDir at arm time, so the shot fires
+  // straight at the hole. Clear the flag + lock badge so the next swing's
+  // controls are unrestricted.
+  if(G._goalOrientedArmed) {
+    G._goalOrientedArmed = false;
+    if(typeof _hideGoalOrientedLockBadge === 'function') _hideGoalOrientedLockBadge();
+  }
   // v0.19r: drag-aiming sets aimManualOverride=true so the aim arrow doesn't
   // fight the cursor. That flag was sticking through the entire roll and
   // silently blocking the follow-cam lerp (it gates on `!aimManualOverride`).
@@ -41637,7 +41979,8 @@ function updateKeyboardCamera(dt) {
   // mid-action would change the player's perspective and confuse direction.
   // W/S zoom remains usable in all modes.
   const _suppressCamAD = !!G._skaterActive
-    || (!!G._powerSteeringArmed && !!G.rolling);
+    || (!!G._powerSteeringArmed && !!G.rolling)
+    || !!G._goalOrientedArmed;
   if(!_suppressCamAD) {
     if(keys['KeyA']) G.camTheta -= CAM_ROT_SPEED * dt;
     if(keys['KeyD']) G.camTheta += CAM_ROT_SPEED * dt;
@@ -42805,6 +43148,9 @@ function rollUpgradeOfferForShop() {
 
 // Helper: is there at least one thing the player can actually upgrade?
 function anyUpgradesAvailable() {
+  // v0.23h7: one upgrade per shop — once used this visit, the shop tile
+  // should dim out so the player isn't promised a button that does nothing.
+  if(G._thisShopUpgradeUsed) return false;
   return getEligibleCardUpgrades().length > 0 || getEligiblePerkUpgrades().length > 0;
 }
 
@@ -43061,6 +43407,19 @@ function renderUpgradePicker() {
   if(backBtn) backBtn.textContent = '← Back to Shop';
   list.style.gridTemplateColumns = '1fr';
 
+  // v0.23h7: gate — one upgrade per shop. If already used, show a friendly
+  // sold-out state instead of the picker.
+  if(G._thisShopUpgradeUsed) {
+    if(titleEl) titleEl.textContent = 'Upgrade redeemed ✓';
+    if(subEl) subEl.textContent = 'One upgrade per shop. Come back next hole!';
+    list.innerHTML = `<div style="padding:32px 12px;text-align:center;color:rgba(255,255,255,0.55);font-size:0.8rem;line-height:1.5">
+      <div style="font-size:2.4rem;margin-bottom:10px">✨</div>
+      You've already upgraded this shop.<br>
+      <span style="font-size:0.7rem;color:rgba(255,255,255,0.4)">A fresh set of upgrades will be offered after the next hole.</span>
+    </div>`;
+    return;
+  }
+
   const cards = (typeof getEligibleCardUpgrades === 'function') ? getEligibleCardUpgrades() : [];
   const perks = (typeof getEligiblePerkUpgrades === 'function') ? getEligiblePerkUpgrades() : [];
 
@@ -43071,66 +43430,93 @@ function renderUpgradePicker() {
     return;
   }
 
-  if(cards.length > 0) {
-    list.innerHTML += `<div style="margin:6px 0 4px;font-size:0.6rem;letter-spacing:2px;color:rgba(255,255,255,0.45);font-weight:700">CARDS IN YOUR DECK</div>`;
-    for(const entry of cards) {
-      const def = entry.def;
-      // v0.23a7: compute max priceMult across branches so premium-tagged
-      // upgrades (e.g. Double Stick) show their actual price in the list.
-      let _maxBranch = null;
-      if(entry.branches) {
-        for(const k of Object.keys(entry.branches)) {
-          const b = entry.branches[k];
-          if(b && (!_maxBranch || (b.priceMult||1) > (_maxBranch.priceMult||1))) _maxBranch = b;
-        }
-      }
-      const price = (typeof getUpgradePrice === 'function') ? getUpgradePrice(def, false, 1, _maxBranch) : def.price * 2;
-      const canAfford = G.coins >= price;
-      // v0.21g: per-instance — show "#N of M" when there are multiple copies.
-      const copyLabel = entry.totalCopies > 1
-        ? `#${entry.copyNumber} of ${entry.totalCopies}`
-        : '';
-      list.innerHTML += renderUpgradeListItem({
-        sourceId: entry.sourceId,
-        deckIndex: entry.deckIndex,
-        def, price, canAfford,
-        countLabel: copyLabel,
-        isPerk: false,
-      });
+  // v0.23h7: Sample a randomized subset of the eligible pool — 3 normally,
+  // 4 when the player owns the Four! perk. Persisted on G._thisShopUpgradeOffers
+  // for this shop visit so re-opening the picker (or going branch→back→list)
+  // shows the same set rather than rerolling on every render. Cleared each
+  // openShop() call in M1-ish above.
+  const _hasFour = G.modifiers && G.modifiers.some(m => m.id === 'four_choices');
+  const _offerCount = _hasFour ? 4 : 3;
+  if(!G._thisShopUpgradeOffers) {
+    // Tag entries by type and combine, then sample uniformly.
+    const _pool = [
+      ...cards.map(e => ({ ...e, _isPerk: false })),
+      ...perks.map(e => ({ ...e, _isPerk: true })),
+    ];
+    // Fisher-Yates shuffle, take first N
+    for(let i = _pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [_pool[i], _pool[j]] = [_pool[j], _pool[i]];
+    }
+    const _picked = _pool.slice(0, _offerCount);
+    // Stash by stable key so re-render finds the same entries. Cards key by
+    // deckIndex (per-instance), perks key by sourceId.
+    G._thisShopUpgradeOffers = _picked.map(e => ({
+      isPerk: !!e._isPerk,
+      sourceId: e.sourceId,
+      deckIndex: e._isPerk ? -1 : (e.deckIndex|0),
+    }));
+  }
+
+  // Re-resolve offer entries against the LIVE eligible lists each render so
+  // prices, upgrade chain tiers, etc. stay current. Skip any offer that's no
+  // longer eligible (e.g. card was discarded between renders — defensive).
+  const _resolvedOffers = [];
+  for(const o of (G._thisShopUpgradeOffers || [])) {
+    if(o.isPerk) {
+      const hit = perks.find(p => p.sourceId === o.sourceId);
+      if(hit) _resolvedOffers.push({ ...hit, _isPerk: true });
+    } else {
+      const hit = cards.find(c => c.sourceId === o.sourceId && (c.deckIndex|0) === (o.deckIndex|0));
+      if(hit) _resolvedOffers.push({ ...hit, _isPerk: false });
     }
   }
-  if(perks.length > 0) {
-    list.innerHTML += `<div style="margin:14px 0 4px;font-size:0.6rem;letter-spacing:2px;color:rgba(255,255,255,0.45);font-weight:700">PERKS YOU OWN</div>`;
-    for(const entry of perks) {
-      const def = entry.def;
-      let _maxBranchP = null;
-      if(entry.branches) {
-        for(const k of Object.keys(entry.branches)) {
-          if(k.startsWith('_') || k.length !== 1) continue; // skip metadata keys
-          const b = entry.branches[k];
-          if(b && (!_maxBranchP || (b.priceMult||1) > (_maxBranchP.priceMult||1))) _maxBranchP = b;
-        }
+
+  if(_resolvedOffers.length === 0) {
+    list.innerHTML = `<div style="padding:32px 12px;text-align:center;color:rgba(255,255,255,0.4);font-size:0.8rem">
+      No eligible upgrades right now. Buy more cards or perks first!
+    </div>`;
+    return;
+  }
+
+  // Render all offers in a single list (no card/perk split — they're mixed
+  // randomly in the sample).
+  list.innerHTML += `<div style="margin:6px 0 4px;font-size:0.6rem;letter-spacing:2px;color:rgba(255,255,255,0.45);font-weight:700">CHOOSE ONE TO UPGRADE</div>`;
+  for(const entry of _resolvedOffers) {
+    const def = entry.def;
+    let _maxBranch = null;
+    if(entry.branches) {
+      for(const k of Object.keys(entry.branches)) {
+        if(k.startsWith('_') || k.length !== 1) continue;
+        const b = entry.branches[k];
+        if(b && (!_maxBranch || (b.priceMult||1) > (_maxBranch.priceMult||1))) _maxBranch = b;
       }
-      const price = (typeof getUpgradePrice === 'function') ? getUpgradePrice(def, true, entry.stacks, _maxBranchP) : def.price * 2;
-      const canAfford = G.coins >= price;
-      const stackLabel = entry.stacks > 1 ? `×${entry.stacks} stacks` : '';
-      // v0.23h4: for kickback chain, surface the NEXT tier name as the label
-      // so the player can see what they'll get without drilling into the
-      // single-branch view. (After Fleet: "→ Drone Armada". After Armada: "→ Drone Cavalry".)
+    }
+    const price = (typeof getUpgradePrice === 'function')
+      ? getUpgradePrice(def, !!entry._isPerk, entry.stacks || 1, _maxBranch)
+      : def.price * 2;
+    const canAfford = G.coins >= price;
+    let countLabel = '';
+    if(entry._isPerk) {
+      const stackLabel = (entry.stacks && entry.stacks > 1) ? `×${entry.stacks} stacks` : '';
       let nextTierLabel = '';
       if(entry.sourceId === 'kickback') {
         const tier = (G._kickbackUpgradeTier|0) + 1;
         const chain = PERK_UPGRADES._kickbackChain;
-        if(chain && chain[tier]) {
-          nextTierLabel = `→ ${chain[tier].name}`;
-        }
+        if(chain && chain[tier]) nextTierLabel = `→ ${chain[tier].name}`;
       }
-      list.innerHTML += renderUpgradeListItem({
-        sourceId: entry.sourceId, def, price, canAfford,
-        countLabel: nextTierLabel ? `${stackLabel} ${nextTierLabel}`.trim() : stackLabel,
-        isPerk: true,
-      });
+      countLabel = nextTierLabel ? `${stackLabel} ${nextTierLabel}`.trim() : stackLabel;
+    } else {
+      const copyLabel = entry.totalCopies > 1 ? `#${entry.copyNumber} of ${entry.totalCopies}` : '';
+      countLabel = copyLabel;
     }
+    list.innerHTML += renderUpgradeListItem({
+      sourceId: entry.sourceId,
+      deckIndex: entry.deckIndex,
+      def, price, canAfford,
+      countLabel,
+      isPerk: !!entry._isPerk,
+    });
   }
 }
 
@@ -43363,14 +43749,11 @@ window.confirmUpgradeBranch = function(sourceId, branch, kindStr, deckIndex) {
 
   // Check if there's anything left to upgrade — if so, return to list view.
   // Otherwise close the overlay so the player drops back to the shop.
-  const stillEligible = anyUpgradesAvailable();
-  if(stillEligible && (G.coins > 0)) {
-    G._upgradePickerStage = 'list';
-    G._upgradePickerSource = null;
-    renderUpgradePicker();
-  } else {
-    closeUpgradePicker();
-  }
+  // v0.23h7: one upgrade per shop — always close after a purchase. The
+  // gating UI in renderUpgradePicker shows the "sold out" state if the
+  // player re-opens the picker this shop.
+  G._thisShopUpgradeUsed = true;
+  closeUpgradePicker();
   // Re-render the shop to refresh the upgrade tile state (eligibility may
   // have dropped; coin display also needs to reflect spend).
   if(typeof renderShop === 'function') renderShop();
@@ -44809,6 +45192,9 @@ function initHole() {
   G._lastSafePosSampleT = 0;
   G._armedCards = [];        // v0.20g: armed pre-swing cards waiting to fire
   G._shotArmedOverrides = []; // v0.21k2: per-shot snapshot of armed overrides for physics-time getCardField
+  // v0.23h7: clear any leftover Goal Oriented lock from the prior hole.
+  G._goalOrientedArmed = false;
+  if(typeof _hideGoalOrientedLockBadge === 'function') _hideGoalOrientedLockBadge();
   G._bestTrickThisHole = null;
   // v0.17y7: clear any stale post-finalize debounce from previous hole
   if(G._postFinalizeTimer) { clearTimeout(G._postFinalizeTimer); G._postFinalizeTimer = null; }
