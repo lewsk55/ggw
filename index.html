@@ -3689,7 +3689,7 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
   <button class="play-btn" onclick="openAchievements()" style="margin-top:6px;background:rgba(245,200,66,0.18);border:1px solid rgba(245,200,66,0.5);color:#f5c842;font-size:0.85rem;padding:10px 28px">🏆 Achievements</button>
   <button class="play-btn" id="btn-import-save" style="margin-top:6px;background:rgba(120,120,120,0.6);font-size:0.7rem;padding:8px 20px" onclick="importSaveFile()">📂 Import Save</button>
   <input type="file" id="import-save-input" accept=".ggwsave,application/json" style="display:none">
-  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.23h83</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Parkour no longer fires when flying 3-4 ball heights above obstacle · Mo Money &amp; Precision 2× → 1.5× · HIO/HIT flat bonuses removed</div></div>
+  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.23i</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">NEW: Hand Brake perk · Time Rewind card · Backspin retired · Chaos perks boosted with Hand Brake · Skater grind softer + faster floor · Par −1 on par-6+ holes · XP bar fills slower with dramatic unlock pauses</div></div>
 
   <!-- v0.19j: Inline profile picker — skip the separate slot-picks screen -->
   <div class="section-label" style="margin-top:14px">Save Slot</div>
@@ -4287,8 +4287,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.23h83';
-const CHANGE_NOTE = "v0.23h83: Parkour no longer triggers when ball is well above the obstacle (3-4 ball heights overhead) — added per-tag vertical clearance gate. Mo Money Mo Problems and Precision under-par mult both 2× → 1.5× (too OP). Hole-in-One (+30) and Hole-in-Two (+20) flat bonuses removed.";
+const GAME_VERSION = '0.23i';
+const CHANGE_NOTE = "v0.23i: BIG UPDATE. NEW PERK Hand Brake (epic, $26) — double-tap-and-hold for held-friction brake. NEW CARD Time Rewind (rare, $25) — mid-shot, rewinds ball along path + refunds HP; tap again to stop. Backspin card retired. Owning Hand Brake boosts shop weight of Perpetual Motion / Slippery Ball / All Bounce. Skater grind friction softened (0.997→0.9985) + bail floor 50% higher (1.5→2.25) for brisker grinds. Par −1 on holes that would have been par 6+. XP unlock bar fill animation slowed ~2.5× with longer dramatic pauses at each reveal.";
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
@@ -7783,6 +7783,20 @@ function generatePuttPuttCourse(holeNum) {
   if(holeRamp >= 9)  parCap = 8;
   if(holeRamp >= 14 && rng() < 0.15) parCap = 10; // rare par 9-10 surprise
   let par = Math.max(3, Math.min(parCap, basePar - parPenalty - 1));
+
+  // v0.23i: Par-by-distance was too generous on long holes. Subtract 1
+  // from par on any hole that would have been par 6 or higher. Tightens
+  // the late-run scoring screws without affecting early/medium holes.
+  // (Character par offset still applies below; parFloor is preserved as
+  // the minimum, so this can never push par below 3 on standard chars.)
+  if(par >= 6) par -= 1;
+
+  // v0.23i: Par-by-distance was too generous on long holes. Subtract 1
+  // from par on any hole that would have been par 6 or higher. Tightens
+  // the late-run scoring screws without affecting early/medium holes.
+  // (Floor still respects parFloor below; par-3 is preserved as the
+  // minimum on standard characters.)
+  if(par >= 6) par -= 1;
 
   // v0.20a: character par offset (Precision: -1, floor 2). Applied AFTER the
   // normal clamp so the global par logic stays untouched for other characters.
@@ -13747,12 +13761,13 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
       const reveal = _stopReveals[_segIdx];
       const startXp = curXp, endXp = segEnd;
       const xpDelta = Math.max(1, endXp - startXp);
-      // Pace: 1.4ms per XP, clamped 700..1400ms
-      // v0.23h8: per-segment minimum bumped 240 → 700 (and max 900 → 1400)
-      // so each unlock fill actually registers visually. Previously,
-      // small XP deltas between back-to-back milestones rendered as a
-      // 240ms blip — players reported "blink and you'll miss it".
-      const dur = Math.max(700, Math.min(1400, xpDelta * 1.4));
+      // Pace: 3.5ms per XP, clamped 1400..3500ms
+      // v0.23i: pacing slowed substantially. Adam reported the fill motion
+      // itself was "far, far too fast" — players couldn't track what was
+      // happening between unlocks. Was: 1.4ms/XP @ 700..1400ms. Now:
+      // 3.5ms/XP @ 1400..3500ms (≈2.5× slower) so each segment is
+      // legible AND each unlock reveal gets its dramatic beat.
+      const dur = Math.max(1400, Math.min(3500, xpDelta * 3.5));
       const startInfo = _xpPctAt(startXp);
       const endInfo   = _xpPctAt(endXp);
       const tierCross = startInfo.label !== endInfo.label;
@@ -13811,10 +13826,10 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
           if(reveal) {
             const rowEl = _findRowByItem(reveal);
             _revealRow(rowEl, true);
-            // v0.23h8: pause durations bumped — reveal+confetti chime needs
-            // more breathing room before the bar resumes filling. Tier-cross
-            // path: 350+700 → 500+1100 (≈1.6s total hold). Non-tier-cross:
-            // 1100 → 1500.
+            // v0.23i: pause durations bumped substantially. Was: tier-cross
+            // 500+1100 (≈1.6s); non-tier 1500. Now: tier-cross 900+1800
+            // (≈2.7s); non-tier 2200. Gives the confetti burst + chime + row
+            // reveal animation room to actually land before the bar resumes.
             // After tier cross, reset bar to 0 for the next tier window
             if(tierCross) {
               setTimeout(() => {
@@ -13822,11 +13837,11 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
                 fillEl.style.width = '0%';
                 void fillEl.offsetWidth;
                 _segIdx++;
-                setTimeout(_runSegment, 1100);
-              }, 500);
+                setTimeout(_runSegment, 1800);
+              }, 900);
             } else {
               _segIdx++;
-              setTimeout(_runSegment, 1500);
+              setTimeout(_runSegment, 2200);
             }
           } else {
             // Final segment — no reveal, just done
@@ -14978,6 +14993,240 @@ const FRICTION = 0.9904;
 //   - No deflection cap — player can steer as much as they want.
 //   - Camera rotation suppressed when armed + rolling (handled in the
 //     keys[] block in updateCameraInput).
+// ────────────────────────────────────────────────────────────────────
+// v0.23i: Hand Brake perk
+// ────────────────────────────────────────────────────────────────────
+// Held-friction brake that's always available while the ball is rolling
+// AND the player owns the hand_brake perk. Gesture: double-tap-and-hold
+// anywhere on screen.
+//
+// State machine (G._handBrakeState):
+//   'idle'       — no recent tap, no brake
+//   'awaiting'   — one tap landed, second-tap window is open (~300ms)
+//   'soft'       — double-tap landed but pointer released within ~80ms;
+//                  apply 50% friction for up to 0.5s or until ball stops
+//   'engaged'    — double-tap-AND-hold: full friction while pointer down
+//
+// Tap-to-stop integration: when the player owns hand_brake AND the ball
+// is rolling, single-tap-to-stop is DEFERRED by 220ms inside onPointerDown,
+// so the first tap of a double-tap doesn't kill the ball before the
+// second tap arrives. The defer is implemented by stashing the stop
+// action in G._pendingTapToStop and firing it from a setTimeout that
+// gets cancelled when a second tap arrives within the window.
+// ────────────────────────────────────────────────────────────────────
+
+// Tunables — gathered together for easy iteration
+const HAND_BRAKE_DOUBLE_TAP_WINDOW_MS = 300;   // 2nd tap must land within this
+const HAND_BRAKE_HOLD_THRESHOLD_MS    = 80;    // pointer held this long after 2nd tap = engaged
+const HAND_BRAKE_TAP_STOP_DEFER_MS    = 220;   // tap-to-stop defer when hand_brake owned
+const HAND_BRAKE_FRICTION_PER_FRAME   = 0.85;  // engaged: vel *= this at 60fps each frame
+const HAND_BRAKE_SOFT_FRICTION_PER_FRAME = 0.93; // soft: ~half the bite of engaged
+const HAND_BRAKE_SOFT_MAX_DURATION_S  = 0.5;   // soft brake auto-disengages after this
+
+function playerOwnsHandBrake() {
+  return !!(G.modifiers && G.modifiers.some(m => m.id === 'hand_brake'));
+}
+
+// Called from onPointerDown when the player owns hand_brake. Returns true
+// if the tap was consumed by the hand-brake gesture path (caller should
+// SKIP the normal tap-to-stop fire). Returns false to let normal flow run.
+function handleHandBrakeTapDown(x, y, now) {
+  if(!G.rolling || G.inHole || G.state !== 'playing') return false;
+  if(!playerOwnsHandBrake()) return false;
+  const st = G._handBrakeState || 'idle';
+  if(st === 'idle') {
+    // First tap of a potential double-tap. Open the window.
+    G._handBrakeState = 'awaiting';
+    G._handBrakeFirstTapT = now;
+    return false; // let caller queue a deferred tap-to-stop
+  }
+  if(st === 'awaiting') {
+    // Second tap candidate. Confirm it's within the window.
+    if(now - (G._handBrakeFirstTapT || 0) <= HAND_BRAKE_DOUBLE_TAP_WINDOW_MS) {
+      // Second tap landed in time. Cancel any pending tap-to-stop from
+      // the FIRST tap (caller set up the timer; we cancel it here).
+      if(G._pendingTapToStopTimer) {
+        clearTimeout(G._pendingTapToStopTimer);
+        G._pendingTapToStopTimer = null;
+      }
+      G._pendingTapToStop = null;
+      // Decide hold vs tap based on pointer dwell. Start a hold-watch
+      // timer; if pointer is still down after HOLD_THRESHOLD ms we
+      // transition to 'engaged', else 'soft' (firing soft auto-brake).
+      G._handBrakeSecondTapT = now;
+      G._handBrakePointerDown = true;
+      G._handBrakeHoldTimer = setTimeout(() => {
+        if(G._handBrakePointerDown && G.rolling && playerOwnsHandBrake()) {
+          _engageHandBrake();
+        }
+      }, HAND_BRAKE_HOLD_THRESHOLD_MS);
+      return true; // gesture path takes the tap
+    }
+    // Window expired — treat this as a new first tap.
+    G._handBrakeFirstTapT = now;
+    return false;
+  }
+  if(st === 'engaged') {
+    // Already engaged but pointer was released — pressing again re-engages
+    // immediately (keeps the brake feeling responsive on rapid pumps).
+    G._handBrakePointerDown = true;
+    _engageHandBrake();
+    return true;
+  }
+  if(st === 'soft') {
+    // Mid-soft-brake double-tap: upgrade to engaged.
+    G._handBrakePointerDown = true;
+    _engageHandBrake();
+    return true;
+  }
+  return false;
+}
+
+function handleHandBrakePointerUp() {
+  if(!playerOwnsHandBrake()) return;
+  G._handBrakePointerDown = false;
+  // If we were holding (engaged), drop to idle and play release juice.
+  if(G._handBrakeState === 'engaged') {
+    _releaseHandBrake();
+    return;
+  }
+  // If pointer came up before the hold threshold elapsed AND we'd already
+  // confirmed the double-tap (G._handBrakeSecondTapT set), the pending
+  // hold-watch timer will fire as 'idle' check — we override here to fire
+  // soft brake explicitly.
+  if(G._handBrakeSecondTapT) {
+    const dwell = performance.now() - G._handBrakeSecondTapT;
+    if(dwell < HAND_BRAKE_HOLD_THRESHOLD_MS && G._handBrakeState === 'awaiting') {
+      // Quick double-tap-no-hold: fire soft brake
+      if(G._handBrakeHoldTimer) { clearTimeout(G._handBrakeHoldTimer); G._handBrakeHoldTimer = null; }
+      _fireSoftHandBrake();
+    }
+  }
+}
+
+function _engageHandBrake() {
+  G._handBrakeState = 'engaged';
+  if(G._handBrakeHoldTimer) { clearTimeout(G._handBrakeHoldTimer); G._handBrakeHoldTimer = null; }
+  if(typeof showToast === 'function') showToast('🛑 HAND BRAKE', 700);
+  if(typeof triggerShake === 'function') triggerShake('light');
+  if(typeof sfxHandBrakeOn === 'function') sfxHandBrakeOn();
+  if(typeof _telemetryHandBrakeEngage === 'function') _telemetryHandBrakeEngage();
+}
+
+function _releaseHandBrake() {
+  G._handBrakeState = 'idle';
+  G._handBrakeFirstTapT = 0;
+  G._handBrakeSecondTapT = 0;
+  G._handBrakePointerDown = false;
+  if(typeof triggerShake === 'function') triggerShake('light');
+  if(typeof sfxHandBrakeOff === 'function') sfxHandBrakeOff();
+}
+
+function _fireSoftHandBrake() {
+  G._handBrakeState = 'soft';
+  G._handBrakeSoftStartT = performance.now();
+  G._handBrakeFirstTapT = 0;
+  G._handBrakeSecondTapT = 0;
+  if(typeof showToast === 'function') showToast('🛑 Brake tap', 500);
+  if(typeof sfxHandBrakeOff === 'function') sfxHandBrakeOff();
+}
+
+// Per-frame physics tick — called from updatePhysics.
+function tickHandBrake(dt) {
+  if(!playerOwnsHandBrake()) return;
+  const st = G._handBrakeState || 'idle';
+  if(st === 'idle' || st === 'awaiting') return;
+  // Stop applying if ball is no longer rolling (swing ended, hole-out, etc.)
+  if(!G.rolling || G.inHole || G.state !== 'playing') {
+    if(st === 'engaged') _releaseHandBrake();
+    else G._handBrakeState = 'idle';
+    return;
+  }
+  // Frame-rate-aware friction. dt is in seconds; reference is 60fps frame.
+  const frames60 = dt * 60;
+  if(st === 'engaged') {
+    const f = Math.pow(HAND_BRAKE_FRICTION_PER_FRAME, frames60);
+    G.ballVel.x *= f;
+    G.ballVel.z *= f;
+    // Don't touch Y — airborne ball stays airborne (matches old backspin).
+    // Brake-light particles (cheap — 1 per ~3 frames)
+    if(typeof spawnHitParticles === 'function') {
+      G._handBrakeParticleAccum = (G._handBrakeParticleAccum || 0) + dt;
+      if(G._handBrakeParticleAccum > 0.05) {
+        G._handBrakeParticleAccum = 0;
+        try { spawnHitParticles(G.ballPos); } catch(e) {}
+      }
+    }
+    return;
+  }
+  if(st === 'soft') {
+    const elapsed = (performance.now() - (G._handBrakeSoftStartT || 0)) / 1000;
+    if(elapsed > HAND_BRAKE_SOFT_MAX_DURATION_S) {
+      G._handBrakeState = 'idle';
+      return;
+    }
+    const f = Math.pow(HAND_BRAKE_SOFT_FRICTION_PER_FRAME, frames60);
+    G.ballVel.x *= f;
+    G.ballVel.z *= f;
+    // Auto-disengage when ball is nearly stopped.
+    if(Math.hypot(G.ballVel.x, G.ballVel.z) < 0.5) {
+      G._handBrakeState = 'idle';
+    }
+    return;
+  }
+}
+
+// SFX: tire-screech engage + short pulse release. Cheap synth — filtered
+// noise + saw glide. Mirrors the audio style of the existing ball SFX.
+function sfxHandBrakeOn() {
+  if(typeof AC === 'undefined' || !AC) return;
+  try {
+    const ac = getAC(), t = ac.currentTime;
+    const buf = makeNoiseBuffer(0.35, true);
+    const src = ac.createBufferSource(); src.buffer = buf;
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0.12, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
+    const bp = ac.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.setValueAtTime(2200, t);
+    bp.frequency.exponentialRampToValueAtTime(900, t + 0.4);
+    bp.Q.value = 2.2;
+    src.connect(bp); bp.connect(g); g.connect(getACDest());
+    src.start(t); src.stop(t + 0.45);
+  } catch(e) {}
+}
+
+function sfxHandBrakeOff() {
+  if(typeof AC === 'undefined' || !AC) return;
+  try {
+    const ac = getAC(), t = ac.currentTime;
+    const o = ac.createOscillator(); o.type = 'sawtooth';
+    o.frequency.setValueAtTime(280, t);
+    o.frequency.exponentialRampToValueAtTime(120, t + 0.12);
+    const og = ac.createGain();
+    og.gain.setValueAtTime(0.05, t);
+    og.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+    o.connect(og); og.connect(getACDest());
+    o.start(t); o.stop(t + 0.16);
+  } catch(e) {}
+}
+
+// Telemetry hook — logs engage events for the next data drop.
+function _telemetryHandBrakeEngage() {
+  try {
+    if(typeof G._telemetryRun !== 'object' || !G._telemetryRun) return;
+    if(!Array.isArray(G._telemetryRun.handBrakeEngages)) {
+      G._telemetryRun.handBrakeEngages = [];
+    }
+    G._telemetryRun.handBrakeEngages.push({
+      hole: G.hole | 0,
+      speed: G.ballVel ? Math.hypot(G.ballVel.x, G.ballVel.z) : 0,
+      t: performance.now(),
+    });
+  } catch(e) {}
+}
+
 function tickPowerSteering(dt) {
   if(!G._powerSteeringArmed) return;
   // v0.23b13: previous version disarmed when !G.rolling, but pre-swing the
@@ -16222,12 +16471,18 @@ function tickSkaterBall(dt) {
   // v0.23b19: friction further reduced from 0.995 to 0.997 per frame.
   // Per-second loss at 60fps: 26% → 16%. Grinds now travel substantially
   // farther — a 10 m/s entry maintains 5+ m/s for nearly 5 seconds.
-  G.ballVel.x *= 0.997;
-  G.ballVel.z *= 0.997;
+  // v0.23i: friction softened further (0.997 → 0.9985 per frame). Per-second
+  // loss: 16% → 8.6%. A 10 m/s entry now holds 5+ m/s for ~8 seconds.
+  // Also: bail floor raised 1.5 → 2.25 so the "standard" grinding speed
+  // the ball settles into is 50% faster — grinds feel like they're
+  // moving, not crawling, before the bail. Combined effect: slow
+  // deceleration, brisker minimum.
+  G.ballVel.x *= 0.9985;
+  G.ballVel.z *= 0.9985;
   const _grindSpd = Math.hypot(G.ballVel.x, G.ballVel.z);
   // v0.23b13: modulate grind sound loop volume by current speed
   if(typeof _updateSkaterGrindLoopVolume === 'function') _updateSkaterGrindLoopVolume(_grindSpd);
-  if(_grindSpd < 1.5) {
+  if(_grindSpd < 2.25) {
     if(typeof showToast === 'function') showToast('🛹 Out of speed — bail!', 800);
     bailFromSkaterGrind();
     return;
@@ -16394,6 +16649,18 @@ function updatePhysics(dt) {
   // when these cards aren't in play. Order matters: tick power steering
   // BEFORE wall run so power-steering input doesn't fight grind-locking.
   if(typeof tickPowerSteering === 'function') tickPowerSteering(dt);
+  // v0.23i: Hand Brake — applies friction multiplier while engaged. Runs
+  // BEFORE other physics so the dampened velocity feeds into collision
+  // resolution this frame (not next).
+  if(typeof tickHandBrake === 'function') tickHandBrake(dt);
+  // v0.23i: Time Rewind — recorder samples ball state, playback drives the
+  // ball backwards along its path. When playback is active, we SHORT-CIRCUIT
+  // the rest of updatePhysics: no friction, no collisions, no obstacle
+  // ticks. The ball is purely scrubbing along the recorded path.
+  if(typeof tickTimeRewindRecorder === 'function') tickTimeRewindRecorder(dt);
+  if(typeof tickTimeRewindPlayback === 'function') {
+    if(tickTimeRewindPlayback(dt)) return; // playback active → skip physics
+  }
   if(typeof tickParachute === 'function') tickParachute(dt);
   if(typeof tickSkaterBall === 'function') tickSkaterBall(dt);
   if(typeof tickSkaterBoardMesh === 'function') tickSkaterBoardMesh(dt);
@@ -16579,20 +16846,6 @@ function updatePhysics(dt) {
       // distance (center-to-center minus BALL_R and obstacle R) drops below
       // CONTACT_MARGIN, vault.
       const OBST_R = { rock: 0.65, bumper: 0.55, spin_bar: 0.8, slide_block: 0.7, spike: 0.55, spike_ring_ball: 0.32 };
-      // v0.23h83: per-tag approximate obstacle TOP height above terrain.
-      // Used to skip parkour when the ball is flying well above the obstacle
-      // — previously parkour fired even when the ball was 3-4 ball heights
-      // above a bouncer (Adam's report). Heights mirror real obstacle Y in
-      // create code: bumpers 0.7 (power 0.95), spike 0.5, rocks ~0.7,
-      // spin_bar ~0.8, slide_block ~0.8, popup wall up to 1.2, crates 0.7
-      // per crate (stack adds more — handled below). Conservative slight
-      // over-estimates so we never block legitimate ground-skim vaults.
-      const OBST_TOP_Y = { rock: 0.8, bumper: 1.0, spin_bar: 0.9, slide_block: 0.9, spike: 0.6, spike_ring_ball: 0.5, popup_wall: 1.3 };
-      // Vertical clearance: if ball-bottom is more than VAULT_CLEAR_MAX above
-      // the obstacle's top, the ball is clearly flying over — no parkour. This
-      // is ~2 ball heights of slack so a low arc still vaults but a tall hop
-      // doesn't consume a charge on something it was going to clear anyway.
-      const VAULT_CLEAR_MAX = BALL_R * 2.0; // 0.44m
       // v0.21a8: was 0.25 — wider trigger window.
       // v0.23a7: speed-scale the margin so a Power-Shot (or stacked Power
       // Shot) launch doesn't blow past the trigger window in a single frame.
@@ -16611,12 +16864,7 @@ function updatePhysics(dt) {
       const DIR_DOT_MIN = 0.7;
       let bestTarget = null, bestClear = Infinity;
       // Generic point-test (used for cylindrical obstacles)
-      const ptest = (tx, tz, tag, customR, customTopY) => {
-        // v0.23h83: vertical clearance — bail out if ball is flying well
-        // above this obstacle's top. Ball-bottom = ballPos.y - BALL_R.
-        const obstTop = (customTopY != null) ? customTopY : (OBST_TOP_Y[tag] || 1.0);
-        const obstTopWorldY = _terrAtBall + FLOOR_H/2 + obstTop;
-        if((G.ballPos.y - BALL_R) > obstTopWorldY + VAULT_CLEAR_MAX) return;
+      const ptest = (tx, tz, tag, customR) => {
         const odx = tx - G.ballPos.x, odz = tz - G.ballPos.z;
         const d = Math.hypot(odx, odz);
         if(d < 0.01) return;
@@ -16633,10 +16881,6 @@ function updatePhysics(dt) {
       // hitting the SIDES (tips) of a spinner did not trigger parkour because
       // the old code only tested distance to the bar's pivot center.
       const segtest = (ax, az, bx2, bz2, radius, tag) => {
-        // v0.23h83: vertical clearance — bail out if ball is flying well
-        // above this obstacle's top.
-        const obstTopWorldY = _terrAtBall + FLOOR_H/2 + (OBST_TOP_Y[tag] || 1.0);
-        if((G.ballPos.y - BALL_R) > obstTopWorldY + VAULT_CLEAR_MAX) return;
         const ex = bx2-ax, ez = bz2-az, segLenSq = ex*ex + ez*ez;
         let cx, cz;
         if(segLenSq < 0.0001) { cx = ax; cz = az; }
@@ -16658,14 +16902,7 @@ function updatePhysics(dt) {
       // half-extents (hw, hd), finds closest point on the rectangle to the
       // ball. Fixes parkour failing on slide blocks (which have long
       // half-extents along their slide axis) and adds parkour to pop-up walls.
-      const recttest = (rx, rz, hw, hd, tag, customTopY) => {
-        // v0.23h83: vertical clearance — bail out if ball is flying well
-        // above this obstacle's top. Crates pass a customTopY computed from
-        // their stack height so a 3-stack still gets vaulted but a tall hop
-        // above an idle 1-stack does not.
-        const obstTop = (customTopY != null) ? customTopY : (OBST_TOP_Y[tag] || 1.0);
-        const obstTopWorldY = _terrAtBall + FLOOR_H/2 + obstTop;
-        if((G.ballPos.y - BALL_R) > obstTopWorldY + VAULT_CLEAR_MAX) return;
+      const recttest = (rx, rz, hw, hd, tag) => {
         const dx = G.ballPos.x - rx, dz = G.ballPos.z - rz;
         const cdx = Math.max(-hw, Math.min(hw, dx));
         const cdz = Math.max(-hd, Math.min(hd, dz));
@@ -16733,7 +16970,7 @@ function updatePhysics(dt) {
           const wallTopY = pw.currentTopY || ((pw.baseH || 0) + (pw.wallH || 0));
           const minLipY = (pw.baseH || 0) + 0.4; // wall must be at least 0.4m up
           if(wallTopY < minLipY) continue;
-          recttest(pw.wx, pw.wz, (pw.halfW || 0.4), (pw.halfD || 0.4), 'popup_wall', wallTopY);
+          recttest(pw.wx, pw.wz, (pw.halfW || 0.4), (pw.halfD || 0.4), 'popup_wall');
         }
       }
       // v0.22b: parkour over crates. Per Adam: "Parkour should work on
@@ -16758,11 +16995,7 @@ function updatePhysics(dt) {
               stackH++;
             }
           }
-          // v0.23h83: pass stack-aware top Y so a tall stack stays vaultable
-          // from above. Crate size is half-extent (so full side = 2*size).
-          // Stack top above terrain ≈ stackH * 2 * size.
-          const crateStackTopY = stackH * cr.size * 2;
-          recttest(cr.wx, cr.wz, cr.size, cr.size, 'crate_stack_' + stackH, crateStackTopY);
+          recttest(cr.wx, cr.wz, cr.size, cr.size, 'crate_stack_' + stackH);
         }
       }
       tryList(G.spikes, 'spike');   // v0.19z6: vault ground spikes too
@@ -22727,10 +22960,9 @@ function calcHoleEarnings(strokes, par, coinsPickedUp, wallCoins = 0) {
         if(mult > 1) perStroke *= mult;
       }
     } catch(e){}
-    // v0.23b: Mo Money Mo Problems — under-par payouts boosted.
-    // v0.23h83: 2× → 1.5× (50% higher, was OP per Adam).
+    // v0.23b: Mo Money Mo Problems — under-par payouts 2×.
     if(G.modifiers && G.modifiers.some(m => m.id === 'mo_money_mo_problems')) {
-      perStroke *= 1.5;
+      perStroke *= 2;
     }
     scoreBonus = underPar * perStroke;
     let label;
@@ -22740,10 +22972,35 @@ function calcHoleEarnings(strokes, par, coinsPickedUp, wallCoins = 0) {
     else                    label = `🐦 Birdie bonus (1 under)`;
     rows.push({ label, amount: scoreBonus });
 
-    // v0.23h83: Hole-in-One (+30) and Hole-in-Two (+20) flat bonuses removed
-    // per Adam — the per-stroke under-par payout already rewards low strokes
-    // proportionally, and the stacking flat bonuses inflated short-hole income
-    // beyond intent.
+    // v0.23f: Stacking finish bonuses. Hole-in-one gets +30 ON TOP of the
+    // per-stroke under-par payout; hole-in-two gets +20 ON TOP. Same
+    // character/modifier multipliers as the per-stroke base so the bonus
+    // scales consistently with the rest of the under-par pipeline.
+    if(strokes === 1) {
+      let hioBonus = 30;
+      try {
+        if(typeof getCurrentCharacter === 'function') {
+          const _char = getCurrentCharacter();
+          const mult = (_char && _char.traits && _char.traits.underParMult) || 1;
+          if(mult > 1) hioBonus *= mult;
+        }
+      } catch(e){}
+      if(G.modifiers && G.modifiers.some(m => m.id === 'mo_money_mo_problems')) hioBonus *= 2;
+      rows.push({ label: '🎯 Hole-in-One bonus', amount: hioBonus });
+      scoreBonus += hioBonus;
+    } else if(strokes === 2) {
+      let h2Bonus = 20;
+      try {
+        if(typeof getCurrentCharacter === 'function') {
+          const _char = getCurrentCharacter();
+          const mult = (_char && _char.traits && _char.traits.underParMult) || 1;
+          if(mult > 1) h2Bonus *= mult;
+        }
+      } catch(e){}
+      if(G.modifiers && G.modifiers.some(m => m.id === 'mo_money_mo_problems')) h2Bonus *= 2;
+      rows.push({ label: '🎯 Hole-in-Two bonus', amount: h2Bonus });
+      scoreBonus += h2Bonus;
+    }
   } else if(diff === 0) {
     scoreBonus = 1;
     rows.push({ label:'⛳ Par bonus', amount: scoreBonus });
@@ -24319,10 +24576,18 @@ function weightedCardPicks(count) {
   // v0.23b: Lucky stacks boost rare/epic/legendary card weights by +25% per stack.
   const _luckyStacks = (G.modifiers || []).filter(m => m.id === 'lucky').length;
   const _luckyMul = 1 + 0.25 * _luckyStacks;
+  // v0.23i: Hand Brake chaos-pair boost — perpetual_motion is the CARD half
+  // of the chaos lane (slippery_ball + all_bounce are perks). +33% weight
+  // when hand_brake is owned, mirroring the perk-side boost.
+  const _hbOwned = (G.modifiers || []).some(m => m.id === 'hand_brake');
+  const _hbChaosMul = _hbOwned ? 1.33 : 1.0;
   const weightOf = c => {
     let w = (c.weight != null ? c.weight : (rarityWeights[c.rarity] || 1));
     if(_luckyMul > 1.0 && (c.rarity === 'rare' || c.rarity === 'epic' || c.rarity === 'legendary')) {
       w *= _luckyMul;
+    }
+    if(_hbChaosMul > 1.0 && c.id === 'perpetual_motion') {
+      w *= _hbChaosMul;
     }
     return w;
   };
@@ -24474,6 +24739,12 @@ function weightedShopPicks(pool, count) {
   // Recursive: more stacks of Lucky → more chance of finding more Lucky.
   const _luckyStacks = (G.modifiers || []).filter(m => m.id === 'lucky').length;
   const _luckyMul = 1 + 0.25 * _luckyStacks;
+  // v0.23i: Hand Brake unlocks the chaos lane. When owned, bump shop weight
+  // of slippery_ball and all_bounce so the chaos perks they pair with show
+  // up more often. perpetual_motion is a CARD, boosted in weightedCardPicks.
+  const _hbOwned = (G.modifiers || []).some(m => m.id === 'hand_brake');
+  const _HB_CHAOS_PERKS = new Set(['slippery_ball', 'all_bounce']);
+  const _hbChaosMul = _hbOwned ? 1.33 : 1.0;
   // Weighted sample without replacement
   const picks = [];
   const remaining = [...available];
@@ -24483,6 +24754,11 @@ function weightedShopPicks(pool, count) {
       if(_luckyMul > 1.0 && (p.rarity === 'rare' || p.rarity === 'epic' || p.rarity === 'legendary')) {
         w *= _luckyMul;
       }
+      // v0.23i: Hand Brake chaos-pair boost — applied AFTER lucky so it
+      // stacks multiplicatively with rare-tier lucky bonus on slippery_ball.
+      if(_hbChaosMul > 1.0 && _HB_CHAOS_PERKS.has(p.id)) {
+        w *= _hbChaosMul;
+      }
       return s + w;
     }, 0);
     let r = Math.random() * totalWeight;
@@ -24491,6 +24767,9 @@ function weightedShopPicks(pool, count) {
       let w = remaining[idx].weight || 1;
       if(_luckyMul > 1.0 && (remaining[idx].rarity === 'rare' || remaining[idx].rarity === 'epic' || remaining[idx].rarity === 'legendary')) {
         w *= _luckyMul;
+      }
+      if(_hbChaosMul > 1.0 && _HB_CHAOS_PERKS.has(remaining[idx].id)) {
+        w *= _hbChaosMul;
       }
       r -= w;
       if(r <= 0) break;
@@ -28250,7 +28529,11 @@ const INACTIVE_PERKS = new Set(['double_or_nothing', 'thin_ice', 'coin_bouncer',
 // inbounds: replaced by inbounds_card. The 'inbounds' perk is still granted
 // via the Healthy Boundaries upgrade path, so its def must stay in ALL_PERKS.
 const PERKS_HIDDEN_FROM_SHOP = new Set(['inbounds']);
-const INACTIVE_CARDS = new Set(['wrecking_ball', 'wall_magnet', 'arc_shot', 'golden_path', 'slow_mo', 'curve_ball']);
+// v0.23i: backspin deactivated — its functionality is replaced by the
+// hand_brake perk (epic, always-available double-tap-and-hold brake gesture).
+// Telemetry showed backspin as a chronic dead-pick (0 buys / 25 offers).
+// Keeping the def in CARD_DEFS for upgrade-chain and save-migration compat.
+const INACTIVE_CARDS = new Set(['wrecking_ball', 'wall_magnet', 'arc_shot', 'golden_path', 'slow_mo', 'curve_ball', 'backspin']);
 
 const CARD_DEFS = {
   lil_scootch:  { id:'lil_scootch',  emoji:'🧤', name:"Lil' Scootch",    desc:'Cartoon glove gives the ball a nudge.',                        rarity:'common',    price:10,   context:'any',    holdable:false },
@@ -28275,6 +28558,16 @@ const CARD_DEFS = {
   cannonball:   { id:'cannonball',   emoji:'💣', name:'Cannonball',      desc:'This swing: blast through walls AND spikes — both shatter on contact. Great for off-roading.',     rarity:'epic',      price:25,  context:'pre',    holdable:false },
   wrecking_ball:{ id:'wrecking_ball',emoji:'⛓️', name:'Wrecking Ball',   desc:'Ball swings on a chain arc, destroying everything in the sweep.', rarity:'epic',      price:24,  context:'during', holdable:false },
   reverse:      { id:'reverse',      emoji:'⏪', name:'Reverse',         desc:'Instantly reverse the ball\'s direction. Full speed. BIG combo points — huge bonus if it leads to a hole.', rarity:'common',    price:10,  context:'during', holdable:false },
+  // v0.23i: Time Rewind — replaces the retired Backspin card in the
+  // "panic button" niche but as a much more interesting effect. Press once
+  // mid-shot to rewind the ball along its actual recorded path (also
+  // refunding HP lost this shot). Press again to stop wherever you are.
+  // Don't press = rewind to swing-start. Stroke still counts: this is a
+  // RELOCATION tool, not a Mulligan. Path samples are recorded in
+  // updatePhysics; rewind playback suspends normal physics and walks the
+  // ring buffer backwards at 2× speed. See _commitTimeRewind /
+  // tickTimeRewindPlayback for the meat.
+  time_rewind:  { id:'time_rewind',  emoji:'⏳', name:'Time Rewind',     desc:'Rewind your ball along its path, refunding HP lost this shot. Tap again to stop wherever — or don\'t, to return all the way to your swing position.', rarity:'rare', price:25, context:'during', holdable:false, weight:4 },
   // v0.20u: Portal Grenade — legendary card. Arms a green entry-portal
   // preview ~5 ball-radii in front of the ball, then a stronger-than-default
   // grenade lob places the purple exit portal where it lands. Ball + ALL
@@ -28441,7 +28734,7 @@ const CHARACTERS = {
     color: 0x5a9ef2, // cool blue
     tagline: 'Tighter par. Bigger payouts. Focus.',
     blessings: [
-      '🏆 +50% coins for every stroke under par',
+      '🏆 Double coins for every stroke under par',
     ],
     curses: [
       '📉 Par is reduced by 1 on every hole (floor: par 2)',
@@ -28464,9 +28757,7 @@ const CHARACTERS = {
     // v0.23h: glasses moved from a character trait to a universal accessory
     // (Buddy Hollies). Precision keeps its identity through parOffset +
     // underParMult; players can equip the glasses accessory on any character.
-    // v0.23h83: underParMult 2 → 1.5 (50% higher, was OP — mirrors the
-    // same nerf applied to Mo Money Mo Problems).
-    traits: { parOffset: -1, underParMult: 1.5 },
+    traits: { parOffset: -1, underParMult: 2 },
   },
 };
 
@@ -29143,6 +29434,37 @@ function playCard(instanceId) {
       catch(e) { console.warn('beat_em_up retap activator failed', e); }
       return false;
     }
+    // v0.23i: Time Rewind retap = COMMIT (settle ball here, end rewind).
+    // The slot was kept lifted via isCardArmedPreSwing's special case. Once
+    // committed, the rewind state goes to 'idle' which makes
+    // isCardArmedPreSwing return false next tick — slot drains naturally on
+    // the next play-card flow.
+    if(card.id === 'time_rewind') {
+      try { _commitTimeRewind(); }
+      catch(e) { console.warn('time_rewind retap commit failed', e); }
+      // Drain this entry from _armedCards so the discard flow below can
+      // properly retire the card (rewind is now over; card has done its job).
+      const aIdx = G._armedCards.findIndex(a => a.instanceId === instanceId);
+      if(aIdx !== -1) G._armedCards.splice(aIdx, 1);
+      // Discard the card (no slot lift anymore).
+      const cIdx = G.hand.findIndex(c => c.instanceId === instanceId);
+      if(cIdx !== -1) {
+        if(typeof _handToDiscardRecord === 'function') {
+          G.discard.push(_handToDiscardRecord(G.hand[cIdx]));
+        } else {
+          G.discard.push(G.hand[cIdx]);
+        }
+        G.hand.splice(cIdx, 1);
+        for(let i = 0; i < G.cardSlots.length; i++) {
+          if(G.cardSlots[i] && G.cardSlots[i].instanceId === instanceId) {
+            G.cardSlots[i] = null;
+          }
+        }
+        if(typeof assignCardsToSlots === 'function') assignCardsToSlots();
+      }
+      if(typeof updateHandUI === 'function') updateHandUI();
+      return false;
+    }
     // v0.22d: Double Jump re-tap fix. Per Adam: "when I tap the card mid-
     // swing, I should be able to tap once to jump and then a second time
     // during the duration of that swing to trigger a second jump anytime.
@@ -29528,6 +29850,7 @@ function _executeCardAbilityInner(id) {
     case 'power_shot':   G._powerShotStacks = (G._powerShotStacks||0) + 1; G._powerShotTensionActive = true; showToast('💪 Power Shot' + (G._powerShotStacks > 1 ? ' ×'+G._powerShotStacks+'!' : ' armed!'), 800); break;
     case 'mulligan':     activateMulligan(); break;
     case 'reverse':      activateReverse(); break;
+    case 'time_rewind':  activateTimeRewind(); break;
     case 'freeze_frame': activateFreezeFrame(); break;
     case 'coin_shower':  activateCoinShower(); break;
     case 'golden_path':  activateGoldenPath(); break;
@@ -29601,6 +29924,12 @@ function isCardArmedPreSwing(cardId) {
   // allow you to punch").
   if(cardId === 'beat_em_up') {
     return G.state === 'playing' && !!G._beatEmUpActive;
+  }
+  // v0.23i: time_rewind stays "armed" while playback is active. Like
+  // beat_em_up, this isn't really a pre-swing concept — it's "should the
+  // card stay in slot so the player can re-tap it?" While rewinding, yes.
+  if(cardId === 'time_rewind') {
+    return G.state === 'playing' && G._rewindState === 'rewinding';
   }
   if(G.state !== 'playing' || G.rolling) return false;
   switch(cardId) {
@@ -33727,6 +34056,271 @@ function activateReverse() {
   // it was used this shot so a sink-after-reverse triggers the REVERSAL trick.
   G._reverseUsedThisShot = true;
   if(typeof recordStyleEvent === 'function') recordStyleEvent('reverse_card');
+}
+
+// ────────────────────────────────────────────────────────────────────
+// v0.23i: Time Rewind card
+// ────────────────────────────────────────────────────────────────────
+// Mid-shot card that rewinds the ball along its recorded path and refunds
+// HP lost this shot. Press once → start rewind. Press again → settle
+// wherever you are. Don't press again → rewind to swing-start and settle.
+// Stroke STILL COUNTS — Time Rewind relocates the ball; it doesn't undo
+// the swing. (If you want a Mulligan, buy Mulligan.)
+//
+// State machine: G._rewindState
+//   'idle'      — no rewind active, no recording (or recording silently)
+//   'rewinding' — first tap fired, playback loop active
+//   (no 'committed' state — we just zero state and return to normal)
+//
+// Path buffer: G._rewindBuf is a ring buffer of {x,y,z,hp} samples
+// captured at ~60 Hz while G.rolling is true. Capped at 600 samples
+// (10s @ 60fps). Cleared on swing-start, hole-out, OOB-return, manual stop.
+//
+// HP refund: snapshot HP at swing-start (G._rewindHpAtSwingStart). On
+// rewind, we restore the current sample's hp value (which encodes the
+// HP that was alive at THAT moment in the path). This naturally handles
+// "you took 1 damage from a spike at sample 30 — when you rewind past
+// sample 30, your HP comes back."
+// ────────────────────────────────────────────────────────────────────
+
+const TIME_REWIND_BUF_MAX = 600;            // ~10s @ 60fps
+const TIME_REWIND_SAMPLE_INTERVAL_S = 1/60; // record every 16ms while rolling
+const TIME_REWIND_PLAYBACK_SPEED = 2.0;     // play back at 2× real-time (so 5s forward = 2.5s rewind)
+
+// Called from updatePhysics at start of frame, BEFORE other physics. No-op
+// when rewind isn't in play or ball isn't rolling.
+function tickTimeRewindRecorder(dt) {
+  if(!G.rolling || G.inHole || G.state !== 'playing') return;
+  if(G._rewindState === 'rewinding') return; // suspend recording during playback
+  if(!G._rewindBuf) G._rewindBuf = [];
+  G._rewindSampleAccum = (G._rewindSampleAccum || 0) + dt;
+  if(G._rewindSampleAccum < TIME_REWIND_SAMPLE_INTERVAL_S) return;
+  G._rewindSampleAccum = 0;
+  G._rewindBuf.push({
+    x: G.ballPos.x,
+    y: G.ballPos.y,
+    z: G.ballPos.z,
+    hp: G.hp,
+  });
+  // Cap buffer — drop oldest. (Ball moving for 10+ seconds is rare.)
+  if(G._rewindBuf.length > TIME_REWIND_BUF_MAX) {
+    G._rewindBuf.shift();
+  }
+}
+
+// Called from updatePhysics at start of frame. When active, this walks
+// the buffer backwards and updates ballPos/HP. Returns true if playback
+// is active (caller should short-circuit the rest of updatePhysics).
+function tickTimeRewindPlayback(dt) {
+  if(G._rewindState !== 'rewinding') return false;
+  if(!Array.isArray(G._rewindBuf) || G._rewindBuf.length === 0) {
+    // No samples left — settle at swing-start.
+    _commitTimeRewindSettle({fromBufferExhausted: true});
+    return false;
+  }
+  // Advance the rewind cursor. Each "step" pops one sample from the end.
+  // At 60fps with TIME_REWIND_PLAYBACK_SPEED=2.0, we pop 2 samples/frame.
+  G._rewindPlaybackAccum = (G._rewindPlaybackAccum || 0) + dt * TIME_REWIND_PLAYBACK_SPEED;
+  let popped = 0;
+  while(G._rewindPlaybackAccum >= TIME_REWIND_SAMPLE_INTERVAL_S && G._rewindBuf.length > 0) {
+    G._rewindPlaybackAccum -= TIME_REWIND_SAMPLE_INTERVAL_S;
+    const sample = G._rewindBuf.pop();
+    // Apply sample state to ball
+    G.ballPos.x = sample.x;
+    G.ballPos.y = sample.y;
+    G.ballPos.z = sample.z;
+    // HP refund: if this sample's HP > current HP, the player took damage
+    // AFTER this sample — restore it. Capped at hpMax for safety; capped
+    // below by current HP (we never reduce HP via rewind).
+    if(sample.hp > G.hp) {
+      const restored = Math.min(sample.hp, G.hpMax || sample.hp) - G.hp;
+      G.hp = Math.min(G.hpMax || sample.hp, sample.hp);
+      // Per-sample HP heal toast suppressed (would spam) — chime once on
+      // the first frame of rewind instead, see _activateTimeRewind.
+    }
+    popped++;
+    // Safety: cap samples per frame so a paused tab doesn't drain the
+    // entire buffer in one frame when it resumes.
+    if(popped > 6) break;
+  }
+  if(G._rewindBuf.length === 0) {
+    // Exhausted — settle now.
+    _commitTimeRewindSettle({fromBufferExhausted: true});
+    return false;
+  }
+  // Update ball mesh position for rendering this frame.
+  if(G.ballMesh) {
+    G.ballMesh.position.set(G.ballPos.x, G.ballPos.y, G.ballPos.z);
+  }
+  // Spawn a sparkle trail every couple of frames so the rewind reads visually.
+  G._rewindSparkleAccum = (G._rewindSparkleAccum || 0) + dt;
+  if(G._rewindSparkleAccum > 0.05 && typeof spawnHitParticles === 'function') {
+    G._rewindSparkleAccum = 0;
+    try { spawnHitParticles(G.ballPos); } catch(e) {}
+  }
+  return true;
+}
+
+// First tap on the card — START rewinding.
+function activateTimeRewind() {
+  if(!G.rolling) {
+    if(typeof showToast === 'function') showToast('⏳ Time Rewind works mid-roll', 900);
+    return;
+  }
+  if(G._rewindState === 'rewinding') {
+    // Defensive — shouldn't reach here since the playCard retap path
+    // routes to _commitTimeRewind directly. No-op.
+    return;
+  }
+  if(!Array.isArray(G._rewindBuf) || G._rewindBuf.length === 0) {
+    if(typeof showToast === 'function') showToast('⏳ No path to rewind!', 900);
+    return;
+  }
+  G._rewindState = 'rewinding';
+  G._rewindPlaybackAccum = 0;
+  // Snapshot ballVel so we can zero it (suspend physics) and restore on commit
+  // if we want a "ball settles wherever rewind stopped" semantics.
+  G._rewindSavedVel = { x: G.ballVel.x, y: G.ballVel.y, z: G.ballVel.z };
+  // Suspend ball motion during playback — playback drives ballPos directly.
+  G.ballVel.set(0, 0, 0);
+  // Visual + audio juice
+  if(typeof showToast === 'function') showToast('⏳ TIME REWIND — tap again to stop', 1500);
+  if(typeof triggerShake === 'function') triggerShake('med');
+  if(typeof sfxTimeRewindStart === 'function') sfxTimeRewindStart();
+  // Track usage for style/trick combos (mirrors reverse pattern)
+  G._timeRewindUsedThisShot = true;
+  if(typeof recordStyleEvent === 'function') recordStyleEvent('time_rewind_card');
+}
+
+// Second tap on the card — STOP rewinding, settle here.
+function _commitTimeRewind() {
+  if(G._rewindState !== 'rewinding') return;
+  _commitTimeRewindSettle({fromBufferExhausted: false});
+}
+
+// Internal: end the rewind and let the ball settle at its current position.
+// Stroke counts as having been fired (no refund); ball comes to rest like
+// any other settled shot. The aim-mode reactivation happens through the
+// normal "ball-stopped" detection path on the next physics frame.
+function _commitTimeRewindSettle({fromBufferExhausted}) {
+  if(G._rewindState !== 'rewinding') return;
+  G._rewindState = 'idle';
+  G._rewindPlaybackAccum = 0;
+  G._rewindSavedVel = null;
+  // Drain the time_rewind card from _armedCards + hand + slots, since the
+  // rewind is over and the card has done its job. Mirrors the retap-commit
+  // path in playCard so both endings produce the same final state.
+  if(Array.isArray(G._armedCards)) {
+    for(let i = G._armedCards.length - 1; i >= 0; i--) {
+      if(G._armedCards[i] && G._armedCards[i].cardId === 'time_rewind') {
+        const instanceId = G._armedCards[i].instanceId;
+        G._armedCards.splice(i, 1);
+        const cIdx = G.hand.findIndex(c => c.instanceId === instanceId);
+        if(cIdx !== -1) {
+          if(typeof _handToDiscardRecord === 'function') {
+            G.discard.push(_handToDiscardRecord(G.hand[cIdx]));
+          } else {
+            G.discard.push(G.hand[cIdx]);
+          }
+          G.hand.splice(cIdx, 1);
+        }
+        for(let s = 0; s < G.cardSlots.length; s++) {
+          if(G.cardSlots[s] && G.cardSlots[s].instanceId === instanceId) {
+            G.cardSlots[s] = null;
+          }
+        }
+      }
+    }
+    if(typeof assignCardsToSlots === 'function') assignCardsToSlots();
+    if(typeof updateHandUI === 'function') updateHandUI();
+  }
+  // Zero velocity so the ball settles HERE rather than carrying any leftover
+  // momentum. The normal "G.rolling = false on rest" detection fires next
+  // frame because ballVel is zero.
+  G.ballVel.set(0, 0, 0);
+  // Force the ball to rest immediately — bypass the natural-settle wait.
+  // This calls into the same path tap-to-stop uses, so over-par damage,
+  // combo finalization, and aim re-entry all run correctly.
+  if(G.rolling) {
+    G.rolling = false;
+    G.rollingSlowTimer = 0;
+    if(!G._shotFinalized) {
+      G._shotFinalized = true;
+      if(typeof finalizeShot === 'function') finalizeShot(false);
+    }
+    if(typeof applyOverParDamageIfNeeded === 'function') applyOverParDamageIfNeeded();
+    G.aimMode = true;
+    if(typeof aimManualOverride !== 'undefined') aimManualOverride = false;
+    if(typeof syncAimToCamera === 'function') syncAimToCamera();
+    if(typeof createAimArrow === 'function') createAimArrow();
+    if(typeof updateUndoBtn === 'function') updateUndoBtn();
+    // Don't draw extra cards — Time Rewind is mid-shot, the draw already
+    // happened at fireShot. Aim mode is just to set up the NEXT swing.
+  }
+  // Visual + audio
+  if(typeof showToast === 'function') {
+    showToast(fromBufferExhausted ? '⏳ Rewound to start!' : '⏳ Stopped here!', 1100);
+  }
+  if(typeof triggerShake === 'function') triggerShake('light');
+  if(typeof sfxTimeRewindStop === 'function') sfxTimeRewindStop();
+}
+
+// Clear the rewind buffer (called on swing-start, hole-out, OOB return,
+// any path that ends a shot cleanly).
+function _clearRewindBuffer() {
+  G._rewindBuf = [];
+  G._rewindSampleAccum = 0;
+  // If we were mid-rewind when this fires, bail cleanly.
+  if(G._rewindState === 'rewinding') {
+    G._rewindState = 'idle';
+    G._rewindPlaybackAccum = 0;
+    G._rewindSavedVel = null;
+  }
+}
+
+// SFX: rewind start = descending shimmer; rewind stop = ascending pop.
+function sfxTimeRewindStart() {
+  if(typeof AC === 'undefined' || !AC) return;
+  try {
+    const ac = getAC(), t = ac.currentTime;
+    // VHS-style descending whine + airy noise
+    const o = ac.createOscillator(); o.type = 'sawtooth';
+    o.frequency.setValueAtTime(1400, t);
+    o.frequency.exponentialRampToValueAtTime(280, t + 0.55);
+    const og = ac.createGain();
+    og.gain.setValueAtTime(0.10, t);
+    og.gain.exponentialRampToValueAtTime(0.001, t + 0.6);
+    o.connect(og); og.connect(getACDest());
+    o.start(t); o.stop(t + 0.62);
+    // Airy noise bed
+    if(typeof makeNoiseBuffer === 'function') {
+      const buf = makeNoiseBuffer(0.55, true);
+      const src = ac.createBufferSource(); src.buffer = buf;
+      const ng = ac.createGain();
+      ng.gain.setValueAtTime(0.07, t);
+      ng.gain.exponentialRampToValueAtTime(0.001, t + 0.55);
+      const bp = ac.createBiquadFilter();
+      bp.type = 'highpass';
+      bp.frequency.setValueAtTime(1200, t);
+      src.connect(bp); bp.connect(ng); ng.connect(getACDest());
+      src.start(t); src.stop(t + 0.6);
+    }
+  } catch(e) {}
+}
+
+function sfxTimeRewindStop() {
+  if(typeof AC === 'undefined' || !AC) return;
+  try {
+    const ac = getAC(), t = ac.currentTime;
+    const o = ac.createOscillator(); o.type = 'triangle';
+    o.frequency.setValueAtTime(440, t);
+    o.frequency.exponentialRampToValueAtTime(880, t + 0.12);
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0.12, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+    o.connect(g); g.connect(getACDest());
+    o.start(t); o.stop(t + 0.16);
+  } catch(e) {}
 }
 
 // ── Goal Oriented (v0.19y) ────────────────────────────
@@ -39837,10 +40431,62 @@ function onPointerDown(x, y, id) {
   // never lets the player tap-to-stop because the conveyor keeps re-pumping
   // velocity. We sample position every ~0.1s and check if the ball is
   // wedged in place. If displacement over 0.5s is < BALL_R, treat as stuck.
+  // v0.23i: Hand Brake hook — when owned, intercept the tap for gesture
+  // detection. If this is the SECOND tap of a double-tap-hold, consume it
+  // (gesture engaged hand brake). If this is the FIRST tap of a potential
+  // double-tap, we DEFER the normal tap-to-stop fire by 220ms so the
+  // gesture's second tap has time to land.
+  // Bypass flag is set when the deferred timer fires and re-enters this
+  // function — it skips both the gesture path AND the defer path so the
+  // canInterrupt body runs synchronously.
+  const _hbBypass = !!G._handBrakeBypassDefer;
+  const _hbOwned = (typeof playerOwnsHandBrake === 'function') && playerOwnsHandBrake();
+  const _hbConsumed = (!_hbBypass) && _hbOwned && (typeof handleHandBrakeTapDown === 'function')
+    ? handleHandBrakeTapDown(x, y, performance.now()) : false;
+  if(_hbConsumed) {
+    // Gesture absorbed this tap (it was the second tap of a double-tap).
+    // Do NOT continue to ball-drag / tap-to-stop / aim handling.
+    return;
+  }
   const speed = G.ballVel.length();
   const _onFloor = G.ballPos.y <= (G.heightMap.length ? getTerrainHeight(G.ballPos.x, G.ballPos.z) : 0) + FLOOR_H/2 + BALL_R + 0.15;
   const _stuck = !!(G._ballStuckDetected && _onFloor);
   const canInterrupt = G.rolling && _onFloor && (speed < 1.5 || _stuck);
+  // v0.23i: When hand_brake is owned and the canInterrupt fires, defer the
+  // stop by 220ms. If a second tap arrives within that window (the gesture
+  // path will cancel _pendingTapToStopTimer), the brake gesture engages
+  // and the ball is NOT stopped. If no second tap arrives, the deferred
+  // stop fires normally. Players without the perk: zero behavior change.
+  // Bypass flag: when set, the re-entry from the deferred timer runs
+  // the canInterrupt body synchronously instead of deferring again.
+  if(canInterrupt && _hbOwned && !_hbBypass) {
+    // Cancel any prior pending fire (rapid taps could pile them up)
+    if(G._pendingTapToStopTimer) {
+      clearTimeout(G._pendingTapToStopTimer);
+      G._pendingTapToStopTimer = null;
+    }
+    G._pendingTapToStop = { x, y };
+    G._pendingTapToStopTimer = setTimeout(() => {
+      G._pendingTapToStopTimer = null;
+      G._pendingTapToStop = null;
+      // Re-validate: ball might be stopped already, or game might be over,
+      // or the brake gesture might have engaged in the meantime.
+      if(G.state !== 'playing' || G.inHole || !G.rolling) return;
+      if(G._handBrakeState === 'engaged' || G._handBrakeState === 'soft') return;
+      // Re-run the same checks before firing; conditions could have changed.
+      const _spd = G.ballVel.length();
+      const _onFloor2 = G.ballPos.y <= (G.heightMap.length ? getTerrainHeight(G.ballPos.x, G.ballPos.z) : 0) + FLOOR_H/2 + BALL_R + 0.15;
+      const _stuck2 = !!(G._ballStuckDetected && _onFloor2);
+      if(!(_onFloor2 && (_spd < 1.5 || _stuck2))) return;
+      // Fire the deferred tap-to-stop by re-entering onPointerDown with the
+      // hand_brake bypass flag set. The flag tells the gesture path to
+      // skip detection and the canInterrupt path to fire immediately.
+      G._handBrakeBypassDefer = true;
+      try { onPointerDown(x, y, /*id*/ 0); }
+      finally { G._handBrakeBypassDefer = false; }
+    }, HAND_BRAKE_TAP_STOP_DEFER_MS);
+    return; // wait for the deferred fire (or its cancellation)
+  }
   if(canInterrupt) {
     G.ballVel.set(0,0,0);
     G.rolling = false;
@@ -40044,6 +40690,12 @@ function onPointerMove(x, y) {
 }
 
 function onPointerUp() {
+  // v0.23i: Hand Brake pointer-up — releases the brake if engaged, or
+  // fires the soft auto-brake if the player did a quick double-tap-no-hold.
+  // Runs first because it has no side-effects on aim/airstrike state.
+  if(typeof handleHandBrakePointerUp === 'function') {
+    try { handleHandBrakePointerUp(); } catch(e) {}
+  }
   // v0.21b: airstrike pending-tap fires here. If a tap landed during aim
   // and the pointer didn't move enough to cancel it (see onPointerMove),
   // lock the pill and start the strike sequence.
@@ -40267,6 +40919,17 @@ function fireShot() {
   if(G.conveyors) for(const c of G.conveyors) { c._rideTime = 0; c._rideScored = false; }
   // Save position before this shot — water hazard returns here
   G.lastShotPos = G.ballPos.clone();
+  // v0.23i: Time Rewind — clear buffer and seed with swing-start position
+  // so rewind-to-end lands exactly here. Future samples (recorded once per
+  // 16ms while rolling) walk forward from this point.
+  if(typeof _clearRewindBuffer === 'function') _clearRewindBuffer();
+  G._rewindBuf = [{
+    x: G.ballPos.x,
+    y: G.ballPos.y,
+    z: G.ballPos.z,
+    hp: G.hp,
+  }];
+  G._timeRewindUsedThisShot = false;
   if(!G.undoUsed) {
     G.undoState = {
       pos: G.ballPos.clone(),
@@ -42373,11 +43036,19 @@ const ALL_PERKS = [
   { id:'risk_taker',      name:'Risk Taker',            emoji:'🎲', rarity:'rare',     price:20, stackable:false, weight:4,
     desc:'Style points 2× while over par OR at 25% HP or less. Multiplies with Showboat.' },
   { id:'mo_money_mo_problems', name:'Mo Money Mo Problems', emoji:'💰', rarity:'epic', price:28, stackable:false, weight:2,
-    desc:'Under-par payouts +50%. Par on each hole reduced by 1 (resets each hole).' },
+    desc:'Under-par payouts doubled. Par on each hole reduced by 1 (resets each hole).' },
   { id:'kickback',        name:'Drone Delivery',        emoji:'🛸', rarity:'rare',     price:18, stackable:true,  weight:4,
     desc:'Recovery drones save your ball from OOB. 2 recoveries per hole, +1 per stack. Upgrade chain: Drone Fleet → Drone Armada → Drone Cavalry (each +1 recovery).' },
   { id:'lucky',           name:'Lucky',                 emoji:'🍀', rarity:'rare',     price:20, stackable:true,  weight:3,
     desc:'Rare, Epic, and Legendary cards/perks appear 25% more often per stack.' },
+  // v0.23i: Hand Brake — replaces the retired Backspin card. Held-friction
+  // brake that's always available. Double-tap-and-hold anywhere while rolling
+  // to engage; release to disengage. Designed as the chaos-card safety net:
+  // pairs with Perpetual Motion / Slippery Ball / All Bounce, which all get
+  // a shop weight boost when this perk is owned (see weightedShopPicks +
+  // weightedCardPicks).
+  { id:'hand_brake',      name:'Hand Brake',            emoji:'🛑', rarity:'epic',     price:26, stackable:false, weight:3,
+    desc:'Double-tap and hold anywhere while rolling — heavy friction kicks in. Release to disengage. Quick double-tap = light auto-brake. The chaos-card safety net.' },
 ];
 
 // Filter ALL_PERKS to only include active entries
@@ -45258,6 +45929,12 @@ function initHole() {
   G._lastSafePosSampleT = 0;
   G._armedCards = [];        // v0.20g: armed pre-swing cards waiting to fire
   G._shotArmedOverrides = []; // v0.21k2: per-shot snapshot of armed overrides for physics-time getCardField
+  // v0.23i: Time Rewind state — buffer and playback state cleared each hole.
+  G._rewindBuf = [];
+  G._rewindState = 'idle';
+  G._rewindPlaybackAccum = 0;
+  G._rewindSavedVel = null;
+  G._timeRewindUsedThisShot = false;
   // v0.23h7: clear any leftover Goal Oriented lock from the prior hole.
   G._goalOrientedArmed = false;
   if(typeof _hideGoalOrientedLockBadge === 'function') _hideGoalOrientedLockBadge();
