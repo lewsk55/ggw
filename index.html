@@ -1261,6 +1261,9 @@ pointer-events:all;
 }
 @media (max-width:899px) {
   #btn-deck { left:auto; right:12px; top:12px; }
+  /* v0.23l17: mobile drops the speedball timer to just below #btn-menu.
+     !important needed to override the inline top:82px on the element. */
+  #speedball-timer { top:50px !important; }
 }
 #btn-deck:active { background:rgba(255,255,255,0.9); }
 /* Deck Viewer Overlay */
@@ -1630,6 +1633,21 @@ pointer-events:none;
 @keyframes goalOrientedLockPulse {
 0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.95; }
 50%      { transform: translate(-50%, -50%) scale(1.18); opacity: 1; }
+}
+/* v0.23l17: Hand Brake reminder badge \u2014 small persistent reminder that
+   the brake gesture (double-tap-and-hold) is available. Gentle pulse
+   while in aim mode; the .rolling class swaps to a brighter, faster
+   pulse that says "you can engage me right now." */
+@keyframes handBrakeBadgePulse {
+0%, 100% { transform: scale(1);    box-shadow: 0 0 10px rgba(140,180,255,0.35), 0 2px 6px rgba(0,0,0,0.4); }
+50%      { transform: scale(1.08); box-shadow: 0 0 16px rgba(180,210,255,0.55), 0 2px 6px rgba(0,0,0,0.4); }
+}
+@keyframes handBrakeBadgePulseHot {
+0%, 100% { transform: scale(1);    box-shadow: 0 0 12px rgba(255,200,120,0.50), 0 2px 6px rgba(0,0,0,0.4); border-color: rgba(255,210,140,0.75); }
+50%      { transform: scale(1.14); box-shadow: 0 0 22px rgba(255,210,140,0.85), 0 2px 8px rgba(0,0,0,0.5); border-color: rgba(255,230,170,1); }
+}
+#hand-brake-badge.rolling {
+animation: handBrakeBadgePulseHot 0.9s ease-in-out infinite;
 }
 /* v0.21f: airstrike launch button pulse — calls attention without being noisy. */
 @keyframes airstrike-launch-pulse {
@@ -3043,11 +3061,22 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
 </div>
 
 <!-- v0.20a: Speedball timer — visible only when current character has speedballTimer trait
-     v0.20a2: shrunk + repositioned (smaller padding, font; mobile media-query bumps it lower so it doesn't sit under the ☰ Menu button) -->
-<div id="speedball-timer" style="display:none;position:fixed;top:12px;left:12px;z-index:240;pointer-events:none;font-family:'Playfair Display',serif;background:linear-gradient(140deg,rgba(40,15,10,0.82),rgba(80,30,20,0.82));backdrop-filter:blur(8px);border:2px solid rgba(255,170,80,0.7);border-radius:10px;padding:5px 10px 4px;box-shadow:0 0 14px rgba(255,120,40,0.35),0 2px 8px rgba(0,0,0,0.4)">
+     v0.20a2: shrunk + repositioned (smaller padding, font; mobile media-query bumps it lower so it doesn't sit under the ☰ Menu button)
+     v0.23l17: desktop default now sits below #btn-deck (Loadout), mobile drops it to just below #btn-menu (where #btn-deck moves to the top-right via the existing @media rule). -->
+<div id="speedball-timer" style="display:none;position:fixed;top:82px;left:12px;z-index:240;pointer-events:none;font-family:'Playfair Display',serif;background:linear-gradient(140deg,rgba(40,15,10,0.82),rgba(80,30,20,0.82));backdrop-filter:blur(8px);border:2px solid rgba(255,170,80,0.7);border-radius:10px;padding:5px 10px 4px;box-shadow:0 0 14px rgba(255,120,40,0.35),0 2px 8px rgba(0,0,0,0.4)">
   <div style="font-size:0.42rem;letter-spacing:2px;color:#ffb060;text-transform:uppercase;text-align:center;margin-bottom:1px">⏱ Timer</div>
   <div id="speedball-timer-val" style="font-size:1.15rem;font-weight:700;color:#fff;line-height:1;text-shadow:0 0 10px rgba(255,140,50,0.7);text-align:center">—</div>
 </div>
+
+<!-- v0.23l17: Hand Brake reminder badge. Shows whenever the player owns
+     the hand_brake perk, so they remember the gesture is available.
+     Pulses gently while in aim mode, brighter while rolling (when the
+     brake is actually engageable). The badge sits on the right side
+     of the screen so it doesn't conflict with the speedball timer or
+     lap HUD on the left. The 🅿️ glyph reads as "park / brake."
+     Toggled via _showHandBrakeBadge() / _hideHandBrakeBadge() at perk
+     grant/loss and at hole-start refresh. -->
+<div id="hand-brake-badge" style="display:none;position:fixed;top:82px;right:12px;z-index:239;pointer-events:none;font-size:1.5rem;width:42px;height:42px;line-height:42px;text-align:center;background:rgba(20,30,50,0.72);border:2px solid rgba(180,210,255,0.55);border-radius:50%;color:#fff;backdrop-filter:blur(6px);box-shadow:0 0 10px rgba(140,180,255,0.35),0 2px 6px rgba(0,0,0,0.4);animation:handBrakeBadgePulse 2.4s ease-in-out infinite">🅿️</div>
 
 <!-- v0.20r: Lap Mode HUD — visible only when active. Top-center pill showing
      LAP n/3 + elapsed timer. Far enough below the Strokes/Total/Coins panel
@@ -3692,7 +3721,7 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
   <button class="play-btn" onclick="openAchievements()" style="margin-top:6px;background:rgba(245,200,66,0.18);border:1px solid rgba(245,200,66,0.5);color:#f5c842;font-size:0.85rem;padding:10px 28px">🏆 Achievements</button>
   <button class="play-btn" id="btn-import-save" style="margin-top:6px;background:rgba(120,120,120,0.6);font-size:0.7rem;padding:8px 20px" onclick="importSaveFile()">📂 Import Save</button>
   <input type="file" id="import-save-input" accept=".ggwsave,application/json" style="display:none">
-  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.23l16</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">1 card removal per shop · Time Rewind: substep sampling + mid-air gravity · Pineapple skin fronds re-done · Conveyor-wall auto-finalize · Combo THPS truncation</div></div>
+  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.23l21</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Motion-adaptive mobile outline depth: 60fps when ball/camera moving, 30fps when idle. Kills the jitter on rolling ball + during camera pans, keeps the perf save when the world is static.</div></div>
 
   <!-- v0.19j: Inline profile picker — skip the separate slot-picks screen -->
   <div class="section-label" style="margin-top:14px">Save Slot</div>
@@ -4146,7 +4175,23 @@ let composer, outlinePass;
 // v0.23l15: Half-rate counter for mobile OutlinePass. Toggles 0/1 each frame;
 // when 1, the depth re-render is skipped and the previous frame's depth
 // texture is reused. Desktop ignores this entirely.
+// v0.23l21: counter now gated by motion \u2014 the half-rate skip only applies
+// on the odd frame AND when the scene is static (ball stopped/slow AND
+// camera not moving). Any motion forces a full 60fps depth pass, which
+// kills the outline jitter on the rolling ball and during camera pans.
 let _outlineFrameCounter = 0;
+// Prev camera state used by the motion check. Initialized lazily on the
+// first animate tick so initComposer ordering doesn't matter.
+let _prevCamPos = null;       // THREE.Vector3
+let _prevCamQuat = null;      // THREE.Quaternion
+// Thresholds. BALL_MOTION_SPEED: matches existing slow/fast thresholds
+// elsewhere in the file (Math.hypot of horizontal vel). CAM_POS_DELTA is
+// world units; even a slow drag moves the camera well past 0.05/frame.
+// CAM_QUAT_DOT compares quaternion alignment \u2014 dot products near 1.0 mean
+// no rotation. 0.9999 catches anything beyond a tiny camera nudge.
+const _OUTLINE_BALL_SPEED_THRESH = 1.5;
+const _OUTLINE_CAM_POS_DELTA_SQ  = 0.05 * 0.05;
+const _OUTLINE_CAM_QUAT_DOT_MIN  = 0.9999;
 function initComposer() {
   const sz = new THREE.Vector2(window.innerWidth, window.innerHeight);
   composer = new THREE.EffectComposer(renderer);
@@ -4424,8 +4469,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.23l16';
-const CHANGE_NOTE = "v0.23l16: Six fixes. (1) Card removal: ONE per shop appearance \u2014 paid removes and Yard Sale sells share the same gate, modal force-closes after one action. (2) Time Rewind: recorder now samples inside the physics substep loop (effective 120Hz when ball is moving fast) so rewind playback reads smoothly on bouncy paths. Buffer cap raised to match. (3) Time Rewind mid-air commit: ball now drops with normal gravity instead of floating to aim mode \u2014 commit zeros horizontal velocity only, lets physics settle. (4) Pineapple skin crown: rebuilt with the simpler hat-style ring approach (one ring + a center spike), no more side-tilted fronds. (5) Conveyor-into-wall stuck state: stuck detector now also auto-finalizes the shot after 1.5s of detected stuckness, no longer requires player tap. (6) Combo chain THPS-style truncation: when content exceeds 3 lines, head items + ellipsis + most recent items, ellipsis lands at end of line 2.";
+const GAME_VERSION = '0.23l21';
+const CHANGE_NOTE = "v0.23l21: Motion-adaptive mobile outline depth: 60fps when ball/camera moving, 30fps when idle. Previous mobile half-rate depth pre-pass caused visible outline jitter on the ball during shots and on walls during camera pans; now the half-rate skip only kicks in when the scene is truly static (ball not moving fast AND camera not panning), so jitter disappears the moment anything's in motion. Desktop unchanged.";
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
@@ -13517,6 +13562,47 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
     return g;
   }
 
+  // v0.23l19: Shared "temple arm" builder for glasses accessories.
+  // Builds a tube that arcs around the ball in a horizontal plane at the
+  // given Y height, from a starting angle (front-right of ball) to an
+  // ending angle (back-right of ball), measured from the +Z (face) axis.
+  // The arc sits at radius BALL_R + 0.014 so it visibly hugs the ball
+  // surface without floating away. xSign controls which side (-1 = left
+  // temple, +1 = right). Returns a Mesh.
+  // Used by buildAcc_sunglasses (replaces the old clipping straight cylinders)
+  // and adds matching ear-frames to buildAcc_buddyHollies + buildAcc_mustacheGlasses.
+  // Per Adam: "Have the sunglasses frames around the ears wrap around the ball
+  // (currently they clip through). Add these frames on the ears for buddy
+  // hollies and mustache glasses as well."
+  function buildTempleArmWrap(xSign, lensY, mat) {
+    const armR = BALL_R + 0.014;
+    // angles measured from +Z (forward / face axis), increasing toward
+    // +X (right). Start at ~30\u00b0 (just past the outer edge of the lens),
+    // end at ~115\u00b0 (behind the "ear"). Curve drops slightly in Y over
+    // its length so the rear end is a touch lower (the "earpiece" droop).
+    const arcStart = 0.55;  // ~31\u00b0 from +Z axis
+    const arcEnd   = 2.00;  // ~115\u00b0 from +Z axis
+    const SAMPLES  = 12;
+    const points = [];
+    for(let i = 0; i <= SAMPLES; i++) {
+      const t = arcStart + (arcEnd - arcStart) * (i / SAMPLES);
+      const x = xSign * armR * Math.sin(t);
+      const z = armR * Math.cos(t);
+      // Slight downward droop at the back end (last 40% of arc).
+      const droop = (i / SAMPLES > 0.6)
+        ? -((i / SAMPLES - 0.6) / 0.4) * 0.025
+        : 0;
+      points.push(new THREE.Vector3(x, lensY + droop, z));
+    }
+    const curve = new THREE.CatmullRomCurve3(points);
+    const tube = new THREE.Mesh(
+      new THREE.TubeGeometry(curve, SAMPLES, 0.008, 6, false),
+      mat
+    );
+    tube.userData.noOutline = true;
+    return tube;
+  }
+
   // Devil horns + red glow aura beneath
   // v0.23k: horns now point STRAIGHT UP out of the ball — previously they
   // were tilted both outward (rotation.z) and forward (rotation.x), making
@@ -13529,20 +13615,34 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
       color: 0xc02020, emissive: 0x802020, emissiveIntensity: 0.4,
       roughness: 0.3, metalness: 0.2,
     });
-    const hornGeo = new THREE.ConeGeometry(0.045, 0.13, 10);
-    // Sit horns on top of the ball, slightly off-center left/right. Y is
-    // BALL_R so the cone BASE just touches the ball surface; cone reaches
-    // up from there. Z=0 so they sit centered on the up-axis (not pushed
-    // forward to face the camera).
+    // v0.23l18: per Adam, devil horns should:
+    //  (a) tilt outward ~20\u00b0 each (was ~8\u00b0) so they point away from
+    //      the ball,
+    //  (b) be slightly larger (cone 0.045\u00d70.13 \u2192 0.055\u00d70.17),
+    //  (c) emerge FROM the ball so the cone bases hide inside the upper
+    //      hemisphere \u2014 lower the position so only the upper ~70% of
+    //      each cone protrudes (was: full cone visible with the base
+    //      sitting on the ball surface).
+    const hornGeo = new THREE.ConeGeometry(0.055, 0.17, 10);
+    // Lower the base into the ball. Cone is built with the BASE at -h/2
+    // and the TIP at +h/2 relative to its own origin. We position the
+    // cone center at BALL_R - 0.03 so the base sits ~0.115 INSIDE the
+    // ball (hidden), and the tip protrudes to BALL_R + 0.055 above.
+    // v0.23l19: raised position 30% (hornCenterY 0.17 \u2192 0.221) so more of
+    // each cone protrudes from the ball, and tilt bumped outward slightly
+    // (0.35 \u2192 0.45 rad, ~20\u00b0\u219226\u00b0) per Adam: "Rotate the devil horns
+    // outward slightly and raise their position by 30%."
+    const hornCenterY = (BALL_R - 0.03) * 1.3;
+    const hornTilt = 0.45;
     const hL = new THREE.Mesh(hornGeo, hornMat);
-    hL.position.set(-0.085, BALL_R + 0.05, 0);
-    hL.rotation.z = -0.14; // very slight outward lean
+    hL.position.set(-0.085, hornCenterY, 0);
+    hL.rotation.z = -hornTilt;
     g.add(hL);
     const hR = new THREE.Mesh(hornGeo, hornMat);
-    hR.position.set(0.085, BALL_R + 0.05, 0);
-    hR.rotation.z = 0.14;
+    hR.position.set(0.085, hornCenterY, 0);
+    hR.rotation.z = hornTilt;
     g.add(hR);
-    // Red glow halo below ball — opposite of the halo accessory
+    // Red glow halo below ball \u2014 opposite of the halo accessory
     const glowMat = new THREE.MeshBasicMaterial({
       color: 0xff2020, transparent: true, opacity: 0.55, depthWrite: false,
     });
@@ -13550,9 +13650,6 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
     glow.material.side = THREE.BackSide;
     glow.userData.noOutline = true;
     g.add(glow);
-    // v0.23k: 'top_static' — locks horns to ball's top axis without spinning
-    // (top_bob's slow rotation would spin the horns around). Halo can still
-    // use top_bob because its ring is radially symmetric.
     g.userData.accType = 'top_static';
     return g;
   }
@@ -13586,34 +13683,58 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
     const g = new THREE.Group();
     const frameMat = new THREE.MeshStandardMaterial({color:0x111418, roughness:0.3, metalness:0.3});
     // Build one squarish lens frame: 4 short bars forming the outline.
-    // Lens dimensions: 0.13 wide × 0.11 tall (slightly wider than tall like
+    // Lens dimensions: 0.13 wide \u00d7 0.11 tall (slightly wider than tall like
     // real horn-rims). Frame bar thickness 0.018.
-    const mkSquareLens = (cx, cy, cz) => {
+    // v0.23l18: each lens is built into its OWN socket group, then the
+    // socket is positioned on the ball surface and tilted outward so its
+    // local front face is tangent to the sphere. Bars + tint are built in
+    // socket-local coordinates so they automatically follow the tilt.
+    // Per Adam: "glasses need to have the lenses tilt slightly and pushed
+    // forward to the surface of the ball so they don't clip through it."
+    const lensX = 0.075, lensY = 0.02;
+    // Solve for z that puts the socket center on the sphere surface.
+    const lensZ = Math.sqrt(Math.max(0.0001, BALL_R*BALL_R - lensX*lensX - lensY*lensY)) + 0.001;
+    const mkSquareLens = (xSign) => {
+      const socket = new THREE.Group();
+      const sx = xSign * lensX;
+      socket.position.set(sx, lensY, lensZ);
+      // Tilt to radial-outward (yaw + pitch from ball center).
+      const yaw = Math.atan2(sx, lensZ);
+      const pitch = -Math.atan2(lensY, Math.sqrt(sx*sx + lensZ*lensZ));
+      socket.rotation.order = 'YXZ';
+      socket.rotation.y = yaw;
+      socket.rotation.x = pitch;
+      // Frame bars in socket-local space (lens center at local origin).
       const w = 0.13, h = 0.11, t = 0.018;
       const top    = new THREE.Mesh(new THREE.BoxGeometry(w, t, t), frameMat);
       const bottom = new THREE.Mesh(new THREE.BoxGeometry(w, t, t), frameMat);
       const left   = new THREE.Mesh(new THREE.BoxGeometry(t, h, t), frameMat);
       const right  = new THREE.Mesh(new THREE.BoxGeometry(t, h, t), frameMat);
-      top.position.set(cx, cy + h/2 - t/2, cz);
-      bottom.position.set(cx, cy - h/2 + t/2, cz);
-      left.position.set(cx - w/2 + t/2, cy, cz);
-      right.position.set(cx + w/2 - t/2, cy, cz);
-      g.add(top); g.add(bottom); g.add(left); g.add(right);
-      // Tint sheet behind the frame so the lenses read as glass
+      top.position.set(0, h/2 - t/2, 0);
+      bottom.position.set(0, -h/2 + t/2, 0);
+      left.position.set(-w/2 + t/2, 0, 0);
+      right.position.set(w/2 - t/2, 0, 0);
+      socket.add(top); socket.add(bottom); socket.add(left); socket.add(right);
+      // Tint sheet behind the frame so the lenses read as glass.
       const lensTintMat = new THREE.MeshStandardMaterial({color:0x2a3344, transparent:true, opacity:0.5, roughness:0.1, side: THREE.DoubleSide});
       const tint = new THREE.Mesh(new THREE.PlaneGeometry(w - t * 0.6, h - t * 0.6), lensTintMat);
-      tint.position.set(cx, cy, cz - 0.004);
+      tint.position.set(0, 0, -0.004);
       tint.rotation.y = Math.PI;
-      g.add(tint);
+      socket.add(tint);
+      g.add(socket);
     };
-    // v0.23k: glasses raised to +0.02 (was -0.06) so they sit higher on the
-    // face — matches Buddy Holly / nerd-glasses placement above the cheeks.
-    mkSquareLens(-0.075, 0.02, 0.20);
-    mkSquareLens( 0.075, 0.02, 0.20);
-    // Bridge between the two lenses
+    mkSquareLens(-1);
+    mkSquareLens( 1);
+    // Bridge between the two lenses \u2014 sits at face-center, no tilt
+    // (small enough that flat orientation reads fine).
     const bridge = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.018, 0.018), frameMat);
-    bridge.position.set(0, 0.02, 0.20);
+    bridge.position.set(0, lensY, lensZ);
     g.add(bridge);
+    // v0.23l19: wrap-around temple arms (matching Sunglasses) so the
+    // frames are present on both ears. Per Adam: "Add these frames on
+    // the ears for buddy hollies and mustache glasses as well."
+    g.add(buildTempleArmWrap(-1, lensY, frameMat));
+    g.add(buildTempleArmWrap( 1, lensY, frameMat));
     g.userData.accType = 'face';
     return g;
   }
@@ -13636,67 +13757,54 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
     const lensMat = new THREE.MeshStandardMaterial({
       color: 0x111111, roughness: 0.25, metalness: 0.3, side: THREE.DoubleSide
     });
-    // Lens "blocks" — squarish slabs. 0.13 wide × 0.10 tall × 0.008 thick.
-    // Both faces will render because BoxGeometry is solid and the material
-    // is DoubleSide. Camera-facing front shows up as the dark lens.
-    const lensGeo = new THREE.BoxGeometry(0.13, 0.10, 0.008);
-    const lensL = new THREE.Mesh(lensGeo, lensMat);
-    lensL.position.set(-0.075, -0.03, 0.215);
-    g.add(lensL);
-    const lensR = new THREE.Mesh(lensGeo, lensMat);
-    lensR.position.set(0.075, -0.03, 0.215);
-    g.add(lensR);
-    // Frame outline around each lens — 4 thin bars on the outside of each
-    // lens. Slightly larger than the lens block so they read as a rim.
-    const mkFrame = (cx, cy, cz) => {
+    // v0.23l18: each lens block + frame is built in its own socket group
+    // and tilted outward so its plane is tangent to the sphere. Was: lenses
+    // were at z=0.215 (already pushed outside BALL_R=0.20) but axis-aligned
+    // to the face plane, so the OUTER edges still floated out into space
+    // and the INNER edges were the visual reference. Tilting wraps them
+    // around the curvature.
+    // v0.23l19: lensY raised -0.03 \u2192 0.02 to match Buddy Hollies (per Adam:
+    // "Raise the sunglasses + mustache glasses up to the same height as
+    // the buddy hollies").
+    const lensX = 0.075, lensY = 0.02;
+    const lensZ = Math.sqrt(Math.max(0.0001, BALL_R*BALL_R - lensX*lensX - lensY*lensY)) + 0.013;
+    const mkLensSocket = (xSign) => {
+      const socket = new THREE.Group();
+      const sx = xSign * lensX;
+      socket.position.set(sx, lensY, lensZ);
+      const yaw = Math.atan2(sx, lensZ);
+      const pitch = -Math.atan2(lensY, Math.sqrt(sx*sx + lensZ*lensZ));
+      socket.rotation.order = 'YXZ';
+      socket.rotation.y = yaw;
+      socket.rotation.x = pitch;
+      // Lens block in socket-local space.
+      const lens = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.10, 0.008), lensMat);
+      socket.add(lens);
+      // Frame outline.
       const w = 0.14, h = 0.11, t = 0.012;
       const top    = new THREE.Mesh(new THREE.BoxGeometry(w, t, 0.012), frameMat);
       const bottom = new THREE.Mesh(new THREE.BoxGeometry(w, t, 0.012), frameMat);
       const left   = new THREE.Mesh(new THREE.BoxGeometry(t, h, 0.012), frameMat);
       const right  = new THREE.Mesh(new THREE.BoxGeometry(t, h, 0.012), frameMat);
-      top.position.set(cx, cy + h/2 - t/2, cz + 0.002);
-      bottom.position.set(cx, cy - h/2 + t/2, cz + 0.002);
-      left.position.set(cx - w/2 + t/2, cy, cz + 0.002);
-      right.position.set(cx + w/2 - t/2, cy, cz + 0.002);
-      g.add(top); g.add(bottom); g.add(left); g.add(right);
+      top.position.set(0, h/2 - t/2, 0.002);
+      bottom.position.set(0, -h/2 + t/2, 0.002);
+      left.position.set(-w/2 + t/2, 0, 0.002);
+      right.position.set(w/2 - t/2, 0, 0.002);
+      socket.add(top); socket.add(bottom); socket.add(left); socket.add(right);
+      g.add(socket);
     };
-    mkFrame(-0.075, -0.03, 0.215);
-    mkFrame( 0.075, -0.03, 0.215);
-    // Bridge between the lenses
+    mkLensSocket(-1);
+    mkLensSocket( 1);
+    // Bridge between the lenses \u2014 small enough to stay flat at face-center.
     const bridge = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.012, 0.012), frameMat);
-    bridge.position.set(0, -0.025, 0.215);
+    bridge.position.set(0, lensY + 0.005, lensZ);
     g.add(bridge);
-    // Temple arms — start at the OUTER edge of each lens, run back along
-    // the sides of the ball, and terminate with a short downward kink
-    // (the "earpiece"). Built as two cylinders per side: a long horizontal
-    // arm and a short angled tip.
-    const templeMat = frameMat;
-    // Each temple: long arm running from outer frame back to behind ball
-    const armLen = 0.36;
-    const mkTemple = (xSign) => {
-      // Long horizontal arm
-      const arm = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.008, 0.008, armLen, 6),
-        templeMat
-      );
-      // Default cylinder orientation: along Y. Rotate so it points along Z (back).
-      arm.rotation.x = Math.PI / 2;
-      // Position: start at the outer edge of the frame, center along Z.
-      // The arm extends from ~z=0.20 (frame edge) backward to ~z=-0.16.
-      arm.position.set(xSign * 0.145, -0.025, 0.20 - armLen / 2);
-      g.add(arm);
-      // Small earpiece tip — a short cylinder hooking downward at the
-      // back end of the arm.
-      const tip = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.008, 0.006, 0.05, 6),
-        templeMat
-      );
-      // Cylinder along Y, then rotate slightly so it kinks down+back
-      tip.position.set(xSign * 0.145, -0.045, 0.20 - armLen);
-      g.add(tip);
-    };
-    mkTemple(-1);
-    mkTemple(1);
+    // v0.23l19: temple arms replaced with wrap-around tube arcs that follow
+    // the ball curvature instead of straight cylinders that clipped through
+    // the side of the ball. Per Adam: "Have the sunglasses frames around
+    // the ears wrap around the ball (currently they clip through)."
+    g.add(buildTempleArmWrap(-1, lensY, frameMat));
+    g.add(buildTempleArmWrap( 1, lensY, frameMat));
     g.userData.accType = 'face';
     return g;
   }
@@ -13704,18 +13812,37 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
   // Swim goggles — two clear circles + yellow strap
   function buildAcc_swimGoggles() {
     const g = new THREE.Group();
+    // v0.23l18: socket-tilt the lens+rim pairs so they wrap to the ball
+    // curvature, matching the other glasses accessories.
     const lensMat = new THREE.MeshStandardMaterial({
       color: 0x88ccff, transparent: true, opacity: 0.55, roughness: 0.1,
     });
     const rimMat = new THREE.MeshStandardMaterial({color:0xf0d020, roughness:0.4});
-    // Lens + rim (torus around each lens)
-    const lensGeo = new THREE.CircleGeometry(0.062, 18);
-    const rimGeo = new THREE.TorusGeometry(0.066, 0.012, 6, 18);
-    const lensL = new THREE.Mesh(lensGeo, lensMat); lensL.position.set(-0.078, -0.04, 0.205); lensL.rotation.y = Math.PI; g.add(lensL);
-    const lensR = new THREE.Mesh(lensGeo, lensMat); lensR.position.set( 0.078, -0.04, 0.205); lensR.rotation.y = Math.PI; g.add(lensR);
-    const rimL = new THREE.Mesh(rimGeo, rimMat); rimL.position.set(-0.078, -0.04, 0.205); g.add(rimL);
-    const rimR = new THREE.Mesh(rimGeo, rimMat); rimR.position.set( 0.078, -0.04, 0.205); g.add(rimR);
-    // Yellow strap wrapping around the back — curved strip approximated by a torus arc
+    const lensX = 0.078, lensY = -0.04;
+    const lensZ = Math.sqrt(Math.max(0.0001, BALL_R*BALL_R - lensX*lensX - lensY*lensY)) + 0.005;
+    const mkLensSocket = (xSign) => {
+      const socket = new THREE.Group();
+      const sx = xSign * lensX;
+      socket.position.set(sx, lensY, lensZ);
+      const yaw = Math.atan2(sx, lensZ);
+      const pitch = -Math.atan2(lensY, Math.sqrt(sx*sx + lensZ*lensZ));
+      socket.rotation.order = 'YXZ';
+      socket.rotation.y = yaw;
+      socket.rotation.x = pitch;
+      // Lens disc (circle in XY plane); flip via Math.PI Y-rotation so the
+      // front face points along socket-local +Z (radially outward).
+      const lens = new THREE.Mesh(new THREE.CircleGeometry(0.062, 18), lensMat);
+      lens.rotation.y = Math.PI;
+      lens.position.z = -0.002; // slight inset so rim sits proud
+      socket.add(lens);
+      // Rim torus in the XY plane \u2014 already faces +Z correctly.
+      const rim = new THREE.Mesh(new THREE.TorusGeometry(0.066, 0.012, 6, 18), rimMat);
+      socket.add(rim);
+      g.add(socket);
+    };
+    mkLensSocket(-1);
+    mkLensSocket( 1);
+    // Yellow strap wrapping around the back \u2014 unchanged
     const strapMat = new THREE.MeshStandardMaterial({color:0xf0d020, roughness:0.5});
     const strap = new THREE.Mesh(new THREE.TorusGeometry(BALL_R + 0.008, 0.012, 6, 24, Math.PI * 1.4), strapMat);
     strap.rotation.y = Math.PI / 2;
@@ -13724,7 +13851,7 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
     g.add(strap);
     // Strap bridge connecting lenses
     const bridge = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.012, 0.015), strapMat);
-    bridge.position.set(0, -0.035, 0.20);
+    bridge.position.set(0, lensY + 0.005, lensZ);
     g.add(bridge);
     g.userData.accType = 'face';
     return g;
@@ -13734,27 +13861,71 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
   // as the ball rolls. The wobble offset is updated in the per-frame tick.
   function buildAcc_googlyEyes() {
     const g = new THREE.Group();
-    const whiteMat = new THREE.MeshStandardMaterial({color:0xffffff, roughness:0.4});
-    const blackMat = new THREE.MeshStandardMaterial({color:0x101010, roughness:0.5});
-    const eyeR = 0.065;
-    const pupilR = 0.025;
-    // Two eye sockets (white spheres) at face position
+    // v0.23l17: rebuilt to match the real plastic googly eyes reference \u2014
+    // flat white cylinders (pucks) instead of spheres, with much larger
+    // black pupils that sit ON the front face. Each pupil's rest position
+    // gets a tiny random offset so the two eyes don't agree (the
+    // "drunken googly" look). Per-frame wobble continues to swing both
+    // pupils within their respective sockets.
+    // v0.23l18: each eye-socket now sits ON the ball surface and is tilted
+    // outward so its front face is tangent to the sphere. Previously the
+    // inner edge of each disc clipped through the ball curvature because
+    // the socket was at z=0.18 < BALL_R=0.20 but the disc was axis-aligned
+    // to the face plane. Now socket position is on the sphere surface and
+    // socket rotation is the radial-outward direction for that point.
+    const whiteMat = new THREE.MeshStandardMaterial({color:0xffffff, roughness:0.35});
+    const blackMat = new THREE.MeshStandardMaterial({color:0x101010, roughness:0.45});
+    const eyeR = 0.072;          // cylinder radius (slightly bigger than old sphere)
+    const eyeThickness = 0.025;  // flat puck depth
+    const pupilR = 0.040;        // ~55% of eye radius \u2014 reference shows BIG pupils
+    const pupilThickness = 0.012;
+    // Lateral offset of each eye from face center (matches original layout).
+    const eyeX = 0.07;
+    const eyeY = 0.02;
+    // Solve for the Z coordinate that puts the socket center on the ball
+    // surface at the given (eyeX, eyeY): z = sqrt(BALL_R\u00b2 - x\u00b2 - y\u00b2).
+    // Then nudge slightly outward (+0.001) so the puck never z-fights with
+    // the ball surface itself.
+    const eyeZ = Math.sqrt(Math.max(0.0001, BALL_R*BALL_R - eyeX*eyeX - eyeY*eyeY)) + 0.001;
     for(const xSign of [-1, 1]) {
       const socket = new THREE.Group();
-      socket.position.set(xSign * 0.07, 0.02, 0.18);
-      const white = new THREE.Mesh(new THREE.SphereGeometry(eyeR, 14, 10), whiteMat);
+      const sx = xSign * eyeX;
+      socket.position.set(sx, eyeY, eyeZ);
+      // Tilt the socket so its local +Z (puck normal) points radially out
+      // from the ball center. Yaw outward by atan2(x, z); pitch up by
+      // -atan2(y, sqrt(x\u00b2 + z\u00b2)). Order matters; YXZ keeps yaw applied
+      // first so pitch stays in the rotated frame.
+      const yaw = Math.atan2(sx, eyeZ);
+      const pitch = -Math.atan2(eyeY, Math.sqrt(sx*sx + eyeZ*eyeZ));
+      socket.rotation.order = 'YXZ';
+      socket.rotation.y = yaw;
+      socket.rotation.x = pitch;
+      // Eye disc \u2014 CylinderGeometry with its axis along the SOCKET'S local
+      // Z (which is now the radial-outward direction). Default cylinder
+      // axis is Y, so rotate \u03c0/2 around X to align.
+      const white = new THREE.Mesh(
+        new THREE.CylinderGeometry(eyeR, eyeR, eyeThickness, 20),
+        whiteMat
+      );
+      white.rotation.x = Math.PI / 2;
       socket.add(white);
-      // Pupil — child of the socket so it can swing within the eye
-      const pupil = new THREE.Mesh(new THREE.SphereGeometry(pupilR, 10, 8), blackMat);
-      // Pupil's "rest" position is at the front of the eye (toward +Z in
-      // socket-local space). The wobble nudges it in XY.
-      pupil.position.set(0, 0, eyeR * 0.65);
+      // Pupil disc \u2014 same orientation, sits slightly proud of the eye front.
+      const pupil = new THREE.Mesh(
+        new THREE.CylinderGeometry(pupilR, pupilR, pupilThickness, 16),
+        blackMat
+      );
+      pupil.rotation.x = Math.PI / 2;
+      // Front-face local-Z = eyeThickness/2; place pupil just in front.
+      const pupilZ = eyeThickness / 2 + pupilThickness / 2 + 0.0005;
+      // Random rest jitter \u2014 within ~30% of the wiggle room left by pupilR.
+      const maxRest = (eyeR - pupilR) * 0.45;
+      const rx = (Math.random() * 2 - 1) * maxRest;
+      const ry = (Math.random() * 2 - 1) * maxRest;
+      pupil.position.set(rx, ry, pupilZ);
       pupil.userData.pupilRest = pupil.position.clone();
       pupil.userData.isPupil = true;
       socket.add(pupil);
       socket.userData.isGooglyEye = true;
-      // Independent wobble phase per eye for that classic "they don't agree"
-      // look — phase offsets randomized at build time.
       socket.userData.wobblePhaseX = Math.random() * Math.PI * 2;
       socket.userData.wobblePhaseY = Math.random() * Math.PI * 2;
       g.add(socket);
@@ -13836,30 +14007,57 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
   function buildAcc_mustacheGlasses() {
     const g = new THREE.Group();
     // Glasses (similar to buddy hollies but rounder)
+    // v0.23l18: lenses now socket-tilted like buddy hollies and googly
+    // eyes \u2014 each round torus + tint sits on the ball surface and is
+    // tilted outward so its plane is tangent. Bridge and mustache stay
+    // at the face center where the curvature is shallow.
     const frameMat = new THREE.MeshStandardMaterial({color:0x0a0a0a, roughness:0.3, metalness:0.4});
-    const lensGeo = new THREE.TorusGeometry(0.068, 0.013, 8, 18);
-    const lensL = new THREE.Mesh(lensGeo, frameMat); lensL.position.set(-0.08, -0.02, 0.20); g.add(lensL);
-    const lensR = new THREE.Mesh(lensGeo, frameMat); lensR.position.set( 0.08, -0.02, 0.20); g.add(lensR);
-    const bridge = new THREE.Mesh(new THREE.BoxGeometry(0.038, 0.015, 0.015), frameMat);
-    bridge.position.set(0, -0.015, 0.20);
-    g.add(bridge);
-    // Lens tint
     const lensTintMat = new THREE.MeshStandardMaterial({color:0x202428, transparent:true, opacity:0.35, roughness:0.1});
-    const tintL = new THREE.Mesh(new THREE.CircleGeometry(0.062, 16), lensTintMat);
-    tintL.position.set(-0.08, -0.02, 0.195); tintL.rotation.y = Math.PI; g.add(tintL);
-    const tintR = new THREE.Mesh(new THREE.CircleGeometry(0.062, 16), lensTintMat);
-    tintR.position.set( 0.08, -0.02, 0.195); tintR.rotation.y = Math.PI; g.add(tintR);
-    // Mustache — two angled boxes below the bridge forming a handlebar shape
+    // v0.23l19: lensY raised -0.02 \u2192 0.02 to match Buddy Hollies (per Adam:
+    // "Raise the sunglasses + mustache glasses up to the same height as
+    // the buddy hollies"). The mustache stays in its original location
+    // (below the bridge) which now reads as a beard\u2010adjacent placement.
+    const lensX = 0.08, lensY = 0.02;
+    const lensZ = Math.sqrt(Math.max(0.0001, BALL_R*BALL_R - lensX*lensX - lensY*lensY)) + 0.001;
+    const mkRoundLens = (xSign) => {
+      const socket = new THREE.Group();
+      const sx = xSign * lensX;
+      socket.position.set(sx, lensY, lensZ);
+      const yaw = Math.atan2(sx, lensZ);
+      const pitch = -Math.atan2(lensY, Math.sqrt(sx*sx + lensZ*lensZ));
+      socket.rotation.order = 'YXZ';
+      socket.rotation.y = yaw;
+      socket.rotation.x = pitch;
+      // Torus is in the XY plane by default \u2014 perfect for "face-forward"
+      // when the socket's +Z is the outward radial direction.
+      const lensGeo = new THREE.TorusGeometry(0.068, 0.013, 8, 18);
+      const lens = new THREE.Mesh(lensGeo, frameMat);
+      socket.add(lens);
+      // Tint disc just behind the torus front.
+      const tint = new THREE.Mesh(new THREE.CircleGeometry(0.062, 16), lensTintMat);
+      tint.position.z = -0.005;
+      tint.rotation.y = Math.PI;
+      socket.add(tint);
+      g.add(socket);
+    };
+    mkRoundLens(-1);
+    mkRoundLens( 1);
+    const bridge = new THREE.Mesh(new THREE.BoxGeometry(0.038, 0.015, 0.015), frameMat);
+    bridge.position.set(0, lensY + 0.005, lensZ);
+    g.add(bridge);
+    // v0.23l19: wrap-around temple arms matching the other glasses.
+    g.add(buildTempleArmWrap(-1, lensY, frameMat));
+    g.add(buildTempleArmWrap( 1, lensY, frameMat));
+    // Mustache \u2014 two angled boxes below the bridge forming a handlebar shape
     const stachMat = new THREE.MeshStandardMaterial({color:0x2a1810, roughness:0.7});
     const stachL = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.025, 0.020), stachMat);
     stachL.position.set(-0.038, -0.085, 0.205);
-    stachL.rotation.z = 0.25; // angle up at the end
+    stachL.rotation.z = 0.25;
     g.add(stachL);
     const stachR = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.025, 0.020), stachMat);
     stachR.position.set(0.038, -0.085, 0.205);
     stachR.rotation.z = -0.25;
     g.add(stachR);
-    // Center mustache pad
     const stachC = new THREE.Mesh(new THREE.BoxGeometry(0.030, 0.030, 0.020), stachMat);
     stachC.position.set(0, -0.083, 0.207);
     g.add(stachC);
@@ -13910,14 +14108,27 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
     pack.position.set(0, -0.02, -0.18);
     g.add(pack);
     // Top flap
-    const flap = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.04, 0.10), strapMat);
-    flap.position.set(0, 0.08, -0.18);
+    // v0.23l19: previous fix only addressed straps; the FLAP was still
+    // causing z-fight because its bottom (y=0.06) sat 0.02u INSIDE the
+    // pack top (y=0.08) with co-planar left/right/front/back side faces.
+    // Fix: shift the flap up so its bottom is above the pack top, AND
+    // make it slightly larger (wider+deeper) so it visually overhangs
+    // the pack like a real backpack closure. Flap bottom at y=0.09 now
+    // sits 0.01u above pack top y=0.08, killing the co-planar overlap.
+    const flap = new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.04, 0.11), strapMat);
+    flap.position.set(0, 0.11, -0.18);
     g.add(flap);
     // Two straps wrapping around to the front
+    // v0.23l17: shortened (0.35\u21920.28) and shifted forward (z=0 \u2192 z=0.04)
+    // so straps no longer pierce the pack body interior. Previously the
+    // back end of each strap was at z=-0.175 \u2014 inside the pack box
+    // (front face z=-0.13) \u2014 causing z-fight along the entry/exit faces.
+    // New rear end z=-0.10 sits just inside the pack front face for a
+    // clean visual join, no overlap of co-planar faces.
     const straps = [-0.06, 0.06];
     for(const sx of straps) {
-      const strap = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.035, 0.35), strapMat);
-      strap.position.set(sx, 0.0, 0.0);
+      const strap = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.035, 0.28), strapMat);
+      strap.position.set(sx, 0.0, 0.04);
       strap.rotation.x = 0.2;
       g.add(strap);
     }
@@ -14297,7 +14508,7 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
     );
     ball.userData.isSkinBall = true;
     g.add(ball);
-    // Black pentagon decals at vertices of an icosahedron — gives the
+    // Black pentagon decals at vertices of an icosahedron \u2014 gives the
     // classic Telstar look without bespoke UV mapping.
     const blackMat = new THREE.MeshBasicMaterial({color: 0x101010});
     // Icosahedron vertex coordinates (normalized)
@@ -14309,57 +14520,93 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
     ];
     const surfR = BALL_R + 0.001;
     const norm = Math.sqrt(1 + phi*phi);
-    // Normalized vertex positions (unit sphere) — reused for both pentagons
-    // and the seam-arc connectors.
     const normVerts = verts.map(([x, y, z]) => [x/norm, y/norm, z/norm]);
-    // Pentagon decals
-    for(const [nx, ny, nz] of normVerts) {
+    // v0.23l18: Pre-compute each vertex's 5 nearest neighbors (= the 5
+    // outgoing icosahedron edges). Used twice: once to find one edge to
+    // align each pentagon's vertex 0 to, and once to build the seams.
+    const neighbors = normVerts.map((v, i) => {
+      const dots = [];
+      for(let j = 0; j < normVerts.length; j++) {
+        if(i === j) continue;
+        dots.push({ j, d: v[0]*normVerts[j][0] + v[1]*normVerts[j][1] + v[2]*normVerts[j][2] });
+      }
+      dots.sort((a, b) => b.d - a.d);
+      return dots.slice(0, 5).map(o => o.j);
+    });
+    // Pentagon decals \u2014 each is rotated around its outward axis so that
+    // pentagon vertex 0 points along the first outgoing edge. The other 4
+    // pentagon vertices land at 72\u00b0 increments which is exactly the angular
+    // spacing of the 5 outgoing icosahedron edges, so all 5 pentagon
+    // points line up with all 5 outgoing edges \u2014 and therefore meet the
+    // seam tubes built from those edges. Per Adam: "the 5 points of the
+    // pentagons on the ball need to connect to the lines."
+    const _tmpV = new THREE.Vector3();
+    const _worldUp = new THREE.Vector3(0, 1, 0);
+    const _localX = new THREE.Vector3();
+    const _localY = new THREE.Vector3();
+    const _outward = new THREE.Vector3();
+    const _edgeTan = new THREE.Vector3();
+    const _edgeRaw = new THREE.Vector3();
+    for(let i = 0; i < normVerts.length; i++) {
+      const [nx, ny, nz] = normVerts[i];
       const dec = new THREE.Mesh(
         new THREE.CircleGeometry(0.068, 5),
         blackMat
       );
       dec.position.set(nx * surfR, ny * surfR, nz * surfR);
       dec.lookAt(nx * 2, ny * 2, nz * 2);
+      // After lookAt, disc's local +Z = (nx, ny, nz) (outward).
+      // Compute local +X / +Y in world space. lookAt uses world +Y as
+      // up; the disc's local +X = up \u00d7 outward (then normalized).
+      // Degenerate case: if outward is parallel to world up, use world +Z
+      // as a fallback up vector (matches Three.js's internal behavior).
+      _outward.set(nx, ny, nz);
+      let upRef = _worldUp;
+      if(Math.abs(_outward.y) > 0.9999) {
+        upRef = new THREE.Vector3(0, 0, 1);
+      }
+      _localX.crossVectors(upRef, _outward).normalize();
+      _localY.crossVectors(_outward, _localX).normalize();
+      // Pick the first neighbor to align with. Edge in 3D: neighbor - self.
+      const nb = neighbors[i][0];
+      const np = normVerts[nb];
+      _edgeRaw.set(np[0] - nx, np[1] - ny, np[2] - nz);
+      // Project edge into the tangent plane (subtract the radial component).
+      const radialDot = _edgeRaw.dot(_outward);
+      _edgeTan.copy(_edgeRaw).addScaledVector(_outward, -radialDot).normalize();
+      // Angle from disc's local +X to the projected edge, measured around
+      // the outward axis. Pentagon vertex 0 sits at local +X (CircleGeometry
+      // starts at angle 0 along local +X), so rotating the disc by this
+      // angle puts vertex 0 directly under the seam to this neighbor.
+      const angle = Math.atan2(_edgeTan.dot(_localY), _edgeTan.dot(_localX));
+      // Rotate around the disc's LOCAL +Z (which is _outward in world).
+      // Three.js rotateOnAxis takes a LOCAL axis; the disc's local +Z is
+      // simply (0, 0, 1) in its own frame.
+      _tmpV.set(0, 0, 1);
+      dec.rotateOnAxis(_tmpV, angle);
       dec.userData.skipOutline = true;
       g.add(dec);
     }
-    // Seam arcs — connect each pair of icosahedron vertices that share an
-    // edge. On the unit-norm icosahedron all edges have the same length,
-    // ≈ 2/√(phi*phi+1) × something… we just pick the 30 closest pairs.
-    // Compute pairwise dot products; pick the 5 nearest neighbors per
-    // vertex (12 × 5 / 2 = 30 unique edges).
+    // Seam arcs \u2014 connect each pair of icosahedron vertices that share an
+    // edge (= each vertex's 5 nearest neighbors). 12 \u00d7 5 / 2 = 30 unique edges.
     const seamMat = new THREE.MeshBasicMaterial({color: 0x101010});
-    const arcRadius = BALL_R + 0.0008; // sit slightly above sphere
+    const arcRadius = BALL_R + 0.0008;
     const edgesSeen = new Set();
     for(let i = 0; i < normVerts.length; i++) {
-      // Find dot products to all other verts
-      const dots = [];
-      for(let j = 0; j < normVerts.length; j++) {
-        if(i === j) continue;
-        const d = normVerts[i][0]*normVerts[j][0]
-                + normVerts[i][1]*normVerts[j][1]
-                + normVerts[i][2]*normVerts[j][2];
-        dots.push({j, d});
-      }
-      dots.sort((a, b) => b.d - a.d); // largest dot = nearest neighbor
-      // Take the 5 closest as edges
-      for(let k = 0; k < 5; k++) {
-        const j = dots[k].j;
+      for(const j of neighbors[i]) {
         const key = i < j ? `${i}-${j}` : `${j}-${i}`;
         if(edgesSeen.has(key)) continue;
         edgesSeen.add(key);
-        // Build a great-circle arc segment between vertex i and j.
-        // Use tube of low radius along ~10 sample points lerped via slerp.
         const a = new THREE.Vector3(...normVerts[i]);
         const b = new THREE.Vector3(...normVerts[j]);
         const omega = Math.acos(Math.max(-1, Math.min(1, a.dot(b))));
-        // Shrink each end so the seam stops at the pentagon's edge instead
-        // of poking through its center. 0.30 → seam covers the middle 40%
-        // of the great-circle distance, which lines up well with the
-        // pentagon radius and reads as panel seams.
+        // v0.23l17: t-range widened so seams extend to the pentagon points.
+        // v0.23l18: with pentagons now aligned, the seams meet pentagon
+        // VERTICES rather than flat sides \u2014 the 0.22/0.78 trim still lands
+        // the seam endpoint exactly at the pentagon's radial corner.
         const ts = [];
         const SAMPLES = 8;
-        const tMin = 0.30, tMax = 0.70;
+        const tMin = 0.22, tMax = 0.78;
         for(let s = 0; s <= SAMPLES; s++) {
           ts.push(tMin + (tMax - tMin) * (s / SAMPLES));
         }
@@ -14373,8 +14620,10 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
           );
         });
         const curve = new THREE.CatmullRomCurve3(points);
+        // v0.23l18: tube radius halved again 0.003 \u2192 0.0015 \u2014 the screenshot
+        // showed v0.23l17's lines were still visibly thick.
         const tube = new THREE.Mesh(
-          new THREE.TubeGeometry(curve, 8, 0.006, 4, false),
+          new THREE.TubeGeometry(curve, 8, 0.0015, 4, false),
           seamMat
         );
         tube.userData.skipOutline = true;
@@ -14656,24 +14905,26 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
     // when viewed against grass.
     const leafMatA = toonFlat({ color: 0x3aa838 });
     const leafMatB = toonFlat({ color: 0x60c860 });
+    // v0.23l17: lowered base Y of all fronds by 0.10u so the crown
+    // emerges FROM the ball rather than floating above it. Visually,
+    // the leaves should look like they're growing out of the top of
+    // the pineapple, with the lower part of each cone hidden inside
+    // the ball's upper hemisphere.
+    const BASE_Y_OFFSET = -0.10;
     // Center spike \u2014 tallest, vertical. Sits on-axis.
     const spike = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.45, 6), leafMatB);
-    spike.position.y = 0.225;
+    spike.position.y = 0.225 + BASE_Y_OFFSET;
     spike.userData.noOutline = true;
     g.add(spike);
     // Outer ring of 9 fronds \u2014 same pattern as buildHat_pineapple lines
     // 13407-13416 but at ~3\u00d7 scale to match the larger ball-skin attachment.
-    // Each leaf is a tall cone, position spread on a small base radius so
-    // they fan from a tight crown center, with mild outward tilt via the
-    // SAME math the hat uses: rotation.z = -cos(a) * 0.3, rotation.x = sin(a) * 0.3.
-    // This produces a clean upward-and-outward fan with no side-droop.
     for(let i = 0; i < 9; i++) {
       const a = (i / 9) * Math.PI * 2;
       const leafLen = 0.30 + (i % 2) * 0.10;
       const leafMat = (i % 2 === 0) ? leafMatA : leafMatB;
       const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.06, leafLen, 5), leafMat);
       const r = 0.07 + (i % 2) * 0.04;
-      leaf.position.set(Math.cos(a) * r, leafLen / 2, Math.sin(a) * r);
+      leaf.position.set(Math.cos(a) * r, leafLen / 2 + BASE_Y_OFFSET, Math.sin(a) * r);
       leaf.rotation.z = -Math.cos(a) * 0.3;
       leaf.rotation.x = Math.sin(a) * 0.3;
       leaf.userData.noOutline = true;
@@ -14966,7 +15217,7 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
     { id: 'crystal_ball',  category: 'skin', xpCost: 2900 },
     { id: 'disco_ball',    category: 'skin', xpCost: 3100 },
     { id: 'skull',         category: 'skin', xpCost: 3400 },
-  ];
+  ].map(item => ({ ...item, xpCost: item.xpCost * 2 })); // v0.23l17: 2\u00d7 across the board per Adam \u2014 cosmetics should feel earned, not handed out by the 3rd run. Multiplier applied here rather than re-typing every literal so the relative curve stays readable.
 
   // Helper: check every XP-gated unlock against meta.xp, push newly
   // unlocked ids into meta.unlocks.cosmetics, and return the list of
@@ -19157,6 +19408,44 @@ function updatePhysics(dt) {
     }
   }
 
+  // v0.23l17: WALKIES heart pickup pre-pass. Mirrors the coin pre-pass
+  // above. Per Adam: "Walkies doesn't pick up hearts during a walk."
+  // Root cause was the same as the coin issue \u2014 the main heart pickup
+  // loop (~line 22506) is gated by G.rolling, which is false during
+  // walkies. Replicate just the proximity-collect + heal logic so hearts
+  // collect during a walk the way coins do.
+  if(G.walkiesActive && !G.rolling && !G.inHole && G.heartMeshes && G.heartMeshes.length) {
+    const _ghostHW = G.ghostBallActive;
+    if(!_ghostHW) {
+      const _HEART_R_W = 0.85 * (TILE_SIZE / TILE_SIZE_BASE);
+      for(const h of G.heartMeshes) {
+        if(h.collected) continue;
+        const dx = G.ballPos.x - h.wx;
+        const dz = G.ballPos.z - h.wz;
+        const dist2D = Math.hypot(dx, dz);
+        if(dist2D < _HEART_R_W) {
+          h.collected = true;
+          if(G.courseGroup) {
+            if(h.pivot) G.courseGroup.remove(h.pivot);
+            if(h.glowMesh) G.courseGroup.remove(h.glowMesh);
+          }
+          // Mirror the heal math from the rolling-path pickup at ~line 22506.
+          const _bhHeal = (typeof getPerkField === 'function')
+            ? getPerkField('extra_heart','heartHeal',2) : 2;
+          const healAmt = Math.min(_bhHeal, (G.hpMax || 10) - (G.hp || 0));
+          if(healAmt > 0) {
+            G.hp = Math.min(G.hpMax || 10, (G.hp || 0) + healAmt);
+            if(typeof spawnHpHealPopup === 'function') spawnHpHealPopup(healAmt);
+            showToast(`\ud83d\udc96 +${healAmt} HP!`, 1200);
+            if(typeof updateUI === 'function') updateUI();
+          } else {
+            showToast(`\ud83d\udc96 Full HP!`, 900);
+          }
+        }
+      }
+    }
+  }
+
   // v0.23g: PRE-SWING MOVER WAKE-UP ──────────────────────
   // While the ball is stationary in aim mode, the early-return below skips
   // ALL collision branches — so movers (sliders, spinners, conveyors,
@@ -20916,6 +21205,17 @@ function updatePhysics(dt) {
       const rockBaseH = G.heightMap.length ? getTerrainHeight(rock.wx, rock.wz) : 0;
       const rockForgive = rockBaseH + rock.r * 0.55;
       if(G.ballPos.y - BALL_R > rockForgive && G.ballVel.y > -0.5) continue;
+      // v0.23l17: tighter forgiveness band \u2014 if the ball's BOTTOM is clearly
+      // above the rock's actual TOP (rock.r*0.8 above base), skip collision
+      // regardless of descent velocity. Per Adam: "I just tried to jump
+      // over one and was way above, but bumped into an invisible object
+      // above a rock." The old forgive (r*0.55, descent-rate-gated) only
+      // helped while ascending; a fast descent from a high jump would
+      // still clip the rock's XZ cylinder even when far above the visible
+      // mesh. The new band gives a clean fly-over once the ball is fully
+      // past the dome regardless of vy.
+      const rockTopY = rockBaseH + rock.r * 0.8 + 0.05; // +5cm slop above visible top
+      if(G.ballPos.y - BALL_R > rockTopY) continue;
       // v0.23c: First-jump fly-over for low forward rocks. Rock "top" is
       // approximately rockBaseH + rock.r * 0.8 (squashed sphere). If that's
       // ≤3 ball-diameters from the terrain AND it's in front of the ball,
@@ -21118,7 +21418,12 @@ function updatePhysics(dt) {
   // ── Spike hemisphere collision ─────────────────────────
   // Dangerous! Hitting one = heavy shake + lose a life. Strong bounce-back.
   // v0.20c: cannonball is now spike-immune. Description updated to match.
-  if(G.spikes && G.spikes.length && !ghostActive && !G._cannonballActive && !G._skaterActive) {
+  // v0.23l17: Pinball is also spike-immune. Per Adam: "I still lose 2 hp
+  // in pinball mode hitting red spikes when I'm supposed to be invulnerable."
+  // Pinball's perk text already says "12 seconds of invulnerable" \u2014 the
+  // missing gate was here. Both red and white spikes now skip when pinball
+  // is active.
+  if(G.spikes && G.spikes.length && !ghostActive && !G._cannonballActive && !G._skaterActive && !G._pinballActive) {
     // v0.23g1: Dash invuln — brief window after a teleport-dash where the
     // ball can pass through spikes/dodgeballs without damage. Lets players
     // dash AROUND or THROUGH a spike that would otherwise have killed them.
@@ -31090,6 +31395,14 @@ function canPlayCard(cardId) {
     // Pre-swing: need a previous-shot path to rewind through.
     return Array.isArray(G._rewindBuf) && G._rewindBuf.length > 0;
   }
+  // v0.23l17: Goal Oriented is dual-context: PRE-swing it locks aim
+  // toward the hole; MID-swing it redirects the ball's current momentum
+  // toward the hole (the implementation already supports both branches
+  // at activateGoalOriented). Per Adam: "Goal oriented now not possible
+  // to arm during a swing like it originally was. Needs to be armable
+  // pre and during swing." The standard context:'pre' gate below would
+  // block this, so special-case it first.
+  if (cardId === 'goal_oriented') return true;
   if (def.context === 'during' && !G.rolling) return false;
   if (def.context === 'pre' && G.rolling) return false;
   if (def.context === 'post' && G.rolling) return false;
@@ -33851,8 +34164,17 @@ function activateWalkiesCard() {
   // v0.21f: prime _walkDir from the current aim arrow so walkies starts
   // moving in the direction the player is facing — no need to tap to
   // start the first step. Falls back to camera-back if shotDir is empty.
+  // v0.23l17: switched the primary source to G.shotAngle (which is always
+  // current in aim mode because it drives the visible aim arrow) instead
+  // of G.shotDir (which only updates when a shot is fired or the player
+  // drags the arrow). Was: walkies would inherit the LAST FIRED shot's
+  // direction, not the current aim. Per Adam: "Walkies should always
+  // start walking in the direction of your arrow (right now its very
+  // inconsistent)." shotDir is kept as a tertiary fallback.
   let _initDir;
-  if(G.shotDir && G.shotDir.length() > 0.01) {
+  if(typeof G.shotAngle === 'number' && isFinite(G.shotAngle)) {
+    _initDir = { x: Math.sin(G.shotAngle), z: Math.cos(G.shotAngle) };
+  } else if(G.shotDir && G.shotDir.length() > 0.01) {
     _initDir = { x: G.shotDir.x, z: G.shotDir.z };
   } else {
     _initDir = { x: -Math.sin(G.camTheta), z: -Math.cos(G.camTheta) };
@@ -36093,6 +36415,180 @@ function spawnVhsRewindEffect() {
   setTimeout(() => { overlay.remove(); }, 950);
 }
 
+// v0.23l19: Continuous VHS overlay that lives for the FULL duration of
+// rewind (not just the 700ms one-shot above). Designed to be subtle so
+// it doesn't obscure gameplay: low-opacity scanlines + faint chromatic
+// fringe + animated tracking band + persistent tape-spin hum.
+// Cleaned up via stopVhsRewindLoop().
+// State stashed on G._vhsLoop = { overlay, hum, sub, lfo, humGain, subGain, canvas }
+function startVhsRewindLoop() {
+  // Don't double-start. If an earlier loop is still running, leave it.
+  if(G._vhsLoop && G._vhsLoop.overlay && document.body.contains(G._vhsLoop.overlay)) {
+    return;
+  }
+  // ── Visual: scanlines + fringe + scrolling tracking band ──
+  const overlay = document.createElement('div');
+  overlay.style.cssText = `
+    position:fixed; inset:0; pointer-events:none; z-index:9998;
+    background:
+      repeating-linear-gradient(
+        0deg,
+        rgba(255,255,255,0.025) 0px,
+        rgba(255,255,255,0.025) 1px,
+        rgba(0,0,0,0.06) 2px,
+        rgba(0,0,0,0.06) 3px
+      );
+    mix-blend-mode:overlay;
+    opacity:0;
+    transition:opacity 0.18s ease-in;
+  `;
+  // Soft chromatic fringe at the screen edges \u2014 thinner than the one-shot.
+  const fringe = document.createElement('div');
+  fringe.style.cssText = `
+    position:absolute; inset:0;
+    box-shadow:
+      inset 6px 0 18px rgba(255,0,80,0.16),
+      inset -6px 0 18px rgba(0,180,255,0.16);
+    opacity:0.7;
+  `;
+  // Scrolling tracking band. CSS keyframes injected once.
+  if(!document.getElementById('vhs-loop-style')) {
+    const st = document.createElement('style');
+    st.id = 'vhs-loop-style';
+    st.textContent = `
+      @keyframes vhs-loop-band {
+        0%   { top:-50px; opacity:0; }
+        15%  { opacity:0.55; }
+        85%  { opacity:0.55; }
+        100% { top:110%; opacity:0; }
+      }
+      @keyframes vhs-loop-rew-blink { 0%,49%{opacity:0.85} 50%,100%{opacity:0.25} }
+    `;
+    document.head.appendChild(st);
+  }
+  const band = document.createElement('div');
+  band.style.cssText = `
+    position:absolute; left:0; right:0; height:32px;
+    top:-50px;
+    background:
+      linear-gradient(to bottom,
+        transparent 0%,
+        rgba(255,255,255,0.40) 30%,
+        rgba(255,255,255,0.70) 50%,
+        rgba(255,255,255,0.40) 70%,
+        transparent 100%);
+    filter:blur(1.5px);
+    mix-blend-mode:screen;
+    animation: vhs-loop-band 1.6s linear infinite;
+  `;
+  // Subtle "REW" marker in the corner that stays for the duration.
+  const rew = document.createElement('div');
+  rew.style.cssText = `
+    position:absolute; top:18px; left:22px;
+    color:#ff5566; font-family:'Courier New',monospace;
+    font-size:0.95rem; font-weight:900;
+    text-shadow:0 0 6px #ff334d, 0 1px 0 rgba(0,0,0,0.4);
+    letter-spacing:1.5px;
+    animation: vhs-loop-rew-blink 0.32s steps(2) infinite;
+  `;
+  rew.textContent = '\u25c0\u25c0 REW';
+  overlay.appendChild(fringe);
+  overlay.appendChild(band);
+  overlay.appendChild(rew);
+  document.body.appendChild(overlay);
+  // Soft canvas filter \u2014 lighter than the one-shot so gameplay stays readable.
+  // v0.23l19 hotfix: do NOT snapshot canvas.style.filter here. The one-shot
+  // spawnVhsRewindEffect fires alongside this on activation; if its 700ms
+  // restore happens BEFORE we snapshot, we save '' (correct). But if we
+  // snapshot first, we snapshot the one-shot's transient blur+saturate and
+  // then "restore" it on stop, permanently blurring the canvas. Solution:
+  // never save \u2014 always force-clear on stop. Other systems (death flash,
+  // OOB shake) set their own filters momentarily and clear them themselves,
+  // so a hard-clear is safe.
+  const canvas = document.querySelector('canvas');
+  if(canvas) {
+    canvas.style.filter = 'saturate(1.15) hue-rotate(-3deg) contrast(1.05)';
+  }
+  // Fade in on next frame.
+  requestAnimationFrame(() => { overlay.style.opacity = '1'; });
+  // ── Audio: looping tape-spin hum. Low-pass filtered noise + slowly
+  // wobbling sub-tone. Lives until stopVhsRewindLoop.
+  let hum = null, sub = null, humGain = null, subGain = null, lfo = null;
+  if(typeof AC !== 'undefined' && AC) {
+    try {
+      const ac = getAC(), t = ac.currentTime;
+      // Wide pink-ish noise filtered down to feel like tape friction.
+      if(typeof makeNoiseBuffer === 'function') {
+        const buf = makeNoiseBuffer(2.0, true);
+        hum = ac.createBufferSource();
+        hum.buffer = buf;
+        hum.loop = true;
+        const lp = ac.createBiquadFilter();
+        lp.type = 'lowpass';
+        lp.frequency.setValueAtTime(800, t);
+        lp.Q.value = 0.6;
+        humGain = ac.createGain();
+        humGain.gain.setValueAtTime(0.0001, t);
+        humGain.gain.exponentialRampToValueAtTime(0.045, t + 0.15);
+        hum.connect(lp); lp.connect(humGain); humGain.connect(getACDest());
+        hum.start(t);
+      }
+      // Wobbling sub-tone, ~80Hz, gentle vibrato \u2014 the "tape reel" feel.
+      sub = ac.createOscillator();
+      sub.type = 'sine';
+      sub.frequency.setValueAtTime(82, t);
+      subGain = ac.createGain();
+      subGain.gain.setValueAtTime(0.0001, t);
+      subGain.gain.exponentialRampToValueAtTime(0.018, t + 0.2);
+      sub.connect(subGain); subGain.connect(getACDest());
+      sub.start(t);
+      // Slow LFO that modulates the sub frequency for the wobble.
+      lfo = ac.createOscillator();
+      lfo.type = 'sine';
+      lfo.frequency.setValueAtTime(3.8, t);
+      const lfoGain = ac.createGain();
+      lfoGain.gain.setValueAtTime(6, t); // \u00b16 Hz wobble
+      lfo.connect(lfoGain); lfoGain.connect(sub.frequency);
+      lfo.start(t);
+    } catch(e){}
+  }
+  G._vhsLoop = { overlay, hum, sub, lfo, humGain, subGain, canvas };
+}
+
+function stopVhsRewindLoop() {
+  const L = G._vhsLoop;
+  if(!L) return;
+  G._vhsLoop = null;
+  // Audio fade-out then stop.
+  if(typeof AC !== 'undefined' && AC) {
+    try {
+      const ac = getAC(), t = ac.currentTime;
+      if(L.humGain) L.humGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+      if(L.subGain) L.subGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+      if(L.hum) try { L.hum.stop(t + 0.22); } catch(e){}
+      if(L.sub) try { L.sub.stop(t + 0.22); } catch(e){}
+      if(L.lfo) try { L.lfo.stop(t + 0.22); } catch(e){}
+    } catch(e){}
+  }
+  // Visual fade-out then remove.
+  if(L.overlay) {
+    L.overlay.style.opacity = '0';
+    setTimeout(() => { try { L.overlay.remove(); } catch(e){} }, 240);
+  }
+  // v0.23l19 hotfix: HARD-CLEAR the canvas filter rather than restoring a
+  // snapshot. The snapshot approach permanently blurred the canvas when
+  // the one-shot's transient filter was captured into the loop's "saved"
+  // state. Plus schedule a second clear 1.0s later to catch the case
+  // where the one-shot's own 700ms timer fires AFTER stop, re-applying
+  // its restore (which would be the pre-loop filter, but only if it
+  // snapshotted BEFORE the loop overwrote it \u2014 messy ordering). Either
+  // way, two unconditional clears guarantees the blur is gone.
+  if(L.canvas) {
+    try { L.canvas.style.filter = ''; } catch(e){}
+    setTimeout(() => { try { L.canvas.style.filter = ''; } catch(e){} }, 1000);
+  }
+}
+
 function activateReverse() {
   if(!G.rolling) return;
   G.ballVel.x *= -1;
@@ -36216,9 +36712,17 @@ function tickTimeRewindPlayback(dt) {
     _commitTimeRewindSettle({fromBufferExhausted: true});
     return false;
   }
-  // Update ball mesh position for rendering this frame.
-  if(G.ballMesh) {
-    G.ballMesh.position.set(G.ballPos.x, G.ballPos.y, G.ballPos.z);
+  // Update ball position for rendering this frame.
+  // v0.23l19: was updating G.ballMesh.position (the white-sphere CHILD),
+  // not G.ball.position (the GROUP). For composite skins like soccer
+  // ball that build pentagon decals + seam tubes as additional children
+  // of the group, only the core sphere followed the rewind path \u2014 the
+  // decals stayed glued to the group origin where it was at activation,
+  // and after commit the ballMesh stayed displaced from its parent
+  // for the rest of the hole. Now matching the normal physics path
+  // which uses G.ball.position.copy(G.ballPos).
+  if(G.ball) {
+    G.ball.position.set(G.ballPos.x, G.ballPos.y, G.ballPos.z);
   }
   // Spawn a sparkle trail every couple of frames so the rewind reads visually.
   G._rewindSparkleAccum = (G._rewindSparkleAccum || 0) + dt;
@@ -36283,6 +36787,15 @@ function activateTimeRewind() {
   }
   if(typeof triggerShake === 'function') triggerShake('med');
   if(typeof sfxTimeRewindStart === 'function') sfxTimeRewindStart();
+  // v0.23l19: fire the one-shot VHS visual that already exists (defined
+  // at ~line 36246) \u2014 was unwired until now. Plus start a lighter
+  // CONTINUOUS overlay that lives until commit, so the rewind reads
+  // visually for its whole duration instead of just the first 700ms.
+  // Per Adam: "add a light but juicy VHS rewind vfx + sfx when you're
+  // rewinding (but don't make it too busy onscreen and obscure the
+  // player's view)."
+  if(typeof spawnVhsRewindEffect === 'function') spawnVhsRewindEffect();
+  if(typeof startVhsRewindLoop === 'function') startVhsRewindLoop();
   // Track usage for style/trick combos (mirrors reverse pattern)
   G._timeRewindUsedThisShot = true;
   if(typeof recordStyleEvent === 'function') recordStyleEvent('time_rewind_card');
@@ -36330,21 +36843,13 @@ function _commitTimeRewindSettle({fromBufferExhausted}) {
     if(typeof assignCardsToSlots === 'function') assignCardsToSlots();
     if(typeof updateHandUI === 'function') updateHandUI();
   }
-  // v0.23l16: Mid-air commit \u2014 let the ball drop naturally instead of
-  // floating in place. Per Adam: "when you time rewind and you stop in
-  // mid-air, the ball should drop down with normal gravity." Detect
-  // airborne state (ball above its resting terrain height by > 0.25u);
-  // if airborne, zero ONLY horizontal velocity so gravity in the substep
-  // loop pulls the ball down. Vertical vel is also zeroed so the moment
-  // of "stopped in mid-air" reads cleanly before the drop begins.
-  // The natural-settle path then takes over once the ball lands.
-  const _terrAtBall = (G.heightMap && G.heightMap.length)
-    ? getTerrainHeight(G.ballPos.x, G.ballPos.z) : 0;
-  const _restingY = _terrAtBall + FLOOR_H/2 + BALL_R;
-  const _isAirborneAtCommit = G.ballPos.y > _restingY + 0.25;
-  // Zero velocity so the ball settles HERE rather than carrying any leftover
-  // momentum. The normal "G.rolling = false on rest" detection fires next
-  // frame because ballVel is zero.
+  // v0.23l16/l17: After the rewind commits, let physics keep running on
+  // the ball \u2014 whether it's airborne (gravity drops it) or grounded (any
+  // active passive like gravity_pull or magnet_field can pull it). We
+  // still zero the velocity here so the ball isn't carrying leftover
+  // momentum from before the rewind, but G.rolling stays true and the
+  // natural-settle path transitions to aim mode when the ball comes to
+  // rest. See the branching block further down for finalizeShot wiring.
   G.ballVel.set(0, 0, 0);
 
   // v0.23j: Defensive visual reset — a rewind interrupted mid-anything
@@ -36360,6 +36865,12 @@ function _commitTimeRewindSettle({fromBufferExhausted}) {
     G.ballMesh.visible = true;
     const _bvs = (typeof getBallVisualScale === 'function') ? getBallVisualScale() : 1.0;
     G.ballMesh.scale.setScalar(_bvs);
+    // v0.23l19: defensively reset the core sphere's LOCAL position to (0,0,0)
+    // so it sits at the group origin. Earlier builds incorrectly moved
+    // G.ballMesh.position instead of G.ball.position during rewind playback,
+    // leaving the core sphere offset from the group origin for the rest of
+    // the hole \u2014 making composite skins like soccer ball appear "hollow."
+    G.ballMesh.position.set(0, 0, 0);
   }
   if(G.ballShadow) G.ballShadow.visible = true;
   // Clear any in-progress visual hooks that could keep stretching/hiding
@@ -36403,40 +36914,30 @@ function _commitTimeRewindSettle({fromBufferExhausted}) {
   // v0.23j: also handles the pre-swing rewind path (G.rolling was already
   // false because the previous shot finalized). In that case finalizeShot
   // has already run, so we skip it but still pop back into aim mode cleanly.
-  // v0.23l16: when committed mid-air, DON'T force aim mode \u2014 leave G.rolling
-  // true so gravity drops the ball, and let the natural-settle path catch
-  // it once it lands. The horizontal velocity was already zeroed above, so
-  // it'll fall straight down. finalizeShot still runs here for combo/over-
-  // par accounting since the shot is conceptually "over" the moment Time
-  // Rewind commits \u2014 the drop is just the visual epilogue.
-  if(_isAirborneAtCommit && G.rolling) {
-    // Run finalize/damage now so we don't accidentally fire them twice
-    // when the natural-settle path eventually closes out the drop.
+  // v0.23l16: airborne commits keep G.rolling true so gravity can drop the
+  // ball naturally.
+  // v0.23l17: ground commits ALSO keep G.rolling true so passive physics
+  // (gravity_pull perk, hole defenses like magnet_field, conveyors,
+  // perpetual_motion, sticky surfaces) can act on the rewound ball.
+  // Per Adam: "I did a time rewind putting the ball very close to the
+  // hole which had the gravitational pull perk (but the gravitational
+  // pull didn't impact the ball, which it should have)." We still run
+  // finalizeShot + over-par damage NOW (the rewind ends the player's
+  // active swing), but the physics simulation continues until the ball
+  // naturally settles via the rolling-slow path \u2014 which will fire within
+  // 0.3s if no passive is acting, or pull the ball into the hole if one
+  // is. If no passive moves the ball, it settles into aim mode normally.
+  if(G.rolling) {
     if(!G._shotFinalized) {
       G._shotFinalized = true;
       if(typeof finalizeShot === 'function') finalizeShot(false);
     }
     if(typeof applyOverParDamageIfNeeded === 'function') applyOverParDamageIfNeeded();
-    // Keep G.rolling = true; the substep gravity will pull the ball down.
-    // The rolling-slow path at the end of updatePhysics will fire once the
-    // ball lands and slows, transitioning to aim mode normally.
+    // Keep G.rolling = true; substep physics will act on the ball this
+    // frame (gravity_pull, conveyors, magnet fields, etc.). The rolling-
+    // slow path settles into aim mode naturally if nothing pushes the ball.
     G.rollingSlowTimer = 0;
     if(typeof updateUndoBtn === 'function') updateUndoBtn();
-  } else if(G.rolling) {
-    G.rolling = false;
-    G.rollingSlowTimer = 0;
-    if(!G._shotFinalized) {
-      G._shotFinalized = true;
-      if(typeof finalizeShot === 'function') finalizeShot(false);
-    }
-    if(typeof applyOverParDamageIfNeeded === 'function') applyOverParDamageIfNeeded();
-    G.aimMode = true;
-    if(typeof aimManualOverride !== 'undefined') aimManualOverride = false;
-    if(typeof syncAimToCamera === 'function') syncAimToCamera();
-    if(typeof createAimArrow === 'function') createAimArrow();
-    if(typeof updateUndoBtn === 'function') updateUndoBtn();
-    // Don't draw extra cards — Time Rewind is mid-shot, the draw already
-    // happened at fireShot. Aim mode is just to set up the NEXT swing.
   } else {
     // Pre-swing rewind (v0.23j): G.rolling was already false. The previous
     // shot already finalized. We just need to re-arm the aim arrow at the
@@ -36466,6 +36967,8 @@ function _commitTimeRewindSettle({fromBufferExhausted}) {
   }
   if(typeof triggerShake === 'function') triggerShake('light');
   if(typeof sfxTimeRewindStop === 'function') sfxTimeRewindStop();
+  // v0.23l19: tear down the continuous VHS overlay + hum.
+  if(typeof stopVhsRewindLoop === 'function') stopVhsRewindLoop();
 }
 
 // Clear the rewind buffer (called on swing-start, hole-out, OOB return,
@@ -36478,6 +36981,9 @@ function _clearRewindBuffer() {
     G._rewindState = 'idle';
     G._rewindPlaybackAccum = 0;
     G._rewindSavedVel = null;
+    // v0.23l19: ensure the continuous VHS overlay tears down on any
+    // forced rewind-state clear (OOB return, hole-out, etc.).
+    if(typeof stopVhsRewindLoop === 'function') stopVhsRewindLoop();
   }
 }
 
@@ -52118,6 +52624,28 @@ function animate(now) {
     }
   }
 
+  // v0.23l17: Hand Brake reminder badge \u2014 visible whenever the player
+  // owns the hand_brake perk and is in active play. .rolling class adds
+  // the brighter "hot" pulse when the brake is actually engageable
+  // (ball moving). Cheap per-frame DOM toggle so the badge auto-syncs
+  // to perk acquisition/loss without a separate event hook.
+  {
+    const _hbEl = document.getElementById('hand-brake-badge');
+    if(_hbEl) {
+      const _hbOwned = !!(G.modifiers && G.modifiers.some(m => m.id === 'hand_brake'));
+      const _hbVisible = _hbOwned && G.state === 'playing' && !G.inHole;
+      if(_hbVisible) {
+        if(_hbEl.style.display !== 'block') _hbEl.style.display = 'block';
+        const _hbHot = !!G.rolling;
+        if(_hbHot && !_hbEl.classList.contains('rolling')) _hbEl.classList.add('rolling');
+        else if(!_hbHot && _hbEl.classList.contains('rolling')) _hbEl.classList.remove('rolling');
+      } else {
+        if(_hbEl.style.display !== 'none') _hbEl.style.display = 'none';
+        if(_hbEl.classList.contains('rolling')) _hbEl.classList.remove('rolling');
+      }
+    }
+  }
+
   // ── Hat follow (v0.19c) ──
   // Hat is a scene sibling of the ball, not a child, so it stays upright
   // as the ball rotates for visual roll. Position tracks G.ballPos — the
@@ -53546,16 +54074,62 @@ function animate(now) {
   // Runs regardless of game state so the bounce completes even if the
   // player pauses. Skips when portal is null or animation is done.
   tickPortalSpawnAnims(dt);
-  // v0.23l15: Mobile half-rate OutlinePass depth pass. Even frames do a
-  // full depth re-render; odd frames reuse the depth texture from the
-  // previous frame. Color buffer (the actual rendered scene) still updates
-  // at 60fps so the world doesn't flicker \u2014 only the outline silhouette
-  // source lags 1 frame on fast motion (spin bars, slide blocks, the ball
-  // in flight). The composite remains every-frame so outlines are always
-  // visible. Desktop renders depth every frame.
+  // v0.23l15: Mobile half-rate OutlinePass depth pass.
+  // v0.23l21: Motion-adaptive \u2014 the half-rate skip only kicks in when
+  // the scene is essentially static. Any of the following forces a full
+  // depth render this frame (60fps):
+  //   (a) ball is rolling AND moving fast (horizontal speed > 1.5)
+  //   (b) camera position moved meaningfully since last frame (\u22650.05u)
+  //   (c) camera rotation changed meaningfully (quat dot < 0.9999)
+  // Otherwise we still allow the every-other-frame skip pattern, so
+  // aiming / menu / idle continue to save the GPU time. The counter
+  // toggles every frame regardless of motion, so when motion stops the
+  // half-rate cadence resumes cleanly without phase glitches.
+  // Desktop is untouched (the outer _GGW_isMobile gate).
   if (_GGW_isMobile && outlinePass) {
     _outlineFrameCounter = (_outlineFrameCounter + 1) & 1;
-    outlinePass._skipDepthThisFrame = (_outlineFrameCounter === 1);
+    // Motion check
+    let _sceneInMotion = false;
+    // (a) ball horizontal speed
+    if (G && G.rolling && G.ballVel) {
+      const _vxz = Math.hypot(G.ballVel.x, G.ballVel.z);
+      if (_vxz > _OUTLINE_BALL_SPEED_THRESH) _sceneInMotion = true;
+    }
+    // (b)+(c) camera deltas. Lazy-init prev refs on first frame; treat
+    // the first frame as "in motion" so we always pay the full depth
+    // cost on startup (cheap one-shot).
+    if (!_sceneInMotion && camera) {
+      if (!_prevCamPos) {
+        _prevCamPos = camera.position.clone();
+        _prevCamQuat = camera.quaternion.clone();
+        _sceneInMotion = true;
+      } else {
+        const _dx = camera.position.x - _prevCamPos.x;
+        const _dy = camera.position.y - _prevCamPos.y;
+        const _dz = camera.position.z - _prevCamPos.z;
+        const _posSq = _dx*_dx + _dy*_dy + _dz*_dz;
+        if (_posSq > _OUTLINE_CAM_POS_DELTA_SQ) {
+          _sceneInMotion = true;
+        } else {
+          // Quaternion dot. abs() because q and -q represent the same rot.
+          const _qd = Math.abs(
+            camera.quaternion.x * _prevCamQuat.x +
+            camera.quaternion.y * _prevCamQuat.y +
+            camera.quaternion.z * _prevCamQuat.z +
+            camera.quaternion.w * _prevCamQuat.w
+          );
+          if (_qd < _OUTLINE_CAM_QUAT_DOT_MIN) _sceneInMotion = true;
+        }
+      }
+    }
+    // Skip depth ONLY when both (a) it's an odd frame AND (b) the scene
+    // is static. Any motion or any even frame \u2192 full depth pass.
+    outlinePass._skipDepthThisFrame = (_outlineFrameCounter === 1) && !_sceneInMotion;
+    // Cache for next frame's delta.
+    if (camera && _prevCamPos) {
+      _prevCamPos.copy(camera.position);
+      _prevCamQuat.copy(camera.quaternion);
+    }
   }
   composer.render();
 }
