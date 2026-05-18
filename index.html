@@ -1200,6 +1200,154 @@ font-size:0.55rem; letter-spacing:2px; text-transform:uppercase;
 color:rgba(255,255,255,0.65); margin-bottom:2px; text-align:left; width:100%; max-width:300px;
 }
 
+/* ── Weekly Challenges (v0.23m) ──────────────────────────
+   Main-menu button mimics the play-btn family but gets a gold accent
+   to signal it as an event. Overlay sits above #overlay with its own
+   transparent dark backdrop and a vertically-stacked card list. */
+.weekly-btn {
+font-family:'Lato', sans-serif;
+font-size:0.85rem; font-weight:700;
+letter-spacing:1px; text-transform:uppercase;
+padding:10px 28px;
+margin-top:6px;
+background:rgba(245,200,66,0.18);
+border:1px solid rgba(245,200,66,0.55);
+color:#f5c842;
+border-radius:50px;
+cursor:pointer;
+display:inline-flex; align-items:center; gap:8px; justify-content:center;
+}
+.weekly-btn:active { background:rgba(245,200,66,0.28); }
+
+#weekly-overlay {
+position:fixed; inset:0; z-index:210;
+background:rgba(20,40,15,0.92);
+backdrop-filter:blur(8px);
+display:none; flex-direction:column;
+align-items:center; justify-content:flex-start;
+padding:24px 16px 40px;
+overflow-y:auto;
+}
+#weekly-overlay.open { display:flex; }
+.weekly-header {
+width:100%; max-width:440px;
+display:flex; align-items:center; justify-content:space-between;
+margin-bottom:12px;
+}
+.weekly-title {
+font-family:'Playfair Display', serif;
+font-size:1.5rem; font-weight:700;
+color:#fff;
+letter-spacing:1px;
+}
+.weekly-subtitle {
+font-family:'Lato', sans-serif;
+font-size:0.65rem; letter-spacing:2px; text-transform:uppercase;
+color:rgba(245,200,66,0.85);
+margin-top:2px;
+}
+.weekly-close {
+font-size:1.4rem; font-weight:700;
+background:rgba(255,255,255,0.18);
+color:#fff;
+border:1px solid rgba(255,255,255,0.3);
+border-radius:50%;
+width:38px; height:38px;
+display:flex; align-items:center; justify-content:center;
+cursor:pointer;
+}
+.weekly-close:active { background:rgba(255,255,255,0.35); }
+
+.weekly-list {
+width:100%; max-width:440px;
+display:flex; flex-direction:column; gap:14px;
+}
+
+/* One challenge "card" — name + two side-by-side rounds (9h / 18h) */
+.weekly-card {
+background:rgba(255,255,255,0.10);
+border:1px solid rgba(255,255,255,0.18);
+border-radius:14px;
+padding:12px;
+box-shadow:0 4px 18px rgba(0,0,0,0.18);
+}
+.weekly-card-name {
+font-family:'Playfair Display', serif;
+font-size:1.05rem; font-weight:700;
+color:#fff;
+margin-bottom:8px;
+display:flex; align-items:center; gap:8px;
+}
+.weekly-card-emoji { font-size:1.2rem; }
+.weekly-card-rounds {
+display:flex; gap:8px;
+}
+.weekly-round {
+flex:1;
+background:rgba(255,255,255,0.06);
+border:1px solid rgba(255,255,255,0.14);
+border-radius:10px;
+padding:10px 8px 8px;
+cursor:pointer;
+transition:transform 0.12s, background 0.15s, border-color 0.15s;
+text-align:center;
+}
+.weekly-round:hover { background:rgba(255,255,255,0.12); border-color:rgba(245,200,66,0.55); }
+.weekly-round:active { transform:scale(0.97); }
+.weekly-round-label {
+font-family:'Lato', sans-serif;
+font-size:0.55rem; letter-spacing:2px; text-transform:uppercase;
+color:rgba(255,255,255,0.6);
+margin-bottom:4px;
+}
+.weekly-round-seed {
+font-family:'Playfair Display', serif;
+font-size:0.95rem; font-weight:700; letter-spacing:1.5px;
+color:#fff;
+margin-bottom:4px;
+}
+.weekly-round-stars {
+font-size:0.85rem; color:#f5c842;
+letter-spacing:1px;
+margin-bottom:6px;
+}
+.weekly-round-stars .filled { color:#f5c842; }
+.weekly-round-stars .empty  { color:rgba(255,255,255,0.18); }
+.weekly-round-diff-label {
+font-family:'Lato', sans-serif;
+font-size:0.5rem; letter-spacing:1.5px; text-transform:uppercase;
+color:rgba(255,255,255,0.55);
+margin-bottom:6px;
+}
+.weekly-round-lb {
+font-family:'Lato', sans-serif;
+font-size:0.55rem;
+color:rgba(255,255,255,0.85);
+border-top:1px dashed rgba(255,255,255,0.18);
+padding-top:5px; margin-top:4px;
+line-height:1.5;
+text-align:left;
+}
+.weekly-round-lb-label {
+font-size:0.45rem; letter-spacing:1.5px; text-transform:uppercase;
+color:rgba(255,255,255,0.5);
+}
+.weekly-round-lb-score { color:#f5e67a; font-weight:700; }
+.weekly-round-lb-style { color:#e040fb; font-weight:700; }
+.weekly-round-lb-empty { color:rgba(255,255,255,0.4); font-style:italic; }
+.weekly-round-lb-global {
+margin-top:3px;
+color:rgba(255,255,255,0.5);
+font-style:italic;
+font-size:0.5rem;
+}
+
+/* Difficulty rarity accent — borders glow harder for ★5 to telegraph "spicy" */
+.weekly-round.diff-5 { border-color:rgba(255,80,80,0.55); }
+.weekly-round.diff-5:hover { border-color:rgba(255,120,120,0.85); }
+.weekly-round.diff-4 { border-color:rgba(255,180,80,0.4); }
+.weekly-round.diff-3 { border-color:rgba(150,220,150,0.35); }
+
 /* Undo button */
 #btn-undo {
 position:absolute;
@@ -3717,11 +3865,12 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
 
   <button class="play-btn" id="btn-start" onclick="confirmStartGame()">Tee Off</button>
   <button class="play-btn" id="btn-resume" style="display:none;margin-top:6px;background:rgba(80,180,80,0.85);font-size:0.85rem" onclick="resumeGame()">▶ Resume Run</button>
+  <button class="weekly-btn" onclick="openWeeklyPicker()">🗓️ Weekly Challenges</button>
   <button class="play-btn" onclick="openLocker()" style="margin-top:6px;background:rgba(167,139,250,0.18);border:1px solid rgba(167,139,250,0.5);color:#c4a7ff;font-size:0.85rem;padding:10px 28px">🎨 Locker Room</button>
   <button class="play-btn" onclick="openAchievements()" style="margin-top:6px;background:rgba(245,200,66,0.18);border:1px solid rgba(245,200,66,0.5);color:#f5c842;font-size:0.85rem;padding:10px 28px">🏆 Achievements</button>
   <button class="play-btn" id="btn-import-save" style="margin-top:6px;background:rgba(120,120,120,0.6);font-size:0.7rem;padding:8px 20px" onclick="importSaveFile()">📂 Import Save</button>
   <input type="file" id="import-save-input" accept=".ggwsave,application/json" style="display:none">
-  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.23l21</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Motion-adaptive mobile outline depth: 60fps when ball/camera moving, 30fps when idle. Kills the jitter on rolling ball + during camera pans, keeps the perf save when the world is static.</div></div>
+  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.23m1</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Bugfix: Weekly Challenges picker was hidden behind the menu overlay (z-index issue). Fixed.</div></div>
 
   <!-- v0.19j: Inline profile picker — skip the separate slot-picks screen -->
   <div class="section-label" style="margin-top:14px">Save Slot</div>
@@ -3729,6 +3878,20 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
 
   <div class="section-label" id="lb-title">Best Scores</div>
   <div class="lb-panel" id="lb-panel"></div>
+</div>
+
+<!-- v0.23m: Weekly Challenges picker. Sits above #overlay; populated by
+     renderWeeklyPicker(). Opens via openWeeklyPicker(); closes via the X
+     button or by selecting a challenge round. -->
+<div id="weekly-overlay">
+  <div class="weekly-header">
+    <div>
+      <div class="weekly-title">Weekly Challenges</div>
+      <div class="weekly-subtitle">Curated Seeds · Pre-Set Difficulty</div>
+    </div>
+    <div class="weekly-close" onclick="closeWeeklyPicker()" aria-label="Close">×</div>
+  </div>
+  <div class="weekly-list" id="weekly-list"></div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -4469,8 +4632,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.23l21';
-const CHANGE_NOTE = "v0.23l21: Motion-adaptive mobile outline depth: 60fps when ball/camera moving, 30fps when idle. Previous mobile half-rate depth pre-pass caused visible outline jitter on the ball during shots and on walls during camera pans; now the half-rate skip only kicks in when the scene is truly static (ball not moving fast AND camera not panning), so jitter disappears the moment anything's in motion. Desktop unchanged.";
+const GAME_VERSION = '0.23m1';
+const CHANGE_NOTE = "v0.23m1: Bugfix — Weekly Challenges button did nothing because the picker overlay was z-index:50 sitting behind the main menu overlay (z-index:100). Click handler was firing, picker was rendering, just invisible underneath the menu. Bumped weekly overlay to z-index:210 so it sits cleanly above the main menu. (Original v0.23m feature: 5 curated weekly challenges × 9h/18h independent seeds, ★3-5 difficulty pre-set bypassing unlock gate, character open, local + global LB stub.)";
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
@@ -4654,11 +4817,13 @@ function rollEliteOffer(playerFacingHoleNum, opts) {
   const candidates = Object.values(ELITE_ARCHETYPES)
     .filter(a => a.enabled && tiers.includes(a.tier));
   if(candidates.length === 0) return null; // safety: nothing enabled
-  const archetype = candidates[Math.floor(Math.random() * candidates.length)];
+  // v0.23l22: rngReward() — elite archetype + reward pool seeded per seed,
+  // independent of shop/deck/course streams.
+  const archetype = candidates[Math.floor(rngReward() * candidates.length)];
   // v0.20t3: archetype can supply customRewardPool to override its tier's pool.
   const rewardPool = archetype.customRewardPool || ELITE_TIER_REWARD_POOLS[archetype.tier] || [];
   if(rewardPool.length === 0) return null;
-  const rewardId = rewardPool[Math.floor(Math.random() * rewardPool.length)];
+  const rewardId = rewardPool[Math.floor(rngReward() * rewardPool.length)];
   const reward = ELITE_REWARDS[rewardId];
   return { archetype, reward };
 }
@@ -4876,26 +5041,79 @@ window.getDifficultyMods = getDifficultyMods;
 // Default to Standard (3★) if nothing set yet. G._diffMods is refreshed in startGame.
 G._diffMods = getDifficultyMods(3);
 
-// ── Seeded PRNG (mulberry32) ──────────────────────────
-// All Math.random() calls inside generatePuttPuttCourse are replaced with rng()
-// so the same seed always produces the same 9-hole layout.
+// ── Seeded PRNG (mulberry32) — NAMED STREAMS (v0.23l22) ──────
+// Each stream has its own state derived from the root seed via FNV-1a hash
+// of (rootSeed + ':' + streamName). Independent streams mean player choices
+// (rerolls, purchases, card play order) in one system can't desync another.
+// Course layout is locked to the seed regardless of what the player does
+// in the shop or with their deck.
+//
+// Streams:
+//   course   — generatePuttPuttCourse and any hole-layout randomness
+//   shop     — shop offerings (cards + perks), reroll, forced hard picks,
+//              upgrade-slot subset shuffle, voucher rolls
+//   deck     — shuffleDeck (Fisher-Yates), Clone insert position, mulligan
+//   reward   — elite archetype + reward pool picks
+//
+// Cosmetic randomness (particles, sound pitch, screen shake jitter, sky
+// puffs, etc.) intentionally stays on Math.random() so frame-rate variation
+// or skipped frames can't desync gameplay streams.
+const _rngStates = { course: 0, shop: 0, deck: 0, reward: 0 };
+
+// Legacy alias — many call sites use rng() for course/layout generation.
+// Kept as a getter onto the course stream state so existing code Just Works.
 let _rngState = 0;
-function seedRng(seed) {
-  // Hash the seed string to a uint32
+
+function _hashSeedString(s) {
   let h = 2166136261 >>> 0;
-  for(let i = 0; i < seed.length; i++) {
-    h ^= seed.charCodeAt(i);
+  for(let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
     h = Math.imul(h, 16777619) >>> 0;
   }
-  _rngState = h || 1;
+  return h || 1;
 }
-function rng() {
-  // mulberry32
-  let t = (_rngState += 0x6D2B79F5) >>> 0;
+
+function seedRng(seed) {
+  // Re-derive every stream from the same root seed. Stream names are
+  // appended so each stream gets a distinct starting state.
+  _rngStates.course = _hashSeedString(seed + ':course');
+  _rngStates.shop   = _hashSeedString(seed + ':shop');
+  _rngStates.deck   = _hashSeedString(seed + ':deck');
+  _rngStates.reward = _hashSeedString(seed + ':reward');
+  // Keep legacy _rngState in sync with course stream for any out-of-band
+  // code that reads it directly. _rngState mutates via rng() through the
+  // course stream, so this is just the initial mirror.
+  _rngState = _rngStates.course;
+}
+
+function _stepMulberry32(stateKey) {
+  let t = (_rngStates[stateKey] = (_rngStates[stateKey] + 0x6D2B79F5) >>> 0);
   t = Math.imul(t ^ (t >>> 15), t | 1) >>> 0;
   t ^= t + Math.imul(t ^ (t >>> 7), t | 61) >>> 0;
   return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 }
+
+// Course / layout stream — the default rng() used by generatePuttPuttCourse
+// and all existing hole-generation code. Behaves identically to the
+// pre-v0.23l22 implementation for the course stream specifically.
+function rng() {
+  const v = _stepMulberry32('course');
+  _rngState = _rngStates.course; // keep legacy mirror current
+  return v;
+}
+
+// Shop stream — card/perk offerings, reroll picks, upgrade-slot shuffle,
+// forced hard-shop perk swap, voucher rolls. Isolated from course so
+// rerolling doesn't shift hole 3's layout.
+function rngShop() { return _stepMulberry32('shop'); }
+
+// Deck stream — shuffle order, Clone insert position, any in-run deck
+// reordering. Isolated from shop so a purchase doesn't change draw order.
+function rngDeck() { return _stepMulberry32('deck'); }
+
+// Reward stream — elite archetype + reward pool picks. Isolated so taking
+// a different elite fork on hole 4 doesn't change what hole 7 offers.
+function rngReward() { return _stepMulberry32('reward'); }
 
 // Seed the PRNG for a run. If seed is null, generate a random one.
 function initSeed(seed) {
@@ -4905,8 +5123,9 @@ function initSeed(seed) {
   }
   G.seed = seed;
   seedRng(seed);
-  // Advance rng a little to avoid low-entropy first values
-  for(let i = 0; i < 8; i++) rng();
+  // Advance each stream a little to avoid low-entropy first values.
+  // Each stream gets its own warm-up — they're independent.
+  for(let i = 0; i < 8; i++) { rng(); rngShop(); rngDeck(); rngReward(); }
   return seed;
 }
 
@@ -5442,6 +5661,190 @@ function toggleSaveSeed(seed) {
   lsSet(LS_KEY_SAVED, saved);
   renderLeaderboard();
 }
+
+// ═══════════════════════════════════════════════════════════════
+//  WEEKLY CHALLENGES (v0.23m — test feature)
+// ───────────────────────────────────────────────────────────────
+//  5 curated challenges, each with independent 9h and 18h seeds.
+//  Difficulty is pre-set ★3-5 (weighted to ★3/★4 with rare ★5s) and
+//  BYPASSES the unlock gate (the challenge is the point).
+//  Character is open: player picks an unlocked character at the
+//  selection screen. Seeds are deliberately distinctive 6-7 char
+//  strings (no ambiguous 0/O or 1/I) and each challenge's 9h vs 18h
+//  seeds differ so the two varieties play completely different courses.
+//
+//  Eventually this will be a fetched manifest (see WeeklyChallenges
+//  discussion in chat log). For now it's hardcoded — but the runtime
+//  reads it via getActiveWeeklyChallenges() so swapping in a fetcher
+//  later won't require touching any UI code.
+// ═══════════════════════════════════════════════════════════════
+const WEEKLY_CHALLENGES = [
+  { id:'wkly1', emoji:'🌀', name:'Pinball Sanctuary',
+    nineH:  { seed:'PNBL9X', diff:3 },
+    eighteenH:{ seed:'BNCEX8', diff:4 } },
+  { id:'wkly2', emoji:'💥', name:'Powder Keg',
+    nineH:  { seed:'BOOM4K', diff:4 },
+    eighteenH:{ seed:'FUSEZQ', diff:5 } },
+  { id:'wkly3', emoji:'👻', name:'Through The Walls',
+    nineH:  { seed:'GHST7B', diff:3 },
+    eighteenH:{ seed:'PHASEM', diff:4 } },
+  { id:'wkly4', emoji:'⚡', name:'Speedrun Special',
+    nineH:  { seed:'FAST3J', diff:4 },
+    eighteenH:{ seed:'BLITZK', diff:3 } },
+  { id:'wkly5', emoji:'🎭', name:'The Gauntlet',
+    nineH:  { seed:'TRIALV', diff:5 },
+    eighteenH:{ seed:'CHAOSP', diff:4 } },
+];
+
+// Public accessor — when a fetcher is added later, swap this body to
+// return the parsed manifest. Keep the same shape and the UI is free.
+function getActiveWeeklyChallenges() { return WEEKLY_CHALLENGES; }
+
+// Build the star row used inside each round card. 3 visible slots so
+// ★5 looks like the top of the range; filled stars are gold, empty
+// stars are washed-out white.
+function _weeklyStarsHtml(diff) {
+  const filled = Math.max(0, Math.min(5, diff));
+  let html = '<span class="weekly-round-stars">';
+  for(let i = 1; i <= 5; i++) {
+    if(i <= filled) html += '<span class="filled">★</span>';
+    else            html += '<span class="empty">★</span>';
+  }
+  html += '</span>';
+  return html;
+}
+
+// Local best for a given seed, drawn from the same LS_KEY_SEEDS store
+// the existing leaderboard panel reads. Returns null if no run yet.
+function _weeklyLocalBest(seed) {
+  const seeds = lsGet(LS_KEY_SEEDS) || {};
+  const row = seeds[seed];
+  if(!row || row.diff == null) return null;
+  return row;
+}
+
+// Global leaderboard fetch — stubbed. Returns null until the global LB
+// backend exists. UI handles null gracefully ("Global leaderboard coming
+// soon"). When wired, this should return { topDiff, topStyle, entries }
+// or null on network failure.
+function _weeklyGlobalBest(seed) {
+  // TODO: wire to global leaderboard service when implemented.
+  return null;
+}
+
+// Render one challenge round (9h or 18h side of a card).
+function _weeklyRoundHtml(challenge, side) {
+  const round = side === '9' ? challenge.nineH : challenge.eighteenH;
+  const holesLabel = side === '9' ? '9 Holes' : '18 Holes';
+  const diffName = (typeof getDifficultyMods === 'function')
+    ? (getDifficultyMods(round.diff).name || '')
+    : '';
+  const local = _weeklyLocalBest(round.seed);
+  const global = _weeklyGlobalBest(round.seed);
+  // Local row: under-par + style, or "Not played yet"
+  let localHtml;
+  if(local) {
+    const diffStr = local.diff === 0 ? 'Even' : (local.diff > 0 ? '+'+local.diff : ''+local.diff);
+    const styleStr = local.style ? `<span class="weekly-round-lb-style">✦${local.style.toLocaleString()}</span>` : '';
+    localHtml = `<span class="weekly-round-lb-score">${diffStr}</span>${styleStr ? ' · ' + styleStr : ''}`;
+  } else {
+    localHtml = '<span class="weekly-round-lb-empty">Not played yet</span>';
+  }
+  // Global row: stubbed for now
+  const globalHtml = global
+    ? `<span class="weekly-round-lb-score">${global.topDiff===0?'Even':(global.topDiff>0?'+'+global.topDiff:''+global.topDiff)}</span>`
+    : '<span class="weekly-round-lb-empty">Coming soon</span>';
+  return `
+    <div class="weekly-round diff-${round.diff}"
+         onclick="launchWeeklyChallenge('${challenge.id}','${side}')">
+      <div class="weekly-round-label">${holesLabel}</div>
+      <div class="weekly-round-seed">${round.seed}</div>
+      ${_weeklyStarsHtml(round.diff)}
+      <div class="weekly-round-diff-label">${diffName}</div>
+      <div class="weekly-round-lb">
+        <div class="weekly-round-lb-label">Local Best</div>
+        ${localHtml}
+        <div class="weekly-round-lb-label" style="margin-top:4px">Global Best</div>
+        <div class="weekly-round-lb-global">${globalHtml}</div>
+      </div>
+    </div>`;
+}
+
+function renderWeeklyPicker() {
+  const list = document.getElementById('weekly-list');
+  if(!list) return;
+  const challenges = getActiveWeeklyChallenges();
+  list.innerHTML = challenges.map(c => `
+    <div class="weekly-card">
+      <div class="weekly-card-name">
+        <span class="weekly-card-emoji">${c.emoji}</span>
+        <span>${c.name}</span>
+      </div>
+      <div class="weekly-card-rounds">
+        ${_weeklyRoundHtml(c, '9')}
+        ${_weeklyRoundHtml(c, '18')}
+      </div>
+    </div>`).join('');
+}
+
+function openWeeklyPicker() {
+  renderWeeklyPicker();
+  const ov = document.getElementById('weekly-overlay');
+  if(ov) ov.classList.add('open');
+}
+
+function closeWeeklyPicker() {
+  const ov = document.getElementById('weekly-overlay');
+  if(ov) ov.classList.remove('open');
+}
+
+// Launch a weekly challenge: prime the seed input, force the matching
+// difficulty + hole count, then route through the standard startGame()
+// flow so all existing run-init machinery (autosave clear, character
+// starter perks, telemetry hooks) fires unchanged.
+//
+// We bypass setDifficulty/setHoles because those route through unlock
+// gates — the design call is that weekly challenges ignore unlocks.
+// G.difficulty / G.totalHoles are read directly by startGame().
+function launchWeeklyChallenge(challengeId, side) {
+  const challenge = getActiveWeeklyChallenges().find(c => c.id === challengeId);
+  if(!challenge) return;
+  const round = side === '9' ? challenge.nineH : challenge.eighteenH;
+  if(!round) return;
+  // Prime the seed input so startGame() reads it.
+  const seedInput = document.getElementById('seed-input');
+  if(seedInput) seedInput.value = round.seed;
+  // Force difficulty + holes WITHOUT routing through gated setters.
+  G.difficulty = round.diff;
+  G._diffMods = (typeof getDifficultyMods === 'function') ? getDifficultyMods(round.diff) : G._diffMods;
+  G.totalHoles = (side === '9') ? 9 : 18;
+  // Reflect the forced state in the underlying menu toggle buttons so
+  // that if the player cancels into the menu it shows the truth.
+  const h9  = document.getElementById('holes-9');
+  const h18 = document.getElementById('holes-18');
+  if(h9)  h9.classList.toggle('active',  side === '9');
+  if(h18) h18.classList.toggle('active', side === '18');
+  // Refresh star row to reflect the forced star value.
+  if(typeof renderStarRow === 'function') renderStarRow();
+  // Tag this run as a weekly so downstream telemetry can distinguish
+  // (e.g. future global-LB submission only fires for tagged runs).
+  G._weeklyChallengeId = challenge.id + ':' + side;
+  closeWeeklyPicker();
+  // Light toast so the player knows the seed was applied.
+  if(typeof showToast === 'function') {
+    showToast(`🗓️ ${challenge.name} — ${side === '9' ? '9h' : '18h'} ★${round.diff}`, 1800);
+  }
+  // Route through the same start path the Tee Off button uses, so the
+  // "erase saved run?" guard fires consistently with normal play.
+  if(typeof confirmStartGame === 'function') confirmStartGame();
+  else if(typeof startGame === 'function') startGame();
+}
+
+// Expose to window for inline onclick handlers in the picker markup.
+window.openWeeklyPicker     = openWeeklyPicker;
+window.closeWeeklyPicker    = closeWeeklyPicker;
+window.launchWeeklyChallenge = launchWeeklyChallenge;
+window.renderWeeklyPicker   = renderWeeklyPicker;
 
 // v0.19j: Compact 3-slot profile picker row for the main menu.
 // Shows filled slots + a "+" button for empty ones. Active slot is highlighted
@@ -26711,7 +27114,8 @@ function maybeForceHardShopPerk() {
   if(candidates.length === 0) return;
   // Pick one at random, swap it for the lowest-weight pick so we don't displace
   // the best pick the shop rolled.
-  const forced = candidates[Math.floor(Math.random() * candidates.length)];
+  // v0.23l22: rngShop() so ★8+ forced-perk choice is reproducible per seed.
+  const forced = candidates[Math.floor(rngShop() * candidates.length)];
   let minW = Infinity, minIdx = 0;
   for(let i = 0; i < G._shopCurrentPicks.length; i++) {
     const w = G._shopCurrentPicks[i].weight || 1;
@@ -26909,7 +27313,9 @@ function weightedCardPicks(count) {
   const remaining = [...pool];
   for(let i = 0; i < Math.min(count, remaining.length); i++) {
     const totalW = remaining.reduce((s,c) => s + weightOf(c), 0);
-    let r = Math.random() * totalW;
+    // v0.23l22: seeded via rngShop() so card offerings are reproducible
+    // across runs of the same seed (independent of course/deck/reward streams).
+    let r = rngShop() * totalW;
     let idx = 0;
     for(; idx < remaining.length - 1; idx++) {
       r -= weightOf(remaining[idx]);
@@ -27075,7 +27481,8 @@ function weightedShopPicks(pool, count) {
       }
       return s + w;
     }, 0);
-    let r = Math.random() * totalWeight;
+    // v0.23l22: seeded via rngShop() — perk offerings reproducible per seed.
+    let r = rngShop() * totalWeight;
     let idx = 0;
     for(; idx < remaining.length - 1; idx++) {
       let w = remaining[idx].weight || 1;
@@ -31229,8 +31636,9 @@ function shuffleDeck() {
   for(let i = 0; i < G.deck.length; i++) {
     G.drawPile.push(_makeCardRecordFromDeckIndex(i));
   }
+  // v0.23l22: rngDeck() — shuffle order reproducible per seed.
   for (let i = G.drawPile.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = Math.floor(rngDeck() * (i + 1));
     [G.drawPile[i], G.drawPile[j]] = [G.drawPile[j], G.drawPile[i]];
   }
   G.discard = [];
@@ -31511,7 +31919,8 @@ function spawnCloneDuplicateCard(originalCardId, originalSlotIdx) {
   // Insert near the top of the draw pile so the player is likely to draw it
   // soon. Splice into a random position within the first 4 cards so it isn't
   // 100% predictable — keeps the "shuffled into deck" feel.
-  const insertIdx = Math.min(G.drawPile.length, Math.floor(Math.random() * 4));
+  // v0.23l22: rngDeck() — Clone insert position reproducible per seed.
+  const insertIdx = Math.min(G.drawPile.length, Math.floor(rngDeck() * 4));
   G.drawPile.splice(insertIdx, 0, dupInstance);
   // Flying-card animation: a copy of the slot's emoji+name spins from the
   // original slot into the #btn-deck (Loadout button) in the top-right.
@@ -46904,8 +47313,9 @@ function renderUpgradePicker() {
       ...perks.map(e => ({ ...e, _isPerk: true })),
     ];
     // Fisher-Yates shuffle, take first N
+    // v0.23l22: rngShop() so the upgrade-slot subset is reproducible per seed.
     for(let i = _pool.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
+      const j = Math.floor(rngShop() * (i + 1));
       [_pool[i], _pool[j]] = [_pool[j], _pool[i]];
     }
     const _picked = _pool.slice(0, _offerCount);
@@ -47879,6 +48289,9 @@ function saveRunData(outcome) {
       upgradeOffersShown: (G._currentRunUpgradeOffersShown | 0),
       scorecard: (G.scorecard || []).slice(),
       seed: G._currentSeed || G.seed || '',
+      // v0.23m: tag weekly-challenge runs so future global-leaderboard
+      // submission can filter for valid weekly entries. Null on regular runs.
+      weeklyChallengeId: G._currentRunWeeklyChallengeId || null,
       runDuration: G._runStartTime ? Math.max(0, Math.round(performance.now() - G._runStartTime)) : 0,
     };
   } catch(err) {
@@ -49889,6 +50302,7 @@ function escMainMenu() {
     </div>
     <button class="play-btn" onclick="confirmStartGame()">Tee Off</button>
     <button class="play-btn" id="btn-resume" style="display:none;margin-top:6px;background:rgba(80,180,80,0.85);font-size:0.85rem" onclick="resumeGame()">▶ Resume Run</button>
+    <button class="weekly-btn" onclick="openWeeklyPicker()">🗓️ Weekly Challenges</button>
     <button class="play-btn" onclick="openLocker()" style="margin-top:6px;background:rgba(167,139,250,0.18);border:1px solid rgba(167,139,250,0.5);color:#c4a7ff;font-size:0.85rem;padding:10px 28px">🎨 Locker Room</button>
     <button class="play-btn" onclick="openAchievements()" style="margin-top:6px;background:rgba(245,200,66,0.18);border:1px solid rgba(245,200,66,0.5);color:#f5c842;font-size:0.85rem;padding:10px 28px">🏆 Achievements</button>
     <div style="font-size:0.55rem;color:rgba(255,255,255,0.35);letter-spacing:1.5px;margin-top:4px">Alpha ${GAME_VERSION} — ${CHANGE_NOTE}</div>
@@ -50536,6 +50950,13 @@ function startGame(){
   const seed = initSeed(rawSeed || null);
   G._currentSeed = seed;
   if(seedInput) seedInput.value = seed;
+
+  // v0.23m: Weekly Challenge tagging. launchWeeklyChallenge() stages
+  // _weeklyChallengeId on G right before calling confirmStartGame; we
+  // consume it into a per-run field here so it doesn't leak into the
+  // next run's telemetry. Null on regular runs.
+  G._currentRunWeeklyChallengeId = G._weeklyChallengeId || null;
+  G._weeklyChallengeId = null;
 
   // v0.18a: Refresh difficulty mods for this run. Everything downstream
   // (HP, shop rates, damage, course scaling) reads from G._diffMods.
