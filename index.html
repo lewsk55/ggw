@@ -3870,7 +3870,7 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
   <button class="play-btn" onclick="openAchievements()" style="margin-top:6px;background:rgba(245,200,66,0.18);border:1px solid rgba(245,200,66,0.5);color:#f5c842;font-size:0.85rem;padding:10px 28px">🏆 Achievements</button>
   <button class="play-btn" id="btn-import-save" style="margin-top:6px;background:rgba(120,120,120,0.6);font-size:0.7rem;padding:8px 20px" onclick="importSaveFile()">📂 Import Save</button>
   <input type="file" id="import-save-input" accept=".ggwsave,application/json" style="display:none">
-  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.23m1</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Bugfix: Weekly Challenges picker was hidden behind the menu overlay (z-index issue). Fixed.</div></div>
+  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.23m4</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Cleanup: removed three leftover diagnostic console.log calls from the diagonal-layout debug work. Reverted the m3 kbd-pill hide.</div></div>
 
   <!-- v0.19j: Inline profile picker — skip the separate slot-picks screen -->
   <div class="section-label" style="margin-top:14px">Save Slot</div>
@@ -4632,8 +4632,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.23m1';
-const CHANGE_NOTE = "v0.23m1: Bugfix — Weekly Challenges button did nothing because the picker overlay was z-index:50 sitting behind the main menu overlay (z-index:100). Click handler was firing, picker was rendering, just invisible underneath the menu. Bumped weekly overlay to z-index:210 so it sits cleanly above the main menu. (Original v0.23m feature: 5 curated weekly challenges × 9h/18h independent seeds, ★3-5 difficulty pre-set bypassing unlock gate, character open, local + global LB stub.)";
+const GAME_VERSION = '0.23m4';
+const CHANGE_NOTE = "v0.23m4: Cleanup — removed three [GGW layout]/[GGW segs]/[GGW walls] diagnostic console.log calls left over from the diagonal-layout debug work in v0.23l10. They were noisy when the in-app console viewer (Eruda) was open. Reverted v0.23m3's kbd-pill hide on touch — that was a misread of the request. (Carries forward v0.23m2's seeded-determinism fix.)";
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
@@ -7150,7 +7150,16 @@ function generatePuttPuttCourse(holeNum) {
   // their dense obstacle packs have room to breathe.
   const _baseLaneW = 4;
   const _isEliteForWidth = !!(typeof G !== 'undefined' && G._activeElite);
-  const _laneWMul = _isEliteForWidth ? 1.5 : (1.0 + rng() * 0.5);
+  // v0.23m2 BUGFIX: BOTH branches must consume one rng() value so the course
+  // stream stays aligned regardless of whether the player accepted the elite
+  // offer. Previously the elite branch skipped the rng() call, so accepting
+  // vs declining an elite on hole N silently shifted every subsequent hole's
+  // layout (different segment count → different layout pick → different
+  // course on holes N+1, N+2, ... even though _activeElite isn't read past
+  // this point). The most-visible symptom: same seed, different 90°/45°
+  // turn picks on the same hole between two runs of the same seed.
+  const _laneRoll = rng();
+  const _laneWMul = _isEliteForWidth ? 1.5 : (1.0 + _laneRoll * 0.5);
   const LANE_W = Math.round(_baseLaneW * _laneWMul);
   const PAD = 6;
   const HALF = LANE_W / 2;  // offset from waypoint corner to lane centre
@@ -7424,16 +7433,6 @@ function generatePuttPuttCourse(holeNum) {
     pool = diagOnly;
   }
   let chosenLayout = pool[Math.floor(rng() * pool.length)];
-
-  // v0.23l10: diagnostic — log layout selection so we can see whether the
-  // debug-force-diag toggle is actually picking a diag layout.
-  try {
-    const _layoutIdx = allLayouts.indexOf(chosenLayout);
-    const _firstDir = chosenLayout && chosenLayout[0] ? chosenLayout[0].dir : '?';
-    console.log('[GGW layout]', 'hole=' + holeNum, 'idx=' + _layoutIdx,
-      'firstDir=' + _firstDir, 'debugDiag=' + !!G._debugForceDiag,
-      'poolLen=' + pool.length);
-  } catch(e) { /* swallow */ }
 
   // v0.23a6: Detect U-shape selection (matches by reference against the
   // tagged indices). Used downstream to (a) bias holeDefense toward
@@ -7758,12 +7757,6 @@ function generatePuttPuttCourse(holeNum) {
       axisRectangles.push({ ax, az, bx, bz, halfW: HALF * TILE_SIZE });
     }
   }
-  // v0.23l10: diagnostic — log segment processing.
-  try {
-    const _segSummary = segments.map(s => s.dir + (s.len || '?')).join(',');
-    console.log('[GGW segs]', 'count=' + segments.length, 'dirs=' + _segSummary,
-      'diagRects=' + diagRectangles.length);
-  } catch(e) { /* swallow */ }
 
   // ── 4. Tee and hole ───────────────────────────────────
   // Place tee/hole at the centre of the lane at each endpoint.
@@ -9369,13 +9362,6 @@ function generatePuttPuttCourse(holeNum) {
     corridorFloorPolygon.push({ x: miterRight[mi].x, z: miterRight[mi].z });
   }
   corridorFloorPolygon.push({ x: _extStartR.x, z: _extStartR.z });
-  // v0.23l10: diagnostic — log polyline wall count.
-  try {
-    console.log('[GGW walls]', 'polylineWalls=' + polylineWalls.length,
-      'diagFloorQuads=' + diagFloorQuads.length,
-      'corridorPoly=' + corridorFloorPolygon.length,
-      'segWallLines=' + segWallLines.length);
-  } catch(e) { /* swallow */ }
 
   const teeCapPts=[], holeCapPts=[];
 
@@ -48563,6 +48549,15 @@ function initHole() {
   // feel "normal" and bigger ones are a noticeable change of pace. Hole 1 is
   // always 1.0× to establish baseline. Giant Hole takes precedence (still 2×).
   // Stored on G._holeScale for telemetry + downstream par adjustment.
+  // v0.23m2 BUGFIX: All branches must consume exactly one rng() so the
+  // course stream stays aligned regardless of elite acceptance / hole index.
+  // Previously the elite + hole-0 branches skipped the roll entirely while
+  // the non-elite mid-run branch consumed one. Accepting an elite on hole 2
+  // therefore desynchronized the course stream from a run where the same
+  // elite was skipped — every subsequent hole rolled different layouts /
+  // obstacles even though the seed was identical. We roll once up front and
+  // only use the value in the branch that actually wants randomness.
+  const _scaleRoll = rng();
   if(G._activeElite && G._activeElite.archetype.flag === 'eliteGiantHole') {
     TILE_SIZE = TILE_SIZE_BASE * 2.0;
     G._holeScale = 2.0;
@@ -48580,7 +48575,7 @@ function initHole() {
     // Random 1.0–1.3× with bias toward 1.0×.
     // pow(rng, 1.5) skews most rolls toward 0, so most holes are near 1.0×
     // and ~1.3× rolls are rare but meaningful.
-    const r = Math.pow(Math.random(), 1.5);
+    const r = Math.pow(_scaleRoll, 1.5);
     const scale = 1.0 + r * 0.3;
     G._holeScale = scale;
     TILE_SIZE = TILE_SIZE_BASE * scale;
