@@ -1170,7 +1170,15 @@ white-space:nowrap;
 
 /* Leaderboard / saved seeds panel */
 /* v0.23n: max-height bumped 200→460 so the top 10 rows for each section
-   (9-hole + 18-hole) sit unfurled by default; remaining rows scroll. */
+   (9-hole + 18-hole) sit unfurled by default; remaining rows scroll.
+   v0.23p4: the panel was visually collapsing to ~30px tall on the home
+   screen even though max-height=460 — Adam reported only a single-row
+   slit visible despite many saved seeds. Root cause: parent #overlay is
+   `display:flex; flex-direction:column` and the panel had no
+   `flex-shrink:0`, so flex layout compressed it down to its minimum
+   intrinsic content height when other items competed for vertical
+   space. Adding flex-shrink:0 + a min-height pin so the panel always
+   reserves space for its rows. */
 .lb-panel {
 width:100%; max-width:300px;
 background:rgba(255,255,255,0.15);
@@ -1178,6 +1186,8 @@ border-radius:14px;
 padding:12px 14px;
 display:flex; flex-direction:column; gap:6px;
 max-height:460px; overflow-y:auto;
+flex-shrink:0;
+min-height:200px;
 }
 .lb-row {
 display:flex; align-items:center; gap:8px;
@@ -3877,7 +3887,7 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
   <button class="play-btn" onclick="openAchievements()" style="margin-top:6px;background:rgba(245,200,66,0.18);border:1px solid rgba(245,200,66,0.5);color:#f5c842;font-size:0.85rem;padding:10px 28px">🏆 Achievements</button>
   <button class="play-btn" id="btn-import-save" style="margin-top:6px;background:rgba(120,120,120,0.6);font-size:0.7rem;padding:8px 20px" onclick="importSaveFile()">📂 Import Save</button>
   <input type="file" id="import-save-input" accept=".ggwsave,application/json" style="display:none">
-  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.23p3</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Telemetry fix: HP-zero deaths were saving as 'won' in run history. Both death code paths now correctly save 'lost'. Bounce/streak/piggy coins audited — wired correctly; perk-gated by design. shopVisits telemetry verified.</div></div>
+  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.23p4</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Leaderboard unfurl fix: panel was flex-squashed to a single-row slit despite max-height=460. Added flex-shrink:0 + min-height so rows always show.</div></div>
 
   <!-- v0.19j: Inline profile picker — skip the separate slot-picks screen -->
   <div class="section-label" style="margin-top:14px">Save Slot</div>
@@ -4639,8 +4649,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.23p3';
-const CHANGE_NOTE = "v0.23p3: Telemetry fix — HP-zero deaths were being saved as 'won' instead of 'lost' in run history. Root cause: startGameOverFade and the applyDamage fallback both called showGameOver(false), which means 'won' to saveRunData. Both call sites only run on HP-zero death (the function name says it all) and must save as 'lost'. Adam's runs file had two examples (7/9 and 15/18 holes with outcome='won'). Bounce/streak/piggy coin telemetry audited — all three fields are correctly wired and perk-gated; zero values across recent runs is expected behavior (none of the 8 runs owned money_bounce or piggy_bank). shopVisits telemetry was already shipped in v0.20a3 — verified the format in the export matches the spec.";
+const GAME_VERSION = '0.23p4';
+const CHANGE_NOTE = "v0.23p4: Leaderboard panel was visually collapsing to a single-row slit on the home screen despite max-height=460px. Adam saw the rounded pill but no rows visible — top 10 rows for 9-hole and 18-hole sections existed in the DOM but the panel was flex-squashed by its parent (#overlay is display:flex column). Added flex-shrink:0 + min-height:200px so the panel always reserves space for its rows. Bumped patch only (no other changes).";
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
