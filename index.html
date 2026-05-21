@@ -380,7 +380,12 @@ box-shadow:0 4px 24px rgba(0,0,0,0.25);
   position: fixed;
   inset: 0;
   pointer-events: none;
-  z-index: 400;
+  /* v0.23r: bumped 400 → 9500. The XP unlock toast at line ~16258 renders
+     at z-index 9000 with a 45% scrim — confetti at 400 was buried beneath
+     the toast and invisible by the time the player tapped Continue. Per
+     Adam: "Confetti also now missing when you hit an unlock milestone".
+     9500 puts confetti above the toast so the celebration is visible. */
+  z-index: 9500;
   overflow: hidden;
 }
 .confetti-piece {
@@ -3887,7 +3892,7 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
   <button class="play-btn" onclick="openAchievements()" style="margin-top:6px;background:rgba(245,200,66,0.18);border:1px solid rgba(245,200,66,0.5);color:#f5c842;font-size:0.85rem;padding:10px 28px">🏆 Achievements</button>
   <button class="play-btn" id="btn-import-save" style="margin-top:6px;background:rgba(120,120,120,0.6);font-size:0.7rem;padding:8px 20px" onclick="importSaveFile()">📂 Import Save</button>
   <input type="file" id="import-save-input" accept=".ggwsave,application/json" style="display:none">
-  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.23p4</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Leaderboard unfurl fix: panel was flex-squashed to a single-row slit despite max-height=460. Added flex-shrink:0 + min-height so rows always show.</div></div>
+  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.23r</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Bug-fix pass: hearts +30%, catapult sticking, Joker now copies upgrades, ghost HUD cleanup, FREE-voucher badge, walkies camera, Divine Wrath HP, XP-bar stuck-on-devil-horns fix, hat heights.</div></div>
 
   <!-- v0.19j: Inline profile picker — skip the separate slot-picks screen -->
   <div class="section-label" style="margin-top:14px">Save Slot</div>
@@ -4649,8 +4654,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.23q';
-const CHANGE_NOTE = "v0.23q: Pro Shop variety overhaul (3 layers). L1 — Seen-Counter Decay: each non-stackable perk and card carries a per-run offer count; weight is multiplied by 1.0/0.5/0.25/0.1 based on prior offerings, so repeated commons fade out. Stackable perks (strengthen_swing, regeneration, etc.) untouched in this pass. L2 — Rarity Drift by Hole: rarity weights shift across the run — H1-2 favor commons (10/4/1.5/0.5), H3-5 baseline (8/4/2/1), H6-7 commons fade (5/5/3/2), H8+/endless rares dominate (3/5/4/3). L3 — Epic+ Pity Counter: tracks shops without an epic+ offering; on the 3rd dry shop, force one epic/legendary into the lineup. All three apply to both perks and cards, fully seeded via rngShop().";
+const GAME_VERSION = '0.23r';
+const CHANGE_NOTE = "v0.23r: Bug-fix pass. (1) Heart spawn rates +30% across difficulty tiers, double-heart roll 10→15%. (2) Catapult sticking on next swing fixed — flag now clears on ANY settle once consumed, even through Scootch/bumper nudge-only rolls. (3) Joker now correctly copies the UPGRADED version of the last card played (e.g. Mega Floomba copies Mega Floomba, not bare Floomba). (4) Ghost ball countdown HUD no longer lingers on the next hole — removed at hole start. (5) Upgrade-not-charged bug — branch picker now shows the same FREE badge as the list view when a voucher is consuming the purchase (was silently showing '🪙 0'). (6) Walkies chase-cam now turns the correct direction with the ball (sign was flipped) and lerps 2× faster for snappier turns. (7) Divine Wrath now correctly grants +1 HP — heal field is read BEFORE _pendingCancellableCard is cleared. (8) XP bar fixes: 'stuck on devil_horns' bug fixed (cosmetic-cost doubling in v0.23l17 caused owned items to be stripped from progress baseline); confetti now renders ABOVE the unlock toast scrim (z-index 9500); unlock toast now resolves cosmetic name from full item object instead of producing '[object Object]'. (9) Hat heights — top hat, hard hat, bucket, traffic cone all lowered onto the ball's head to match cowboy hat / grad cap reference.";
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
@@ -9543,17 +9548,19 @@ function generatePuttPuttCourse(holeNum) {
 
   // ── Healing hearts (v0.19s) ──────────────────────────
   // Spinning glowing hearts on the fairway. On pickup: heal +2 HP.
-  // Per-hole spawn rate: ~25% at regular (diff 3), scaled lightly by diff:
-  //   diff 1: 40%   diff 2: 32%   diff 3: 25%   diff 4: 18%   diff 5+: 12%
-  // 90% of holes that spawn a heart get one; 10% get two.
+  // v0.23r: spawn rates bumped ~30% across all difficulty tiers per Adam —
+  // hearts were too sparse. 2-heart roll also bumped 10% → 15%.
+  // Per-hole spawn rate (was 40/32/25/18/12):
+  //   diff 1: 52%   diff 2: 42%   diff 3: 33%   diff 4: 24%   diff 5+: 16%
+  // 85% of holes that spawn a heart get one; 15% get two.
   const heartData = [];
-  const heartSpawnP = diff <= 1 ? 0.40
-                    : diff === 2 ? 0.32
-                    : diff === 3 ? 0.25
-                    : diff === 4 ? 0.18
-                    : 0.12;
+  const heartSpawnP = diff <= 1 ? 0.52
+                    : diff === 2 ? 0.42
+                    : diff === 3 ? 0.33
+                    : diff === 4 ? 0.24
+                    : 0.16;
   if(rng() < heartSpawnP) {
-    const heartCount = rng() < 0.10 ? 2 : 1;
+    const heartCount = rng() < 0.15 ? 2 : 1;
     const heartCands = [...ppFair]
       .filter(c => ppTeeDist(c) >= 3 && ppHoleDist(c) >= 3)
       .sort(() => rng() - 0.5);
@@ -13660,9 +13667,13 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
     band.position.y = 0.030;
     g.add(band);
     g.scale.setScalar(1.2);
-    // v0.23p2: lowered 0.20 → 0.25 (drop ~20% of hat height) so it rests
-    // more naturally on the ball's "head".
-    g.position.y = -0.15;
+    // v0.23r: lowered -0.15 → -0.21. Adam: "The top hat, hard hat, bucket
+    // and parking cone need be lowered onto the ball's head slightly more.
+    // Use cowboy hat or graduation cap as a reference for the right height."
+    // Cowboy/grad cap sit naturally at offset 0 with small internal Y
+    // adjustments; top hat's +1.2 scale visually exaggerates the float, so
+    // it needs more downward offset to match the visual "sits on the head".
+    g.position.y = -0.21;
     return g;
   }
 
@@ -13679,8 +13690,10 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
     ridge.position.y = 0.09;
     g.add(brim, dome, ridge);
     g.scale.setScalar(1.2);
-    // v0.23p2: lowered 0.20 → 0.25 to sit lower on the ball's "head".
-    g.position.y = -0.15;
+    // v0.23r: lowered -0.15 → -0.21 (same logic as top hat — scale 1.2
+    // exaggerates the float, needs more downward offset to read as
+    // "sits ON the head" rather than "floats over the head").
+    g.position.y = -0.21;
     return g;
   }
 
@@ -13884,8 +13897,10 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
     handle.position.y = 0.21;
     handle.rotation.y = Math.PI / 2;
     g.add(body, rim, handle);
-    // v0.23p2: lowered to sit more naturally on the ball's "head".
-    g.position.y = -0.05;
+    // v0.23r: lowered -0.05 → -0.12. Per Adam: bucket needs to sit deeper
+    // on the ball's head. Bucket is tall+heavy so it especially needs the
+    // "swallowing the head" silhouette to read as worn rather than balanced.
+    g.position.y = -0.12;
     return g;
   }
 
@@ -13901,8 +13916,10 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
     const stripe2 = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.09, 0.022, 14), toonFlat({ color: 0xffffff }));
     stripe2.position.y = 0.16;
     g.add(base, cone, stripe1, stripe2);
-    // v0.23p2: lowered to sit more naturally on the ball's "head".
-    g.position.y = -0.07;
+    // v0.23r: lowered -0.07 → -0.14. Per Adam: "parking cone" needs to be
+    // lowered onto the ball's head more. The base square should look like
+    // it's resting on the ball's crown, not floating above it.
+    g.position.y = -0.14;
     return g;
   }
 
@@ -15830,6 +15847,13 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
     if(h) return h.name;
     const s = SKINS.find(x => x.id === id);
     if(s) return s.name;
+    // v0.23r: also search ACCESSORIES — devil_horns, halo, googly_eyes etc.
+    // were previously falling through to the raw id, producing labels like
+    // "devil_horns" instead of "Devil Horns" in the unlock-bar next-target.
+    if(typeof ACCESSORIES !== 'undefined' && Array.isArray(ACCESSORIES)) {
+      const a = ACCESSORIES.find(x => x.id === id);
+      if(a) return a.name;
+    }
     return id;
   }
 
@@ -16088,16 +16112,30 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
     // segment resets. Fix: build a "virtual" unlocked set per evaluation that
     // EXCLUDES any cosmetic whose xpCost is > the simulated xp. That way the
     // bar correctly sees each unlock as "not yet earned" until xp crosses it.
+    // v0.23r: REFINED — the previous filter stripped EVERY owned item whose
+    // current cost exceeded fromXp. After v0.23l17's 2× cosmetic-cost doubling,
+    // a player who had unlocked e.g. devil_horns (was 2000, now 4000) with
+    // 2500 XP would see devil_horns excluded from _ownedAtZero — and the
+    // unlock bar would then "stick" on devil_horns as the next unlock
+    // forever, since getNextCosmeticUnlock saw it as not-owned even though
+    // it WAS owned (just at a previously-cheaper cost). Per Adam: "It also
+    // seems to be permanently stuck listing 'devil horns' as the next unlock."
+    // Correct logic: only strip items the player unlocked DURING this run
+    // (xpCost > fromXp AND xpCost <= toXp). Keep everything else.
     const _ownedAtZero = (() => {
-      // Snapshot meta.unlocks.cosmetics MINUS any item with xpCost > fromXp.
-      // These are the items the player owned BEFORE this run started — they
-      // shouldn't roll back further than fromXp's worth of unlocks.
       const owned = (meta.unlocks && Array.isArray(meta.unlocks.cosmetics)) ? meta.unlocks.cosmetics : [];
       const xpTable = (typeof COSMETIC_XP_UNLOCKS !== 'undefined') ? COSMETIC_XP_UNLOCKS : [];
-      // Build a map of xp cost per cosmetic id for fast lookup
       const costById = {};
       for(const r of xpTable) costById[r.id] = r.xpCost || 0;
-      return owned.filter(id => (costById[id] || 0) <= fromXp);
+      return owned.filter(id => {
+        const c = costById[id] || 0;
+        // Items not in the XP table (achievement-gated like 'black') always kept.
+        if(!c) return true;
+        // Strip ONLY items unlocked this run (cost in the (fromXp, toXp] window).
+        // Keeps items already owned before this run, even if their cost has been
+        // re-tuned upward in a later patch (v0.23l17 cosmetic-cost doubling).
+        return c <= fromXp || c > toXp;
+      });
     })();
 
     const _xpPctAt = (xp) => {
@@ -16242,13 +16280,26 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
     // the row reveal + confetti are still visible behind. Resolves via the
     // onContinue callback so the caller can chain into the next segment.
     const _showUnlockToast = (item, onContinue) => {
+      // v0.23r: `item` is the full entry object passed through from the
+      // reveals array ({ kind, id, category, ... }), NOT a string id. The
+      // previous code passed `item` directly into xpTable.find(r => r.id === item)
+      // which always returned undefined (string vs object compare), and into
+      // cosmeticDisplayName(item) which fell through to `return id;` and
+      // rendered "[object Object]" in the unlock card. Resolve the id and
+      // category from the item object first; fall back to string handling
+      // for any legacy callers that pass an id directly.
+      const _itemId = (typeof item === 'string') ? item : (item && item.id) || '';
+      const _itemCategory = (typeof item === 'object' && item && item.category) ? item.category : null;
       // Resolve display info for the unlocked cosmetic.
       const xpTable = (typeof COSMETIC_XP_UNLOCKS !== 'undefined') ? COSMETIC_XP_UNLOCKS : [];
-      const row = xpTable.find(r => r.id === item);
-      const cat = row ? row.category : null;
-      const catEmoji = cat === 'hat' ? '🎩' : cat === 'ball' ? '⚪' : '✨';
-      const niceName = (typeof cosmeticDisplayName === 'function') ? cosmeticDisplayName(item) : item;
-      const subText = cat === 'hat' ? 'New hat unlocked!' : cat === 'ball' ? 'New ball skin unlocked!' : 'New cosmetic unlocked!';
+      const row = xpTable.find(r => r.id === _itemId);
+      const cat = _itemCategory || (row ? row.category : null);
+      const catEmoji = cat === 'hat' ? '🎩' : cat === 'ball' || cat === 'skin' ? '⚪' : cat === 'accessory' ? '✨' : '🎉';
+      const niceName = (typeof cosmeticDisplayName === 'function') ? cosmeticDisplayName(_itemId) : _itemId;
+      const subText = cat === 'hat' ? 'New hat unlocked!'
+                    : (cat === 'ball' || cat === 'skin') ? 'New ball skin unlocked!'
+                    : cat === 'accessory' ? 'New accessory unlocked!'
+                    : 'New cosmetic unlocked!';
 
       // Build the toast overlay. Sits ABOVE the summary panel but not
       // truly full-screen — a centered card with a soft scrim behind it
@@ -24279,7 +24330,11 @@ function updatePhysics(dt) {
         // v0.17v: If this roll was only a Scootch nudge (no actual swing), skip the
         // per-swing perk resets — the player still has iron ball / power shot /
         // catapult / arc shot armed for their upcoming swing.
-        const _wasSwing = !G._nudgeOnlyRoll;
+        // v0.23r: BUT if catapult has already been CONSUMED (fired this turn),
+        // a subsequent bumper/Scootch/slide-block nudge must NOT preserve the
+        // catapult flag. Force a real swing reset in that case so the next
+        // aim doesn't falsely re-arm the magenta arc.
+        const _wasSwing = !G._nudgeOnlyRoll || !!G._catapultConsumed;
         G._nudgeOnlyRoll = false;
         if(_wasSwing) {
         // ── Card: draw per-swing cards & reset per-swing flags ──
@@ -24287,6 +24342,7 @@ function updatePhysics(dt) {
         G._anglerCardActive = false;
         G._wallMagnetActive = false;
         G._catapultActive = false;
+        G._catapultConsumed = false;
         G._catapultBounceBoost = 0;
         G._catapultGroundBounce = false;
         G._catapultLaunchGrace = false;
@@ -24636,6 +24692,7 @@ function resetToLastShot() {
   G._anglerCardActive = false;
         G._wallMagnetActive = false;
   G._catapultActive = false;
+  G._catapultConsumed = false;
   G._catapultBounceBoost = 0;
   G._catapultGroundBounce = false;
   G._catapultLaunchGrace = false;
@@ -32616,7 +32673,7 @@ function unarmCardByInstance(instanceId, cardId) {
     case 'iron_ball':        G._ironBallActive = false; break;
     case 'cannonball':       G._cannonballActive = false; break;
     case 'arc_shot':         G._arcShotActive = false; break;
-    case 'catapult':         G._catapultActive = false; break;
+    case 'catapult':         G._catapultActive = false; G._catapultConsumed = false; break;
     case 'wall_magnet':      G._wallMagnetActive = false; break;
     case 'jumper':           G._jumpPreloaded = false; G._jumpPending = false; G._jumpChargesRemaining = 0; G._rocketJumpPending = false; break;
     case 'pinball':          G._pinballArmed = false; break;
@@ -33220,8 +33277,15 @@ function _executeCardAbilityInner(id) {
   // so a future Joker can copy it. Done AFTER the switch dispatch so the
   // current id is what was actually executed (Skydiver maps to parachute
   // semantics; track the original id so player intent is preserved).
+  // v0.23r: ALSO stash the upgrade override of the played card so Joker
+  // copies the UPGRADED version (Mega Floomba → Mega Floomba), not the base.
+  // Without this, getCardField during Joker's re-dispatch falls through to
+  // CARD_DEFS base. _activeCardInstance is still populated here because the
+  // dispatch runs inside playCard's try/finally (cleared in `finally`).
   if(id && id !== 'joker') {
     G._lastNonJokerCardPlayed = id;
+    G._lastNonJokerCardOverride = (G._activeCardInstance && G._activeCardInstance._defOverride)
+      ? G._activeCardInstance._defOverride : null;
   }
 }
 
@@ -35488,9 +35552,21 @@ function activateJoker() {
   // Joker does NOT update _lastNonJokerCardPlayed (the dispatcher's tail
   // logic skips the Joker id; we also explicitly skip our own copy below
   // by reading id === 'joker' first).
-  showToast('🃏 Joker → copying ' + (CARD_DEFS[lastId] && CARD_DEFS[lastId].name || lastId), 1100);
+  // v0.23r: Set up a synthetic _activeCardInstance carrying the original
+  // card's _defOverride so getCardField inside the re-dispatch returns
+  // the UPGRADED values (Mega Floomba's sizeMult, Big Scootch's nudgeForceMult,
+  // Trebuchet's arcHeightMult, etc.). Without this, Joker copies always
+  // executed at base CARD_DEFS values — silently bypassing all upgrades.
+  const _override = G._lastNonJokerCardOverride;
+  const _displayDef = _override || CARD_DEFS[lastId];
+  const _displayName = (_displayDef && _displayDef.name) || (CARD_DEFS[lastId] && CARD_DEFS[lastId].name) || lastId;
+  showToast('🃏 Joker → copying ' + _displayName, 1100);
   if(typeof triggerShake === 'function') triggerShake('light');
-  try { _executeCardAbilityInner(lastId); } catch(e) { console.warn('Joker copy failed', e); }
+  const _prevActive = G._activeCardInstance;
+  G._activeCardInstance = { id: lastId, _defOverride: _override };
+  try { _executeCardAbilityInner(lastId); }
+  catch(e) { console.warn('Joker copy failed', e); }
+  finally { G._activeCardInstance = _prevActive; }
 }
 
 // ── Power Steering — hold ←/→ during ball motion to nudge trajectory ──
@@ -40452,6 +40528,16 @@ function throwGrenadeAt(power, dir, opts) {
   // v0.21d: Hand of God upgrade reads radiusMult off CARD_DEFS.holy_hand_grenade
   // (default 1.0; Hand of God = 4/3 brings total to 4×). Read BEFORE clearing pendingCard.
   const _hhgUp = (typeof getCardField === 'function') ? getCardField('holy_hand_grenade','radiusMult',1.0) : 1.0;
+  // v0.23r: Divine Wrath healOnExplosion ALSO read here, BEFORE pendingCard
+  // clear. The actual heal application runs deep inside the deferred fuse-
+  // timer block (line ~40891) which fires seconds later, by which point
+  // _pendingCancellableCard has been cleared and getCardField falls through
+  // to base def (healOnExplosion = 0). Per Adam: "Divine Wrath (HHG upgrade)
+  // doesn't give +1 HP." Captured value is stashed on _hhgHealOnBoom for
+  // the fuse-timer block to read. Stashed unconditionally — base HHG returns
+  // 0 which is the correct no-op.
+  G._hhgHealOnBoom = (typeof getCardField === 'function')
+    ? (getCardField('holy_hand_grenade','healOnExplosion',0) | 0) : 0;
   // Clear the cancellable flag AFTER upgrade reads — card is consumed at this point, no refund.
   G._pendingCancellableCard = null;
   // v0.23p2: Blackhole Grenade is in _armedCards (armed-stays-in-slot path).
@@ -40887,12 +40973,20 @@ function throwGrenadeAt(power, dir, opts) {
         // v0.21d: Divine Wrath upgrade reads healOnExplosion off CARD_DEFS.holy_hand_grenade.
         // Only heals on HHG (isHoly), since the upgrade lives on that card. applyHeal
         // caps at G.hpMax and updates HUD/lives.
+        // v0.23r: read the value from G._hhgHealOnBoom (captured BEFORE
+        // _pendingCancellableCard was cleared earlier in spawnGrenade). The
+        // previous in-place getCardField call here fired AFTER the pendingCard
+        // had been nulled, so the override was no longer reachable and the
+        // call always returned the default 0 — Divine Wrath silently no-op'd.
         if(isHoly) {
-          const _heal = (typeof getCardField === 'function') ? getCardField('holy_hand_grenade','healOnExplosion',0) : 0;
+          const _heal = (G._hhgHealOnBoom | 0);
           if(_heal > 0 && typeof applyHeal === 'function') {
             const _actual = applyHeal(_heal, 'divine_wrath');
             if(_actual > 0) showToast(`⛪💚 Divine Wrath — +${_actual} HP`, 1300);
           }
+          // One-shot consume — Joker copies / next HHG must re-capture
+          // afresh, otherwise a banked stale value could leak across plays.
+          G._hhgHealOnBoom = 0;
         }
         // Blast ring
         const blastRing = new THREE.Mesh(
@@ -44857,6 +44951,13 @@ function fireShot() {
   // v0.22b: Frisbee gets the same treatment — disc launches into the air on
   // throw and bouncing off a close wall at the tee felt frustrating per Adam.
   G._catapultLaunchGrace = !!G._catapultActive;
+  // v0.23r: mark catapult as CONSUMED at fire time. If a bumper/Scootch/slide
+  // block nudges the ball after settle and flags _nudgeOnlyRoll=true, the
+  // per-swing reset is skipped — leaving _catapultActive=true so the next
+  // swing's aim preview falsely shows the magenta catapult arc. _consumed
+  // overrides that: ball-stop reset clears _catapultActive regardless of
+  // _nudgeOnlyRoll when this flag is set. Cleared on any catapult reset.
+  G._catapultConsumed = !!G._catapultActive;
   G._jumpPreloadLaunchGrace = !!G._jumpPreloaded;
   G._frisbeeLaunchGrace = !!G._frisbeeArmed;
   // Jumper pre-load consumption: punch Y-velocity up on launch if armed.
@@ -46463,14 +46564,23 @@ function updateKeyboardCamera(dt) {
     // target theta rather than snapping so it doesn't whiplash. Without
     // this, the camera held its last aim heading and the player ran off
     // sideways relative to the view.
+    // v0.23r: SIGN FIX — camTheta is the angle FROM camera TO ball, so for
+    // the camera to sit BEHIND the ball looking FORWARD along walk direction
+    // we need atan2(-walkDir.x, -walkDir.z) (the negated direction). Was
+    // unflipped, which placed the camera in front of the ball facing the
+    // wrong way. This matches the Skater Ball cam logic at line 43456 which
+    // also negates velocity. Also bumped lerp rate 4× → 8× per second for
+    // snappier turning. Per Adam: "Walkies doesn't shift to behind the ball
+    // camera that turns when you turn (as it should). The camera angle that
+    // it switches to is also facing the wrong direction."
     if(G._walkDir) {
-      const _targetTheta = Math.atan2(G._walkDir.x, G._walkDir.z);
+      const _targetTheta = Math.atan2(-G._walkDir.x, -G._walkDir.z);
       // Lerp theta toward target via shortest-arc to avoid +π/-π wraparound
       let _dTheta = _targetTheta - G.camTheta;
       while(_dTheta > Math.PI)  _dTheta -= Math.PI * 2;
       while(_dTheta < -Math.PI) _dTheta += Math.PI * 2;
-      // Lerp factor: 4× per second feels responsive but not jerky.
-      G.camTheta += _dTheta * Math.min(1, dt * 4);
+      // Lerp factor: 8× per second feels responsive but not jerky.
+      G.camTheta += _dTheta * Math.min(1, dt * 8);
     }
     return; // Skip normal camera controls during walkies
   }
@@ -47839,8 +47949,23 @@ function renderUpgradePicker() {
     // ── Branch comparison view ──
     const src = G._upgradePickerSource;
     if(!src) { G._upgradePickerStage = 'list'; renderUpgradePicker(); return; }
+    // v0.23r: detect free-upgrade voucher state for FREE badge display.
+    // The list view at line 48069 already shows a gold FREE badge; the branch
+    // picker previously just displayed "🪙 0" which was easy to mistake for
+    // a bug or zero-cost glitch. Per Adam: "Upgraded Floomba and didn't seem
+    // to be charged for it. I think this happened on other upgrades on other
+    // runs." Strongly suggests voucher was banked but the picker silently
+    // applied the freebie without flagging it. Bring the FREE indicator into
+    // the picker so the player can't miss the price = 0 reason.
+    const _isFreeUpgrade = (G._freeUpgradeVouchers|0) > 0;
+    const _priceLabel = _isFreeUpgrade
+      ? `<span style="background:linear-gradient(90deg,#ffd750,#ff8c2a);color:#3a1a00;padding:3px 8px;border-radius:8px;font-weight:900;letter-spacing:1px">FREE 🎟️</span>`
+      : `🪙 ${src.price}`;
     if(titleEl) titleEl.textContent = `${src.def.emoji} ${src.def.name} — pick a branch`;
-    if(subEl) subEl.textContent = `Locked in for the rest of the run · 🪙 ${src.price}`;
+    if(subEl) {
+      // Use innerHTML so the FREE badge HTML renders.
+      subEl.innerHTML = `Locked in for the rest of the run · ${_priceLabel}`;
+    }
     if(backBtn) backBtn.textContent = '← Back to list';
     const branches = src.branches;
     const canAfford = G.coins >= src.price;
@@ -47862,7 +47987,10 @@ function renderUpgradePicker() {
       } else {
         up = branches[_branchKeys[0]];
       }
-      if(subEl) subEl.textContent = `Confirm to apply · 🪙 ${src.price}`;
+      if(subEl) {
+        // v0.23r: same FREE-badge treatment for single-branch (kickback) view.
+        subEl.innerHTML = `Confirm to apply · ${_priceLabel}`;
+      }
       const disabledStyle = canAfford ? 'cursor:pointer;' : 'opacity:0.45;cursor:not-allowed;';
       const handler = canAfford
         ? `onclick="confirmUpgradeBranch('${src.sourceId}','${_branchKeys[0]}','${src.isPerk?'perk':'card'}',${src.deckIndex|0})"`
@@ -49368,6 +49496,7 @@ function initHole() {
   G._psDashRightPending = false;
   // — Joker: track last non-Joker card played this hole.
   G._lastNonJokerCardPlayed = null;
+  G._lastNonJokerCardOverride = null;
   // — Multiball / Blackhole / Lack of Boundaries: per-card transient state.
   // v0.23b1: Multiball needs full state teardown. If a hole transition
   // happens mid-Multiball (via a hole-out on shot 1, mulligan, or any
@@ -49714,6 +49843,16 @@ function initHole() {
   G.boulderAvail  = G.modifiers.some(m => m.id === 'boulder');
   G.ghostBallAvail = G.modifiers.some(m => m.id === 'ghost_ball');
   G.ghostBallActive = false;
+  // v0.23r: tear down lingering ghost-countdown HUD from previous hole.
+  // Was: if the previous hole ended (hole-out / OOB) while Ghost Ball was
+  // still active, the HUD div stayed in the DOM at opacity:1 from its last
+  // frame. ghostBallActive=false above just stopped the per-frame updates
+  // — the floating "👻 1.5s" text remained visible on the new hole's tee.
+  // Per Adam: countdown stayed on screen at the start of the new hole.
+  try {
+    const _ghostHud = document.getElementById('ghost-countdown');
+    if(_ghostHud && _ghostHud.parentNode) _ghostHud.parentNode.removeChild(_ghostHud);
+  } catch(e){}
   // v0.21a: Ghost toggle state — clear card tracking so a new hole starts fresh.
   G._ghostCardInstanceId = null;
   G._ghostCardWasUsed = false;
@@ -50017,6 +50156,7 @@ function initHole() {
   G._powerShotTensionActive = false;
   G._cannonballActive = false;
   G._catapultActive = false;
+  G._catapultConsumed = false;
   G._catapultBounceBoost = 0;
   G._catapultGroundBounce = false;
   G._catapultLaunchGrace = false;
