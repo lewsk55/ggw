@@ -4649,8 +4649,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.23p4';
-const CHANGE_NOTE = "v0.23p4: Leaderboard panel was visually collapsing to a single-row slit on the home screen despite max-height=460px. Adam saw the rounded pill but no rows visible — top 10 rows for 9-hole and 18-hole sections existed in the DOM but the panel was flex-squashed by its parent (#overlay is display:flex column). Added flex-shrink:0 + min-height:200px so the panel always reserves space for its rows. Bumped patch only (no other changes).";
+const GAME_VERSION = '0.23q';
+const CHANGE_NOTE = "v0.23q: Pro Shop variety overhaul (3 layers). L1 — Seen-Counter Decay: each non-stackable perk and card carries a per-run offer count; weight is multiplied by 1.0/0.5/0.25/0.1 based on prior offerings, so repeated commons fade out. Stackable perks (strengthen_swing, regeneration, etc.) untouched in this pass. L2 — Rarity Drift by Hole: rarity weights shift across the run — H1-2 favor commons (10/4/1.5/0.5), H3-5 baseline (8/4/2/1), H6-7 commons fade (5/5/3/2), H8+/endless rares dominate (3/5/4/3). L3 — Epic+ Pity Counter: tracks shops without an epic+ offering; on the 3rd dry shop, force one epic/legendary into the lineup. All three apply to both perks and cards, fully seeded via rngShop().";
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
@@ -27409,6 +27409,173 @@ window.onEndlessContinue = onEndlessContinue;
 // difficulty. Not the same as "bad" — these are legitimately interesting
 // mechanics, just demanding ones.
 const HARD_SHOP_PERK_IDS = ['shrink_ray','all_bounce','three_balls'];
+// ── v0.23q: Pro Shop Variety System ───────────────────────────
+// Three layers stacked into one weight pipeline:
+//   L1  Seen-Counter Decay — per-run offer count per id. Repeated offerings
+//       of the same item decay its weight: 1.0, 0.5, 0.25, 0.1+ (asymptotic).
+//       Applies to non-stackable perks and all cards. Stackable perks
+//       (strengthen_swing, regeneration, lucky, etc.) skip this layer in
+//       v0.23q — repeat offers are the point of those.
+//   L2  Rarity Drift by Hole — rarity weight multipliers shift across the
+//       run so late shops favor build-defining items. Keyed on G.hole+1
+//       (the hole just completed; player is shopping for the next one).
+//   L3  Epic+ Pity Counter — tracks shops without any epic+ offering;
+//       force one in on the 3rd dry shop. Resets on OFFER, not purchase.
+//
+// All three feed into the same weight function so picks and rerolls inside
+// the same shop both respect the rules. Seen-count increments when items
+// are *offered* (after picking), which covers reroll-displaced items too.
+// Run-start reset lives in startGame; per-shop pity tracking lives in
+// openShop. Each layer is independent of the others — disabling any one
+// would leave the rest functional.
+
+// L1 — Decay curve. Indexed by prior offering count.
+// 0 priors → 1.0× (full), 1 prior → 0.5×, 2 priors → 0.25×, 3+ priors → 0.1×.
+// Never zero: there's always SOME chance, preserving "should have bought it."
+const _SHOP_SEEN_DECAY = [1.0, 0.5, 0.25, 0.1];
+// Keys are namespaced "perk:<id>" / "card:<id>" so future id collisions
+// between CARD_DEFS and ALL_PERKS don't conflate two separate items.
+function _seenKey(type, id) { return type + ':' + id; }
+function _shopSeenMul(type, id) {
+  if(!G._shopSeenCount) return 1.0;
+  const n = G._shopSeenCount[_seenKey(type, id)] | 0;
+  return _SHOP_SEEN_DECAY[Math.min(n, _SHOP_SEEN_DECAY.length - 1)];
+}
+
+// L2 — Rarity drift table, keyed by hole-just-completed (G.hole + 1).
+// Returns a multiplier per rarity tier that scales the base rarity weight.
+// Holes 1-2 lean common; 3-5 baseline; 6-7 commons fade; 8+/endless rares dominate.
+// In endless post-game mode, we treat all bonus holes as bucket 4 (rares dominate).
+function _shopRarityDrift(rarity) {
+  let bucketHole = (G.hole | 0) + 1; // hole-just-completed, 1-indexed
+  if(G._endlessMode) bucketHole = 8; // post-game: always max-tier drift
+  // Bucket boundaries match the design table.
+  let table;
+  if(bucketHole <= 2)      table = { common:1.25, rare:1.00, epic:0.75, legendary:0.50 };
+  else if(bucketHole <= 5) table = { common:1.00, rare:1.00, epic:1.00, legendary:1.00 };
+  else if(bucketHole <= 7) table = { common:0.625, rare:1.25, epic:1.50, legendary:2.00 };
+  else                     table = { common:0.375, rare:1.25, epic:2.00, legendary:3.00 };
+  return table[rarity] || 1.0;
+}
+
+// L3 — Epic+ pity. Returns true if the current shop should force an epic+
+// offering. Reads the PRE-SHOP streak so the decision is stable across
+// rerolls within the same shop — natural roll, reroll, and re-reroll all
+// see the same pity trigger if the entering streak was at threshold.
+// Caller increments G._shopNoEpicStreak when no epic+ was offered, or
+// resets it to 0 when one was. Threshold = 3 dry shops.
+const _SHOP_PITY_THRESHOLD = 3;
+function _shopShouldForceEpic() {
+  return (G._shopNoEpicStreakBeforeShop | 0) >= _SHOP_PITY_THRESHOLD;
+}
+
+// Record that a set of items was offered. Called from openShop and rerollShop
+// after picks land and before render. Bumps seen-count for each id, keyed by
+// type so perk/card namespaces stay separate.
+function _recordShopOffered(perks, cards) {
+  if(!G._shopSeenCount) G._shopSeenCount = {};
+  if(Array.isArray(perks)) {
+    for(const p of perks) {
+      if(!p || !p.id) continue;
+      const k = _seenKey('perk', p.id);
+      G._shopSeenCount[k] = (G._shopSeenCount[k] | 0) + 1;
+    }
+  }
+  if(Array.isArray(cards)) {
+    for(const c of cards) {
+      if(!c || !c.id) continue;
+      const k = _seenKey('card', c.id);
+      G._shopSeenCount[k] = (G._shopSeenCount[k] | 0) + 1;
+    }
+  }
+}
+
+// After picks are finalized for a shop visit, update the no-epic streak based
+// on whether any epic/legendary slot landed. Recomputes from the pre-shop
+// stashed value so rerolls within the same shop don't double-count. The
+// stash (G._shopNoEpicStreakBeforeShop) is set at the top of openShop; this
+// function reads it and writes the final value to G._shopNoEpicStreak.
+function _updateEpicPityStreak() {
+  const perks = G._shopCurrentPicks || [];
+  const cards = G._shopCardPicks || [];
+  const hasEpicPlus = perks.some(p => p && (p.rarity === 'epic' || p.rarity === 'legendary'))
+                  || cards.some(c => c && (c.rarity === 'epic' || c.rarity === 'legendary'));
+  const beforeStreak = G._shopNoEpicStreakBeforeShop | 0;
+  G._shopNoEpicStreak = hasEpicPlus ? 0 : (beforeStreak + 1);
+}
+
+// L3 — Force one epic+ into the current picks if pity triggered AND the
+// rolled lineup is dry. Swaps the lowest-weight slot for a random epic+
+// from the appropriate pool. Mirrors maybeForceHardShopPerk's swap pattern.
+// Called from openShop and rerollShop AFTER picks land, BEFORE the snapshot.
+// Note: this fires only when the natural roll already came up dry, so it
+// preserves natural variety; players don't get forced-epic'd every 3 shops
+// regardless of what they saw.
+function maybeForcePityEpic(perkPool) {
+  if(!_shopShouldForceEpic()) return;
+  const perks = G._shopCurrentPicks || [];
+  const cards = G._shopCardPicks || [];
+  const alreadyHasEpic = perks.some(p => p && (p.rarity === 'epic' || p.rarity === 'legendary'))
+                     || cards.some(c => c && (c.rarity === 'epic' || c.rarity === 'legendary'));
+  if(alreadyHasEpic) return;
+
+  // Decide whether to force into the perk row or the card row. Coin-flip on
+  // rngShop() so it stays seeded. If one row has no eligible epic+ entries,
+  // try the other.
+  const _flip = rngShop();
+  const tryPerkFirst = _flip < 0.5;
+
+  // Build perk-side candidate pool — filter by stackable/owned + clearance gate,
+  // same as weightedShopPicks. Avoid ids that are already in the current picks.
+  const perkOnshelfIds = new Set(perks.map(p => p && p.id).filter(Boolean));
+  const perkCandidates = (perkPool || ALL_PERKS).filter(p => {
+    if(!p || (p.rarity !== 'epic' && p.rarity !== 'legendary')) return false;
+    if(perkOnshelfIds.has(p.id)) return false;
+    if(!p.stackable && G.modifiers.find(m => m.id === p.id)) return false;
+    if(p.id === 'clearance_sale' && !G.modifiers.some(m => m.id === 'bargain_hunter')) return false;
+    return true;
+  });
+
+  // Build card-side candidate pool — mirror weightedCardPicks filtering.
+  const _char = (typeof getCurrentCharacter === 'function') ? getCurrentCharacter() : null;
+  const bannedCards = (_char && _char.bannedCards) || [];
+  const _inactiveSet = (typeof INACTIVE_CARDS !== 'undefined') ? INACTIVE_CARDS : new Set();
+  const cardOnshelfIds = new Set(cards.map(c => c && c.id).filter(Boolean));
+  const cardCandidates = Object.values(CARD_DEFS).filter(c => {
+    if(!c || (c.rarity !== 'epic' && c.rarity !== 'legendary')) return false;
+    if(bannedCards.includes(c.id)) return false;
+    if(_inactiveSet.has(c.id)) return false;
+    if(c.id === 'skydiver') return false;
+    if(cardOnshelfIds.has(c.id)) return false;
+    return true;
+  });
+
+  // Choose which side to force based on flip + availability.
+  let injectAsPerk = tryPerkFirst ? perkCandidates.length > 0 : cardCandidates.length === 0;
+  if(injectAsPerk && perkCandidates.length === 0) injectAsPerk = false;
+  if(!injectAsPerk && cardCandidates.length === 0) injectAsPerk = perkCandidates.length > 0;
+
+  if(injectAsPerk && perkCandidates.length > 0 && perks.length > 0) {
+    const forced = perkCandidates[Math.floor(rngShop() * perkCandidates.length)];
+    let minW = Infinity, minIdx = 0;
+    for(let i = 0; i < perks.length; i++) {
+      const w = (perks[i] && perks[i].weight) || 1;
+      if(w < minW) { minW = w; minIdx = i; }
+    }
+    G._shopCurrentPicks[minIdx] = forced;
+  } else if(cardCandidates.length > 0 && cards.length > 0) {
+    const rarityWeights = { common:8, rare:4, epic:2, legendary:1 };
+    const forced = cardCandidates[Math.floor(rngShop() * cardCandidates.length)];
+    let minW = Infinity, minIdx = 0;
+    for(let i = 0; i < cards.length; i++) {
+      const c = cards[i];
+      const w = c ? (c.weight != null ? c.weight : (rarityWeights[c.rarity] || 1)) : 1;
+      if(w < minW) { minW = w; minIdx = i; }
+    }
+    G._shopCardPicks[minIdx] = forced;
+  }
+}
+
 function maybeForceHardShopPerk() {
   if(!(G._diffMods && G._diffMods.forcedHardShopCards)) return;
   if(!Array.isArray(G._shopCurrentPicks) || G._shopCurrentPicks.length === 0) return;
@@ -27491,11 +27658,22 @@ function openShop() {
   const perkPool = ALL_PERKS.filter(p =>
     !bannedPerks.includes(p.id) && !_hiddenSet.has(p.id)
   );
+  // v0.23q: stash the no-epic streak as it stood BEFORE this shop opened.
+  // _updateEpicPityStreak reads this and computes the final value, so rerolls
+  // within the same shop visit can re-evaluate from the same starting point
+  // instead of double-counting.
+  G._shopNoEpicStreakBeforeShop = G._shopNoEpicStreak | 0;
   G._shopCurrentPicks = weightedShopPicks(perkPool, count);
   // Generate card picks for the card row.
   // v0.20i: Four! perk now also gives 4 cards (was hardcoded 3). Card row
   // mirrors the perk row count so Four! lives up to its name.
   G._shopCardPicks = weightedCardPicks(count);
+  // v0.23q: L3 Epic+ Pity — if 3+ shops have gone by without any epic+
+  // offering, force one into this shop's lineup (perk or card, coin-flipped).
+  // Runs AFTER picks land so we only force when the natural roll was dry.
+  // Runs BEFORE force-hard-perk so a ★8+ forced fragile can't displace
+  // the pity epic in the same swap pass.
+  maybeForcePityEpic(perkPool);
   G._shopRerolledThisHole = false;
   // v0.20c: reset Free Reroll usage each hole so the perk fires at every shop, not once per run.
   // v0.21j: now a count instead of a boolean — Reroll Master upgrade lets first 2 be free.
@@ -27522,6 +27700,11 @@ function openShop() {
   // Bowling Ball change the run fundamentally — forcing one pressures players to
   // either embrace the chaos or skip the shop. Adds a visible sign of harder difficulty.
   maybeForceHardShopPerk();
+  // v0.23q: now that all forced swaps (pity epic + hard-perk) have settled,
+  // record the final offered set into the per-run seen-counter and update the
+  // epic-pity streak. Both forced and naturally-rolled items count as offered.
+  _recordShopOffered(G._shopCurrentPicks, G._shopCardPicks);
+  _updateEpicPityStreak();
   // v0.17y5: 1-second grace period before any shop click registers.
   // Prevents accidental purchases from stray taps immediately after the
   // shop pops up (common on mobile after a final putt).
@@ -27615,6 +27798,11 @@ function weightedCardPicks(count) {
     if(_hbChaosMul > 1.0 && c.id === 'perpetual_motion') {
       w *= _hbChaosMul;
     }
+    // v0.23q: L2 rarity drift by hole + L1 per-run seen-counter decay.
+    // Cards always go through L1 (no stackable carve-out — duplicate card
+    // offers are exactly the kind of repetition the layer is designed to fix).
+    w *= _shopRarityDrift(c.rarity || 'common');
+    w *= _shopSeenMul('card', c.id);
     return w;
   };
   const picks = [];
@@ -27623,6 +27811,14 @@ function weightedCardPicks(count) {
     const totalW = remaining.reduce((s,c) => s + weightOf(c), 0);
     // v0.23l22: seeded via rngShop() so card offerings are reproducible
     // across runs of the same seed (independent of course/deck/reward streams).
+    // v0.23q: fallback to uniform pick if total weight collapses to 0
+    // (every remaining card crushed by seen-decay).
+    if(totalW <= 0) {
+      const idx = Math.floor(rngShop() * remaining.length);
+      picks.push(remaining[idx]);
+      remaining.splice(idx, 1);
+      continue;
+    }
     let r = rngShop() * totalW;
     let idx = 0;
     for(; idx < remaining.length - 1; idx++) {
@@ -27732,9 +27928,23 @@ function rerollShop() {
   // Also reroll card picks
   // v0.20i: Four! also expands the rerolled card row.
   G._shopCardPicks = weightedCardPicks(count);
+  // v0.23q: L3 pity AFTER the natural reroll lands, BEFORE the hard-perk force.
+  // Same ordering as openShop so the two paths produce comparable lineups.
+  // The pity check uses G._shopNoEpicStreak as it stood entering THIS shop —
+  // openShop has already written the post-shop value, but if the player
+  // rerolled, that "post-shop" value was based on the pre-reroll lineup.
+  // _updateEpicPityStreak below recomputes the streak from the pre-shop
+  // stash, so the reroll-time pity decision uses the right input.
+  maybeForcePityEpic(basePool);
   // v0.18a: re-apply forced hard perk after reroll so ★8+ players can't just
   // reroll their way out of the difficulty modifier.
   maybeForceHardShopPerk();
+  // v0.23q: record the post-reroll offered set into the per-run seen-counter
+  // (displaced rerolls are NOT counted — only the final set lands on screen).
+  // Recompute the epic-pity streak from the pre-shop stash so the final
+  // post-reroll lineup determines whether this shop counts as "dry".
+  _recordShopOffered(G._shopCurrentPicks, G._shopCardPicks);
+  _updateEpicPityStreak();
   // v0.20a3: telemetry — log this reroll on the current shop visit. Per spec,
   // we keep only the FINAL offer set (so we replace `offerings`); the prior
   // pre-reroll offerings are not preserved. Reroll cost (post-doubling) was
@@ -27773,34 +27983,43 @@ function weightedShopPicks(pool, count) {
   const _hbOwned = (G.modifiers || []).some(m => m.id === 'hand_brake');
   const _HB_CHAOS_PERKS = new Set(['slippery_ball', 'all_bounce']);
   const _hbChaosMul = _hbOwned ? 1.33 : 1.0;
+  // v0.23q: single perk-weight helper. Replaces the old duplicated math in
+  // total-sum and pick-walk loops. Applies (in order):
+  //   base weight → Lucky boost → Hand Brake chaos boost → L2 rarity drift →
+  //   L1 seen-counter decay (non-stackable only).
+  // Stackable perks skip L1 — repeat offers of strengthen_swing / regeneration
+  // are intentional; the seen-counter is for stamping out common-spam.
+  const _perkWeight = p => {
+    let w = p.weight || 1;
+    if(_luckyMul > 1.0 && (p.rarity === 'rare' || p.rarity === 'epic' || p.rarity === 'legendary')) {
+      w *= _luckyMul;
+    }
+    if(_hbChaosMul > 1.0 && _HB_CHAOS_PERKS.has(p.id)) {
+      w *= _hbChaosMul;
+    }
+    w *= _shopRarityDrift(p.rarity || 'common');
+    if(!p.stackable) w *= _shopSeenMul('perk', p.id);
+    return w;
+  };
   // Weighted sample without replacement
   const picks = [];
   const remaining = [...available];
   for(let i = 0; i < Math.min(count, remaining.length); i++) {
-    const totalWeight = remaining.reduce((s,p) => {
-      let w = p.weight || 1;
-      if(_luckyMul > 1.0 && (p.rarity === 'rare' || p.rarity === 'epic' || p.rarity === 'legendary')) {
-        w *= _luckyMul;
-      }
-      // v0.23i: Hand Brake chaos-pair boost — applied AFTER lucky so it
-      // stacks multiplicatively with rare-tier lucky bonus on slippery_ball.
-      if(_hbChaosMul > 1.0 && _HB_CHAOS_PERKS.has(p.id)) {
-        w *= _hbChaosMul;
-      }
-      return s + w;
-    }, 0);
+    const totalWeight = remaining.reduce((s,p) => s + _perkWeight(p), 0);
     // v0.23l22: seeded via rngShop() — perk offerings reproducible per seed.
+    // Guard against totalWeight collapsing to 0 (e.g. every remaining item
+    // has had its weight crushed by repeated seen-decay): fall back to
+    // uniform pick across remaining so we still return `count` items.
+    if(totalWeight <= 0) {
+      const idx = Math.floor(rngShop() * remaining.length);
+      picks.push(remaining[idx]);
+      remaining.splice(idx, 1);
+      continue;
+    }
     let r = rngShop() * totalWeight;
     let idx = 0;
     for(; idx < remaining.length - 1; idx++) {
-      let w = remaining[idx].weight || 1;
-      if(_luckyMul > 1.0 && (remaining[idx].rarity === 'rare' || remaining[idx].rarity === 'epic' || remaining[idx].rarity === 'legendary')) {
-        w *= _luckyMul;
-      }
-      if(_hbChaosMul > 1.0 && _HB_CHAOS_PERKS.has(remaining[idx].id)) {
-        w *= _hbChaosMul;
-      }
-      r -= w;
+      r -= _perkWeight(remaining[idx]);
       if(r <= 0) break;
     }
     picks.push(remaining[idx]);
@@ -51463,6 +51682,15 @@ function startGame(){
   // offerings + purchases + rerolls; included in saveRunData() for post-run analysis.
   G._currentRunShopVisits = [];
   G._currentShopVisit = null;
+  // v0.23q: Pro Shop variety state — fresh per run.
+  // _shopSeenCount[id] tracks how many times each perk/card has been offered
+  // this run (L1 decay input). _shopNoEpicStreak tracks consecutive shops
+  // without an epic+ offering (L3 pity counter). _shopNoEpicStreakBeforeShop
+  // is set at openShop time and read by pity logic so rerolls within the
+  // same shop don't double-count.
+  G._shopSeenCount = {};
+  G._shopNoEpicStreak = 0;
+  G._shopNoEpicStreakBeforeShop = 0;
   // v0.21d: card/perk upgrade state — clear runtime upgrade picks AND restore
   // any mutated CARD_DEFS / ALL_PERKS entries to baseline. Without the
   // resetAllUpgrades() call, a second run would inherit upgrades from the first.
