@@ -3892,7 +3892,7 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
   <button class="play-btn" onclick="openAchievements()" style="margin-top:6px;background:rgba(245,200,66,0.18);border:1px solid rgba(245,200,66,0.5);color:#f5c842;font-size:0.85rem;padding:10px 28px">🏆 Achievements</button>
   <button class="play-btn" id="btn-import-save" style="margin-top:6px;background:rgba(120,120,120,0.6);font-size:0.7rem;padding:8px 20px" onclick="importSaveFile()">📂 Import Save</button>
   <input type="file" id="import-save-input" accept=".ggwsave,application/json" style="display:none">
-  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.23r</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Bug-fix pass: hearts +30%, catapult sticking, Joker now copies upgrades, ghost HUD cleanup, FREE-voucher badge, walkies camera, Divine Wrath HP, XP-bar stuck-on-devil-horns fix, hat heights.</div></div>
+  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.23s</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Fixed iOS win-save bug + added save status indicator. saveRunData now sets _runSaved only after a confirmed localStorage write so failed saves are retryable. Run summary shows ✅/⚠️ with a Retry pill if the write didn't land.</div></div>
 
   <!-- v0.19j: Inline profile picker — skip the separate slot-picks screen -->
   <div class="section-label" style="margin-top:14px">Save Slot</div>
@@ -4654,8 +4654,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.23r';
-const CHANGE_NOTE = "v0.23r: Bug-fix pass. (1) Heart spawn rates +30% across difficulty tiers, double-heart roll 10→15%. (2) Catapult sticking on next swing fixed — flag now clears on ANY settle once consumed, even through Scootch/bumper nudge-only rolls. (3) Joker now correctly copies the UPGRADED version of the last card played (e.g. Mega Floomba copies Mega Floomba, not bare Floomba). (4) Ghost ball countdown HUD no longer lingers on the next hole — removed at hole start. (5) Upgrade-not-charged bug — branch picker now shows the same FREE badge as the list view when a voucher is consuming the purchase (was silently showing '🪙 0'). (6) Walkies chase-cam now turns the correct direction with the ball (sign was flipped) and lerps 2× faster for snappier turns. (7) Divine Wrath now correctly grants +1 HP — heal field is read BEFORE _pendingCancellableCard is cleared. (8) XP bar fixes: 'stuck on devil_horns' bug fixed (cosmetic-cost doubling in v0.23l17 caused owned items to be stripped from progress baseline); confetti now renders ABOVE the unlock toast scrim (z-index 9500); unlock toast now resolves cosmetic name from full item object instead of producing '[object Object]'. (9) Hat heights — top hat, hard hat, bucket, traffic cone all lowered onto the ball's head to match cowboy hat / grad cap reference.";
+const GAME_VERSION = '0.23s';
+const CHANGE_NOTE = "v0.23s — fixed iOS win-save bug, added save status indicator. (1) saveRunData no longer marks _runSaved=true before the localStorage write succeeds — previously a thrown setItem (quota / iOS purge) left the run flagged 'saved' in memory while disk had nothing, defeating every belt-and-suspenders retry path in escMainMenu and showGameOver. Adam reported a D5 18-hole win (seed 89V5O2, 3 simultaneous unlocks) vanishing this way. (2) New save-status indicator on the run summary: ✅ Saved / ⏳ Saving… / ⚠️ Save failed with tappable Retry pill. (3) saveRunData now returns true/false on success/failure and populates G._lastSaveStatus with bytes/latency/error details. (4) New retrySaveRun() reuses the stashed pendingRun so retried saves preserve the ORIGINAL outcome (e.g. 'won') instead of being downgraded to 'completed_unknown' by the inference path. (5) escMainMenu fallback now calls retrySaveRun() when a pendingRun is available. (6) Added defensive console logs ('SAVE FIRED', 'SAVE WROTE', 'SAVE FAILED') for iOS debug-console verification.";
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
@@ -48685,6 +48685,12 @@ function showGameOver(bustedBudget=false){
   }
 
   const ov=document.getElementById('overlay');
+  // v0.23s: save-status indicator block. Reads G._lastSaveStatus, rendered
+  // immediately after the run summary is built so the player can SEE whether
+  // their run actually persisted. iOS Safari occasionally drops localStorage
+  // writes under quota pressure, and we want failures visible (with a retry
+  // button) rather than silently logged.
+  const saveStatusBlock = `<div id="go-save-status" style="margin:4px auto 10px;max-width:340px;font-size:0.7rem;letter-spacing:1px;text-align:center;opacity:0.85"></div>`;
   if(bustedBudget) {
     ov.innerHTML=`
       <div class="tagline">Game Over</div>
@@ -48696,6 +48702,7 @@ function showGameOver(bustedBudget=false){
       ${cosmoProgressBlock}
       ${styleLine}${soloAwards}${coinsLine}${seedLine}
       ${bonusHolesBlock}
+      ${saveStatusBlock}
       <button class="play-btn" onclick="startGame()">Try Again</button>
       <button class="play-btn" onclick="escMainMenu()" style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,0.4);margin-top:-8px;font-size:0.9rem;padding:12px 36px">🏠 Main Menu</button>
       <div id="go-unlocks-block"></div>
@@ -48711,6 +48718,7 @@ function showGameOver(bustedBudget=false){
       ${cosmoProgressBlock}
       ${styleLine}${soloAwards}${coinsLine}${seedLine}
       ${bonusHolesBlock}
+      ${saveStatusBlock}
       <button class="play-btn" onclick="startGame()">Play Again</button>
       <button class="play-btn" onclick="escMainMenu()" style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,0.4);margin-top:-8px;font-size:0.9rem;padding:12px 36px">🏠 Main Menu</button>
       <div id="go-unlocks-block"></div>
@@ -48719,6 +48727,8 @@ function showGameOver(bustedBudget=false){
   }
   ov.classList.remove('hidden');
   G.state='gameover';
+  // v0.23s: paint the save-status indicator now that the DOM exists.
+  if(typeof renderSaveStatusIndicator === 'function') renderSaveStatusIndicator();
 
   // ── Analytics: run was already persisted at top of showGameOver (v0.20f3 fix) ──
 
@@ -49045,16 +49055,25 @@ function showGameOver(bustedBudget=false){
 // ── Analytics: run history persistence ────────────────
 // Appends the current run to ggw_run_history in localStorage and caps history at MAX_RUN_HISTORY
 // to prevent quota exhaustion. Guarded so the same run can't be double-saved.
+//
+// v0.23s: hardened against iOS Safari save-loss. Critical fix: G._runSaved is
+// now set ONLY after a confirmed successful localStorage write. Previously it
+// was set BEFORE the write, meaning a thrown setItem (quota / storage purge)
+// left the run marked "saved" in memory while disk had nothing — and all the
+// belt-and-suspenders retry paths in escMainMenu / showGameOver were guarded
+// against `_runSaved=true` and silently skipped. Returns true on confirmed
+// write, false on any failure. Populates G._lastSaveStatus for the UI
+// indicator. Adam reported a D5 18-hole win with 3 simultaneous unlocks lost
+// to this path (seed 89V5O2, screenshot evidence).
 const MAX_RUN_HISTORY = 30;
 function saveRunData(outcome) {
+  const _t0 = (typeof performance !== 'undefined') ? performance.now() : Date.now();
   // Guard: no run in progress, or already saved this run
   if(!G._runId || G._runSaved) {
-    // v0.20f3: log skipped saves so we can diagnose missing run data
     console.log('[runHistory] saveRunData SKIPPED', { outcome, runId: G._runId, alreadySaved: G._runSaved });
-    return;
+    return G._runSaved === true; // already-saved counts as success
   }
-  console.log('[runHistory] saveRunData called', { outcome, runId: G._runId, holes: (G.scorecard||[]).length });
-  G._runSaved = true;
+  console.log('SAVE FIRED', { runId: G._runId, ts: Date.now(), outcome });
   let run;
   try {
     run = {
@@ -49093,8 +49112,15 @@ function saveRunData(outcome) {
     };
   } catch(err) {
     console.warn('saveRunData: failed to assemble run object', err);
-    return;
+    G._lastSaveStatus = { state: 'failed', error: 'assembly_failed', ts: Date.now(), runId: G._runId };
+    return false;
   }
+  // ── Attempt write. Track success/failure carefully — _runSaved is set ONLY
+  // on confirmed write so failed saves remain eligible for retry.
+  let wroteOk = false;
+  let writeBytes = 0;
+  let writeMode = 'normal';
+  let lastError = null;
   try {
     const raw = localStorage.getItem(profKey('ggw_run_history'));
     let history = [];
@@ -49105,13 +49131,15 @@ function saveRunData(outcome) {
     history.push(run);
     // Cap history — drop oldest to keep well under localStorage quota (~5MB typical)
     if(history.length > MAX_RUN_HISTORY) history = history.slice(history.length - MAX_RUN_HISTORY);
-    localStorage.setItem(profKey('ggw_run_history'), JSON.stringify(history));
-    console.log('[runHistory] saveRunData WROTE', { outcome: run.outcome, total: history.length, runId: run.runId });
+    const json = JSON.stringify(history);
+    localStorage.setItem(profKey('ggw_run_history'), json);
+    wroteOk = true;
+    writeBytes = json.length;
   } catch(err) {
-    // Quota exceeded or storage unavailable — try once more with a trimmed history.
+    lastError = err;
+    // Quota exceeded or storage unavailable — try with a trimmed history.
     // v0.19z8: was `trimmed=[run]` which nuked ALL prior run history. Now we
-    // keep the most recent 20 runs to preserve the player's run log. Only
-    // wipes fully if even that trimmed version still exceeds quota.
+    // keep the most recent 20 runs to preserve the player's run log.
     try {
       const raw = localStorage.getItem(profKey('ggw_run_history'));
       let existing = [];
@@ -49122,20 +49150,186 @@ function saveRunData(outcome) {
       existing.push(run);
       const trimmed = existing.slice(-20);
       try {
-        localStorage.setItem(profKey('ggw_run_history'), JSON.stringify(trimmed));
+        const tjson = JSON.stringify(trimmed);
+        localStorage.setItem(profKey('ggw_run_history'), tjson);
+        wroteOk = true;
+        writeBytes = tjson.length;
+        writeMode = 'trimmed20';
         console.warn('saveRunData: quota hit, trimmed history to last 20 runs');
       } catch(e3) {
+        lastError = e3;
         // Still over quota — last resort, save just the current run
-        localStorage.setItem(profKey('ggw_run_history'), JSON.stringify([run]));
-        console.warn('saveRunData: quota hit even with 20-run trim, reset to just this run');
+        try {
+          const sjson = JSON.stringify([run]);
+          localStorage.setItem(profKey('ggw_run_history'), sjson);
+          wroteOk = true;
+          writeBytes = sjson.length;
+          writeMode = 'solo';
+          console.warn('saveRunData: quota hit even with 20-run trim, reset to just this run');
+        } catch(e4) {
+          lastError = e4;
+          console.warn('saveRunData: localStorage write failed even with solo-run fallback', e4);
+        }
       }
     } catch(e2) {
+      lastError = e2;
       console.warn('saveRunData: localStorage write failed', e2);
     }
   }
-  // Clear runId so abandoned-save can't fire afterward for the same run
-  G._runId = null;
+  const _t1 = (typeof performance !== 'undefined') ? performance.now() : Date.now();
+  if(wroteOk) {
+    // v0.23s: mark saved ONLY after confirmed write. This is the load-bearing
+    // change — if anything above threw, _runSaved stays false and escMainMenu's
+    // fallback paths (lines ~51059) can retry.
+    G._runSaved = true;
+    G._lastSaveStatus = {
+      state: 'saved',
+      ts: Date.now(),
+      runId: run.runId,
+      outcome: run.outcome,
+      bytes: writeBytes,
+      latency: Math.round(_t1 - _t0),
+      mode: writeMode,
+    };
+    console.log('SAVE WROTE', { runId: run.runId, bytes: writeBytes, latency: Math.round(_t1 - _t0), mode: writeMode, outcome: run.outcome });
+    // Clear runId so abandoned-save can't fire afterward for the same run
+    G._runId = null;
+    return true;
+  } else {
+    // v0.23s: leave G._runSaved=false and G._runId set so retry paths still work.
+    const errMsg = (lastError && lastError.name === 'QuotaExceededError') ? 'storage_full'
+                 : (lastError && lastError.message) ? lastError.message
+                 : 'write_failed';
+    G._lastSaveStatus = {
+      state: 'failed',
+      ts: Date.now(),
+      runId: G._runId,
+      outcome: outcome,
+      error: errMsg,
+      // Stash the assembled run so retry doesn't have to rebuild it. If the
+      // failure was quota, retry will still hit quota — but at least the data
+      // survives in memory if iOS later frees storage.
+      pendingRun: run,
+    };
+    console.warn('SAVE FAILED', { runId: G._runId, error: errMsg, latency: Math.round(_t1 - _t0) });
+    return false;
+  }
 }
+
+// v0.23s: explicit retry handler for the save-status indicator's retry button.
+// Forces a fresh write attempt by clearing _runSaved, then re-runs saveRunData.
+// If the previous failure stashed a pendingRun, we use that to avoid rebuilding
+// state that may have shifted (G.coins, G.modifiers can change post-summary).
+function retrySaveRun() {
+  const last = G._lastSaveStatus;
+  if(!last || last.state === 'saved') {
+    console.log('[runHistory] retrySaveRun: no failed save to retry');
+    return true;
+  }
+  if(!last.runId) {
+    console.warn('[runHistory] retrySaveRun: no runId on failed status');
+    return false;
+  }
+  // Restore _runId/_runSaved so saveRunData will attempt the write.
+  G._runId = last.runId;
+  G._runSaved = false;
+  // If we have a stashed run object, write it directly (bypass reassembly).
+  if(last.pendingRun) {
+    const run = last.pendingRun;
+    let wroteOk = false, writeBytes = 0, writeMode = 'retry', lastError = null;
+    const _t0 = performance.now();
+    try {
+      const raw = localStorage.getItem(profKey('ggw_run_history'));
+      let history = [];
+      if(raw) { try { history = JSON.parse(raw); } catch(_){} if(!Array.isArray(history)) history = []; }
+      history.push(run);
+      if(history.length > MAX_RUN_HISTORY) history = history.slice(history.length - MAX_RUN_HISTORY);
+      const json = JSON.stringify(history);
+      localStorage.setItem(profKey('ggw_run_history'), json);
+      wroteOk = true;
+      writeBytes = json.length;
+    } catch(err) {
+      lastError = err;
+      try {
+        const sjson = JSON.stringify([run]);
+        localStorage.setItem(profKey('ggw_run_history'), sjson);
+        wroteOk = true;
+        writeBytes = sjson.length;
+        writeMode = 'retry_solo';
+      } catch(e2) { lastError = e2; }
+    }
+    const _t1 = performance.now();
+    if(wroteOk) {
+      G._runSaved = true;
+      G._lastSaveStatus = { state: 'saved', ts: Date.now(), runId: run.runId, outcome: run.outcome, bytes: writeBytes, latency: Math.round(_t1 - _t0), mode: writeMode };
+      console.log('SAVE WROTE (retry)', { runId: run.runId, bytes: writeBytes, mode: writeMode });
+      G._runId = null;
+      return true;
+    } else {
+      const errMsg = (lastError && lastError.name === 'QuotaExceededError') ? 'storage_full' : (lastError && lastError.message) || 'write_failed';
+      G._lastSaveStatus = { state: 'failed', ts: Date.now(), runId: run.runId, outcome: run.outcome, error: errMsg, pendingRun: run };
+      console.warn('SAVE FAILED (retry)', { runId: run.runId, error: errMsg });
+      return false;
+    }
+  }
+  // No stashed run — call full saveRunData (which will reassemble from G state).
+  return saveRunData(last.outcome || 'unknown');
+}
+window.retrySaveRun = retrySaveRun;
+
+// v0.23s: paint #go-save-status with the current save state. Reads
+// G._lastSaveStatus and renders one of three states:
+//   ✅ Saved        → green, low-key (default success path)
+//   ⏳ Saving…      → yellow (only if a write is still in flight; rare)
+//   ⚠️ Save failed   → red with tappable Retry pill
+// Re-rendered on every state change via setLastSaveStatus().
+function renderSaveStatusIndicator() {
+  const el = document.getElementById('go-save-status');
+  if(!el) return;
+  const s = G._lastSaveStatus;
+  if(!s) {
+    // No save status — most likely a no-op skip (already saved earlier), so
+    // show a neutral confirmation rather than nothing.
+    el.innerHTML = `<span style="color:rgba(120,220,140,0.9)">✅ Saved</span>`;
+    return;
+  }
+  if(s.state === 'saving') {
+    el.innerHTML = `<span style="color:rgba(245,200,66,0.95)">⏳ Saving…</span>`;
+    return;
+  }
+  if(s.state === 'saved') {
+    el.innerHTML = `<span style="color:rgba(120,220,140,0.9)">✅ Saved</span>`;
+    return;
+  }
+  // Failure state — red, with explanation + retry pill
+  const errLabel = s.error === 'storage_full' ? 'storage full'
+                 : s.error === 'assembly_failed' ? 'data error'
+                 : s.error === 'write_failed' ? 'try again'
+                 : (s.error || 'try again');
+  el.innerHTML = `
+    <span style="color:rgba(255,120,100,0.95);font-weight:700;letter-spacing:1.5px">⚠️ Save failed (${errLabel})</span>
+    <button id="go-save-retry-btn" onclick="onSaveRetryTap()" style="display:inline-block;margin-left:10px;padding:6px 14px;background:linear-gradient(135deg,#e84545,#c63838);color:#fff;border:0;border-radius:14px;font-size:0.7rem;letter-spacing:1.5px;font-weight:700;cursor:pointer;text-transform:uppercase;box-shadow:0 2px 8px rgba(232,69,69,0.4)">Retry</button>`;
+}
+window.renderSaveStatusIndicator = renderSaveStatusIndicator;
+
+// v0.23s: tap handler for the retry pill. Shows ⏳ briefly, retries, and
+// repaints the indicator. If retry succeeds, the green checkmark replaces
+// the red warning. If it fails again, the warning re-appears with updated
+// error text.
+function onSaveRetryTap() {
+  const el = document.getElementById('go-save-status');
+  if(el) el.innerHTML = `<span style="color:rgba(245,200,66,0.95)">⏳ Retrying…</span>`;
+  // Yield to next frame so the spinner state actually paints before the
+  // synchronous retry blocks.
+  requestAnimationFrame(() => {
+    try { retrySaveRun(); } catch(e) {
+      console.warn('onSaveRetryTap: retrySaveRun threw', e);
+      G._lastSaveStatus = { state: 'failed', error: 'exception', ts: Date.now(), runId: (G._lastSaveStatus && G._lastSaveStatus.runId) || null };
+    }
+    renderSaveStatusIndicator();
+  });
+}
+window.onSaveRetryTap = onSaveRetryTap;
 
 // Exports the full run history as a JSON file.
 // Tries the Web Share API first (best UX on mobile — opens native share sheet),
@@ -51054,11 +51248,19 @@ function escMainMenu() {
   }
   // v0.20f3: belt-and-suspenders — if we're leaving via main menu but the run
   // ID is still set (e.g. showGameOver completed but the won-save was somehow
-  // skipped/blocked), persist now as 'completed_unknown'. Won't double-save:
-  // saveRunData has its own _runSaved guard.
+  // skipped/blocked), persist now. saveRunData has its own _runSaved guard.
+  // v0.23s: prefer retrySaveRun() if a prior failed save stashed a pendingRun
+  // — that path uses the ORIGINAL outcome (e.g. 'won') instead of inferring
+  // 'completed_unknown', which would otherwise mislabel a lost-and-recovered
+  // win in run history.
   if(G._runId && !G._runSaved && G.scorecard && G.scorecard.length > 0) {
-    const inferredOutcome = (G.hp <= 0) ? 'lost' : 'completed_unknown';
-    try { saveRunData(inferredOutcome); } catch(e) { console.warn('saveRunData fallback failed', e); }
+    const _hasPending = G._lastSaveStatus && G._lastSaveStatus.state === 'failed' && G._lastSaveStatus.pendingRun;
+    if(_hasPending) {
+      try { retrySaveRun(); } catch(e) { console.warn('retrySaveRun on menu-exit failed', e); }
+    } else {
+      const inferredOutcome = (G.hp <= 0) ? 'lost' : 'completed_unknown';
+      try { saveRunData(inferredOutcome); } catch(e) { console.warn('saveRunData fallback failed', e); }
+    }
   }
   G.state = 'gameover'; // stop physics
   clearTimeout(G._stylePopupTimer);
@@ -51903,6 +52105,8 @@ function startGame(){
   G._runId = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
   G._runStartTime = performance.now();
   G._runSaved = false;
+  // v0.23s: clear last-save status so prior run's indicator doesn't bleed in
+  G._lastSaveStatus = null;
   G.strokeBudget = 0;
   // v0.18a: starting HP scales with difficulty (10 at ★1-3, 8 at ★4, 7 at ★5-8, 5 at ★9-10).
   // v0.20g: removed the 18-hole +2 HP bonus per Adam — feedback that
