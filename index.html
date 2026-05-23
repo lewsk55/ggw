@@ -3892,7 +3892,7 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
   <button class="play-btn" onclick="openAchievements()" style="margin-top:6px;background:rgba(245,200,66,0.18);border:1px solid rgba(245,200,66,0.5);color:#f5c842;font-size:0.85rem;padding:10px 28px">🏆 Achievements</button>
   <button class="play-btn" id="btn-import-save" style="margin-top:6px;background:rgba(120,120,120,0.6);font-size:0.7rem;padding:8px 20px" onclick="importSaveFile()">📂 Import Save</button>
   <input type="file" id="import-save-input" accept=".ggwsave,application/json" style="display:none">
-  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.23s</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Fixed iOS win-save bug + added save status indicator. saveRunData now sets _runSaved only after a confirmed localStorage write so failed saves are retryable. Run summary shows ✅/⚠️ with a Retry pill if the write didn't land.</div></div>
+  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.23t</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Fixed run-state corruption on resume after main menu. Exit-to-menu now writes 'in_progress' (non-terminal); resume restores _runId + telemetry; completion upserts by runId. Run records now carry wasResumed + runStartedAt for auditing historical data.</div></div>
 
   <!-- v0.19j: Inline profile picker — skip the separate slot-picks screen -->
   <div class="section-label" style="margin-top:14px">Save Slot</div>
@@ -4654,8 +4654,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.23s';
-const CHANGE_NOTE = "v0.23s — fixed iOS win-save bug, added save status indicator. (1) saveRunData no longer marks _runSaved=true before the localStorage write succeeds — previously a thrown setItem (quota / iOS purge) left the run flagged 'saved' in memory while disk had nothing, defeating every belt-and-suspenders retry path in escMainMenu and showGameOver. Adam reported a D5 18-hole win (seed 89V5O2, 3 simultaneous unlocks) vanishing this way. (2) New save-status indicator on the run summary: ✅ Saved / ⏳ Saving… / ⚠️ Save failed with tappable Retry pill. (3) saveRunData now returns true/false on success/failure and populates G._lastSaveStatus with bytes/latency/error details. (4) New retrySaveRun() reuses the stashed pendingRun so retried saves preserve the ORIGINAL outcome (e.g. 'won') instead of being downgraded to 'completed_unknown' by the inference path. (5) escMainMenu fallback now calls retrySaveRun() when a pendingRun is available. (6) Added defensive console logs ('SAVE FIRED', 'SAVE WROTE', 'SAVE FAILED') for iOS debug-console verification.";
+const GAME_VERSION = '0.23t';
+const CHANGE_NOTE = "v0.23t — fixed run state corruption when resuming mid-run after main menu. Before this patch, exiting to main menu wrote outcome:'abandoned' (terminal), and resumeGame() restored gameplay state but NOT analytics identity — so the completion-save's _runId guard silently no-op'd. Result: a D3 9-hole win (seed EDLE8P) showed in export as 'abandoned 2/9' while the in-game unlock for ★4 HARD fired correctly. Fixes: (1) Autosave schema now persists _runId, _runStartTime, _runStartTimestamp, _currentRunShopVisits, _currentRunUpgrades, _currentRunUpgradeOffersShown, _wasResumed. (2) resumeGame() restores all of these and sets _runSaved=false so completion-save can fire. Legacy autosaves without _runId get a synthetic backfill on resume. (3) saveRunData is now lifecycle-aware: 'in_progress' is non-terminal and keeps _runId set so the record can be re-claimed on resume; 'won'/'lost'/'abandoned'/'completed_unknown' are terminal and clear _runId. (4) saveRunData upserts by runId instead of always appending — completion writes OVERWRITE prior in_progress snapshots from the same run. (5) escMainMenu now writes 'in_progress' instead of 'abandoned'. (6) startGame() calls finalizeLingeringInProgress() to flip lingering in_progress records to 'abandoned' when the player explicitly starts fresh. (7) Run history records now carry wasResumed:bool and runStartedAt so historical telemetry can be audited for resume-corrupted records. (8) Save-status indicator no longer paints ✅ on null status — instead it attempts a recovery save first. Preserves all 0.23s save-reliability work.";
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
@@ -49054,32 +49054,59 @@ function showGameOver(bustedBudget=false){
 
 // ── Analytics: run history persistence ────────────────
 // Appends the current run to ggw_run_history in localStorage and caps history at MAX_RUN_HISTORY
-// to prevent quota exhaustion. Guarded so the same run can't be double-saved.
+// to prevent quota exhaustion.
 //
-// v0.23s: hardened against iOS Safari save-loss. Critical fix: G._runSaved is
-// now set ONLY after a confirmed successful localStorage write. Previously it
-// was set BEFORE the write, meaning a thrown setItem (quota / storage purge)
-// left the run marked "saved" in memory while disk had nothing — and all the
-// belt-and-suspenders retry paths in escMainMenu / showGameOver were guarded
-// against `_runSaved=true` and silently skipped. Returns true on confirmed
-// write, false on any failure. Populates G._lastSaveStatus for the UI
-// indicator. Adam reported a D5 18-hole win with 3 simultaneous unlocks lost
-// to this path (seed 89V5O2, screenshot evidence).
+// v0.23s: hardened against iOS Safari save-loss. _runSaved is now set ONLY
+// after a confirmed successful localStorage write, so failed writes remain
+// retryable. Returns true/false. Populates G._lastSaveStatus.
+//
+// v0.23t: outcomes are now LIFECYCLE-AWARE. Save behavior depends on outcome:
+//   - 'in_progress'  → NON-TERMINAL. Find-and-replace existing record by
+//                      runId. Do NOT set _runSaved=true. Do NOT clear _runId.
+//                      Resume needs to re-claim this record, so it stays
+//                      open. Indicator status stays 'in_progress'.
+//   - 'won' | 'lost' | 'abandoned' | 'completed_unknown' → TERMINAL.
+//                      Find-and-replace existing record by runId (overrides
+//                      any prior 'in_progress' snapshot from the same runId).
+//                      Set _runSaved=true so retry paths skip. Clear _runId
+//                      so abandoned-save can't double-fire afterward.
+//
+// This replaces the pre-0.23t "always append" behavior. Previously, exit-to-
+// menu wrote outcome:'abandoned' and the record sat there even if the player
+// returned and completed the run — the completion save's _runId guard
+// silently no-op'd because resumeGame never restored _runId. Result: D3 9-hole
+// wins (seed EDLE8P, Adam's screenshot) appeared in history as 'abandoned
+// 2/9' with the unlock having fired correctly off live in-memory state.
 const MAX_RUN_HISTORY = 30;
+const TERMINAL_OUTCOMES = new Set(['won','lost','abandoned','completed_unknown']);
 function saveRunData(outcome) {
   const _t0 = (typeof performance !== 'undefined') ? performance.now() : Date.now();
-  // Guard: no run in progress, or already saved this run
-  if(!G._runId || G._runSaved) {
-    console.log('[runHistory] saveRunData SKIPPED', { outcome, runId: G._runId, alreadySaved: G._runSaved });
-    return G._runSaved === true; // already-saved counts as success
+  const _isTerminal = TERMINAL_OUTCOMES.has(outcome);
+  // Guard: no run in progress. For TERMINAL outcomes, also guard against
+  // double-save via _runSaved. For NON-TERMINAL ('in_progress'), allow
+  // repeated writes — every leave-to-menu should refresh the snapshot.
+  if(!G._runId) {
+    console.log('[runHistory] saveRunData SKIPPED (no runId)', { outcome, alreadySaved: G._runSaved });
+    return G._runSaved === true;
   }
-  console.log('SAVE FIRED', { runId: G._runId, ts: Date.now(), outcome });
+  if(_isTerminal && G._runSaved) {
+    console.log('[runHistory] saveRunData SKIPPED (already terminal)', { outcome, runId: G._runId });
+    return true;
+  }
+  console.log('SAVE FIRED', { runId: G._runId, ts: Date.now(), outcome, terminal: _isTerminal });
   let run;
   try {
     run = {
       runId: G._runId,
       version: GAME_VERSION,
       timestamp: new Date().toISOString(),
+      // v0.23t: when the run actually began (separate from `timestamp` which
+      // gets updated on every in_progress refresh). Lets analytics compute
+      // wall-clock run duration even when in-game performance.now() time
+      // resets across page reloads. Falls back to current time if missing.
+      runStartedAt: G._runStartTimestamp
+        ? new Date(G._runStartTimestamp).toISOString()
+        : new Date().toISOString(),
       // v0.21k6: character tracking. Lets analytics slice take rates,
       // archetype affinity, and difficulty performance per character —
       // critical for tuning Smashy/Speedball/Precision relative to Classic.
@@ -49109,18 +49136,44 @@ function saveRunData(outcome) {
       // submission can filter for valid weekly entries. Null on regular runs.
       weeklyChallengeId: G._currentRunWeeklyChallengeId || null,
       runDuration: G._runStartTime ? Math.max(0, Math.round(performance.now() - G._runStartTime)) : 0,
+      // v0.23t: was this run ever resumed via the main-menu "Resume Run"
+      // button? Sticky-true once flipped in resumeGame(). Useful for auditing
+      // historical telemetry — Adam noted "the won at 11/18 anomalies" may
+      // be resume-corrupted records from pre-0.23t.
+      wasResumed: !!G._wasResumed,
     };
   } catch(err) {
     console.warn('saveRunData: failed to assemble run object', err);
     G._lastSaveStatus = { state: 'failed', error: 'assembly_failed', ts: Date.now(), runId: G._runId };
     return false;
   }
-  // ── Attempt write. Track success/failure carefully — _runSaved is set ONLY
-  // on confirmed write so failed saves remain eligible for retry.
+  // ── Attempt write. Track success/failure carefully — for terminal outcomes
+  // _runSaved is set ONLY on confirmed write so failed saves remain eligible
+  // for retry. For in_progress, _runSaved stays false unconditionally.
   let wroteOk = false;
   let writeBytes = 0;
   let writeMode = 'normal';
   let lastError = null;
+  // v0.23t: find-and-replace by runId helper. This is the structural change:
+  // we no longer blindly push. Any prior record with the same runId (e.g.
+  // a previous 'in_progress' snapshot, or a stale 'abandoned' write that
+  // should have been the completion) is OVERWRITTEN. New records still get
+  // appended at the end so chronological order is preserved.
+  function _upsertRun(historyArr) {
+    if(!Array.isArray(historyArr)) historyArr = [];
+    const idx = historyArr.findIndex(r => r && r.runId === run.runId);
+    if(idx >= 0) {
+      historyArr[idx] = run;
+    } else {
+      historyArr.push(run);
+    }
+    // Cap history — drop oldest to keep well under localStorage quota (~5MB typical).
+    // Done AFTER upsert so we don't accidentally drop the record we just wrote.
+    if(historyArr.length > MAX_RUN_HISTORY) {
+      historyArr = historyArr.slice(historyArr.length - MAX_RUN_HISTORY);
+    }
+    return historyArr;
+  }
   try {
     const raw = localStorage.getItem(profKey('ggw_run_history'));
     let history = [];
@@ -49128,9 +49181,7 @@ function saveRunData(outcome) {
       try { history = JSON.parse(raw); } catch(_) { history = []; }
       if(!Array.isArray(history)) history = [];
     }
-    history.push(run);
-    // Cap history — drop oldest to keep well under localStorage quota (~5MB typical)
-    if(history.length > MAX_RUN_HISTORY) history = history.slice(history.length - MAX_RUN_HISTORY);
+    history = _upsertRun(history);
     const json = JSON.stringify(history);
     localStorage.setItem(profKey('ggw_run_history'), json);
     wroteOk = true;
@@ -49138,8 +49189,6 @@ function saveRunData(outcome) {
   } catch(err) {
     lastError = err;
     // Quota exceeded or storage unavailable — try with a trimmed history.
-    // v0.19z8: was `trimmed=[run]` which nuked ALL prior run history. Now we
-    // keep the most recent 20 runs to preserve the player's run log.
     try {
       const raw = localStorage.getItem(profKey('ggw_run_history'));
       let existing = [];
@@ -49147,7 +49196,7 @@ function saveRunData(outcome) {
         try { existing = JSON.parse(raw); } catch(_) { existing = []; }
         if(!Array.isArray(existing)) existing = [];
       }
-      existing.push(run);
+      existing = _upsertRun(existing);
       const trimmed = existing.slice(-20);
       try {
         const tjson = JSON.stringify(trimmed);
@@ -49178,10 +49227,13 @@ function saveRunData(outcome) {
   }
   const _t1 = (typeof performance !== 'undefined') ? performance.now() : Date.now();
   if(wroteOk) {
-    // v0.23s: mark saved ONLY after confirmed write. This is the load-bearing
-    // change — if anything above threw, _runSaved stays false and escMainMenu's
-    // fallback paths (lines ~51059) can retry.
-    G._runSaved = true;
+    if(_isTerminal) {
+      // v0.23s: mark saved ONLY after confirmed write for TERMINAL outcomes.
+      G._runSaved = true;
+      G._runId = null;
+    }
+    // For in_progress: leave _runSaved=false and _runId set so the run can
+    // be re-claimed on resume or finalized on the next startGame/escMainMenu.
     G._lastSaveStatus = {
       state: 'saved',
       ts: Date.now(),
@@ -49190,10 +49242,9 @@ function saveRunData(outcome) {
       bytes: writeBytes,
       latency: Math.round(_t1 - _t0),
       mode: writeMode,
+      terminal: _isTerminal,
     };
-    console.log('SAVE WROTE', { runId: run.runId, bytes: writeBytes, latency: Math.round(_t1 - _t0), mode: writeMode, outcome: run.outcome });
-    // Clear runId so abandoned-save can't fire afterward for the same run
-    G._runId = null;
+    console.log('SAVE WROTE', { runId: run.runId, bytes: writeBytes, latency: Math.round(_t1 - _t0), mode: writeMode, outcome: run.outcome, terminal: _isTerminal });
     return true;
   } else {
     // v0.23s: leave G._runSaved=false and G._runId set so retry paths still work.
@@ -49206,12 +49257,13 @@ function saveRunData(outcome) {
       runId: G._runId,
       outcome: outcome,
       error: errMsg,
+      terminal: _isTerminal,
       // Stash the assembled run so retry doesn't have to rebuild it. If the
       // failure was quota, retry will still hit quota — but at least the data
       // survives in memory if iOS later frees storage.
       pendingRun: run,
     };
-    console.warn('SAVE FAILED', { runId: G._runId, error: errMsg, latency: Math.round(_t1 - _t0) });
+    console.warn('SAVE FAILED', { runId: G._runId, error: errMsg, latency: Math.round(_t1 - _t0), terminal: _isTerminal });
     return false;
   }
 }
@@ -49236,14 +49288,23 @@ function retrySaveRun() {
   // If we have a stashed run object, write it directly (bypass reassembly).
   if(last.pendingRun) {
     const run = last.pendingRun;
+    const _isTerminal = TERMINAL_OUTCOMES.has(run.outcome);
     let wroteOk = false, writeBytes = 0, writeMode = 'retry', lastError = null;
     const _t0 = performance.now();
+    // v0.23t: upsert-by-runId so retry doesn't append a duplicate when a
+    // prior in_progress snapshot of this same run already exists in history.
+    const _upsert = (arr) => {
+      if(!Array.isArray(arr)) arr = [];
+      const idx = arr.findIndex(r => r && r.runId === run.runId);
+      if(idx >= 0) arr[idx] = run; else arr.push(run);
+      if(arr.length > MAX_RUN_HISTORY) arr = arr.slice(arr.length - MAX_RUN_HISTORY);
+      return arr;
+    };
     try {
       const raw = localStorage.getItem(profKey('ggw_run_history'));
       let history = [];
       if(raw) { try { history = JSON.parse(raw); } catch(_){} if(!Array.isArray(history)) history = []; }
-      history.push(run);
-      if(history.length > MAX_RUN_HISTORY) history = history.slice(history.length - MAX_RUN_HISTORY);
+      history = _upsert(history);
       const json = JSON.stringify(history);
       localStorage.setItem(profKey('ggw_run_history'), json);
       wroteOk = true;
@@ -49260,14 +49321,13 @@ function retrySaveRun() {
     }
     const _t1 = performance.now();
     if(wroteOk) {
-      G._runSaved = true;
-      G._lastSaveStatus = { state: 'saved', ts: Date.now(), runId: run.runId, outcome: run.outcome, bytes: writeBytes, latency: Math.round(_t1 - _t0), mode: writeMode };
-      console.log('SAVE WROTE (retry)', { runId: run.runId, bytes: writeBytes, mode: writeMode });
-      G._runId = null;
+      if(_isTerminal) { G._runSaved = true; G._runId = null; }
+      G._lastSaveStatus = { state: 'saved', ts: Date.now(), runId: run.runId, outcome: run.outcome, bytes: writeBytes, latency: Math.round(_t1 - _t0), mode: writeMode, terminal: _isTerminal };
+      console.log('SAVE WROTE (retry)', { runId: run.runId, bytes: writeBytes, mode: writeMode, terminal: _isTerminal });
       return true;
     } else {
       const errMsg = (lastError && lastError.name === 'QuotaExceededError') ? 'storage_full' : (lastError && lastError.message) || 'write_failed';
-      G._lastSaveStatus = { state: 'failed', ts: Date.now(), runId: run.runId, outcome: run.outcome, error: errMsg, pendingRun: run };
+      G._lastSaveStatus = { state: 'failed', ts: Date.now(), runId: run.runId, outcome: run.outcome, error: errMsg, terminal: _isTerminal, pendingRun: run };
       console.warn('SAVE FAILED (retry)', { runId: run.runId, error: errMsg });
       return false;
     }
@@ -49277,21 +49337,85 @@ function retrySaveRun() {
 }
 window.retrySaveRun = retrySaveRun;
 
+// v0.23t: sweep ggw_run_history for any records with outcome:'in_progress'
+// and flip them to 'abandoned'. Called from startGame() when the player
+// explicitly starts a fresh run instead of resuming — at that moment, any
+// lingering in_progress record is by definition abandoned. Idempotent;
+// no-op if no in_progress records exist. Pass opts.excludeRunId to preserve
+// a specific runId (e.g. to skip an active in-progress record); by default
+// nothing is excluded.
+function finalizeLingeringInProgress(opts) {
+  const _excludeRunId = (opts && opts.excludeRunId) || null;
+  try {
+    const raw = localStorage.getItem(profKey('ggw_run_history'));
+    if(!raw) return 0;
+    let history;
+    try { history = JSON.parse(raw); } catch(_) { return 0; }
+    if(!Array.isArray(history)) return 0;
+    let changed = 0;
+    for(let i = 0; i < history.length; i++) {
+      const r = history[i];
+      if(!r || r.outcome !== 'in_progress') continue;
+      if(_excludeRunId && r.runId === _excludeRunId) continue;
+      r.outcome = 'abandoned';
+      // Stamp a marker so audits can tell this was a deferred-finalize
+      // rather than an in-the-moment abandon.
+      r.abandonedAt = new Date().toISOString();
+      r.abandonReason = 'lingering_in_progress';
+      changed++;
+    }
+    if(changed > 0) {
+      try {
+        localStorage.setItem(profKey('ggw_run_history'), JSON.stringify(history));
+        console.log('[runHistory] finalizeLingeringInProgress: flipped', changed, 'in_progress → abandoned');
+      } catch(writeErr) {
+        console.warn('finalizeLingeringInProgress: write failed', writeErr);
+      }
+    }
+    return changed;
+  } catch(e) {
+    console.warn('finalizeLingeringInProgress: read failed', e);
+    return 0;
+  }
+}
+window.finalizeLingeringInProgress = finalizeLingeringInProgress;
+
 // v0.23s: paint #go-save-status with the current save state. Reads
 // G._lastSaveStatus and renders one of three states:
 //   ✅ Saved        → green, low-key (default success path)
 //   ⏳ Saving…      → yellow (only if a write is still in flight; rare)
 //   ⚠️ Save failed   → red with tappable Retry pill
 // Re-rendered on every state change via setLastSaveStatus().
+//
+// v0.23t: removed the "no status = ✅" fallback. Previously, a missing
+// _lastSaveStatus painted green by default, which lied to the player when
+// the win-save was SKIPPED by the _runId guard (the resume-corruption bug).
+// Now, missing status triggers an immediate recovery attempt — the save may
+// genuinely have not fired, and we want to fix it before showing anything.
 function renderSaveStatusIndicator() {
   const el = document.getElementById('go-save-status');
   if(!el) return;
-  const s = G._lastSaveStatus;
+  let s = G._lastSaveStatus;
   if(!s) {
-    // No save status — most likely a no-op skip (already saved earlier), so
-    // show a neutral confirmation rather than nothing.
-    el.innerHTML = `<span style="color:rgba(120,220,140,0.9)">✅ Saved</span>`;
-    return;
+    // No save status. This shouldn't happen post-0.23t because every
+    // saveRunData call (including SKIP) populates the status or preserves
+    // a prior one. But if we land here anyway (e.g. orphaned legacy state),
+    // try one synchronous save to recover, then re-read.
+    console.warn('[runHistory] renderSaveStatusIndicator: no status — attempting recovery save');
+    el.innerHTML = `<span style="color:rgba(245,200,66,0.95)">⏳ Saving…</span>`;
+    try {
+      // Try a 'completed_unknown' save if we still have a runId on hand.
+      // The terminal-or-not branch in saveRunData will populate _lastSaveStatus.
+      if(G._runId) saveRunData((G.hp <= 0) ? 'lost' : 'won');
+    } catch(e) { console.warn('recovery saveRunData threw', e); }
+    s = G._lastSaveStatus;
+    if(!s) {
+      // Recovery didn't populate status either — likely no run was in progress
+      // (showGameOver opened from a stale state). Show a neutral "Saved"
+      // since there's nothing to save and nothing was lost.
+      el.innerHTML = `<span style="color:rgba(120,220,140,0.9)">✅ Saved</span>`;
+      return;
+    }
   }
   if(s.state === 'saving') {
     el.innerHTML = `<span style="color:rgba(245,200,66,0.95)">⏳ Saving…</span>`;
@@ -49768,6 +49892,19 @@ function initHole() {
         // is undefined on resume, the unlock fallback uses live G.difficulty,
         // and bonus-hole bumps cause stars to skip.
         _runStartingDifficulty: (G._runStartingDifficulty != null) ? (G._runStartingDifficulty | 0) : null,
+        // v0.23t: persist per-run ANALYTICS identity so resume can re-claim
+        // the in-progress record instead of orphaning it. Pre-0.23t saves
+        // restored gameplay only — _runId was lost on resume, the abandon-save
+        // record was never updated, and the completion save SKIPPED on its
+        // _runId guard. Adam reported a D3 9-hole win (seed EDLE8P) showing in
+        // export as 'abandoned 2/9' because of exactly this corruption path.
+        _runId: G._runId || null,
+        _runStartTime: G._runStartTime || null,
+        _runStartTimestamp: G._runStartTimestamp || Date.now(),
+        _currentRunShopVisits: Array.isArray(G._currentRunShopVisits) ? G._currentRunShopVisits.slice() : [],
+        _currentRunUpgrades: Array.isArray(G._currentRunUpgrades) ? G._currentRunUpgrades.slice() : [],
+        _currentRunUpgradeOffersShown: (G._currentRunUpgradeOffersShown | 0),
+        _wasResumed: !!G._wasResumed,
         timestamp: Date.now(),
       };
       const json = JSON.stringify(saveData);
@@ -51242,9 +51379,17 @@ function escMainMenu() {
     camera.updateProjectionMatrix();
     G._ssBallCinematic = null;
   }
-  // ── Analytics: save abandoned run if one is in progress ──
+  // ── Analytics: save run mid-flight as 'in_progress' if one is active ──
+  // v0.23t: was 'abandoned', but that was terminal — completion-save couldn't
+  // overwrite it because resumeGame never restored _runId, and the abandon
+  // record sat permanently in history even when the player came back and
+  // completed the run (Adam: D3 9-hole win, seed EDLE8P, shown as 'abandoned
+  // 2/9'). Now we write 'in_progress' which is non-terminal: _runId stays
+  // set, _runSaved stays false, the record can be upserted by runId on
+  // completion. startGame sweeps lingering in_progress records and marks
+  // them as 'abandoned' when the player explicitly starts fresh.
   if(G._runId && G.scorecard && G.scorecard.length > 0 && G.state === 'playing') {
-    try { saveRunData('abandoned'); } catch(e) { console.warn('saveRunData abandoned failed', e); }
+    try { saveRunData('in_progress'); } catch(e) { console.warn('saveRunData in_progress failed', e); }
   }
   // v0.20f3: belt-and-suspenders — if we're leaving via main menu but the run
   // ID is still set (e.g. showGameOver completed but the won-save was somehow
@@ -51253,7 +51398,10 @@ function escMainMenu() {
   // — that path uses the ORIGINAL outcome (e.g. 'won') instead of inferring
   // 'completed_unknown', which would otherwise mislabel a lost-and-recovered
   // win in run history.
-  if(G._runId && !G._runSaved && G.scorecard && G.scorecard.length > 0) {
+  // v0.23t: this branch only fires for TERMINAL post-gameover exits where the
+  // win-save was blocked. The in_progress save above handles the active-run
+  // case. Guard: G.state !== 'playing' eliminates overlap.
+  if(G._runId && !G._runSaved && G.scorecard && G.scorecard.length > 0 && G.state !== 'playing') {
     const _hasPending = G._lastSaveStatus && G._lastSaveStatus.state === 'failed' && G._lastSaveStatus.pendingRun;
     if(_hasPending) {
       try { retrySaveRun(); } catch(e) { console.warn('retrySaveRun on menu-exit failed', e); }
@@ -51971,6 +52119,13 @@ function startGame(){
   if(G._runId && G.scorecard && G.scorecard.length > 0 && G.state === 'playing') {
     try { saveRunData('abandoned'); } catch(e) { console.warn('saveRunData abandoned failed', e); }
   }
+  // v0.23t: sweep run history for any lingering 'in_progress' records and
+  // finalize them as 'abandoned'. These exist when the player previously
+  // tapped Main Menu (saved as in_progress) and is now starting fresh
+  // instead of tapping Resume. Without this sweep, in_progress records
+  // would accumulate forever — visible in the export as a permanent open
+  // run.
+  try { finalizeLingeringInProgress(); } catch(e) { console.warn('finalizeLingeringInProgress failed', e); }
   // Kill any pending style/combo timers
   clearTimeout(G._stylePopupTimer);
   // Force-close any open overlays
@@ -52104,7 +52259,14 @@ function startGame(){
   // ── Analytics: unique run id + start timestamp ─────────
   G._runId = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
   G._runStartTime = performance.now();
+  // v0.23t: wall-clock timestamp (separate from performance.now() which resets
+  // across page reloads). Used by saveRunData to record runStartedAt for the
+  // resume-aware audit trail.
+  G._runStartTimestamp = Date.now();
   G._runSaved = false;
+  // v0.23t: fresh run was not resumed. Sticky-true if/when resumeGame() is
+  // called later in the run; emitted on the run history record for auditing.
+  G._wasResumed = false;
   // v0.23s: clear last-save status so prior run's indicator doesn't bleed in
   G._lastSaveStatus = null;
   G.strokeBudget = 0;
@@ -53003,6 +53165,33 @@ function resumeGame() {
     }
     G.state = 'playing';
     G.strokeBudget = 0;
+    // v0.23t: restore per-run ANALYTICS identity. This is the load-bearing
+    // fix for the resume-after-main-menu corruption bug. Without these, the
+    // completion-save's `!G._runId` guard skipped, and the run history kept
+    // its stale 'abandoned 2/9' record instead of being updated to a
+    // completed 9-hole win. _runSaved is reset to false so completion-save
+    // can fire. _wasResumed is flipped true (sticky for the rest of the run)
+    // so audits can spot resumed records in historical telemetry.
+    G._runId = save._runId || null;
+    G._runSaved = false;
+    G._runStartTime = (typeof save._runStartTime === 'number') ? save._runStartTime : performance.now();
+    G._runStartTimestamp = save._runStartTimestamp || Date.now();
+    G._currentRunShopVisits = Array.isArray(save._currentRunShopVisits) ? save._currentRunShopVisits.slice() : [];
+    G._currentRunUpgrades = Array.isArray(save._currentRunUpgrades) ? save._currentRunUpgrades.slice() : [];
+    G._currentRunUpgradeOffersShown = (save._currentRunUpgradeOffersShown | 0);
+    G._wasResumed = true;
+    // v0.23t: clear last-save status so the indicator doesn't show a stale
+    // 'saved' or 'failed' state from before the resume.
+    G._lastSaveStatus = null;
+    // v0.23t: backfill _runId if a pre-0.23t autosave is being resumed (no
+    // _runId field in the snapshot). Generate a fresh one so completion-save
+    // can write SOMETHING, and stamp _wasResumed so we can tell this record
+    // is post-recovery rather than original. Without this, legacy resumes
+    // hit the same null-_runId guard and silently fail.
+    if(!G._runId) {
+      G._runId = Date.now().toString(36) + '-resumed-' + Math.random().toString(36).slice(2, 6);
+      console.log('[runHistory] resumeGame: backfilled missing _runId for legacy autosave', G._runId);
+    }
     // v0.17x: load HP system fields. Legacy v1 saves (no hp field) fall back to
     // fresh values — saves pre-HP-system invalidate naturally since clean-slate
     // was the chosen direction.
