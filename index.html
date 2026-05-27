@@ -3864,7 +3864,12 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
         <button class="toggle-btn" id="holes-18" onclick="setHoles(18)">18</button>
       </div>
     </div>
-    <div class="setting-group">
+    <!-- v0.23w: Static Players picker hidden until multiplayer ships. Was
+         still showing when the game opened from cold (the dynamic re-render
+         path at line ~51664 had it gated, but the initial HTML still
+         flashed it). Code kept in place to restore once multiplayer ships
+         — remove the display:none on the wrapper. -->
+    <div class="setting-group" style="display:none">
       <div class="setting-label">Players</div>
       <div class="toggle-btns">
         <button class="toggle-btn active" id="players-1" onclick="setPlayers(1)">1</button>
@@ -4654,8 +4659,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.23t';
-const CHANGE_NOTE = "v0.23t — fixed run state corruption when resuming mid-run after main menu. Before this patch, exiting to main menu wrote outcome:'abandoned' (terminal), and resumeGame() restored gameplay state but NOT analytics identity — so the completion-save's _runId guard silently no-op'd. Result: a D3 9-hole win (seed EDLE8P) showed in export as 'abandoned 2/9' while the in-game unlock for ★4 HARD fired correctly. Fixes: (1) Autosave schema now persists _runId, _runStartTime, _runStartTimestamp, _currentRunShopVisits, _currentRunUpgrades, _currentRunUpgradeOffersShown, _wasResumed. (2) resumeGame() restores all of these and sets _runSaved=false so completion-save can fire. Legacy autosaves without _runId get a synthetic backfill on resume. (3) saveRunData is now lifecycle-aware: 'in_progress' is non-terminal and keeps _runId set so the record can be re-claimed on resume; 'won'/'lost'/'abandoned'/'completed_unknown' are terminal and clear _runId. (4) saveRunData upserts by runId instead of always appending — completion writes OVERWRITE prior in_progress snapshots from the same run. (5) escMainMenu now writes 'in_progress' instead of 'abandoned'. (6) startGame() calls finalizeLingeringInProgress() to flip lingering in_progress records to 'abandoned' when the player explicitly starts fresh. (7) Run history records now carry wasResumed:bool and runStartedAt so historical telemetry can be audited for resume-corrupted records. (8) Save-status indicator no longer paints ✅ on null status — instead it attempts a recovery save first. Preserves all 0.23s save-reliability work.";
+const GAME_VERSION = '0.23w';
+const CHANGE_NOTE = "v0.23w — batch fix pass per Adam's playtest list: (1) Wall-skip launch grace now also gates angled-walls (corner triangles), not just polyline walls — they were the silent third path letting the ball deflect right at the tee during slow-mo catapult/jumper launches. Grace duration also bumped 200→280ms base for more headroom on top of the slowMo scaling from v0.23u. (2) Cosmetic re-unlocks: showcase panel now filters duplicates AND drops backlog entries the player already owns (was re-revealing Pineapple Ball / Devil Horns on runs that didn't earn them). (3) Multiplayer picker on main menu fixed for cold-open: static HTML at line 3867 also wrapped in display:none; previously only the dynamic re-render at 51664 was hidden. (4) 'All Bounce No Hole' added to INACTIVE_PERKS so it can't appear in shop via upgrade-offer paths (weight:0 alone wasn't enough). (5) Floomba gets a shadow disc + outline pass — removed noOutline flag, added a flat ground-shadow that tracks the body each frame and cleans up in initHole. (6) Sticky → OOB → respawn → aim arrow gone: resetToLastShot now unconditionally recreates the aim arrow at the new position (was only created if `!G.aimArrow`, leaving stale arrows parked at the old wall position). (7) Joker on empty hole: canPlayCard returns false (with toast) when no non-Joker card has been played yet, so the slot stays armed instead of being consumed. (8) Power Shot weaker in Sharpshooter slow-mo over OOB: OOB friction now uses pow(fr, slowAdj/SUB_STEPS) — same shape as the regular FRICTION above. Previously a flat 0.97 per substep, which compounded 2-4× harder per in-game-second in slow-mo because SUB_STEPS often floors at 1 there.";
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
@@ -14134,13 +14139,18 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
     // outward slightly and raise their position by 30%."
     const hornCenterY = (BALL_R - 0.03) * 1.3;
     const hornTilt = 0.45;
+    // v0.23u: SIGN FIX — horns were tilting INWARD. Rotation around +Z
+    // pitches a +Y-pointing cone toward -X. So for the right horn (at +X)
+    // to tilt outward (toward +X), it needs a NEGATIVE rotation.z; left
+    // horn (at -X) needs a POSITIVE one. Was reversed. Per Adam: "Devil
+    // horns are pointing inward when they should be pointed outward."
     const hL = new THREE.Mesh(hornGeo, hornMat);
     hL.position.set(-0.085, hornCenterY, 0);
-    hL.rotation.z = -hornTilt;
+    hL.rotation.z = hornTilt;
     g.add(hL);
     const hR = new THREE.Mesh(hornGeo, hornMat);
     hR.position.set(0.085, hornCenterY, 0);
-    hR.rotation.z = hornTilt;
+    hR.rotation.z = -hornTilt;
     g.add(hR);
     // Red glow halo below ball \u2014 opposite of the halo accessory
     const glowMat = new THREE.MeshBasicMaterial({
@@ -14215,12 +14225,12 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
       left.position.set(-w/2 + t/2, 0, 0);
       right.position.set(w/2 - t/2, 0, 0);
       socket.add(top); socket.add(bottom); socket.add(left); socket.add(right);
-      // Tint sheet behind the frame so the lenses read as glass.
-      const lensTintMat = new THREE.MeshStandardMaterial({color:0x2a3344, transparent:true, opacity:0.5, roughness:0.1, side: THREE.DoubleSide});
-      const tint = new THREE.Mesh(new THREE.PlaneGeometry(w - t * 0.6, h - t * 0.6), lensTintMat);
-      tint.position.set(0, 0, -0.004);
-      tint.rotation.y = Math.PI;
-      socket.add(tint);
+      // v0.23u: removed the dark lens-tint plane. It sat just behind the
+      // frame and clipped through the ball surface from certain angles,
+      // reading as a weird shadow rectangle rather than tinted glass. Per
+      // Adam: "Get rid of the 'lenses' in the buddy holly glasses since they
+      // clip through the ball in a funny way." Frames + bridge + temple
+      // arms read clearly on their own; the empty lens slots are fine.
       g.add(socket);
     };
     mkSquareLens(-1);
@@ -15881,7 +15891,12 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
       setTimeout(() => {
         try {
           if(item.kind === 'xp') {
-            showToast(`✨ +${item.amount} XP earned!`, 2600);
+            // v0.23u: Adam asked to drop this toast — XP is already visible
+            // on the run summary screen, so re-announcing it on the main
+            // menu return is just noise. Other unlock toasts (difficulty,
+            // cosmetic, character, runLength) still fire — those are
+            // milestones the player hasn't seen yet.
+            return;
           } else if(item.kind === 'difficulty') {
             const nm = (item.name || '').toUpperCase();
             showToast(`★ ${item.star} ${nm} UNLOCKED!`, 3200);
@@ -17187,7 +17202,25 @@ function updateAimArrow() {
     ? getCardField('catapult','arcHeightMult',1.0) : 1.0;
   const vy0Cat     = 2.5 + (6.5 * _catArcMulPrev);
   const vy0Fris    = 2.5 + 4.5 + 1.0;   // arcExtra (4.5) + frisbeeArc (+1)
-  const vy0    = hasCatapult ? vy0Cat : (G._frisbeeArmed ? vy0Fris : vy0Default);
+  let vy0    = hasCatapult ? vy0Cat : (G._frisbeeArmed ? vy0Fris : vy0Default);
+  // v0.23u: Lofty Lobs preview — mirror the +10° pitch-up rotation applied
+  // in fireShot for arc cards. Without this the preview parabola would
+  // undershoot the actual landing point (steeper angle = less horizontal
+  // travel for same speed). Operate on local (vy, spd) since the preview is
+  // drawn in arrow-local coordinates where +z is shot-forward.
+  // _jumpPreloaded is NOT in the preview path because jump-preload doesn't
+  // show its own arc preview; it just bumps vy at fire time.
+  // v0.23v: 20° → 10° per Adam, splitting the difference between the
+  // pre-v0.23u flat angle and the +20° we tried in v0.23u — 20° was too
+  // high, the arcs were lobbing too vertical.
+  let spd2 = spd;
+  if(hasCatapult || hasArc || G._frisbeeArmed) {
+    const _vhP = spd2;
+    const _delta = 10 * Math.PI / 180;
+    const _cosD = Math.cos(_delta), _sinD = Math.sin(_delta);
+    spd2 = _vhP * _cosD - vy0 * _sinD;
+    vy0  = _vhP * _sinD + vy0 * _cosD;
+  }
   const grav   = 12;
   const totalT = (vy0 + Math.sqrt(vy0 * vy0)) / grav;
 
@@ -17213,12 +17246,12 @@ function updateAimArrow() {
       let crossIdx = 13; // default = no crossing (everything renders local)
       let foldOrigin = null; // {wx, wz, dx, dz} world-space partner emerge data
       const tEnd = totalT * 1.1;
-      const arcRange = spd * tEnd; // total horizontal distance covered by visible arc
+      const arcRange = spd2 * tEnd; // total horizontal distance covered by visible arc
       if(isMain && G._portalEntry && G._portalExit && G.shotDir) {
         const hit = _aimRayHitsPortal(ox, oz, G.shotDir.x, G.shotDir.z, arcRange);
         if(hit) {
           // Time at which the ball's XZ crosses the portal
-          const tCross = hit.t / spd;
+          const tCross = hit.t / spd2;
           // Lowest dot index whose t-value exceeds the crossing → first hidden
           crossIdx = Math.max(0, Math.ceil((tCross / tEnd) * 12));
           if(crossIdx > 13) crossIdx = 13;
@@ -17235,7 +17268,7 @@ function updateAimArrow() {
       for(let i = 1; i <= 12; i++) {
         const dot = grp.children[i];
         const t   = (i / 12) * totalT * 1.1;
-        dot.position.set(0, vy0*t - 0.5*grav*t*t - 0.28, spd*t);
+        dot.position.set(0, vy0*t - 0.5*grav*t*t - 0.28, spd2*t);
         dot.scale.setScalar(dotScale);
         // v0.21a4: dots past the portal-cross point are hidden locally;
         // their continuation gets drawn world-space below.
@@ -17254,7 +17287,7 @@ function updateAimArrow() {
         cone.visible = false;
       } else {
         cone.visible = true;
-        cone.position.set(0, vy0*tEnd - 0.5*grav*tEnd*tEnd - 0.28, spd*tEnd);
+        cone.position.set(0, vy0*tEnd - 0.5*grav*tEnd*tEnd - 0.28, spd2*tEnd);
         cone.scale.setScalar((hasCatapult || hasFrisbee) ? 1.6 : 1.0);
       }
       // Stash fold info so the post-driveGroup block can spawn world dots
@@ -17308,9 +17341,9 @@ function updateAimArrow() {
       const t = (k / N_SAMPLES) * tEnd;
       if(t < fold.tCross) continue; // still in local-space part
       const dt = t - fold.tCross;
-      // World XZ continues from fold origin in folded direction at speed spd
-      const wx = fold.wx + fold.dx * spd * dt;
-      const wz = fold.wz + fold.dz * spd * dt;
+      // World XZ continues from fold origin in folded direction at speed spd2
+      const wx = fold.wx + fold.dx * spd2 * dt;
+      const wz = fold.wz + fold.dz * spd2 * dt;
       // Y: continue the original parabola — vy0*t - 0.5*g*t² + ball Y + offset
       const yAbove = vy0*t - 0.5*grav*t*t - 0.28;
       const wy = ballGroundY + 0.28 + yAbove;
@@ -17332,8 +17365,8 @@ function updateAimArrow() {
       // current XZ direction at the final dot.
       const lastT = (N_SAMPLES / N_SAMPLES) * tEnd;
       const lastDt = lastT - fold.tCross;
-      const lastX = fold.wx + fold.dx * spd * lastDt;
-      const lastZ = fold.wz + fold.dz * spd * lastDt;
+      const lastX = fold.wx + fold.dx * spd2 * lastDt;
+      const lastZ = fold.wz + fold.dz * spd2 * lastDt;
       const lastY = ballGroundY + 0.28 + (vy0*lastT - 0.5*grav*lastT*lastT - 0.28);
       const coneGeo = new THREE.ConeGeometry(0.18 * ((hasCatapult || hasFrisbee) ? 1.6 : 1.0), 0.52 * ((hasCatapult || hasFrisbee) ? 1.6 : 1.0), 8);
       const coneMat = new THREE.MeshStandardMaterial({
@@ -19473,12 +19506,40 @@ function updatePhysics(dt) {
   if(G._multiballActive && G._multiballPhase === 1 && !G._multiballShot1RestPos
      && !G.rolling && G.aimMode && !G.inHole && G.state === 'playing'
      && typeof _multiballPhase1ToPhase2 === 'function') {
-    // Small grace timer so we don't fire BEFORE the player has actually
-    // taken shot 1 (initial multiball activation also has !rolling && aimMode).
-    // Only fire if shot 1 has actually been fired (G.strokes > _multiballStartStrokes).
-    if(typeof G._multiballStartStrokes === 'number' && G.strokes > G._multiballStartStrokes) {
+    // v0.23u2: Flag-driven gate. _multiballAwaitingShot1Rest is set in
+    // fireShot when a swing fires DURING phase 1. As soon as the ball comes
+    // to rest after that swing (rolling=false AND aimMode=true), we capture
+    // the position. The flag is cleared on capture (and on clearMultiball)
+    // so a SECOND swing during phase 1 (which shouldn't happen, but defends
+    // against state corruption) can't trigger a re-capture.
+    // Previous gate (`G.strokes > _multiballStartStrokes`) was too loose
+    // and captured shot 2's rest position as shot 1 when shot 1's normal
+    // settle path was missed. Adam's reproduction (v0.23u): shot 1
+    // settled abruptly without phase transition, player fired shot 2
+    // thinking it was their first swing, safety net then captured shot 2
+    // rest as shot 1, leading to the wrong winner being picked.
+    if(G._multiballAwaitingShot1Rest) {
       _multiballPhase1ToPhase2();
+      G._multiballAwaitingShot1Rest = false;
     }
+  }
+  // v0.23u3: Per-frame safety net for PHASE 2. Same pattern as phase 1 —
+  // _multiballAwaitingShot2Rest is set in fireShot when a swing fires
+  // during phase 2. As soon as the ball comes to rest, we resolve the
+  // winner via _multiballPhase2Resolve. Was: the inline bleed-to-zero
+  // settle was the only path that fired the resolve, so any abrupt
+  // settle (tap-to-stop, wall stick, exotic settle path) left phase 2
+  // stranded forever — the ball stayed at shot 2's rest position even
+  // when shot 1 was closer. Per Adam: "Regardless of whether the second
+  // multiball is closer to the hole or not, it always continues on. It
+  // never switches to the winning ball in any case."
+  // Skip when shot 2 went OOB / water — those paths have their own
+  // setTimeout-based resolution that we shouldn't pre-empt.
+  if(G._multiballActive && G._multiballPhase === 2 && G._multiballAwaitingShot2Rest
+     && !G._multiballShot2Oob
+     && !G.rolling && G.aimMode && !G.inHole && G.state === 'playing'
+     && typeof _multiballPhase2Resolve === 'function') {
+    _multiballPhase2Resolve();
   }
   // v0.23g: Near-miss detector — runs per-frame while ball is rolling.
   if(typeof tickNearMissDetector === 'function') tickNearMissDetector(dt);
@@ -20507,7 +20568,19 @@ function updatePhysics(dt) {
       // Still in grace period — apply heavy friction but don't reset yet.
       // v0.19j: with Off-Roading, friction loss reduced by ~3× so trick shots
       // through the rough stay fast and reachable (0.03 loss → 0.01 loss per substep).
-      const oobFric = G.modifiers.some(m=>m.id==='off_roading') ? 0.99 : 0.97;
+      const oobFricBase = G.modifiers.some(m=>m.id==='off_roading') ? 0.99 : 0.97;
+      // v0.23w: normalize per-substep AND per-slowMo, matching the regular
+      // FRICTION application at line ~20873. Was: `vel *= 0.97` applied per
+      // substep without normalization — in slow-mo, SUB_STEPS often floors
+      // at 1 (small per-frame travel) while normal speed has 2+ substeps,
+      // so per-in-game-second friction got amplified 2-4× in slow-mo. Per
+      // Adam: "Power shot is less powerful when you use sharpshooter since
+      // time goes more slowly and friction is applied more intensely in
+      // slow mo (especially noticeable when using powershot over the out
+      // of bounds area)."
+      // pow(fr, slowAdj/SUB_STEPS) is the same shape used for FRICTION.
+      const _slowAdjOob = (G._slowMoScale && G._slowMoScale < 1.0) ? G._slowMoScale : 1.0;
+      const oobFric = Math.pow(oobFricBase, _slowAdjOob / SUB_STEPS);
       G.ballVel.x *= oobFric;
       G.ballVel.z *= oobFric;
       // UI: show the countdown number (counts down from 1.5 to 0)
@@ -20556,6 +20629,7 @@ function updatePhysics(dt) {
         // advance to phase 2, restore aim mode after the reset timeout.
         G._multiballShot1RestPos = G._multiballStartPos.clone();
         G._multiballPhase = 2;
+        G._multiballAwaitingShot1Rest = false; // v0.23u2
         // Show the "shot 1 OOB" message after reset completes
         setTimeout(() => {
           showToast('⚪⚪ Shot 1 OOB — try again from start!', 1800);
@@ -20837,6 +20911,24 @@ function updatePhysics(dt) {
 
   // ── Wall collision — polyline SDF ─────────────────────
   // Skip entirely when ball is above wall height or ghost ball active.
+  // v0.23w: launchGrace hoisted up here so it's also in scope for the
+  // angled-walls (corner triangles) collision below — without this, the
+  // ball could ignore polyline walls at the tee during grace but still
+  // get redirected by a corner triangle in front of the tee, which
+  // visibly contradicted the "ball gets a 200ms launch pass" feel.
+  // v0.23u: Scale the grace window by slow-mo. The 200ms is meant to cover
+  // the moment of liftoff, but in slow-mo (catapult/parkour/freeze-frame
+  // active when this shot fires) the ball moves a fraction of normal
+  // distance in 200ms wall-clock — it hasn't cleared the tee wall yet
+  // when the grace expires, and the wall blocks the launch. Multiplying
+  // the window by 1/slowMoScale preserves the same in-game traversal.
+  const _smScale_g = (G._slowMoScale && G._slowMoScale > 0.01) ? G._slowMoScale : 1.0;
+  // v0.23w: base bumped 200→280ms so the grace is more generous even at
+  // normal speed; the slow-mo scaling still applies on top.
+  const _graceMs_g = 280 / _smScale_g;
+  const launchGrace = G._shotJustFired
+    && (performance.now() - G._shotJustFired) < _graceMs_g
+    && (G._catapultLaunchGrace || G._jumpPreloadLaunchGrace || G._frisbeeLaunchGrace);
   {
     const wbBase = (G._perpetualMotionActive || G._pinballActive) ? 1.0 : BOUNCE * BOUNCE_MULT;
     // Catapult: boost restitution on the first 3 bounces after launch (counter consumed below)
@@ -20849,9 +20941,9 @@ function updatePhysics(dt) {
     // Those are the cases where the ball leaves the ground immediately and
     // bouncing off a wall at tee is an annoying false interaction. Regular
     // rolling shots still respect walls at the tee.
-    const launchGrace = G._shotJustFired
-      && (performance.now() - G._shotJustFired) < 200
-      && (G._catapultLaunchGrace || G._jumpPreloadLaunchGrace || G._frisbeeLaunchGrace);
+    // Per Adam: "Wall skips from ball grace don't work when jumping or
+    // catapulting in slow mo. Walls in front of me that I would ordinarily
+    // be able to skip make me bounce of off them in slow mo."
     // v0.21c: Curve Ball — no wall collision during the curve phase. The ball
     // bends around walls and obstacles instead of bouncing off them. Once the
     // ~1.5s curve timer expires, normal wall physics resume.
@@ -21671,7 +21763,7 @@ function updatePhysics(dt) {
   } else {
     G._skaterAngledHandled = false;
   }
-  if(G.angledWalls && G.angledWalls.length && !ghostActive && !G._skaterAngledHandled) {
+  if(G.angledWalls && G.angledWalls.length && !ghostActive && !launchGrace && !G._skaterAngledHandled) {
     // v0.23p2: Stuck-in-triangle failsafe. Some grind-dismount + dense
     // collision combos can leave the ball pinned inside a corner triangle
     // with vel near zero, bounce-looping every frame. Track consecutive
@@ -23321,6 +23413,7 @@ function updatePhysics(dt) {
         G._multiballShot1Oob = true;
         G._multiballShot1RestPos = G._multiballStartPos.clone();
         G._multiballPhase = 2;
+        G._multiballAwaitingShot1Rest = false; // v0.23u2
         setTimeout(() => {
           showToast('⚪⚪ Shot 1 in water — try again from start!', 1800);
         }, 700);
@@ -24276,56 +24369,11 @@ function updatePhysics(dt) {
           _multiballPhase1ToPhase2();
         }
         // v0.23b1: Multiball phase 2 settle — pick winner.
+        // v0.23u3: now routed through the idempotent _multiballPhase2Resolve
+        // helper so the per-frame safety net can call it too. Helper does
+        // the diagnostic log + winner pick + teleport + clear.
         else if(G._multiballActive && G._multiballPhase === 2) {
-          const hx = G.holePos.x * TILE_SIZE;
-          const hz = G.holePos.y * TILE_SIZE;
-          const shot2OOB = !!G._multiballShot2Oob;
-          const shot1Pos = G._multiballShot1RestPos;
-          const shot2Pos = G.ballPos.clone();
-          const shot1Valid = shot1Pos && !G._multiballShot1Oob;
-          const shot2Valid = !shot2OOB;
-          let winner = null;
-          let winLabel = '';
-          // v0.23p2: longer, more emphatic toast — Adam reported missing the
-          // winner reveal entirely. Prefix with "⚪⚪ MULTIBALL!" so it's
-          // unmistakable, and bumped duration 2200→3200ms.
-          if(shot1Valid && shot2Valid) {
-            const d1 = Math.hypot(shot1Pos.x - hx, shot1Pos.z - hz);
-            const d2 = Math.hypot(shot2Pos.x - hx, shot2Pos.z - hz);
-            if(d1 < d2) {
-              winner = shot1Pos;
-              winLabel = `⚪⚪ MULTIBALL! Shot 1 wins (${d1.toFixed(1)}m vs ${d2.toFixed(1)}m)`;
-            } else {
-              winner = shot2Pos;
-              winLabel = `⚪⚪ MULTIBALL! Shot 2 wins (${d2.toFixed(1)}m vs ${d1.toFixed(1)}m)`;
-            }
-          } else if(shot1Valid) {
-            winner = shot1Pos;
-            winLabel = '⚪⚪ MULTIBALL! Shot 1 wins (Shot 2 OOB)';
-          } else if(shot2Valid) {
-            winner = shot2Pos;
-            winLabel = '⚪⚪ MULTIBALL! Shot 2 wins (Shot 1 OOB)';
-          } else {
-            // Both OOB — leave ball where it is (will trigger normal OOB path)
-            winner = shot2Pos;
-            winLabel = '⚪⚪ MULTIBALL! Both OOB — yikes!';
-          }
-          if(winner) {
-            G.ballPos.copy(winner);
-            if(G.ball) G.ball.position.copy(G.ballPos);
-            G.ballVel.set(0, 0, 0);
-            // v0.23b1: smooth camera lerp to winning position.
-            const _hx2 = G.holePos.x * TILE_SIZE, _hz2 = G.holePos.y * TILE_SIZE;
-            const _toHX = G.ballPos.x - _hx2, _toHZ = G.ballPos.z - _hz2;
-            if(Math.hypot(_toHX, _toHZ) > 0.1) {
-              G.camTheta = Math.atan2(_toHX, _toHZ);
-            }
-            G.camPhi = 0.85;
-            G._camTransitionFrames = 40;
-          }
-          showToast(winLabel, 3200);
-          if(typeof triggerShake === 'function') triggerShake('light');
-          _clearMultiballState();
+          _multiballPhase2Resolve();
         }
         // v0.17v: If this roll was only a Scootch nudge (no actual swing), skip the
         // per-swing perk resets — the player still has iron ball / power shot /
@@ -24729,6 +24777,17 @@ function resetToLastShot() {
   if(G.ballShadow) {
     G.ballShadow.position.set(wx, Math.max(0, ty) + 0.02, wz);
   }
+  // v0.23w: Force-recreate the aim arrow at the new ball position. Was:
+  // OOB handler only created it if `!G.aimArrow`, but the arrow could
+  // linger from an earlier state (e.g. sticky free swing) and stay parked
+  // at the old wall position, with no aim possible from the new spot.
+  // Per Adam: "After going OOB off a shot where you were using sticky
+  // and were stuck to a wall, the aiming arrow disappears after you
+  // respawn at your old sticky spot and you can't take a shot at all.
+  // Need to reload the level to fix." Recreating unconditionally here
+  // makes resetToLastShot the canonical "ready to aim" state regardless
+  // of which sub-system was active before.
+  if(typeof createAimArrow === 'function') createAimArrow();
   snapCameraToPos(G.ballPos);
 }
 
@@ -31776,7 +31835,13 @@ function fireProjectile({ blastRadius = 4.0, travelSpeed = 22, color = 0xff4400,
     }
   };
 
-  // Launch SFX: initial boom + sustained white-noise rocket rumble
+  // Launch SFX: initial boom + sustained white-noise rocket rumble.
+  // v0.23u: If a prior rumble is still active (e.g. rapid back-to-back fires
+  // before the prior missile stopped), kill it first — otherwise we leak the
+  // reference and the old gain node keeps playing its noise buffer audibly
+  // until the source's natural 9s stop. That's the "hissing long after
+  // impact" symptom Adam reported.
+  if(G._rocketRumble) stopRocketRumble();
   G._rocketRumble = null;
   if(AC) {
     const ac = getAC(), t = ac.currentTime;
@@ -31798,13 +31863,24 @@ function fireProjectile({ blastRadius = 4.0, travelSpeed = 22, color = 0xff4400,
     const rumbleG = ac.createGain(); rumbleG.gain.setValueAtTime(0,t); rumbleG.gain.linearRampToValueAtTime(0.22,t+0.12);
     rumbleSrc.connect(bp); bp.connect(rumbleG); rumbleG.connect(getACDest());
     rumbleSrc.start(t+0.05); rumbleSrc.stop(t+9);
-    G._rocketRumble = { gainNode: rumbleG };
+    G._rocketRumble = { gainNode: rumbleG, sourceNode: rumbleSrc };
   }
 }
 
 function stopRocketRumble() {
   if(!G._rocketRumble || !AC) return;
-  G._rocketRumble.gainNode.gain.setTargetAtTime(0, AC.currentTime, 0.04);
+  // v0.23u: Adam reported the hiss persisting "long after" impact. Two fixes:
+  // (1) shorter time constant (0.04 → 0.015) so the perceived fade is under
+  //     80ms instead of ~200ms of audible tail;
+  // (2) explicitly stop the underlying buffer source ~0.1s out so the noise
+  //     buffer doesn't keep grinding silently against the destination for
+  //     up to 9s, holding audio graph state and risking accumulation.
+  const node = G._rocketRumble;
+  try { node.gainNode.gain.cancelScheduledValues(AC.currentTime); } catch(e){}
+  try { node.gainNode.gain.setTargetAtTime(0, AC.currentTime, 0.015); } catch(e){}
+  if(node.sourceNode) {
+    try { node.sourceNode.stop(AC.currentTime + 0.1); } catch(e){}
+  }
   G._rocketRumble = null;
 }
 
@@ -31853,7 +31929,7 @@ function triggerCheckeredFlag() {
 // and slow_mo also have working impls so they could be reactivated; left
 // inactive here for now per existing tuning intent (wall_magnet too gimmicky;
 // slow_mo card duplicates the perk).
-const INACTIVE_PERKS = new Set(['double_or_nothing', 'thin_ice', 'coin_bouncer', 'three_balls', 'bowling_ball']);
+const INACTIVE_PERKS = new Set(['double_or_nothing', 'thin_ice', 'coin_bouncer', 'three_balls', 'bowling_ball', 'all_bounce']);
 // v0.21k2: perks present in ALL_PERKS but never offered in the shop. Used for
 // perks that exist as def-only (so upgrade flows / save migration / runtime
 // granting still works) but should NOT appear as a regular shop pick.
@@ -31924,7 +32000,7 @@ const CARD_DEFS = {
   airstrike:    { id:'airstrike',    emoji:'✈️', name:'Air Strike',       desc:'Call in a Top Gun-style bombing run. A pill-shaped target oscillates near→far in front of you — tap to lock distance. A jet drops 8 bombs across the strike zone, destroying everything inside.', rarity:'epic', price:35, context:'pre', holdable:false, weight:2 },
   pinball:      { id:'pinball',      emoji:'🎰', name:'Pinball',         desc:'12 seconds of invulnerable, frictionless, perfectly bouncy ball. The walls cannot hurt you. The walls cannot hold you.', rarity:'legendary', price:32, context:'pre', holdable:false, weight:1 },
   freeze_frame: { id:'freeze_frame', emoji:'🧊', name:'Freeze Frame',    desc:'All moving obstacles freeze for 10 seconds.',                    rarity:'rare',      price:11,  context:'any',    holdable:false, weight:3 },
-  coin_shower:  { id:'coin_shower',  emoji:'🌧️', name:'Coin Shower',     desc:'Drop 20 coins in a line ahead of your ball. Clean line = bonus 5× coin!', rarity:'rare',      price:18,  context:'pre',    holdable:false },
+  coin_shower:  { id:'coin_shower',  emoji:'🌧️', name:'Coin Shower',     desc:'Drop 20 coins in a line ahead of your ball, ending with a 🪙×10 bonus coin.', rarity:'rare',      price:18,  context:'pre',    holdable:false },
   // golden_path hidden — may revisit later
   // golden_path:  { id:'golden_path',  emoji:'🔦', name:'Golden Path',     desc:'Reveals the optimal line to the hole. Fades after one swing.',    rarity:'common',    price:10,  context:'pre',    holdable:false },
   // v0.20g: angler moved from CARD_DEFS to ALL_PERKS. Was a single-use card;
@@ -32405,6 +32481,20 @@ function canPlayCard(cardId) {
   if (def.context === 'post' && G.rolling) return false;
   // Mulligan needs a previous shot to undo
   if (cardId === 'mulligan' && (!G.undoState || G.strokes < 1)) return false;
+  // v0.23w: Joker needs something to copy. Per Adam: "Don't let the player
+  // use up a joker if they haven't played a card that hole yet (currently
+  // it is used up followed by 'no card played yet' toast — just do the
+  // latter without using the card in this case)." Returning false here
+  // means playCard bails before slot drain / discard / executeCardAbility.
+  // Show the toast inline so the player still gets the feedback they had
+  // before — just without losing the card.
+  if (cardId === 'joker') {
+    const lastId = G._lastNonJokerCardPlayed;
+    if (!lastId || lastId === 'joker') {
+      if (typeof showToast === 'function') showToast('🃏 Nothing to copy yet!', 1000);
+      return false;
+    }
+  }
   return true;
 }
 
@@ -35211,6 +35301,14 @@ function activateWalkiesCard() {
   const _ilen = Math.hypot(_initDir.x, _initDir.z) || 1;
   G._walkDir = { x: _initDir.x / _ilen, z: _initDir.z / _ilen };
   G._walkTarget = null;
+  // v0.23u: SNAP camera to walk direction immediately on activation. The
+  // per-frame lerp (was 8/sec, now 18/sec) catches up smoothly on subsequent
+  // direction changes, but the initial transition from aim-mode camera to
+  // walkies chase-cam must be instant — otherwise the player spends the
+  // first ~1 second walking with a side-on view. Per Adam: "The camera is
+  // not behind the ball like on the regular camera angle — it seems to be
+  // more of a side angle so you can't look ahead of you."
+  G.camTheta = Math.atan2(-G._walkDir.x, -G._walkDir.z);
   const dur = Math.round(G.walkiesTimer);
   const _label = _wkDurMul > 1 ? 'Power Walkies!' : 'Walkies!';
   // v0.23p2: platform-specific hint. Desktop gets WASD; mobile gets the
@@ -35680,6 +35778,8 @@ function activateMultiball() {
   G._multiballShot1RestPos = null;
   G._multiballShot1Oob = false;
   G._multiballShot1Holed = false;
+  G._multiballAwaitingShot1Rest = false; // v0.23u2
+  G._multiballAwaitingShot2Rest = false; // v0.23u3
   G._multiballGhostMesh = null;
   showToast('⚪⚪ Multiball — take TWO shots, the better one wins!', 1800);
   if(typeof triggerShake === 'function') triggerShake('medium');
@@ -35754,6 +35854,10 @@ function _multiballPhase1ToPhase2() {
   if(G._multiballShot1RestPos) return; // already transitioned this cycle
   // Capture shot 1's resting position (safe even if OOB — flag handles it)
   G._multiballShot1RestPos = G.ballPos.clone();
+  // v0.23u2: clear the "awaiting shot 1 rest" flag — this helper is the
+  // canonical capture point, so any path that reaches it (bleed-to-zero,
+  // safety net, OOB handler, water handler) finalizes the flag too.
+  G._multiballAwaitingShot1Rest = false;
   // Spawn ghost marker so the player can see what they need to beat.
   // Skip the marker if shot 1 went OOB (no valid target to beat).
   if(!G._multiballShot1Oob) {
@@ -35808,6 +35912,65 @@ function _multiballPhase1ToPhase2() {
   G._wasOOB = false;
 }
 
+// v0.23u3: Phase 2 winner-pick extracted into a helper so multiple settle
+// paths can call it. Idempotent — bails out if phase != 2 or already
+// resolved. Picks the closer of shot1Pos and shot2Pos, teleports the ball
+// to the winner, fires the winner toast, and clears all multiball state.
+// Mirrors the inline block that used to live only in the bleed-to-zero
+// settle. Per Adam's v0.23u2 repro: phase 2 settle was being missed by
+// the bleed-to-zero path on some shots, leaving the ball stranded at
+// shot 2's rest position — even when shot 1 was clearly closer to the
+// cup. Now any settle path that reaches aim-mode rest after shot 2 fires
+// will resolve the winner via this helper.
+function _multiballPhase2Resolve() {
+  if(!G._multiballActive || G._multiballPhase !== 2) return;
+  const hx = G.holePos.x * TILE_SIZE;
+  const hz = G.holePos.y * TILE_SIZE;
+  const shot2OOB = !!G._multiballShot2Oob;
+  const shot1Pos = G._multiballShot1RestPos;
+  const shot2Pos = G.ballPos.clone();
+  const shot1Valid = shot1Pos && !G._multiballShot1Oob;
+  const shot2Valid = !shot2OOB;
+  let winner = null;
+  let winLabel = '';
+  if(shot1Valid && shot2Valid) {
+    const d1 = Math.hypot(shot1Pos.x - hx, shot1Pos.z - hz);
+    const d2 = Math.hypot(shot2Pos.x - hx, shot2Pos.z - hz);
+    if(d1 < d2) {
+      winner = shot1Pos;
+      winLabel = `⚪⚪ MULTIBALL! Shot 1 wins (${d1.toFixed(1)}m vs ${d2.toFixed(1)}m)`;
+    } else {
+      winner = shot2Pos;
+      winLabel = `⚪⚪ MULTIBALL! Shot 2 wins (${d2.toFixed(1)}m vs ${d1.toFixed(1)}m)`;
+    }
+  } else if(shot1Valid) {
+    winner = shot1Pos;
+    winLabel = '⚪⚪ MULTIBALL! Shot 1 wins (Shot 2 OOB)';
+  } else if(shot2Valid) {
+    winner = shot2Pos;
+    winLabel = '⚪⚪ MULTIBALL! Shot 2 wins (Shot 1 OOB)';
+  } else {
+    winner = shot2Pos;
+    winLabel = '⚪⚪ MULTIBALL! Both OOB — yikes!';
+  }
+  if(winner) {
+    G.ballPos.copy(winner);
+    if(G.ball) G.ball.position.copy(G.ballPos);
+    G.ballVel.set(0, 0, 0);
+    const _hx2 = G.holePos.x * TILE_SIZE, _hz2 = G.holePos.y * TILE_SIZE;
+    const _toHX = G.ballPos.x - _hx2, _toHZ = G.ballPos.z - _hz2;
+    if(Math.hypot(_toHX, _toHZ) > 0.1) {
+      G.camTheta = Math.atan2(_toHX, _toHZ);
+    }
+    G.camPhi = 0.85;
+    G._camTransitionFrames = 40;
+  }
+  if(typeof showToast === 'function') showToast(winLabel, 3200);
+  if(typeof triggerShake === 'function') triggerShake('light');
+  G._multiballAwaitingShot2Rest = false;
+  _clearMultiballState();
+}
+
 // Internal: end Multiball cleanly. Tears down all state without picking
 // a winner — used on hole transition / OOB-both / abort paths.
 function _clearMultiballState() {
@@ -35818,6 +35981,8 @@ function _clearMultiballState() {
   G._multiballShot1RestPos = null;
   G._multiballShot1Oob = false;
   G._multiballShot1Holed = false;
+  G._multiballAwaitingShot1Rest = false; // v0.23u2
+  G._multiballAwaitingShot2Rest = false; // v0.23u3
   _despawnMultiballGhost();
   // v0.23b1: drain the multiball card from _armedCards / hand / slot now
   // that the sequence is over. Without this, the card stays armed in slot
@@ -38711,16 +38876,17 @@ function activateCoinShower() {
     }];
   }
 
-  // Walk the polyline by arc-length and emit a point every SPACING, starting
-  // at START_OFFSET. Accept the point if its cell is FAIR; if not, we break
-  // the line there (hit an interior obstacle we can't reflect off). The wall
-  // bounce tracer already handles wall deflection so points stay in-bounds.
+  // v0.23u: Walk the polyline by arc-length and emit a point every SPACING,
+  // starting at START_OFFSET. SKIP non-FAIR cells (interior obstacles like
+  // crates, bumpers, spikes) without breaking the line — keep walking and
+  // place subsequent coins past them. The line follows the wall-bounce path;
+  // interior obstacles are just gaps in the line, not termination. No more
+  // scatter cone fallback — coins always live on the bounce path.
   const placements = [];
   let travelled = 0;
   let target = START_OFFSET;
   let placeIdx = 0;
-  let lineClean = true;
-  outer: for(const seg of pathSegs) {
+  for(const seg of pathSegs) {
     const segLen = Math.hypot(seg.ex - seg.sx, seg.ez - seg.sz);
     if(segLen < 0.001) continue;
     const enx = (seg.ex - seg.sx) / segLen;
@@ -38731,57 +38897,44 @@ function activateCoinShower() {
       const wx = seg.sx + enx * along;
       const wz = seg.sz + enz * along;
       const cell = getCell(wx, wz);
-      if(cell !== CELL.FAIR) { lineClean = false; break outer; }
-      placements.push({ wx, wz, idx: placeIdx++ });
+      // Non-FAIR cell (obstacle, OOB, water, etc.): skip this slot but keep
+      // advancing target so the LINE stays straight. The coin just doesn't
+      // spawn at this position; the next position past the obstacle does.
+      if(cell === CELL.FAIR) {
+        placements.push({ wx, wz, idx: placeIdx });
+      }
+      placeIdx++;
       target += SPACING;
-      if(placements.length >= LINE_COUNT) break outer;
+      if(placeIdx >= LINE_COUNT) break;
     }
     travelled += segLen;
+    if(placeIdx >= LINE_COUNT) break;
   }
 
-  // If the full line landed cleanly, append a 5× bonus at the next step.
-  const wantBonus = lineClean && placements.length === LINE_COUNT;
-  if(wantBonus) {
-    // Walk one more SPACING along the same polyline.
+  // Append a 10-value bonus coin at the very end of the line, one step past
+  // the last regular coin. Per Adam: "always end with a 10 value coin".
+  // Walk one more SPACING along the same polyline. Try increasing offsets
+  // until we find a FAIR cell, so the bonus doesn't get eaten by the same
+  // obstacle that the line just walked through.
+  let bonusPlaced = false;
+  for(let bonusOffset = 1; bonusOffset <= 6 && !bonusPlaced; bonusOffset++) {
     let trav2 = 0;
-    let t2 = START_OFFSET + LINE_COUNT * SPACING;
+    const t2 = START_OFFSET + (LINE_COUNT + bonusOffset - 1) * SPACING;
     for(const seg of pathSegs) {
       const segLen = Math.hypot(seg.ex - seg.sx, seg.ez - seg.sz);
       if(t2 <= trav2 + segLen) {
         const along = t2 - trav2;
-        const enx = (seg.ex - seg.sx) / segLen;
-        const enz = (seg.ez - seg.sz) / segLen;
-        const wx = seg.sx + enx * along;
-        const wz = seg.sz + enz * along;
+        const enx2 = (seg.ex - seg.sx) / segLen;
+        const enz2 = (seg.ez - seg.sz) / segLen;
+        const wx = seg.sx + enx2 * along;
+        const wz = seg.sz + enz2 * along;
         if(getCell(wx, wz) === CELL.FAIR) {
-          placements.push({ wx, wz, idx: LINE_COUNT, isSpecial: true });
+          placements.push({ wx, wz, idx: LINE_COUNT + bonusOffset, isSpecial: true });
+          bonusPlaced = true;
         }
         break;
       }
       trav2 += segLen;
-    }
-  }
-
-  // If the tracer hit a dead-end short — guarantee at least the coins can be
-  // scattered so the perk doesn't feel wasted. This falls back to the old
-  // scatter logic only for what didn't fit on the bounce path.
-  const shortfall = LINE_COUNT - placements.length;
-  if(shortfall > 0) {
-    const usedKeys = new Set(placements.map(p => `${Math.round(p.wx*4)},${Math.round(p.wz*4)}`));
-    let scatterIdx = placements.length;
-    const maxAttempts = shortfall * 40;
-    for(let a = 0; a < maxAttempts && (scatterIdx - placements.length) < shortfall; a++) {
-      const baseAngle = Math.atan2(dirZ, dirX);
-      const ang = baseAngle + (Math.random() - 0.5) * Math.PI * 0.9; // narrower cone now (±80°)
-      const rad = 1.2 + Math.random() * 3.8;
-      const wx = G.ballPos.x + Math.cos(ang) * rad;
-      const wz = G.ballPos.z + Math.sin(ang) * rad;
-      const key = `${Math.round(wx*4)},${Math.round(wz*4)}`;
-      if(usedKeys.has(key)) continue;
-      const cell = getCell(wx, wz);
-      if(cell !== CELL.FAIR) continue;
-      usedKeys.add(key);
-      placements.push({ wx, wz, idx: scatterIdx++, _scattered: true });
     }
   }
 
@@ -38822,7 +38975,7 @@ function activateCoinShower() {
       wx: p.wx, wz: p.wz, collected: false,
       bobOffset: Math.random() * Math.PI * 2,
       spinSpeed: isSpecial ? 5.5 : 4.0 + Math.random() * 1.2,
-      value: isSpecial ? 5 : 1,
+      value: isSpecial ? 10 : 1,
       isSpecial,
       // v0.19j drop/squash state
       _dropDelay: (p.idx * STAGGER_MS) / 1000,  // seconds until it starts falling
@@ -38845,15 +38998,15 @@ function activateCoinShower() {
   // which is the "infinite shower" symptom (re-tapping refired it). Fix:
   // use `shortfall` (defined above at line ~17393) which is the canonical
   // signal for "did we have to fall back to scatter".
+  // v0.23u: Always a line, always a 10-value bonus coin at the end. No more
+  // scatter fallback; gaps from obstacles just become empty slots.
   const regularCount = placements.filter(p => !p.isSpecial).length;
-  if(wantBonus && placements.length > LINE_COUNT) {
-    showToast(`🌧️ COIN SHOWER! +${regularCount} + 5× bonus!`, 1800);
+  const bonusCount = placements.filter(p => p.isSpecial).length;
+  if(bonusCount > 0) {
+    showToast(`🌧️ COIN SHOWER! +${regularCount} + 🪙×10 bonus!`, 1800);
     triggerShake('med');
-  } else if(shortfall === 0) {
-    showToast(`🌧️ Coin Shower! +${regularCount} coins`, 1500);
-    triggerShake('light');
   } else {
-    showToast(`🌧️ Coin Shower! +${regularCount} coins (scatter)`, 1600);
+    showToast(`🌧️ Coin Shower! +${regularCount} coins`, 1500);
     triggerShake('light');
   }
   // Staggered landing blips — match visual cadence
@@ -38985,8 +39138,12 @@ function triggerJump() {
     updateHandUI();
     return;
   }
-  // Mid-roll: existing grace-window pending-jump behavior
-  const jumpReady = (G.rolling || (performance.now() - (G._shotJustFired||0) < 300)) && !G.inHole && !G.aimMode;
+  // Mid-roll: existing grace-window pending-jump behavior.
+  // v0.23u: same slow-mo scaling as the wall-skip grace — without it, in
+  // slow-mo the 300ms window expires before the ball has actually started
+  // rolling, so the jump goes unprimed.
+  const _smJ = (G._slowMoScale && G._slowMoScale > 0.01) ? G._slowMoScale : 1.0;
+  const jumpReady = (G.rolling || (performance.now() - (G._shotJustFired||0) < (300 / _smJ))) && !G.inHole && !G.aimMode;
   if(jumpReady) {
     G._jumpPending = true;
     if(!G._jumpChargesRemaining) G._jumpChargesRemaining = Math.max(1, _jumpN|0);
@@ -42961,10 +43118,28 @@ function spawnFloombaFromCard() {
   }
 
   fbGroup.position.set(fwx, ftY + FLOOR_H/2 + 0.3, fwz);
-  fbGroup.userData.noOutline = true;
+  // v0.23w: removed userData.noOutline so the standard outline pass renders
+  // Floomba's silhouette, fitting it into the rest of the game's pixel-art
+  // aesthetic. Also added a flat shadow disc on the ground beneath it so
+  // it doesn't look like it's floating. Per Adam: "Add shadow under
+  // Floomba and give it an outline to make it fit the aesthetic of the
+  // game more."
+  // (no fbGroup.userData.noOutline = true; — outline pass picks it up)
   // v0.21d: scale entire floomba group for Mega Floomba upgrade.
   if(_flSizeMul !== 1.0) fbGroup.scale.setScalar(_flSizeMul);
   scene.add(fbGroup);
+  // Shadow disc — flat dark ellipse on the ground, follows the floomba.
+  // We track it on the floomba record so the per-frame movement update
+  // can keep it under the body. Uses noOutline so it doesn't itself get
+  // an outline (a shadow with an outline reads weird).
+  const _fbShadow = new THREE.Mesh(
+    new THREE.CircleGeometry(0.55 * _flSizeMul, 18),
+    new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.32, depthWrite: false })
+  );
+  _fbShadow.rotation.x = -Math.PI / 2;
+  _fbShadow.position.set(fwx, ftY + FLOOR_H/2 + 0.012, fwz);
+  _fbShadow.userData.noOutline = true;
+  _fbShadow.renderOrder = 1; // draw after terrain so the shadow shows through
   // v0.23p2: Spawn Floomba aimed in a random direction within the 90° cone
   // around the player's current aim. Was: fully random 0-2π — Adam reported
   // Floombas spawning toward a wall and just ping-ponging without progress.
@@ -42981,12 +43156,16 @@ function spawnFloombaFromCard() {
   }
   const fAng = _aimAng + (Math.random() - 0.5) * (Math.PI / 2);
   const fSpeed = (5 + Math.random() * 3) * _flSpeedMul;
+  _fbShadow.userData.noOutline = true;
+  _fbShadow.renderOrder = 1; // draw after terrain so the shadow shows through
+  scene.add(_fbShadow);
   G._floombas.push({
     mesh: fbGroup, pos: new THREE.Vector3(fwx, ftY + FLOOR_H/2 + 0.2, fwz),
     vel: new THREE.Vector3(Math.sin(fAng)*fSpeed, 0, Math.cos(fAng)*fSpeed),
     _hitSet: new Set(), _flipTimer: 0, _squashTimer: 0, _squashDir: new THREE.Vector3(1,0,0),
     _radiusMul: _flSizeMul, // for collision-radius scaling if Floomba physics reads it later
     _isMega,
+    _shadow: _fbShadow, // v0.23w: shadow mesh tracked for per-frame ground-follow
   });
   const _label = _isMega ? 'Mega Floomba deployed!' : 'Floomba deployed!';
   showToast('🤖 ' + _label, 1000);
@@ -44854,6 +45033,34 @@ function fireShot() {
   const speed = G.shotPower * BASE_LAUNCH_FACTOR * boost * ironWeight * _ironPwrMul * powerMult * catapultSoloDamp * frisbeeBoost * _catapultHorizMul;
   const firedPower = G.shotPower;
   G.ballVel.set(G.shotDir.x * speed, 2.5 + arcExtra, G.shotDir.z * speed);
+  // v0.23u: Lofty Lobs — Adam wants arc cards (Arc Shot, Catapult, Trebuchet,
+  // Frisbee, Jump-preload) to launch at a STEEPER angle without losing
+  // distance/power. Rotate the velocity vector toward vertical, preserving
+  // total speed magnitude. The horizontal direction is unchanged, only the
+  // pitch increases.
+  //   vhoriz_new = vhoriz * cos(δ) - vy * sin(δ)
+  //   vy_new     = vhoriz * sin(δ) + vy * cos(δ)
+  // where δ = pitch-up angle.
+  // v0.23v: 20° → 10°. Per Adam: "All of the jumps now (catapult, jump,
+  // etc) have TOO high of an arc. Split the difference between the old
+  // version and the current version." 20° was too vertical; 10° lands
+  // between the original flat angle and the v0.23u over-pitched arc.
+  const _isArcLaunch = G._catapultActive || G._arcShotActive || G._frisbeeArmed || G._jumpPreloaded;
+  if(_isArcLaunch) {
+    const _vhoriz = Math.hypot(G.ballVel.x, G.ballVel.z);
+    if(_vhoriz > 0.001) {
+      const _hdirX = G.ballVel.x / _vhoriz;
+      const _hdirZ = G.ballVel.z / _vhoriz;
+      const _vy = G.ballVel.y;
+      const _delta = 10 * Math.PI / 180; // 10° pitch-up
+      const _cosD = Math.cos(_delta), _sinD = Math.sin(_delta);
+      const _vhorizNew = _vhoriz * _cosD - _vy * _sinD;
+      const _vyNew     = _vhoriz * _sinD + _vy * _cosD;
+      G.ballVel.x = _hdirX * _vhorizNew;
+      G.ballVel.z = _hdirZ * _vhorizNew;
+      G.ballVel.y = _vyNew;
+    }
+  }
   // Screen shake on shot — proportional to power
   // v0.21k2: Mega Power upgrade reads screenShakeOnImpact off CARD_DEFS.power_shot.
   // When upgraded, shake gets a 1.5× multiplier on fire so the kick reads as
@@ -44903,7 +45110,10 @@ function fireShot() {
       scene.add(mesh);
       G._threeBalls.push({
         pos: new THREE.Vector3(G.ballPos.x + offX, G.ballPos.y, G.ballPos.z + offZ),
-        vel: new THREE.Vector3(G.shotDir.x * speed, 2.5 + arcExtra, G.shotDir.z * speed),
+        // v0.23u: clone G.ballVel directly so the arc-card pitch-up rotation
+        // applies uniformly to all three balls (otherwise the centre ball
+        // lobs and the side balls fly flat).
+        vel: G.ballVel.clone(),
         mesh,
         rolling: true,
         slowTimer: 0,
@@ -45119,9 +45329,25 @@ function fireShot() {
     // The whole Multiball sequence is one stroke total (incremented on shot 1).
     if(G._multiballActive && G._multiballPhase === 2) {
       G._holeSwingCount = (G._holeSwingCount||0) + 1;
+      // v0.23u3: same flag pattern as phase 1 — mark "shot 2 is in flight"
+      // so the per-frame safety net can resolve the winner-pick as soon
+      // as shot 2 settles, regardless of which settle path runs. Adam's
+      // v0.23u2 repro showed the bleed-to-zero phase 2 settle being
+      // missed entirely (no [MULTIBALL RESOLVE] log appeared), leaving
+      // the ball stuck at shot 2's rest position even when shot 1 was
+      // clearly closer.
+      G._multiballAwaitingShot2Rest = true;
     } else {
       G.strokes++;
       G._holeSwingCount = (G._holeSwingCount||0) + 1;
+      // v0.23u2: Mark "shot 1 is in flight" when a swing fires DURING
+      // multiball phase 1 so the per-frame safety net can capture rest
+      // position immediately on settle, regardless of which settle path
+      // runs. Without this gate the safety net keyed off stroke deltas
+      // and could capture LATER shots' rest positions as shot 1.
+      if(G._multiballActive && G._multiballPhase === 1) {
+        G._multiballAwaitingShot1Rest = true;
+      }
     }
   }
   // v0.20t: Reset triggered flag on course-placed (oscillating) speed hoops
@@ -46136,6 +46362,11 @@ function updateFloombas(dt) {
     const fbTY = G.heightMap.length ? getTerrainHeight(fb.pos.x, fb.pos.z) : 0;
     fb.pos.y = fbTY + FLOOR_H/2 + 0.3;
     fb.mesh.position.copy(fb.pos);
+    // v0.23w: keep the shadow disc parked under the floomba. Sits on the
+    // ground (FLOOR_H/2 + tiny offset to avoid Z-fighting with terrain).
+    if(fb._shadow) {
+      fb._shadow.position.set(fb.pos.x, fbTY + FLOOR_H/2 + 0.012, fb.pos.z);
+    }
     // v0.23a7: Mega Floomba's tank chassis has a clear front (cannons + eye)
     // so it reads wrong if it idle-spins like the cute disc. Face direction
     // of travel with smooth-steer so quick direction changes don't snap.
@@ -46566,21 +46797,22 @@ function updateKeyboardCamera(dt) {
     // sideways relative to the view.
     // v0.23r: SIGN FIX — camTheta is the angle FROM camera TO ball, so for
     // the camera to sit BEHIND the ball looking FORWARD along walk direction
-    // we need atan2(-walkDir.x, -walkDir.z) (the negated direction). Was
-    // unflipped, which placed the camera in front of the ball facing the
-    // wrong way. This matches the Skater Ball cam logic at line 43456 which
-    // also negates velocity. Also bumped lerp rate 4× → 8× per second for
-    // snappier turning. Per Adam: "Walkies doesn't shift to behind the ball
-    // camera that turns when you turn (as it should). The camera angle that
-    // it switches to is also facing the wrong direction."
+    // we need atan2(-walkDir.x, -walkDir.z) (the negated direction).
+    // v0.23u: Bumped lerp rate 8 → 18/sec because direction changes from
+    // tap-to-walk on mobile are usually large (player taps a new heading
+    // 60–120° off current); 8/sec meant ~1s to align, which read as a
+    // sustained "side-on view". Activation now ALSO snaps camTheta to
+    // the initial walk direction (see activateWalkiesCard), so this lerp
+    // only handles MID-walk turns.
     if(G._walkDir) {
       const _targetTheta = Math.atan2(-G._walkDir.x, -G._walkDir.z);
       // Lerp theta toward target via shortest-arc to avoid +π/-π wraparound
       let _dTheta = _targetTheta - G.camTheta;
       while(_dTheta > Math.PI)  _dTheta -= Math.PI * 2;
       while(_dTheta < -Math.PI) _dTheta += Math.PI * 2;
-      // Lerp factor: 8× per second feels responsive but not jerky.
-      G.camTheta += _dTheta * Math.min(1, dt * 8);
+      // Lerp factor: 18× per second — covers a 90° turn in ~0.25s, fast
+      // enough to feel deliberate without whiplash.
+      G.camTheta += _dTheta * Math.min(1, dt * 18);
     }
     return; // Skip normal camera controls during walkies
   }
@@ -48876,9 +49108,9 @@ function showGameOver(bustedBudget=false){
     // one go). Overflow stays on `meta._pendingCosmeticBacklog` and drains
     // at 2 per subsequent run so every unlock gets its moment.
     const pending = Array.isArray(meta._pendingUnlockToasts) ? meta._pendingUnlockToasts : [];
-    if(_xpEarnedThisRun > 0) {
-      pending.push({ kind:'xp', amount: _xpEarnedThisRun });
-    }
+    // v0.23u: Don't queue an XP-earned toast — XP is already shown on the
+    // run summary screen, so reposting it on the menu is redundant. Kept the
+    // _xpEarnedThisRun variable for any future telemetry use.
     if(_newStarThisRun != null) {
       const mods = getDifficultyMods(_newStarThisRun);
       pending.push({ kind:'difficulty', star:_newStarThisRun, name: mods.name });
@@ -48901,9 +49133,35 @@ function showGameOver(bustedBudget=false){
     const backlog = Array.isArray(meta._pendingCosmeticBacklog) ? meta._pendingCosmeticBacklog : [];
     const newCosmetics = newlyUnlocked.concat(achievementUnlocks);
     const combined = backlog.concat(newCosmetics.map(item => ({ id: item.id, category: item.category })));
+    // v0.23w: De-dupe and strip already-owned. Adam reported the showcase
+    // panel "revealing" cosmetics he already had (pineapple ball + devil
+    // horns) on a run that didn't earn them. The stale items lived on
+    // `_pendingCosmeticBacklog` from a prior run that didn't flush, then
+    // resurfaced after they were already owned. Filter both before slicing
+    // so the per-run cap doesn't burn slots on duplicates.
+    const _ownedNow = new Set(
+      (meta.unlocks && Array.isArray(meta.unlocks.cosmetics)) ? meta.unlocks.cosmetics : []
+    );
+    const _seenIds = new Set();
+    const combinedFiltered = combined.filter(item => {
+      if(!item || !item.id) return false;
+      if(_seenIds.has(item.id)) return false;
+      _seenIds.add(item.id);
+      // Strip items that are already owned BUT didn't come from THIS run's
+      // newCosmetics (i.e. they got owned earlier and shouldn't re-announce).
+      // newlyUnlocked items go through checkXpUnlocks which itself filters
+      // owned, so anything in `newCosmetics` is a genuine-this-run unlock
+      // (newCosmetics's items had their id ADDED to owned just before this
+      // check ran). Detect "genuine this run" by intersecting with
+      // newCosmetics ids — those bypass the owned-skip.
+      const fromThisRun = newCosmetics.some(nc => nc && nc.id === item.id);
+      if(fromThisRun) return true;
+      // Backlog item that's already owned: drop it.
+      return !_ownedNow.has(item.id);
+    });
     const COSMETICS_PER_RUN = 2;
-    const toShow = combined.slice(0, COSMETICS_PER_RUN);
-    const remaining = combined.slice(COSMETICS_PER_RUN);
+    const toShow = combinedFiltered.slice(0, COSMETICS_PER_RUN);
+    const remaining = combinedFiltered.slice(COSMETICS_PER_RUN);
     for(const item of toShow) {
       pending.push({ kind:'cosmetic', id:item.id, category:item.category });
     }
@@ -50204,7 +50462,12 @@ function initHole() {
   G._speedBallTimer = 0;
   G._speedBallActive = G.modifiers.some(m => m.id === 'speed_ball');
   // Clean up floombas from previous hole
-  if(G._floombas) { for(const f of G._floombas) { if(f.mesh) scene.remove(f.mesh); } }
+  if(G._floombas) {
+    for(const f of G._floombas) {
+      if(f.mesh) scene.remove(f.mesh);
+      if(f._shadow) scene.remove(f._shadow); // v0.23w: shadow disc cleanup
+    }
+  }
   G._floombas = [];
   // v0.20p: Clean up hunter mesh from previous hole (if any). The active
   // flag is set later (from data.eliteHunter) so we don't conflate clearing
@@ -52524,7 +52787,12 @@ function showEliteFork(playerFacingHole, offer) {
   // Reward chip content
   document.getElementById('elite-reward-emoji').textContent = reward.emoji;
   document.getElementById('elite-reward-label').textContent = reward.label;
-  document.getElementById('elite-reward-desc').textContent  = reward.desc;
+  // v0.23u: append a difficulty-gate hint to the reward description so the
+  // player knows whether they need to beat par (★1-2) or just match it
+  // (★3+). Underlying gate logic in resolveEliteHoleResult mirrors this.
+  const _diff = (G.difficulty || 1) | 0;
+  const _gateHint = _diff >= 3 ? ' (par or better claims it)' : ' (beat par to claim)';
+  document.getElementById('elite-reward-desc').textContent  = reward.desc + _gateHint;
 
   // Commit-overlay archetype label
   const cArch = document.getElementById('elite-commit-archetype');
@@ -52662,12 +52930,22 @@ function hideEliteStakesPip() {
 function resolveEliteHoleResult(strokesUsed, par) {
   if(!G._activeElite) return;
   const { archetype, reward, wager } = G._activeElite;
-  const underPar = strokesUsed < par; // strict under par per spec
+  // v0.23u: Difficulty-scaled elite gate. On ★3 HARD and higher, parring
+  // the elite hole is enough to claim the reward — those holes are already
+  // harder so the par bar reads as the meaningful achievement. On ★1-2 the
+  // strict under-par requirement stays so the reward feels earned at the
+  // tiers where par is the easier baseline. Per Adam: "Players should get
+  // the elite hole bonus even without getting par on 3 or 4 difficulty."
+  // (Reading "without getting par" as "without scoring under par" — i.e.
+  // matching par should be enough at high difficulty.)
+  const _diff = (G.difficulty || 1) | 0;
+  const _parIsEnough = _diff >= 3;
+  const cleared = _parIsEnough ? (strokesUsed <= par) : (strokesUsed < par);
   // Find latest history entry for this archetype & flag success
   const histEntry = G._eliteHistory.length ? G._eliteHistory[G._eliteHistory.length - 1] : null;
-  if(histEntry) histEntry.success = !!underPar;
+  if(histEntry) histEntry.success = !!cleared;
 
-  if(underPar) {
+  if(cleared) {
     deliverEliteReward(reward, wager);
   } else {
     failEliteReward(reward, wager);
@@ -53008,6 +53286,30 @@ function pickProfile(slotId) {
   // v0.20g: refresh 9/18 lock state per-profile (different profiles may
   // have different unlock state).
   if(typeof refreshHoleButtons === 'function') refreshHoleButtons();
+  // v0.23u: full per-profile UI refresh. Without these the main menu was
+  // showing stale state from the previous profile: locked characters
+  // showed as unlocked, the active character emoji stuck to whichever
+  // character the prior profile had selected, equipped cosmetics carried
+  // over visually, and the star/hole buttons could fall out of sync with
+  // the new profile's unlocks. Per Adam: "the old difficulty levels and
+  // characters from your other save are still visible."
+  // 1) Clamp G.currentCharacter to something this profile has unlocked,
+  //    falling back to 'classic' (always available).
+  if(typeof isCharacterUnlocked === 'function') {
+    const _cur = (G && G.currentCharacter) || 'classic';
+    if(!isCharacterUnlocked(_cur)) {
+      if(G) G.currentCharacter = 'classic';
+    }
+  }
+  // 2) Re-render the character portrait row so locks + active highlight
+  //    match the new profile. (renderStarRow already handles difficulty
+  //    clamping internally — no separate clamp needed here.)
+  if(typeof renderCharacterRow === 'function') renderCharacterRow();
+  // 3) Refresh the cosmetic-progress XP bar so the next-unlock target
+  //    reflects this profile's XP, not the previous profile's.
+  if(typeof renderCosmoProgress === 'function') {
+    try { renderCosmoProgress({ target: '' }); } catch(e){}
+  }
 }
 
 function switchProfile() {
