@@ -3897,7 +3897,7 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
   <button class="play-btn" onclick="openAchievements()" style="margin-top:6px;background:rgba(245,200,66,0.18);border:1px solid rgba(245,200,66,0.5);color:#f5c842;font-size:0.85rem;padding:10px 28px">🏆 Achievements</button>
   <button class="play-btn" id="btn-import-save" style="margin-top:6px;background:rgba(120,120,120,0.6);font-size:0.7rem;padding:8px 20px" onclick="importSaveFile()">📂 Import Save</button>
   <input type="file" id="import-save-input" accept=".ggwsave,application/json" style="display:none">
-  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.23t</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Fixed run-state corruption on resume after main menu. Exit-to-menu now writes 'in_progress' (non-terminal); resume restores _runId + telemetry; completion upserts by runId. Run records now carry wasResumed + runStartedAt for auditing historical data.</div></div>
+  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.23y</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Anonymous online telemetry is live — terminal runs upload to Supabase (ggw_runs) with an offline retry queue, on top of the v0.23x2 playtest fixes (jumps, parkour, parachute, chase-cam, arc preview, camera-drag).</div></div>
 
   <!-- v0.19j: Inline profile picker — skip the separate slot-picks screen -->
   <div class="section-label" style="margin-top:14px">Save Slot</div>
@@ -4659,8 +4659,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.23w';
-const CHANGE_NOTE = "v0.23w — batch fix pass per Adam's playtest list: (1) Wall-skip launch grace now also gates angled-walls (corner triangles), not just polyline walls — they were the silent third path letting the ball deflect right at the tee during slow-mo catapult/jumper launches. Grace duration also bumped 200→280ms base for more headroom on top of the slowMo scaling from v0.23u. (2) Cosmetic re-unlocks: showcase panel now filters duplicates AND drops backlog entries the player already owns (was re-revealing Pineapple Ball / Devil Horns on runs that didn't earn them). (3) Multiplayer picker on main menu fixed for cold-open: static HTML at line 3867 also wrapped in display:none; previously only the dynamic re-render at 51664 was hidden. (4) 'All Bounce No Hole' added to INACTIVE_PERKS so it can't appear in shop via upgrade-offer paths (weight:0 alone wasn't enough). (5) Floomba gets a shadow disc + outline pass — removed noOutline flag, added a flat ground-shadow that tracks the body each frame and cleans up in initHole. (6) Sticky → OOB → respawn → aim arrow gone: resetToLastShot now unconditionally recreates the aim arrow at the new position (was only created if `!G.aimArrow`, leaving stale arrows parked at the old wall position). (7) Joker on empty hole: canPlayCard returns false (with toast) when no non-Joker card has been played yet, so the slot stays armed instead of being consumed. (8) Power Shot weaker in Sharpshooter slow-mo over OOB: OOB friction now uses pow(fr, slowAdj/SUB_STEPS) — same shape as the regular FRICTION above. Previously a flat 0.97 per substep, which compounded 2-4× harder per in-game-second in slow-mo because SUB_STEPS often floors at 1 there.";
+const GAME_VERSION = '0.23y';
+const CHANGE_NOTE = "v0.23y — anonymous online telemetry LIVE (Supabase). Each terminal run now uploads its full run object to the ggw_runs Postgres table in addition to localStorage history, replacing manual JSON exports. Configured + active (project mqgixxqhfmkcvhzqmess, table ggw_runs, publishable key embedded — insert-only behind RLS, safe to ship). Anonymous per-INSTALL UUID (ggw_install_id) groups runs by device, no PII/Steam ID. Offline-resilient queue (capped 50) retries 4s after launch + on visibilitychange→hidden. keepalive fetch; Prefer:return=minimal. Flat row = promoted filter columns (version/char_id/difficulty/outcome/holes_completed/total_style) + full run as JSONB payload, de-duped by run_id across primary + retry save paths. Wrapper-agnostic: identical fetch() in browser, mobile, and Electron/WebView2 on Steam. Hooked into both terminal-save paths; never blocks or breaks a save. ── v0.23x2 — playtest batch: (1) Jumps dampen horizontal velocity 0.7× on launch (height unchanged) — airborne hops had no ground friction so they coasted too far; this also restores the Power Shot + Jump combo (faster launch → longer hop). (2) Parkour hitbox tightened with a lateral-offset gate (perp ≤ obstacleR+BALL_R+0.16) so it stops vaulting obstacles the ball would cleanly slip past. (3) Parachute canopies no longer persist onto future holes — landing detection is now terrain-aware (was a hardcoded y<0.5 that never fired on raised ground) and initHole hard-removes any orphaned canopy. (4) Desktop Walkies cam is now chase-cam tank steering: A/D (or ←/→) rotate the heading, the ball auto-walks where it faces, and the camera trails behind — replaces the camera-relative strafe that froze the view at a side angle. (5) Catapult/arc aim preview trimmed from totalT×1.1 to totalT so the dotted arc ends exactly at the landing point instead of 10% past it (and below the floor). (6) Camera no longer yaws while a parachute is deployed — A/D steer the chute; turning resumes on landing. (7) Parachute is now 1 charge PER CARD PLAY (was per hole) — replaying it on a later swing re-enables deploy; card text updated. (8) First-jump fly-over now covers bumpers you're flush against — jumping leaps through instead of bouncing (mirrors the rock fly-over, ascending + facing-toward gated). (9) Desktop camera-drag hitch fixed — window-level mousemove now drives camera-rotate drags too, so passing the cursor over center HUD overlays no longer freezes the drag and snaps the angle.";
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
@@ -17222,6 +17222,11 @@ function updateAimArrow() {
     vy0  = _vhP * _sinD + vy0 * _cosD;
   }
   const grav   = 12;
+  // totalT = time for the parabola to return to LAUNCH height = the true
+  // (flat-ground) landing time. v0.23x2: the preview used to draw to
+  // totalT * 1.1 — 10% PAST landing, where the arc dips below the floor — so
+  // the predicted landing read noticeably farther than where the ball actually
+  // comes down. The arc now terminates exactly at totalT (the landing point).
   const totalT = (vy0 + Math.sqrt(vy0 * vy0)) / grav;
 
   // Drive one arrow group positioned at world (ox, oy, oz)
@@ -17245,7 +17250,7 @@ function updateAimArrow() {
       // at the partner side via a separate Points cloud built below.
       let crossIdx = 13; // default = no crossing (everything renders local)
       let foldOrigin = null; // {wx, wz, dx, dz} world-space partner emerge data
-      const tEnd = totalT * 1.1;
+      const tEnd = totalT;
       const arcRange = spd2 * tEnd; // total horizontal distance covered by visible arc
       if(isMain && G._portalEntry && G._portalExit && G.shotDir) {
         const hit = _aimRayHitsPortal(ox, oz, G.shotDir.x, G.shotDir.z, arcRange);
@@ -17267,7 +17272,7 @@ function updateAimArrow() {
       }
       for(let i = 1; i <= 12; i++) {
         const dot = grp.children[i];
-        const t   = (i / 12) * totalT * 1.1;
+        const t   = (i / 12) * totalT;
         dot.position.set(0, vy0*t - 0.5*grav*t*t - 0.28, spd2*t);
         dot.scale.setScalar(dotScale);
         // v0.21a4: dots past the portal-cross point are hidden locally;
@@ -17329,7 +17334,7 @@ function updateAimArrow() {
   if(G._aimArcCone) { scene.remove(G._aimArcCone); G._aimArcCone = null; }
   if(G._aimArcFoldOrigin && (hasArc || hasCatapult) && power > 0.01) {
     const fold = G._aimArcFoldOrigin;
-    const tEnd = totalT * 1.1;
+    const tEnd = totalT;
     const dotPts = [];
     // Spawn dots from tCross onward at the same per-frame spacing the local
     // group would have used — sample 12 indices total, but only emit the ones
@@ -18407,8 +18412,15 @@ function tickParachute(dt) {
       // Gentle wobble
       G._parachuteCanopy.rotation.z = Math.sin(performance.now() / 200) * 0.08;
     }
-    // Terminate when ball touches ground (y < 0.5)
-    if(G.ballPos.y < 0.5) {
+    // Terminate when ball touches ground.
+    // v0.23x2: was a hardcoded `y < 0.5`, which never fired on elevated
+    // terrain (ball rests at terrain + FLOOR_H/2 + BALL_R, often > 0.5). The
+    // chute then stayed "active" forever, leaving the canopy mesh orphaned in
+    // the scene — it persisted onto future holes (Adam's report). Now we
+    // compare against the ball's actual resting height at its current XZ.
+    const _terrAtBall = (G.heightMap && G.heightMap.length) ? getTerrainHeight(G.ballPos.x, G.ballPos.z) : 0;
+    const _chuteGroundY = _terrAtBall + FLOOR_H/2 + BALL_R;
+    if(G.ballPos.y <= _chuteGroundY + 0.06) {
       G._parachuteActive = false;
       if(G._parachuteCanopy && G._parachuteCanopy.parent) {
         // Smoke poof
@@ -19607,6 +19619,18 @@ function updatePhysics(dt) {
       }
     }
     G.ballVel.y = 6.38;
+    // v0.23x2: dampen HORIZONTAL velocity on the jump (height unchanged). The
+    // ball is airborne after a jump, where no ground friction applies, so it
+    // coasted its full launch speed and travelled far too far — and because a
+    // weak shot + jump reached nearly as far as a Power Shot + jump, the combo
+    // had little payoff. Scaling horizontal speed here shortens the hop and
+    // restores the combo (higher launch speed → proportionally longer hop).
+    // Vertical (6.38) is left alone so hop HEIGHT is identical. Tunable.
+    {
+      const JUMP_HORIZ_DAMP = 0.7; // 30% less forward distance per jump
+      G.ballVel.x *= JUMP_HORIZ_DAMP;
+      G.ballVel.z *= JUMP_HORIZ_DAMP;
+    }
     G.rolling = true;
     G.rollingSlowTimer = 0;
     if(AC) sfxJump();
@@ -19721,6 +19745,14 @@ function updatePhysics(dt) {
       // Must also be moving toward the obstacle: dot(ballDir, center-ball) > 0.7
       // (∼45° cone tolerance so an obstacle sideswipe still triggers).
       const DIR_DOT_MIN = 0.7;
+      // v0.23x2: lateral-offset gate. The dot-product cone above is generous
+      // at close range (a 45° cone is ~1m wide at 1m out), so the ball "vaulted"
+      // obstacles it would have cleanly slipped past — Adam: "triggering it
+      // slightly outside a given obstacle." perp = how far the contact point
+      // sits off the ball's travel line; if it exceeds the combined radius
+      // (+ this slop), the swept ball misses, so don't vault. Tight enough to
+      // kill false vaults, loose enough not to drop a genuine head-on leap.
+      const PARKOUR_PERP_TOL = 0.16;
       let bestTarget = null, bestClear = Infinity;
       // Generic point-test (used for cylindrical obstacles)
       const ptest = (tx, tz, tag, customR) => {
@@ -19732,6 +19764,8 @@ function updatePhysics(dt) {
         if(clear > CONTACT_MARGIN) return;     // too far — wait
         const dn = (odx/d) * pdirX + (odz/d) * pdirZ;
         if(dn < DIR_DOT_MIN) return;           // not moving toward it
+        const perp = Math.abs(odx * pdirZ - odz * pdirX); // lateral offset from travel line
+        if(perp > r + BALL_R + PARKOUR_PERP_TOL) return;  // would cleanly miss
         if(clear < bestClear) { bestClear = clear; bestTarget = { wx: tx, wz: tz, tag }; }
       };
       // v0.20t3: segment test (for spin bars). Treats the obstacle as a thick
@@ -19754,6 +19788,8 @@ function updatePhysics(dt) {
         if(clear > CONTACT_MARGIN) return;
         const dn = (odx/d) * pdirX + (odz/d) * pdirZ;
         if(dn < DIR_DOT_MIN) return;
+        const perp = Math.abs(odx * pdirZ - odz * pdirX);
+        if(perp > radius + BALL_R + PARKOUR_PERP_TOL) return;
         if(clear < bestClear) { bestClear = clear; bestTarget = { wx: cx, wz: cz, tag }; }
       };
       // v0.20t3: rectangle test (for slide blocks and pop-up walls). Treats
@@ -19777,6 +19813,8 @@ function updatePhysics(dt) {
         if(clear > CONTACT_MARGIN) return;
         const dn = (odx/d) * pdirX + (odz/d) * pdirZ;
         if(dn < DIR_DOT_MIN) return;
+        const perp = Math.abs(odx * pdirZ - odz * pdirX);
+        if(perp > BALL_R + PARKOUR_PERP_TOL) return;
         if(clear < bestClear) { bestClear = clear; bestTarget = { wx: cx, wz: cz, tag }; }
       };
       const tryList = (arr, tag) => {
@@ -22510,6 +22548,25 @@ function updatePhysics(dt) {
       const bmpForgive = bmp.baseH + bmp.bumperH * 0.70; // ball bottom above this = jumping over
       if(G.ballPos.y - BALL_R > bmpForgive && G.ballVel.y > -0.5) continue;
       if(G.ballPos.y - BALL_R > bmpTop) continue;
+      // v0.23x2: First-jump fly-over for bumpers you're RIGHT in front of.
+      // Per Adam: jumping while flush against a bumper should leap THROUGH it,
+      // not bounce off. The height gate above can't help here — at the moment
+      // the jump fires the ball is still at ground level, so it collides before
+      // it has risen above bmpForgive. This mirrors the rock fly-over but drops
+      // the "already above the top" requirement: during the first jump arc,
+      // while the ball is ascending (vy > -0.5) toward a clearable bumper that
+      // sits ahead of its travel direction, pass through it. Once the ball
+      // crests and starts diving (vy <= -0.5) normal bounce resumes, so a
+      // misjudged landing onto the bumper still bounces.
+      if(G._firstJumpFlyOverActive && G.ballVel.y > -0.5) {
+        const _bmpClearable = (bmp.bumperH || 0.7) <= 1.32; // within ~one hop's reach
+        if(_bmpClearable) {
+          const _toX = bmp.wx - G.ballPos.x;
+          const _toZ = bmp.wz - G.ballPos.z;
+          const _vmag2 = G.ballVel.x * G.ballVel.x + G.ballVel.z * G.ballVel.z;
+          if(_vmag2 > 0.04 && (_toX * G.ballVel.x + _toZ * G.ballVel.z) > 0) continue;
+        }
+      }
       const dx3 = G.ballPos.x - bmp.wx;
       const dz3 = G.ballPos.z - bmp.wz;
       const dist3 = Math.hypot(dx3, dz3);
@@ -32036,7 +32093,7 @@ const CARD_DEFS = {
   // ── v0.23b: 9 new cards (data-only, see _executeCardAbilityInner for impls) ──
   joker:           { id:'joker',           emoji:'🃏',  name:'Joker',             desc:'Plays a copy of the last card you played this hole. Cannot copy itself or other Jokers.',                                          rarity:'rare',      price:25, context:'any', holdable:false, weight:3 },
   power_steering:  { id:'power_steering',  emoji:'🎮',  name:'Power Steering',    desc:'While ball is in motion, hold ← / → (or canvas edges) to nudge its trajectory. Active until ball stops.',                       rarity:'rare',      price:22, context:'any', holdable:false, weight:3 },
-  parachute:       { id:'parachute',       emoji:'🪂',  name:'Parachute',         desc:'Auto-deploys at the apex of any airborne shot. Slows descent and lets you nudge landing position. 1 charge per hole.',         rarity:'epic',      price:26, context:'any', holdable:false, weight:3 },
+  parachute:       { id:'parachute',       emoji:'🪂',  name:'Parachute',         desc:'Auto-deploys at the apex of any airborne shot. Slows descent and lets you nudge landing position. 1 charge per card play.',         rarity:'epic',      price:26, context:'any', holdable:false, weight:3 },
   skater_ball:     { id:'skater_ball',     emoji:'🛹',  name:'Skater Ball',       desc:'Ball rides a board for one swing. Hit a wall to grind it for huge style — tap left/right to balance. Press "release" to bail. Faster entry = longer grind.', rarity:'epic',      price:29, context:'pre', holdable:false, weight:3 },
   multiball:       { id:'multiball',       emoji:'⚪⚪', name:'Multiball',         desc:'Take TWO different shots from your current position on a single swing. Whichever ball ends closer to the hole becomes your next ball.', rarity:'legendary', price:35, context:'pre', holdable:false, weight:1 },
   blackhole_grenade:{ id:'blackhole_grenade', emoji:'🕳️', name:'Blackhole Grenade', desc:'Throw a grenade that creates a black hole on impact. Sucks all coins, hearts, and obstacles within a large radius into the singularity.', rarity:'legendary', price:30, context:'pre', holdable:false, weight:1 },
@@ -35316,7 +35373,7 @@ function activateWalkiesCard() {
   // that confused players on each platform with the other's controls.
   const _hint = (typeof _GGW_isMobile !== 'undefined' && _GGW_isMobile)
     ? 'Tap anywhere to walk towards that point'
-    : 'Use the WASD keys to move';
+    : 'A / D to steer — the ball walks where it faces';
   showToast('🦵 ' + _label + ' ' + dur + 's — ' + _hint, 1800);
   if(G.ball) {
     G.ballMesh.material = new THREE.MeshStandardMaterial({color:0xffcc44, roughness:0.3, metalness:0.1});
@@ -35676,11 +35733,21 @@ function activatePowerSteering() {
 }
 
 // ── Parachute — auto-deploys at apex of next airborne shot ──
-function activateParachute() {
-  if((G._parachuteCharges|0) <= 0) {
-    showToast('🪂 No parachute charges left this hole', 1000);
-    return;
+// v0.23x2: how many deploys ONE card-play grants. Base 1; a Skydiver-upgraded
+// parachute anywhere in the deck grants 3 (charges are global, matching the
+// old per-hole scan). Used by activateParachute to restock on each arm.
+function _parachuteChargesPerPlay() {
+  if(Array.isArray(G.deck)) {
+    for(let _i = 0; _i < G.deck.length; _i++) {
+      if(G.deck[_i] !== 'parachute') continue;
+      const _up = G.deckUpgrades && G.deckUpgrades[_i];
+      const _upDef = _up && CARD_UPGRADES.parachute && CARD_UPGRADES.parachute[_up];
+      if(_upDef && _upDef.skydiver) return 3;
+    }
   }
+  return 1;
+}
+function activateParachute() {
   // Re-tap during active chute = cut early
   if(G._parachuteActive) {
     G._parachuteActive = false;
@@ -35698,9 +35765,16 @@ function activateParachute() {
     showToast('🪂 Parachute disarmed', 800);
     return;
   }
+  // v0.23x2: 1 charge PER CARD PLAY (was 1 per hole). Each fresh arm restocks
+  // the charge(s), so replaying parachute on a later swing re-enables deploy.
+  // Previously charges were pre-stocked once per hole, so a second swing in
+  // the same hole found 0 charges and the chute silently never deployed
+  // (Adam's jumper+parachute combo report).
+  G._parachuteCharges = _parachuteChargesPerPlay();
   G._parachuteCardArmed = true;
   G._parachuteApexTriggered = false; // arm next-apex deploy
-  showToast('🪂 Parachute armed — auto-deploys at apex (' + (G._parachuteCharges|0) + ' left)', 1400);
+  const _pcN = G._parachuteCharges | 0;
+  showToast('🪂 Parachute armed — auto-deploys at apex' + (_pcN > 1 ? ' (×' + _pcN + ')' : ''), 1400);
   if(typeof triggerShake === 'function') triggerShake('light');
 }
 
@@ -45431,7 +45505,15 @@ function updateUndoBtn() {
 canvas.addEventListener('mousedown', e=>{ if(G.state==='playing') onPointerDown(e.clientX,e.clientY,'mouse'); });
 canvas.addEventListener('mousemove', e=>{ onPointerMove(e.clientX,e.clientY); });
 // Window-level move/up so pull-back drag works even when cursor leaves canvas
-window.addEventListener('mousemove', e=>{ if(input.ballDragging) onPointerMove(e.clientX,e.clientY); });
+// v0.23x2: also forward camera-rotate drags (input.dragging), not just
+// ball-pull drags. Previously only the canvas mousemove fired during a camera
+// drag, so when the cursor passed over a center-screen HUD overlay the canvas
+// stopped receiving mousemove, input.lastX froze, and re-entering the canvas
+// produced a large dx jump — the "hitch around the middle of the screen" Adam
+// saw on desktop. (Touch has implicit capture, so it was desktop-only.) When
+// the cursor IS over the canvas both listeners fire, but the second call sees
+// dx=0 (lastX already updated), so it's a harmless no-op.
+window.addEventListener('mousemove', e=>{ if(input.ballDragging || input.dragging) onPointerMove(e.clientX,e.clientY); });
 window.addEventListener('mouseup',   e=>{ if(input.ballDragging || input.dragging) onPointerUp(); });
 
 // Mouse wheel: orbital camera zoom in/out (desktop). Skip when Sharpshooter is
@@ -46675,23 +46757,35 @@ function updateKeyboardCamera(dt) {
         return true;
       };
 
-      // WASD moves in camera-relative directions
-      const fwdX = -Math.sin(G.camTheta), fwdZ = -Math.cos(G.camTheta);
-      const rgtX =  Math.cos(G.camTheta), rgtZ = -Math.sin(G.camTheta);
-      let mx = 0, mz = 0;
-      if(keys['KeyW'] || keys['ArrowUp'])    { mx += fwdX; mz += fwdZ; }
-      if(keys['KeyS'] || keys['ArrowDown'])  { mx -= fwdX; mz -= fwdZ; }
-      if(keys['KeyA'] || keys['ArrowLeft'])  { mx -= rgtX; mz -= rgtZ; }
-      if(keys['KeyD'] || keys['ArrowRight']) { mx += rgtX; mz += rgtZ; }
-      const len = Math.hypot(mx, mz);
-      if(len > 0) {
-        _walkStep((mx/len) * WALK_SPEED * dt, (mz/len) * WALK_SPEED * dt);
-        G._walkTarget = null; // clear tap target if keyboard used
-        G._walkDir = null;
-        const terrY = G.heightMap.length ? getTerrainHeight(G.ballPos.x, G.ballPos.z) : 0;
-        G.ballPos.y = terrY + FLOOR_H/2 + WALK_BALL_R;
-        if(G.ball) G.ball.position.copy(G.ballPos);
-        if(G.ballShadow) { G.ballShadow.position.x = G.ballPos.x; G.ballShadow.position.z = G.ballPos.z; }
+      // v0.23x2: Desktop walkies is now chase-cam tank steering — it matches
+      // the mobile auto-walk AND the normal follow cam. A/D (or ←/→) ROTATE the
+      // heading; the ball auto-walks forward along _walkDir (the block below)
+      // and the camera trails behind it (the follow-lerp further down). Per
+      // Adam: previously A/D strafed camera-relative AND nulled _walkDir, which
+      // froze the chase cam at a fixed side angle and made A/D feel like a
+      // sidestep instead of a turn — "you can't look ahead of you."
+      // mx/mz/len stay declared only so the leg-facing fallback below
+      // (`else if(len > 0)`) still resolves; with _walkDir always set it's dead.
+      let mx = 0, mz = 0, len = 0;
+      const WALKIES_TURN_SPEED = 1.9; // rad/sec — covers ~110°/s, snappy steer
+      let _turn = 0;
+      if(keys['KeyA'] || keys['ArrowLeft'])  _turn -= 1;
+      if(keys['KeyD'] || keys['ArrowRight']) _turn += 1;
+      // If the heading was cleared (e.g. the ball ran into a wall, which nulls
+      // _walkDir below), a turn key re-seeds it from the current camera facing
+      // so the player can steer back out. With no input the ball just parks —
+      // matching the old stop-on-obstacle feel rather than grinding the wall.
+      if(!G._walkDir && _turn !== 0) {
+        G._walkDir = { x: -Math.sin(G.camTheta), z: -Math.cos(G.camTheta) };
+      }
+      if(_turn !== 0 && G._walkDir) {
+        const _ang = _turn * WALKIES_TURN_SPEED * dt;
+        const _ca = Math.cos(_ang), _sa = Math.sin(_ang);
+        const _ndx = G._walkDir.x * _ca - G._walkDir.z * _sa;
+        const _ndz = G._walkDir.x * _sa + G._walkDir.z * _ca;
+        const _nl = Math.hypot(_ndx, _ndz) || 1;
+        G._walkDir = { x: _ndx/_nl, z: _ndz/_nl };
+        G._walkTarget = null; // keyboard steer overrides any pending tap target
       }
       // Tap-to-walk: keep walking in the tapped DIRECTION until time expires
       // or a wall blocks us. Don't stop at the tap point — that was the old
@@ -46844,9 +46938,14 @@ function updateKeyboardCamera(dt) {
   // are gameplay inputs (balance / lateral steer) — rotating the camera
   // mid-action would change the player's perspective and confuse direction.
   // W/S zoom remains usable in all modes.
+  // v0.23x2: also suppress while a parachute is deployed — A/D drift the chute
+  // (see tickParachute), so they must NOT also yaw the camera. The camera
+  // keeps its normal follow angle during descent; A/D camera turning resumes
+  // automatically once the chute lands and _parachuteActive clears.
   const _suppressCamAD = !!G._skaterActive
     || (!!G._powerSteeringArmed && !!G.rolling)
-    || !!G._goalOrientedArmed;
+    || !!G._goalOrientedArmed
+    || !!G._parachuteActive;
   if(!_suppressCamAD) {
     if(keys['KeyA']) G.camTheta -= CAM_ROT_SPEED * dt;
     if(keys['KeyD']) G.camTheta += CAM_ROT_SPEED * dt;
@@ -49310,6 +49409,129 @@ function showGameOver(bustedBudget=false){
   renderLeaderboard();
 }
 
+// ── Telemetry: anonymous online run upload (Supabase) ──────────────────
+// v0.23y: each TERMINAL run uploads its full run object to the ggw_runs table
+// (Postgres) in addition to the existing localStorage history — replacing the
+// manual JSON-export workflow. Works unchanged in a browser, a mobile browser,
+// and the Steam wrapper (Electron/WebView2): all make plain HTTPS fetch() calls.
+// Prefer:return=minimal so Supabase echoes nothing back (saves egress) and the
+// anon role only ever needs INSERT, never SELECT.
+//
+// Backend: table public.ggw_runs, RLS enabled, INSERT-only policy for the anon
+// role + `grant insert on public.ggw_runs to anon`. The publishable key below is
+// SAFE to ship in client code — it's insert-only behind RLS, so it can write but
+// can't read or wipe data. Rotate anytime from Settings → API Keys if desired.
+const TELEMETRY_ENDPOINT = 'https://mqgixxqhfmkcvhzqmess.supabase.co/rest/v1/ggw_runs';
+const TELEMETRY_ANON_KEY = 'sb_publishable_6aC2JTgcfGWfimYJaVFE1A_HKQpSonb';
+const TELEMETRY_QUEUE_KEY = 'ggw_pending_telemetry';
+const TELEMETRY_MAX_QUEUE = 50;  // cap so a long offline streak can't blow localStorage quota
+let _telemetryFlushing = false;
+
+function telemetryEnabled() { return !!(TELEMETRY_ENDPOINT && TELEMETRY_ANON_KEY); }
+
+// Stable anonymous per-INSTALL id (NOT per-profile). Groups runs by device with
+// no PII or Steam ID. Persists in localStorage (durable in Electron/WebView2 too).
+function getInstallId() {
+  try {
+    let id = localStorage.getItem('ggw_install_id');
+    if(!id) {
+      id = (typeof crypto !== 'undefined' && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : ('iid-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10));
+      localStorage.setItem('ggw_install_id', id);
+    }
+    return id;
+  } catch(_) { return 'anon'; }
+}
+
+function _telemetryReadQueue() {
+  try {
+    const raw = localStorage.getItem(TELEMETRY_QUEUE_KEY);
+    if(!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr : [];
+  } catch(_) { return []; }
+}
+function _telemetryWriteQueue(arr) {
+  try { localStorage.setItem(TELEMETRY_QUEUE_KEY, JSON.stringify(arr.slice(-TELEMETRY_MAX_QUEUE))); }
+  catch(_) {} // quota — drop silently; telemetry is best-effort, never load-bearing
+}
+
+// Flat row = promoted filter columns + the full run object as JSONB `payload`.
+// created_at defaults server-side. Called from saveRunData on TERMINAL outcomes
+// only. char_id (not 'character') — 'character' collides with the SQL type word.
+function enqueueTelemetry(run) {
+  if(!run || !run.runId) return;
+  try {
+    const row = {
+      run_id: run.runId,
+      install_id: getInstallId(),
+      version: run.version || GAME_VERSION,
+      char_id: run.character || 'classic',
+      difficulty: run.difficulty | 0,
+      outcome: run.outcome || 'unknown',
+      holes_completed: run.holesCompleted | 0,
+      total_style: run.totalStyleScore | 0,
+      payload: run,
+    };
+    const q = _telemetryReadQueue();
+    // De-dupe by run_id so primary + retry save paths can't enqueue twice.
+    if(!q.some(r => r && r.run_id === row.run_id)) q.push(row);
+    _telemetryWriteQueue(q);
+  } catch(e) { console.warn('[telemetry] enqueue failed', e); }
+  flushTelemetry();
+}
+
+async function _postTelemetryRow(row) {
+  try {
+    const headers = {
+      'Content-Type': 'application/json',
+      'apikey': TELEMETRY_ANON_KEY,
+      'Prefer': 'return=minimal',
+    };
+    // Publishable keys (sb_...) MUST NOT go in Authorization — the gateway rejects
+    // that. apikey alone resolves to the anon role. Legacy anon keys are JWTs
+    // (start 'eyJ') and additionally go in Authorization: Bearer.
+    if(/^eyJ/.test(TELEMETRY_ANON_KEY)) headers['Authorization'] = 'Bearer ' + TELEMETRY_ANON_KEY;
+    const res = await fetch(TELEMETRY_ENDPOINT, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(row),
+      keepalive: true, // survives teardown; lets us flush on visibilitychange without sendBeacon
+    });
+    return res.ok || res.status === 409; // 409 = duplicate run_id already stored → treat as success
+  } catch(_) { return false; }
+}
+
+// Drain the queue; keep failures for the next attempt. Guarded against overlap.
+async function flushTelemetry() {
+  if(!telemetryEnabled() || _telemetryFlushing) return;
+  const queue = _telemetryReadQueue();
+  if(!queue.length) return;
+  _telemetryFlushing = true;
+  try {
+    const remaining = [];
+    for(const row of queue) {
+      const ok = await _postTelemetryRow(row);
+      if(!ok) remaining.push(row);
+    }
+    _telemetryWriteQueue(remaining);
+  } finally { _telemetryFlushing = false; }
+}
+
+// Flush when backgrounded/closed (mobile + Steam wrapper can kill the process).
+if(typeof document !== 'undefined' && document.addEventListener) {
+  document.addEventListener('visibilitychange', () => {
+    if(document.visibilityState === 'hidden') flushTelemetry();
+  });
+}
+// Retry rows left queued from a previous session, shortly after load.
+if(typeof window !== 'undefined') {
+  setTimeout(() => { try { flushTelemetry(); } catch(_){} }, 4000);
+}
+window.flushTelemetry = flushTelemetry;
+window.getInstallId = getInstallId;
+
 // ── Analytics: run history persistence ────────────────
 // Appends the current run to ggw_run_history in localStorage and caps history at MAX_RUN_HISTORY
 // to prevent quota exhaustion.
@@ -49489,6 +49711,9 @@ function saveRunData(outcome) {
       // v0.23s: mark saved ONLY after confirmed write for TERMINAL outcomes.
       G._runSaved = true;
       G._runId = null;
+      // v0.23y: anonymous online upload. Terminal-only. Wrapped so a telemetry
+      // hiccup can never break a save.
+      try { enqueueTelemetry(run); } catch(_) {}
     }
     // For in_progress: leave _runSaved=false and _runId set so the run can
     // be re-claimed on resume or finalized on the next startGame/escMainMenu.
@@ -49579,7 +49804,11 @@ function retrySaveRun() {
     }
     const _t1 = performance.now();
     if(wroteOk) {
-      if(_isTerminal) { G._runSaved = true; G._runId = null; }
+      if(_isTerminal) {
+        G._runSaved = true; G._runId = null;
+        // v0.23y: upload on retry-success too (enqueue de-dupes by run_id).
+        try { enqueueTelemetry(run); } catch(_) {}
+      }
       G._lastSaveStatus = { state: 'saved', ts: Date.now(), runId: run.runId, outcome: run.outcome, bytes: writeBytes, latency: Math.round(_t1 - _t0), mode: writeMode, terminal: _isTerminal };
       console.log('SAVE WROTE (retry)', { runId: run.runId, bytes: writeBytes, mode: writeMode, terminal: _isTerminal });
       return true;
@@ -50015,22 +50244,20 @@ function initHole() {
   // v0.23b1: Skydiver is now an UPGRADE branch on the parachute card, not a
   // standalone card. Charge count comes from the card-instance upgrade
   // branch — branch 'a' (skydiver) sets skydiver:true → 3 charges.
-  let _paraCharges = 0;
-  if(Array.isArray(G.deck)) {
-    for(let _i = 0; _i < G.deck.length; _i++) {
-      const _cid = G.deck[_i];
-      if(_cid === 'parachute') {
-        _paraCharges = 1;
-        const _up = G.deckUpgrades && G.deckUpgrades[_i];
-        const _upDef = _up && CARD_UPGRADES.parachute && CARD_UPGRADES.parachute[_up];
-        if(_upDef && _upDef.skydiver) { _paraCharges = 3; break; }
-      }
-    }
-  }
-  G._parachuteCharges = _paraCharges;
+  // v0.23x2: Parachute charges are now granted PER CARD PLAY (see
+  // activateParachute / _parachuteChargesPerPlay), not pre-stocked per hole.
+  // Start the hole at zero — a charge only exists once the card is played.
+  G._parachuteCharges = 0;
   G._parachuteActive = false;
   G._parachuteApexTriggered = false;
   G._parachuteCardArmed = false;
+  // v0.23x2: hard-remove any leftover canopy mesh so a chute that didn't get
+  // a clean landing last hole can't persist into this one (Adam's report:
+  // pink canopies floating on later holes). Canopies live in `scene`, not
+  // `courseGroup`, so the hole rebuild doesn't sweep them.
+  if(G._parachuteCanopy && G._parachuteCanopy.parent) {
+    G._parachuteCanopy.parent.remove(G._parachuteCanopy);
+  }
   G._parachuteCanopy = null;
   // — Skater Ball: per-swing physics + minigame state.
   G._skaterArmed = false;
