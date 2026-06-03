@@ -4020,7 +4020,7 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
   <button class="play-btn" onclick="openAchievements()" style="margin-top:6px;background:rgba(245,200,66,0.18);border:1px solid rgba(245,200,66,0.5);color:#f5c842;font-size:0.85rem;padding:10px 28px">🏆 Achievements</button>
   <button class="play-btn" id="btn-import-save" style="margin-top:6px;background:rgba(120,120,120,0.6);font-size:0.7rem;padding:8px 20px" onclick="importSaveFile()">📂 Import Save</button>
   <input type="file" id="import-save-input" accept=".ggwsave,application/json" style="display:none">
-  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.23z27</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Desktop pro-shop art &amp; text 50% larger.</div></div>
+  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.23z33</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Fix: hand not refilling after some swings.</div></div>
 
   <!-- v0.19j: Inline profile picker — skip the separate slot-picks screen -->
   <div class="section-label" style="margin-top:14px">Save Slot</div>
@@ -4782,8 +4782,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.23z32';
-const CHANGE_NOTE = "v0.23z32 — added pixel art for 14 more perks (Hand Brake, Off-Roading, Mo Money Mo Problems, Clearance Sale, Combo Multiplier, Chain Lightning, Scorched Earth, Big Boom, Money Pit, Four!, Shrink Ray, Big Hole, Bounce & Boom, Snowball); backgrounds removed, downscaled, pngquant'd. Money Pit now doubles coins per stack (2×/3×/4×…) instead of +50%; Gold Mine +150%/stack, Reinvestment +100%/stack. Pro shop rarity badge + card cost text enlarged 50%.";
+const GAME_VERSION = '0.23z33';
+const CHANGE_NOTE = "v0.23z33 — CRITICAL FIX: hand sometimes wasn't refilled after a swing (no card dealt next swing). The post-swing draw lived only in two settle paths (auto-settle + manual-stop); swings resolving via any other finalize path (stuck-ball, time-rewind, combo-debounce, portal exit tripping stuck detection) left slots empty. Refill now centralized in finalizeShot(), the single per-swing chokepoint, so every resolution path refills exactly once.";
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
@@ -24681,7 +24681,9 @@ function updatePhysics(dt) {
         const qdN = G.modifiers.some(m=>m.id==='quick_draw')
           ? ((typeof getPerkField === 'function') ? getPerkField('quick_draw','drawPerSwing',2) : 2)
           : 1;
-        if(hasEmptySlot && G._drawPerSwing > 0 && G.strokes > 0) drawCards(qdN);
+        // v0.23z33: hand refill moved to finalizeShot() (the single per-swing
+        // chokepoint) so every settle path refills, not just this one. Keep the
+        // UI repaint here for the cleanup state above.
         updateHandUI();
         // ── Speed Ball: check time expired ──────────────
         if(G._speedBallActive) {
@@ -25694,6 +25696,25 @@ function showLiveTrickName(name, pts, repeatCount) {
 
 // Finalize shot score when ball stops or holes out; returns { base, mult, total, tricks[] }
 function finalizeShot(holed) {
+  // v0.23z33: CRITICAL FIX — refill the hand HERE, the single chokepoint every
+  // swing resolution passes through. The post-swing draw previously lived only
+  // in the auto-settle (updatePhysics 2s) and manual-stop (onPointerDown) paths,
+  // so any swing that finalized via a different path — stuck-ball auto-finalize,
+  // time-rewind, combo-debounce, a portal exit that tripped stuck detection, or
+  // the event-less early-return just below — left emptied slots un-refilled.
+  // That was the intermittent "no card dealt on the next swing" bug (repro:
+  // power swing + slow mo + portal grenade + power steering on one swing).
+  // finalizeShot runs exactly once per swing (callers gate on _shotFinalized)
+  // and never on hole-out, so this draws once and only when appropriate.
+  if(!holed && G.cardSlots && G.strokes > 0 && G._drawPerSwing > 0 && typeof drawCards === 'function') {
+    if(G.cardSlots.some(s => s === null)) {
+      const _qdRefill = (G.modifiers && G.modifiers.some(m => m.id === 'quick_draw'))
+        ? ((typeof getPerkField === 'function') ? getPerkField('quick_draw','drawPerSwing',2) : 2)
+        : 1;
+      drawCards(_qdRefill);
+      if(typeof updateHandUI === 'function') updateHandUI();
+    }
+  }
   // v0.23b: Time Bomb — ball explodes when it comes to rest at the end of a
   // swing (not on hole-out, not on nudge-only rolls). Damages obstacles only;
   // never affects ball position, never costs HP. Fires BEFORE event/score
@@ -44981,7 +45002,9 @@ function onPointerDown(x, y, id) {
     const qdN2 = G.modifiers.some(m=>m.id==='quick_draw')
       ? ((typeof getPerkField === 'function') ? getPerkField('quick_draw','drawPerSwing',2) : 2)
       : 1;
-    if(hasEmptySlot2 && G._drawPerSwing > 0 && G.strokes > 0) drawCards(qdN2);
+    // v0.23z33: hand refill moved to finalizeShot() — the finalizeShot(false)
+    // call earlier in this manual-stop branch already refills via the central
+    // path, so the duplicate draw here is removed to avoid double-dealing.
     updateHandUI();
   }
   if(G.aimMode && !G.rolling && !G.inHole && hitTestBall(x,y)) {
