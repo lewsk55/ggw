@@ -4020,7 +4020,7 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
   <button class="play-btn" onclick="openAchievements()" style="margin-top:6px;background:rgba(245,200,66,0.18);border:1px solid rgba(245,200,66,0.5);color:#f5c842;font-size:0.85rem;padding:10px 28px">🏆 Achievements</button>
   <button class="play-btn" id="btn-import-save" style="margin-top:6px;background:rgba(120,120,120,0.6);font-size:0.7rem;padding:8px 20px" onclick="importSaveFile()">📂 Import Save</button>
   <input type="file" id="import-save-input" accept=".ggwsave,application/json" style="display:none">
-  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.23z33</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Fix: hand not refilling after some swings.</div></div>
+  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.23z34</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Fix: run duration lost on pause/resume.</div></div>
 
   <!-- v0.19j: Inline profile picker — skip the separate slot-picks screen -->
   <div class="section-label" style="margin-top:14px">Save Slot</div>
@@ -4782,8 +4782,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.23z33';
-const CHANGE_NOTE = "v0.23z33 — CRITICAL FIX: hand sometimes wasn't refilled after a swing (no card dealt next swing). The post-swing draw lived only in two settle paths (auto-settle + manual-stop); swings resolving via any other finalize path (stuck-ball, time-rewind, combo-debounce, portal exit tripping stuck detection) left slots empty. Refill now centralized in finalizeShot(), the single per-swing chokepoint, so every resolution path refills exactly once.";
+const GAME_VERSION = '0.23z34';
+const CHANGE_NOTE = "v0.23z34 — fixed runDuration not preserving time across pause/resume. Old math was performance.now() - _runStartTime, which is meaningless across page reloads (clock resets per session) and counted menu idle when no reload happened. Now: _runDurationAccumulated (persisted, flushed on every hole-start autosave) + Date.now() session anchor (re-anchored on resume). Survives any number of pause/resume cycles; paused wall-clock gaps never counted.";
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
@@ -49948,7 +49948,13 @@ function saveRunData(outcome) {
       // v0.23m: tag weekly-challenge runs so future global-leaderboard
       // submission can filter for valid weekly entries. Null on regular runs.
       weeklyChallengeId: G._currentRunWeeklyChallengeId || null,
-      runDuration: G._runStartTime ? Math.max(0, Math.round(performance.now() - G._runStartTime)) : 0,
+      // v0.23z34: pause/resume-safe duration. accumulated (flushed on every
+      // hole-start autosave) + current-session elapsed. Falls back to the old
+      // performance.now() math only if the new fields are missing (shouldn't
+      // happen post-z34, but keeps mid-run-upgrade saves from logging 0).
+      runDuration: (typeof G._runSessionStartedAt === 'number')
+        ? Math.max(0, Math.round((G._runDurationAccumulated || 0) + (Date.now() - G._runSessionStartedAt)))
+        : (G._runStartTime ? Math.max(0, Math.round(performance.now() - G._runStartTime)) : 0),
       // v0.23t: was this run ever resumed via the main-menu "Resume Run"
       // button? Sticky-true once flipped in resumeGame(). Useful for auditing
       // historical telemetry — Adam noted "the won at 11/18 anomalies" may
@@ -50674,6 +50680,16 @@ function initHole() {
   // ── Auto-save at hole start ─────────────────────────
   if(!isMultiplayer()) {
     try {
+      // v0.23z34: flush the elapsed play-session time into the run-duration
+      // accumulator and re-anchor the session timer. Doing this on every
+      // autosave means the persisted accumulator always reflects play time up
+      // to this hole start — which matches what resume restores gameplay-wise.
+      // Menu idle / wall-clock gaps between sessions never enter the math
+      // because resumeGame() re-anchors _runSessionStartedAt on resume.
+      if(typeof G._runSessionStartedAt === 'number') {
+        G._runDurationAccumulated = (G._runDurationAccumulated || 0) + Math.max(0, Date.now() - G._runSessionStartedAt);
+      }
+      G._runSessionStartedAt = Date.now();
       const saveData = {
         version: 2, // v0.17x: HP system — old v1 saves invalidate
         seed: G._currentSeed || '',
@@ -50719,6 +50735,10 @@ function initHole() {
         _runId: G._runId || null,
         _runStartTime: G._runStartTime || null,
         _runStartTimestamp: G._runStartTimestamp || Date.now(),
+        // v0.23z34: total ms played across all sessions of this run, flushed
+        // just above. Restored by resumeGame() so runDuration survives any
+        // number of pause/resume cycles (and page reloads) correctly.
+        _runDurationAccumulated: G._runDurationAccumulated || 0,
         _currentRunShopVisits: Array.isArray(G._currentRunShopVisits) ? G._currentRunShopVisits.slice() : [],
         _currentRunUpgrades: Array.isArray(G._currentRunUpgrades) ? G._currentRunUpgrades.slice() : [],
         _currentRunUpgradeOffersShown: (G._currentRunUpgradeOffersShown | 0),
@@ -53086,6 +53106,15 @@ function startGame(){
   // across page reloads). Used by saveRunData to record runStartedAt for the
   // resume-aware audit trail.
   G._runStartTimestamp = Date.now();
+  // v0.23z34: pause/resume-safe run duration tracking. _runDurationAccumulated
+  // holds total ms played across all sessions of this run (persisted in the
+  // autosave). _runSessionStartedAt is the Date.now() anchor for the current
+  // play session (NOT meaningful across sessions — re-anchored on every
+  // autosave flush and on resume). runDuration = accumulated + (now - anchor).
+  // Fixes the old performance.now()-based math, which was garbage across page
+  // reloads and counted menu idle time when no reload happened.
+  G._runDurationAccumulated = 0;
+  G._runSessionStartedAt = Date.now();
   G._runSaved = false;
   // v0.23t: fresh run was not resumed. Sticky-true if/when resumeGame() is
   // called later in the run; emitted on the run history record for auditing.
@@ -54038,6 +54067,12 @@ function resumeGame() {
     G._runSaved = false;
     G._runStartTime = (typeof save._runStartTime === 'number') ? save._runStartTime : performance.now();
     G._runStartTimestamp = save._runStartTimestamp || Date.now();
+    // v0.23z34: restore accumulated play time and start a fresh session
+    // anchor at NOW — the gap spent paused/closed never enters runDuration.
+    // Pre-z34 saves have no accumulator field → 0 (duration counts from
+    // resume onward; best available for legacy snapshots).
+    G._runDurationAccumulated = (typeof save._runDurationAccumulated === 'number') ? save._runDurationAccumulated : 0;
+    G._runSessionStartedAt = Date.now();
     G._currentRunShopVisits = Array.isArray(save._currentRunShopVisits) ? save._currentRunShopVisits.slice() : [];
     G._currentRunUpgrades = Array.isArray(save._currentRunUpgrades) ? save._currentRunUpgrades.slice() : [];
     G._currentRunUpgradeOffersShown = (save._currentRunUpgradeOffersShown | 0);
