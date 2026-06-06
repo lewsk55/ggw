@@ -4020,7 +4020,7 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
   <button class="play-btn" onclick="openAchievements()" style="margin-top:6px;background:rgba(245,200,66,0.18);border:1px solid rgba(245,200,66,0.5);color:#f5c842;font-size:0.85rem;padding:10px 28px">🏆 Achievements</button>
   <button class="play-btn" id="btn-import-save" style="margin-top:6px;background:rgba(120,120,120,0.6);font-size:0.7rem;padding:8px 20px" onclick="importSaveFile()">📂 Import Save</button>
   <input type="file" id="import-save-input" accept=".ggwsave,application/json" style="display:none">
-  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.23z34</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Fix: run duration lost on pause/resume.</div></div>
+  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.23aa</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">True-pause resume — no more free hole retries.</div></div>
 
   <!-- v0.19j: Inline profile picker — skip the separate slot-picks screen -->
   <div class="section-label" style="margin-top:14px">Save Slot</div>
@@ -4782,8 +4782,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.23z34';
-const CHANGE_NOTE = "v0.23z34 — fixed runDuration not preserving time across pause/resume. Old math was performance.now() - _runStartTime, which is meaningless across page reloads (clock resets per session) and counted menu idle when no reload happened. Now: _runDurationAccumulated (persisted, flushed on every hole-start autosave) + Date.now() session anchor (re-anchored on resume). Survives any number of pause/resume cycles; paused wall-clock gaps never counted.";
+const GAME_VERSION = '0.23aa';
+const CHANGE_NOTE = "v0.23aa — True-pause resume. Quitting to the menu mid-hole now saves your EXACT spot (stroke count, HP, coins, cards in hand, ball position) and resumes there, instead of restarting the hole on stroke 1. Closes the 'bail to menu = free hole retry + card refund' exploit. Mid-roll bails freeze at the shot's launch point with the stroke kept; force-close mid-hole is covered by a per-stroke snapshot. Hole-start + mid-hole saves now share one builder so their fields can't drift.";
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
@@ -50678,91 +50678,15 @@ function initHole() {
   // Speedball timer reset moved below — deferred until G.par is known for
   // this hole so the timer can scale with par (par × 7 seconds).
   // ── Auto-save at hole start ─────────────────────────
+  // v0.23aa: now routes through the shared writeAutoSave() builder (see
+  // buildAutoSaveObject / writeMidHoleSnapshot). No _midHole flag → this is a
+  // clean hole-start snapshot (ball at tee, stroke 0). The run-duration flush
+  // + session re-anchor that used to live here now happens inside writeAutoSave.
   if(!isMultiplayer()) {
-    try {
-      // v0.23z34: flush the elapsed play-session time into the run-duration
-      // accumulator and re-anchor the session timer. Doing this on every
-      // autosave means the persisted accumulator always reflects play time up
-      // to this hole start — which matches what resume restores gameplay-wise.
-      // Menu idle / wall-clock gaps between sessions never enter the math
-      // because resumeGame() re-anchors _runSessionStartedAt on resume.
-      if(typeof G._runSessionStartedAt === 'number') {
-        G._runDurationAccumulated = (G._runDurationAccumulated || 0) + Math.max(0, Date.now() - G._runSessionStartedAt);
-      }
-      G._runSessionStartedAt = Date.now();
-      const saveData = {
-        version: 2, // v0.17x: HP system — old v1 saves invalidate
-        seed: G._currentSeed || '',
-        hole: G.hole,
-        totalHoles: G.totalHoles,
-        difficulty: G.difficulty,
-        hp: G.hp,
-        hpMax: G.hpMax,
-        lives: G.lives, // legacy shim (multiplayer reads this)
-        coins: G.coins,
-        totalStrokes: G.totalStrokes,
-        modifiers: G.modifiers.map(m => ({id:m.id, name:m.name, emoji:m.emoji, rarity:m.rarity, price:m.price, stackable:m.stackable})),
-        scorecard: G.scorecard.slice(),
-        hotStreak: G.hotStreak || 0,
-        piggyBankStacks: G.piggyBankStacks || 0,
-        swingMult: G.swingMult || 1.0,
-        jumpsMax: G.jumpsMax || 0,
-        snowballStacks: G.snowballStacks || 0,
-        shopPickCount: G.shopPickCount || 3,
-        _runStyleScore: G._runStyleScore || 0,
-        biome: G.biome || 'puttputt',
-        deck: G.deck.slice(),
-        // v0.21g: persist per-instance card upgrades (parallel to deck array).
-        deckUpgrades: G.deckUpgrades ? G.deckUpgrades.slice() : [],
-        // v0.20a: persist character id so resume preserves the run's ball archetype
-        currentCharacter: G.currentCharacter || 'classic',
-        // Speedball timer state so mid-hole resume keeps remaining time
-        _speedballTimerRemaining: G._speedballTimerRemaining,
-        _speedballTimerActive: !!G._speedballTimerActive,
-        // v0.20h: Dealer's Choice picked card persists across saves
-        _dealersChoiceCardId: G._dealersChoiceCardId || null,
-        // v0.22e: persist the run's STARTING difficulty so resume after a page
-        // refresh doesn't lose track of it. Without this, _runStartingDifficulty
-        // is undefined on resume, the unlock fallback uses live G.difficulty,
-        // and bonus-hole bumps cause stars to skip.
-        _runStartingDifficulty: (G._runStartingDifficulty != null) ? (G._runStartingDifficulty | 0) : null,
-        // v0.23t: persist per-run ANALYTICS identity so resume can re-claim
-        // the in-progress record instead of orphaning it. Pre-0.23t saves
-        // restored gameplay only — _runId was lost on resume, the abandon-save
-        // record was never updated, and the completion save SKIPPED on its
-        // _runId guard. Adam reported a D3 9-hole win (seed EDLE8P) showing in
-        // export as 'abandoned 2/9' because of exactly this corruption path.
-        _runId: G._runId || null,
-        _runStartTime: G._runStartTime || null,
-        _runStartTimestamp: G._runStartTimestamp || Date.now(),
-        // v0.23z34: total ms played across all sessions of this run, flushed
-        // just above. Restored by resumeGame() so runDuration survives any
-        // number of pause/resume cycles (and page reloads) correctly.
-        _runDurationAccumulated: G._runDurationAccumulated || 0,
-        _currentRunShopVisits: Array.isArray(G._currentRunShopVisits) ? G._currentRunShopVisits.slice() : [],
-        _currentRunUpgrades: Array.isArray(G._currentRunUpgrades) ? G._currentRunUpgrades.slice() : [],
-        _currentRunUpgradeOffersShown: (G._currentRunUpgradeOffersShown | 0),
-        _wasResumed: !!G._wasResumed,
-        timestamp: Date.now(),
-      };
-      const json = JSON.stringify(saveData);
-      try {
-        localStorage.setItem(profKey('ggw_autosave'), json);
-      } catch(writeErr) {
-        // Quota exceeded — try dropping the analytics history to make room, then retry autosave.
-        // v0.19z8: keep 20 runs instead of 5 — wiping user history too aggressively.
-        try {
-          const rh = localStorage.getItem(profKey('ggw_run_history'));
-          if(rh) {
-            const hist = JSON.parse(rh);
-            if(Array.isArray(hist) && hist.length > 20) {
-              localStorage.setItem(profKey('ggw_run_history'), JSON.stringify(hist.slice(-20)));
-            }
-          }
-          localStorage.setItem(profKey('ggw_autosave'), json);
-        } catch(retryErr) { /* storage unavailable — skip this save */ }
-      }
-    } catch(e) { /* save assembly failure — skip */ }
+    writeAutoSave();
+    // Seed the per-stroke snapshot tracker at 0 so the hole-start save stays a
+    // clean (non-_midHole) snapshot until the player's first shot settles.
+    G._lastSnapshotStrokes = 0;
   }
 
   // v0.20r: Lap Mode uses a custom course-data builder instead of the
@@ -52252,6 +52176,15 @@ function escMainMenu() {
       const inferredOutcome = (G.hp <= 0) ? 'lost' : 'completed_unknown';
       try { saveRunData(inferredOutcome); } catch(e) { console.warn('saveRunData fallback failed', e); }
     }
+  }
+  // v0.23aa: TRUE-PAUSE — write a live mid-hole snapshot before tearing the
+  // scene down, so "Main Menu → Resume" returns to the exact spot (stroke, HP,
+  // coins, hand, ball position) instead of re-teeing on stroke 1. If the ball
+  // is mid-roll, freeze at the launch point with the in-flight stroke kept.
+  // Must run while G.state is still 'playing' (writeMidHoleSnapshot guards on
+  // it). The animate-loop snapshot covers the force-close-mid-hole path.
+  if(typeof isMultiplayer === 'function' && !isMultiplayer() && G.state === 'playing' && G.ball) {
+    try { writeMidHoleSnapshot({ rollingFreeze: true }); } catch(e) { console.warn('mid-hole snapshot on menu-exit failed', e); }
   }
   G.state = 'gameover'; // stop physics
   clearTimeout(G._stylePopupTimer);
@@ -54012,6 +53945,131 @@ function checkAutoSave() {
     }
   } catch(e) {}
 }
+// v0.23aa: shared autosave object builder. Both the hole-start autosave and
+// the live mid-hole snapshot route through this so their 40+ fields can never
+// drift apart (a past Full-House-on-resume bug came from exactly that kind of
+// drift). `extra` overlays mid-hole-only fields — see writeMidHoleSnapshot().
+function buildAutoSaveObject(extra) {
+  const base = {
+    version: 2, // v0.17x: HP system — old v1 saves invalidate
+    seed: G._currentSeed || '',
+    hole: G.hole,
+    totalHoles: G.totalHoles,
+    difficulty: G.difficulty,
+    hp: G.hp,
+    hpMax: G.hpMax,
+    lives: G.lives, // legacy shim (multiplayer reads this)
+    coins: G.coins,
+    totalStrokes: G.totalStrokes,
+    modifiers: G.modifiers.map(m => ({id:m.id, name:m.name, emoji:m.emoji, rarity:m.rarity, price:m.price, stackable:m.stackable})),
+    scorecard: G.scorecard.slice(),
+    hotStreak: G.hotStreak || 0,
+    piggyBankStacks: G.piggyBankStacks || 0,
+    swingMult: G.swingMult || 1.0,
+    jumpsMax: G.jumpsMax || 0,
+    snowballStacks: G.snowballStacks || 0,
+    shopPickCount: G.shopPickCount || 3,
+    _runStyleScore: G._runStyleScore || 0,
+    biome: G.biome || 'puttputt',
+    deck: G.deck.slice(),
+    deckUpgrades: G.deckUpgrades ? G.deckUpgrades.slice() : [],
+    currentCharacter: G.currentCharacter || 'classic',
+    _speedballTimerRemaining: G._speedballTimerRemaining,
+    _speedballTimerActive: !!G._speedballTimerActive,
+    _dealersChoiceCardId: G._dealersChoiceCardId || null,
+    _runStartingDifficulty: (G._runStartingDifficulty != null) ? (G._runStartingDifficulty | 0) : null,
+    _runId: G._runId || null,
+    _runStartTime: G._runStartTime || null,
+    _runStartTimestamp: G._runStartTimestamp || Date.now(),
+    _runDurationAccumulated: G._runDurationAccumulated || 0,
+    _currentRunShopVisits: Array.isArray(G._currentRunShopVisits) ? G._currentRunShopVisits.slice() : [],
+    _currentRunUpgrades: Array.isArray(G._currentRunUpgrades) ? G._currentRunUpgrades.slice() : [],
+    _currentRunUpgradeOffersShown: (G._currentRunUpgradeOffersShown | 0),
+    _wasResumed: !!G._wasResumed,
+    timestamp: Date.now(),
+  };
+  if(extra) Object.assign(base, extra);
+  return base;
+}
+
+// v0.23aa: persist the autosave. Flushes the run-duration accumulator and
+// re-anchors the play-session timer (so paused/closed wall-clock time never
+// inflates runDuration), then writes the object with the same quota-recovery
+// fallback the hole-start save has always used. `extra` overlays mid-hole
+// fields for live snapshots.
+function writeAutoSave(extra) {
+  if(isMultiplayer()) return;
+  try {
+    if(typeof G._runSessionStartedAt === 'number') {
+      G._runDurationAccumulated = (G._runDurationAccumulated || 0) + Math.max(0, Date.now() - G._runSessionStartedAt);
+    }
+    G._runSessionStartedAt = Date.now();
+    const json = JSON.stringify(buildAutoSaveObject(extra));
+    try {
+      localStorage.setItem(profKey('ggw_autosave'), json);
+    } catch(writeErr) {
+      // Quota exceeded — drop old analytics history to make room, then retry.
+      try {
+        const rh = localStorage.getItem(profKey('ggw_run_history'));
+        if(rh) {
+          const hist = JSON.parse(rh);
+          if(Array.isArray(hist) && hist.length > 20) {
+            localStorage.setItem(profKey('ggw_run_history'), JSON.stringify(hist.slice(-20)));
+          }
+        }
+        localStorage.setItem(profKey('ggw_autosave'), json);
+      } catch(retryErr) { /* storage unavailable — skip this save */ }
+    }
+  } catch(e) { /* save assembly failure — skip */ }
+}
+
+// v0.23aa: TRUE-PAUSE — capture a live mid-hole snapshot. Called once per
+// settled stroke (from the animate loop) and on menu-exit. Records strokes
+// taken so far, the ball's rest position, the live hand/draw/discard piles,
+// and any Double-or-Nothing wager, so resuming lands exactly where the player
+// paused instead of re-teeing on stroke 1. This is what closes the
+// "quit to menu = free hole retry (and card refund)" exploit.
+// opts.rollingFreeze: if the ball is mid-roll (player bailed to menu during a
+// shot), freeze at the shot's launch point with the in-flight stroke already
+// counted — so leaving never refunds a shot.
+function writeMidHoleSnapshot(opts) {
+  if(isMultiplayer()) return;
+  if(G.state !== 'playing' || !G.ball || !G.ballPos) return;
+  if(G.inHole) return; // hole-out owns that transition; next initHole resaves
+  opts = opts || {};
+  let bp = G.ballPos;
+  if(G.rolling) {
+    // Only persist a rolling ball when explicitly freezing on menu-exit, and
+    // prefer the launch point (always a valid on-ground rest spot) over a
+    // possibly-airborne / over-a-pit live position.
+    if(!opts.rollingFreeze) return;
+    bp = G.lastShotPos ? G.lastShotPos : G.ballPos;
+  }
+  const handLite = Array.isArray(G.hand) ? G.hand.map(c => {
+    const o = { id: c.id, instanceId: c.instanceId, deckIndex: (c.deckIndex == null ? -1 : c.deckIndex) };
+    if(c.upgradeBranch) o.upgradeBranch = c.upgradeBranch;
+    if(c._cloneDuplicate) o._cloneDuplicate = true;
+    return o;
+  }) : [];
+  const recLite = (r) => {
+    const o = { id: r.id, deckIndex: (r.deckIndex == null ? -1 : r.deckIndex) };
+    if(r.upgradeBranch) o.upgradeBranch = r.upgradeBranch;
+    if(r._cloneDuplicate) o._cloneDuplicate = true;
+    return o;
+  };
+  writeAutoSave({
+    _midHole: true,
+    strokes: G.strokes | 0,
+    ballPos: { x: bp.x, y: bp.y, z: bp.z },
+    hand: handLite,
+    drawPile: Array.isArray(G.drawPile) ? G.drawPile.map(recLite) : [],
+    discard: Array.isArray(G.discard) ? G.discard.map(recLite) : [],
+    _cardInstanceCounter: G._cardInstanceCounter | 0,
+    _donWagered: !!G._donWagered,
+    _donWagerAmount: G._donWagerAmount || 0,
+  });
+}
+
 function resumeGame() {
   try {
     const raw = localStorage.getItem(profKey('ggw_autosave'));
@@ -54215,6 +54273,62 @@ function resumeGame() {
     try { if(typeof getAC === 'function') getAC(); } catch(e){}
     if(typeof startMusic === 'function') startMusic();
     initHole();
+    // v0.23aa: TRUE-PAUSE restore. initHole() re-tees the ball, resets strokes
+    // to 0, and deals a fresh opening hand. If this save captured a mid-hole
+    // snapshot (player paused after taking shots), overwrite those fresh-hole
+    // values with the live state so resume lands exactly where they left off —
+    // same stroke count, ball position, hand/draw/discard, and DoN wager. This
+    // is the half of the exploit fix that makes resume a genuine pause.
+    if(save._midHole) {
+      try {
+        if(typeof save.strokes === 'number') G.strokes = save.strokes | 0;
+        // Ball resting position (velocity always zeroed — we only snapshot at
+        // rest, or freeze at the launch point on a mid-roll bail).
+        if(save.ballPos && G.ballPos && G.ball) {
+          G.ballPos.set(save.ballPos.x, save.ballPos.y, save.ballPos.z);
+          if(G.ballVel) G.ballVel.set(0, 0, 0);
+          G.ball.position.copy(G.ballPos);
+          G.lastShotPos = G.ballPos.clone();
+        }
+        // Restore the exact card piles so cards already played this hole stay
+        // spent (no refund). Rebuild per-instance upgrade defs — _defOverride
+        // isn't serialized. Reset the instance counter to the snapshot value so
+        // fresh draws get unique ids without colliding with restored ones.
+        if(typeof save._cardInstanceCounter === 'number') G._cardInstanceCounter = save._cardInstanceCounter | 0;
+        const _rehydrateHand = (inst) => {
+          const o = { id: inst.id, instanceId: inst.instanceId, deckIndex: (inst.deckIndex == null ? -1 : inst.deckIndex) };
+          if(inst.upgradeBranch) {
+            o.upgradeBranch = inst.upgradeBranch;
+            if(typeof buildCardInstanceDef === 'function') o._defOverride = buildCardInstanceDef(inst.id, inst.upgradeBranch);
+          }
+          if(inst._cloneDuplicate) o._cloneDuplicate = true;
+          return o;
+        };
+        if(Array.isArray(save.hand))     G.hand     = save.hand.map(_rehydrateHand);
+        if(Array.isArray(save.drawPile)) G.drawPile = save.drawPile.slice();
+        if(Array.isArray(save.discard))  G.discard  = save.discard.slice();
+        if(typeof assignCardsToSlots === 'function') assignCardsToSlots();
+        if(typeof updateHandUI === 'function') updateHandUI();
+        // DoN wager state — set AFTER initHole (which clears it) and BEFORE the
+        // 800ms showDonPrompt fires, so a placed bet can't be re-offered/undone.
+        G._donWagered = !!save._donWagered;
+        G._donWagerAmount = save._donWagerAmount || 0;
+        // Re-center the camera on the restored ball instead of the tee.
+        if(G.ballPos) {
+          if(G.camTarget) G.camTarget.set(G.ballPos.x, 0, G.ballPos.z);
+          if(typeof syncAimToCamera === 'function') syncAimToCamera();
+          if(typeof updateAimArrow === 'function') updateAimArrow();
+          if(typeof focusCameraOnBall === 'function') { try { focusCameraOnBall(); } catch(e){} }
+        }
+        if(typeof updateUI === 'function') updateUI();
+        if(typeof updateScorePips === 'function') updateScorePips();
+        // Keep the settle-detector aligned so it doesn't immediately re-snapshot.
+        G._lastSnapshotStrokes = G.strokes | 0;
+        // Persist a corrected snapshot — initHole just overwrote disk with a
+        // hole-start save, so re-stamp the mid-hole state for any force-close.
+        if(typeof writeMidHoleSnapshot === 'function') { try { writeMidHoleSnapshot(); } catch(e){} }
+      } catch(e) { console.warn('mid-hole restore failed; left at hole start', e); }
+    }
     showToast(`▶ Resumed — Hole ${G.hole+1}`, 1800);
   } catch(e) {
     showToast('Resume failed', 1200);
@@ -55143,6 +55257,19 @@ function animate(now) {
   }
   if(G._slowMoScale && G._slowMoScale < 1.0) dt *= G._slowMoScale;
   flagTime+=dt;
+
+  // v0.23aa: TRUE-PAUSE mid-hole snapshot. The moment the ball settles after a
+  // shot (rolling→rest with aim re-engaged, not holed), persist the live state
+  // so quitting to the menu and resuming drops the player back HERE on the same
+  // stroke — instead of restarting the hole on stroke 1 (the old free-retry
+  // exploit). Fires once per settled stroke via the strokes-changed guard;
+  // hole-start and hole-out have their own saves. Single-player only.
+  if(G.state === 'playing' && !G.rolling && G.aimMode && !G.inHole
+     && typeof isMultiplayer === 'function' && !isMultiplayer()
+     && (G.strokes | 0) !== (G._lastSnapshotStrokes | 0)) {
+    G._lastSnapshotStrokes = (G.strokes | 0);
+    if(G.strokes > 0) { try { writeMidHoleSnapshot(); } catch(e){} }
+  }
 
   // v0.20l: Barbed Wire menace tell — subtle dark-red emissive throb on the
   // barbs (NOT the wire strand — keeping the strand pure black).
