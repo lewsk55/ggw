@@ -3256,13 +3256,14 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
 }
 </style>
 <link rel="stylesheet" href="GGW_assets.css">
+<link rel="stylesheet" href="GGW_theme.css">
 
 <!-- v0.20f4: eruda mobile dev console (lazy-loaded on demand from debug menu).
      Loaded only when the user taps "Console" in the debug menu so iOS users
      have devtools access without paying boot cost on every session. -->
 
 </head>
-<body>
+<body class="scorecard">
 
 <canvas id="canvas"></canvas>
 
@@ -4023,7 +4024,7 @@ filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));
   <button class="weekly-btn" onclick="openAchievements()"><span class=px-trophy></span> Achievements</button>
   <button class="play-btn" id="btn-import-save" style="margin-top:6px;background:rgba(120,120,120,0.6);font-size:0.7rem;padding:8px 20px" onclick="importSaveFile()"><span class=px-folder></span> Import Save</button>
   <input type="file" id="import-save-input" accept=".ggwsave,application/json" style="display:none">
-  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.23aa14</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Image assets split into GGW_assets.js / GGW_assets.css to slim the core file.</div></div>
+  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.24b</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">New scorecard look for the menu, pro shop and hole summary.</div></div>
 
   <!-- v0.19j: Inline profile picker — skip the separate slot-picks screen -->
   <div class="section-label" style="margin-top:14px">Save Slot</div>
@@ -4476,10 +4477,18 @@ const canvas = document.getElementById('canvas');
 //  3. PCFShadowMap (cheap) instead of PCFSoftShadowMap on mobile — softer
 //     shadow filtering is the most expensive shadow mode three.js offers.
 const _GGW_isMobile = window.innerWidth < 900 || 'ontouchstart' in window;
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: !_GGW_isMobile });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, _GGW_isMobile ? 1.5 : 2));
+// v0.23aa15: apply the mobile-tier perf path to desktop too (AA off, DPR cap,
+// hard PCF shadows, fewer bg trees, particle cap, half-rate outlines). Flip
+// _GGW_perfMode to false to restore desktop's old high-quality path. NOTE: the
+// 1024 shadow-map + per-frame frustum tracker pair stays mobile-only on purpose
+// (it caused shadow-swim on whip pans on desktop) — see _GGW_isMobile at the
+// sun.shadow.mapSize and updateSunShadowFrustum sites.
+const _GGW_perfMode = true;
+const _GGW_lowGfx = _GGW_isMobile || _GGW_perfMode;
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: !_GGW_lowGfx });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, _GGW_lowGfx ? 1.5 : 2));
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = _GGW_isMobile ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = _GGW_lowGfx ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
 renderer.setClearColor(0x87CEEB);
 
 const scene = new THREE.Scene();
@@ -4522,8 +4531,9 @@ function initComposer() {
   outlinePass.visibleEdgeColor.set(0x000000);
   outlinePass.hiddenEdgeColor.set(0x000000);
   composer.addPass(outlinePass);
-  // FXAA for light anti-aliasing — desktop only (skip on mobile for performance)
-  const isMobile = _GGW_isMobile;
+  // FXAA for light anti-aliasing — skipped whenever the low-gfx perf path is on
+  // (v0.23aa15: that now includes desktop unless _GGW_perfMode is false).
+  const isMobile = _GGW_lowGfx;
   if(!isMobile) {
     const fxaa = new THREE.ShaderPass(THREE.FXAAShader);
     fxaa.material.uniforms['resolution'].value.set(1/window.innerWidth, 1/window.innerHeight);
@@ -4789,8 +4799,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.23aa14';
-const CHANGE_NOTE = "v0.23aa14 -- Image assets extracted from the core HTML into two sibling files: GGW_assets.js (CARD_ART card/perk art, CHAR_ART character portraits, ball-skin reference textures) and GGW_assets.css (coin + pixel-art icon classes), both loaded before the main game script. Core file is ~890 KB / ~230 lines lighter with no gameplay changes. Keep all three files in the same folder. Builds on aa13.";
+const GAME_VERSION = '0.24b';
+const CHANGE_NOTE = "v0.24b -- Phase 1 of the minigolf-scorecard UI redesign. The main menu, pro shop and hole-summary screens are reskinned as a printed country-club scorecard: cream paper, forest-green header bars, an orange flag motif and hill footer, ruled toggles, paper shop tickets, and a rubber-stamp score word. Self-hosted fonts (Anton / Yellowtail / DM Sans, embedded in GGW_theme.css, no CDN). All styling lives in the new GGW_theme.css layer scoped under body.scorecard; the gameplay HUD is unchanged (Phase 2) and no game logic was touched. Builds on 0.24a.";
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
@@ -10005,7 +10015,7 @@ function buildCourse(data) {
     // instead of 40-65. Portrait viewport sees far fewer trees in the periphery
     // anyway, and each tree is a 2-3 mesh group that ends up in main render,
     // depth pass for OutlinePass, AND shadow pass. Desktop unchanged.
-    const bgTreeCount = _GGW_isMobile
+    const bgTreeCount = _GGW_lowGfx
       ? (20 + Math.floor(Math.random() * 8))
       : (40 + Math.floor(Math.random() * 25));
     for(let i = 0; i < bgTreeCount; i++) {
@@ -10067,8 +10077,8 @@ function buildCourse(data) {
       // shading carries the silhouette read fine on its own.
       tg.traverse(o => {
         if(o.isMesh) {
-          o.castShadow = !_GGW_isMobile;
-          if(_GGW_isMobile) o.userData.noOutline = true;
+          o.castShadow = !_GGW_lowGfx;
+          if(_GGW_lowGfx) o.userData.noOutline = true;
         }
       });
       group.add(tg);
@@ -40527,7 +40537,7 @@ function tickPortalRTT() {
     // un-outlined fallback path is below — it just points the door at rt
     // directly. Visually: portal contents render without cartoon outlines
     // on mobile only. Far better than the broken-window bug.
-    const _skipOutlineOnPortal = !!_GGW_isMobile;
+    const _skipOutlineOnPortal = !!_GGW_lowGfx;
     if (!_skipOutlineOnPortal && typeof outlinePass !== 'undefined' && outlinePass && updateMe.renderTargetB) {
       const _origCam = outlinePass.camera;
       outlinePass.camera = cam;
@@ -44068,7 +44078,7 @@ function updateParticles(dt) {
   // v0.23l15: Mobile cap further tightened 220 \u2192 150. Combined with the
   // smaller forest + half-rate outlines, this keeps Pinball/Demolition runs
   // smooth on phones during the heavy-debris moments.
-  const _PARTICLE_CAP = _GGW_isMobile ? 150 : 400;
+  const _PARTICLE_CAP = _GGW_lowGfx ? 150 : 400;
   if(G.particles.length > _PARTICLE_CAP) {
     const _excess = G.particles.length - _PARTICLE_CAP;
     for(let i = 0; i < _excess; i++) {
@@ -57054,7 +57064,7 @@ function animate(now) {
   // toggles every frame regardless of motion, so when motion stops the
   // half-rate cadence resumes cleanly without phase glitches.
   // Desktop is untouched (the outer _GGW_isMobile gate).
-  if (_GGW_isMobile && outlinePass) {
+  if (_GGW_lowGfx && outlinePass) {
     _outlineFrameCounter = (_outlineFrameCounter + 1) & 1;
     // Motion check
     let _sceneInMotion = false;
@@ -57115,6 +57125,218 @@ if('serviceWorker' in navigator && location.protocol === 'https:') {
     });
   });
 }
+
+/* ============================================================
+   v0.24a — Gamepad / controller support
+     Left stick  : aim direction + power (push harder = more power)
+     A           : fire        B : cancel aim / menu back
+     LB / RB     : cycle card   X : play selected card
+     Right stick : rotate camera
+     D-pad / L-stick : menu nav   A : confirm   B : back   Start : pause
+   Reuses the real launch path (onPointerUp) so ball + grenade fire,
+   forgiveness, double-ammo, etc. all behave exactly as with mouse/touch.
+   ============================================================ */
+(function(){
+  if(!('getGamepads' in navigator)) return;
+
+  // Standard-mapping button indices
+  const BTN = { A:0, B:1, X:2, Y:3, LB:4, RB:5, LT:6, RT:7, BACK:8, START:9,
+                L3:10, R3:11, DU:12, DD:13, DL:14, DR:15 };
+  const DEAD = 0.22, AIM_DEAD = 0.18, NAV_REPEAT = 200;
+
+  let prev = {};                 // previous frame pressed-state per button index
+  let padActive = false;         // controller currently the active input device
+  let aiming = false;            // gamepad aim engaged this swing
+  let cardSel = 0;               // selected hand index
+  let lastMenuEl = null, menuIdx = 0, nextNavOk = 0;
+  let lastT = performance.now();
+
+  const qs = s => document.querySelector(s);
+  const safe = fn => { try { return fn(); } catch(e){} };
+
+  function getPad(){
+    const ps = navigator.getGamepads ? navigator.getGamepads() : [];
+    for(let i=0;i<ps.length;i++){ if(ps[i] && ps[i].connected) return ps[i]; }
+    return null;
+  }
+  function isDown(p, idx){ const b = p.buttons[idx]; return !!(b && (b.pressed || b.value > 0.5)); }
+
+  // ---------- menu context ----------
+  function getPadMenu(){
+    const open = id => { const e = qs('#'+id); return e && e.classList.contains('open'); };
+    if(open('debug-menu')) return null;                       // dev menu stays mouse-only
+    if(open('locker-overlay'))       return { el: qs('#locker-overlay'),       back: ()=>safe(closeLocker) };
+    if(open('achievements-overlay')) return { el: qs('#achievements-overlay'), back: ()=>safe(closeAchievements) };
+    if(open('shop-overlay'))         return { el: qs('#shop-overlay'),         back: null };
+    if(open('escape-menu'))          return { el: qs('#escape-menu'),          back: ()=>safe(closeEscMenu) };
+    const ov = qs('#overlay');
+    if(ov && !ov.classList.contains('hidden')) return { el: ov, back: null };
+    return null;
+  }
+
+  // ---------- aiming ----------
+  function driveAim(p){
+    const canAim = G.state==='playing' && G.aimMode && !G.rolling && !G.inHole
+                 && !G._airstrikeAiming && !G._sharpshooterActive && !G.walkiesActive && !G._portalArming;
+    const ax = p.axes[0]||0, ay = p.axes[1]||0;
+    const mag = Math.hypot(ax, ay);
+    if(canAim && mag > AIM_DEAD){
+      const t = Math.min(1, (mag - AIM_DEAD)/(1 - AIM_DEAD));   // deadzone-remapped 0..1
+      const nx = ax/mag, ny = ay/mag;
+      const camFwd = new THREE.Vector3(); camera.getWorldDirection(camFwd);
+      const camRight = new THREE.Vector3().crossVectors(camFwd, camera.up).normalize();
+      const dir = new THREE.Vector3();
+      dir.addScaledVector(camRight, nx);     // push right  -> launch right
+      dir.addScaledVector(camFwd,  -ny);     // push up     -> launch forward (away)
+      dir.y = 0;
+      if(dir.length() > 0.01 && !G._goalOrientedArmed){
+        dir.normalize();
+        G.shotDir.copy(dir);
+        G.shotAngle = Math.atan2(G.shotDir.x, G.shotDir.z);
+        safe(()=>{ aimManualOverride = true; });
+      }
+      G.shotPower = t;
+      aiming = true;
+      input.ballDragging = true;
+      G.pullCurrent = { x: window.innerWidth/2, y: window.innerHeight/2 };  // never the edge-cancel margin
+      if(G._grenadeAiming){ G._grenadePower = G.shotPower; safe(rebuildGrenadePreview); }
+      safe(updateAimArrow);
+      const hs = document.getElementById('h-strokes');
+      if(hs) hs.textContent = G.strokes + ' (' + Math.round(G.shotPower*100) + '%)';
+      safe(updateStrokeColor);
+    } else if(aiming){
+      // released the stick without firing -> drop the shot cleanly
+      aiming = false; input.ballDragging = false; G.shotPower = 0;
+      G.pullStart = null; G.pullCurrent = null;
+      safe(updateAimArrow);
+    }
+  }
+  function fire(){ safe(onPointerUp); aiming = false; input.ballDragging = false; }
+  function cancelAim(){
+    if(G._grenadeAiming) safe(cancelGrenadeAim);
+    aiming = false; input.ballDragging = false; G.shotPower = 0;
+    G.pullStart = null; G.pullCurrent = null;
+    safe(updateAimArrow);
+  }
+
+  // ---------- camera ----------
+  function driveCamera(p, dt){
+    let rx = p.axes[2]||0, ry = p.axes[3]||0;
+    if(Math.abs(rx) < DEAD) rx = 0;
+    if(Math.abs(ry) < DEAD) ry = 0;
+    if(rx===0 && ry===0) return;
+    if(!G._goalOrientedArmed) G.camTheta -= rx * 2.2 * dt;
+    if(typeof G.camPhi === 'number') G.camPhi = Math.max(0.15, Math.min(1.45, G.camPhi + ry * 1.6 * dt));
+  }
+
+  // ---------- cards ----------
+  const hand = () => (Array.isArray(G.hand) ? G.hand : []);
+  function clearCardSel(){ document.querySelectorAll('.card-slot.pad-card-sel').forEach(e=>e.classList.remove('pad-card-sel')); }
+  function highlightCard(){
+    clearCardSel();
+    if(!padActive) return;
+    const h = hand(); if(!h.length) return;
+    if(cardSel >= h.length) cardSel = h.length - 1;
+    if(cardSel < 0) cardSel = 0;
+    const el = document.getElementById('card-slot-S'+cardSel);
+    if(el) el.classList.add('pad-card-sel');
+  }
+  function cycleCard(d){ const h = hand(); if(!h.length) return; cardSel = (cardSel + d + h.length) % h.length; highlightCard(); }
+  function playSel(){
+    const h = hand(); if(!h.length) return;
+    if(cardSel >= h.length) cardSel = h.length - 1;
+    const inst = h[cardSel] && h[cardSel].instanceId;
+    if(inst != null) safe(()=>playCard(inst));
+  }
+
+  // ---------- menu nav ----------
+  function focusables(container){
+    const sel = 'button, [onclick], .shop-card, .char-card, .toggle-btn, input[type=file]';
+    return Array.from(container.querySelectorAll(sel)).filter(el=>{
+      if(el.disabled) return false;
+      const r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden';
+    });
+  }
+  function clearMenuFocus(){ document.querySelectorAll('.pad-focus').forEach(e=>e.classList.remove('pad-focus')); }
+  function navMenu(menu, d){
+    const items = focusables(menu.el); if(!items.length) return;
+    if(menu.el !== lastMenuEl){ lastMenuEl = menu.el; menuIdx = 0; }
+    else menuIdx = (menuIdx + d + items.length) % items.length;
+    clearMenuFocus();
+    const el = items[menuIdx];
+    if(el){ el.classList.add('pad-focus'); el.scrollIntoView({block:'nearest'}); }
+  }
+  function activateMenu(menu){ const items = focusables(menu.el); const el = items[menuIdx] || items[0]; if(el) el.click(); }
+
+  // ---------- poll ----------
+  function poll(){
+    const now = performance.now();
+    const dt = Math.min(0.05, (now - lastT)/1000); lastT = now;
+    const p = getPad();
+    if(!p){ prev = {}; requestAnimationFrame(poll); return; }
+
+    const curr = {};
+    for(const k in BTN) curr[BTN[k]] = isDown(p, BTN[k]);
+    const jp = idx => curr[idx] && !prev[idx];
+
+    // device-active detection (toggles focus UI)
+    let active = false;
+    for(let i=0;i<p.buttons.length;i++){ if(isDown(p,i)){ active = true; break; } }
+    if(!active){ for(let i=0;i<p.axes.length;i++){ if(Math.abs(p.axes[i])>0.35){ active = true; break; } } }
+    if(active && !padActive){ padActive = true; document.body.classList.add('pad-active'); }
+
+    const menu = getPadMenu();
+    if(menu){
+      if(aiming) cancelAim();
+      clearCardSel();
+      const lx = p.axes[0]||0, ly = p.axes[1]||0;
+      let d = 0;
+      if(jp(BTN.DU) || jp(BTN.DL)) d = -1;
+      else if(jp(BTN.DD) || jp(BTN.DR)) d = +1;
+      const stickDir = (ly < -0.6 || lx < -0.6) ? -1 : ((ly > 0.6 || lx > 0.6) ? 1 : 0);
+      if(d === 0 && stickDir !== 0 && now >= nextNavOk){ d = stickDir; nextNavOk = now + NAV_REPEAT; }
+      if(stickDir === 0 && Math.abs(lx) < 0.4 && Math.abs(ly) < 0.4) nextNavOk = 0;
+      if(d !== 0) navMenu(menu, d);
+      if(jp(BTN.A)) activateMenu(menu);
+      if(jp(BTN.B) && menu.back) menu.back();
+      if(jp(BTN.START) && menu.back) menu.back();
+    } else {
+      clearMenuFocus(); lastMenuEl = null;
+      driveAim(p);
+      driveCamera(p, dt);
+      if(jp(BTN.A) && G.state==='playing' && (aiming || (G.aimMode && G.shotPower > 0.05))) fire();
+      if(jp(BTN.B) && (aiming || G.shotPower > 0)) cancelAim();
+      if(jp(BTN.RB)) cycleCard(+1);
+      if(jp(BTN.LB)) cycleCard(-1);
+      if(jp(BTN.X)) playSel();
+      if(jp(BTN.START) && G.state==='playing') safe(openEscMenu);
+      if(padActive) highlightCard();
+    }
+
+    prev = curr;
+    requestAnimationFrame(poll);
+  }
+
+  // mouse/touch reclaims the focus UI
+  ['mousedown','touchstart'].forEach(ev => window.addEventListener(ev, ()=>{
+    if(padActive){ padActive = false; document.body.classList.remove('pad-active'); clearMenuFocus(); clearCardSel(); }
+  }, {passive:true}));
+
+  window.addEventListener('gamepadconnected', ()=> safe(()=>{ if(typeof showToast==='function') showToast('🎮 Controller connected', 1400); }));
+
+  const st = document.createElement('style');
+  st.textContent =
+    '.pad-focus{outline:3px solid #ffd54a !important;outline-offset:2px;'
+  + 'box-shadow:0 0 0 3px rgba(255,213,74,0.35),0 0 14px rgba(255,213,74,0.6) !important;border-radius:8px;}'
+  + '.card-slot.pad-card-sel{outline:3px solid #6fd3ff;outline-offset:2px;'
+  + 'box-shadow:0 0 0 3px rgba(111,211,255,0.4),0 0 16px rgba(111,211,255,0.7);'
+  + 'transform:translateY(-6px);transition:transform .08s;}';
+  document.head.appendChild(st);
+
+  requestAnimationFrame(poll);
+})();
+
 </script>
 
 </body>
