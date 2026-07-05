@@ -3334,6 +3334,23 @@ body.scorecard #overlay .seed-btn{
   border:1px solid var(--sc-edge) !important; border-radius:8px !important; font-weight:700 !important;
 }
 
+/* v0.24c: remaining white text on the cream menu -> forest green.
+   Star buttons, char portrait names, and any legacy h1/tagline/p were
+   still #fff from the base theme and unreadable on paper. */
+body.scorecard #overlay h1,
+body.scorecard #overlay .tagline,
+body.scorecard #overlay p{ color:var(--sc-green) !important; text-shadow:none !important; }
+body.scorecard #overlay .star-btn{ color:var(--sc-green) !important; }
+body.scorecard #overlay .star-btn.locked{ color:rgba(31,91,61,0.38) !important; }
+body.scorecard #overlay .char-portrait{
+  background:var(--sc-paper2) !important; border:2px solid var(--sc-edge) !important;
+}
+body.scorecard #overlay .char-portrait.active{
+  border-color:var(--sc-green) !important; background:var(--sc-tint2) !important;
+  box-shadow:0 0 10px rgba(31,91,61,0.3) !important;
+}
+body.scorecard #overlay .char-portrait .char-name{ color:var(--sc-green) !important; }
+
 /* difficulty stars + label */
 body.scorecard #overlay .star-row-line{ filter:none; }
 body.scorecard #overlay .star-diff-label{
@@ -3526,6 +3543,16 @@ body.scorecard #hole-summary :focus-visible{ outline:3px solid var(--sc-orange);
       <div class="toggle-btns">
         <button class="toggle-btn" id="esc-cam-follow" onclick="setCameraMode('follow')">Follow</button>
         <button class="toggle-btn" id="esc-cam-classic" onclick="setCameraMode('classic')">Classic</button>
+      </div>
+    </div>
+    <!-- v0.24c: controller shot-power scheme. Push (default): stick UP sets
+         power, DOWN pulls it back. Pull: mirrored, golf-swing style. Power
+         latches when the stick is released; A fires in both schemes. -->
+    <div class="esc-toggle-row">
+      <label><span class=px-gamepad></span> Shot Stick</label>
+      <div class="toggle-btns">
+        <button class="toggle-btn" id="esc-stick-push" onclick="setStickScheme('push')">Push</button>
+        <button class="toggle-btn" id="esc-stick-pull" onclick="setStickScheme('pull')">Pull</button>
       </div>
     </div>
     </div>
@@ -4250,7 +4277,7 @@ body.scorecard #hole-summary :focus-visible{ outline:3px solid var(--sc-orange);
   <button class="weekly-btn" onclick="openAchievements()"><span class=px-trophy></span> Achievements</button>
   <button class="play-btn" id="btn-import-save" style="margin-top:6px;background:rgba(120,120,120,0.6);font-size:0.7rem;padding:8px 20px" onclick="importSaveFile()"><span class=px-folder></span> Import Save</button>
   <input type="file" id="import-save-input" accept=".ggwsave,application/json" style="display:none">
-  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.24b1</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Scorecard menu/shop/summary theme (now built into the page).</div></div>
+  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:320px;line-height:1.2"><div style="font-weight:700">Alpha v0.24c</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Controller scheme 2 (latched power, camera aim, shop/summary nav) + green menu text.</div></div>
 
   <!-- v0.19j: Inline profile picker — skip the separate slot-picks screen -->
   <div class="section-label" style="margin-top:14px">Save Slot</div>
@@ -5025,8 +5052,8 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.24b1';
-const CHANGE_NOTE = "v0.24b1 -- Packaging fix for 0.24b: the scorecard theme (fonts + all menu/shop/summary styling) is now inlined directly into index.html instead of a separate GGW_theme.css, so it always deploys with the page and cannot 404. No visual or logic changes from 0.24b. GGW_theme.css is no longer needed.";
+const GAME_VERSION = '0.24c';
+const CHANGE_NOTE = "v0.24c -- Controller scheme 2 + menu readability. Main menu white text is now scorecard green. Controller: shot aims camera-forward (left stick rotates camera), latched shot power with Push/Pull schemes (pause-menu toggle) fired with A, right stick zooms, R3 resets camera, L1/L2/R1/R2/Y + D-pad up are card hotkeys shown on the slots, D-pad left/right + X browse/arm cards, B cancels aim then unarms cards then backs out of any submenu, Select toggles Loadout, locked difficulties/characters are skipped in menu nav, and the Pro Shop + hole summary are now controller-navigable.";
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
@@ -6471,6 +6498,25 @@ window.setHoles = function(n) {
 // v0.19v: camera mode toggle. 'follow' (default) enables the auto-rotation
 // behind-the-ball camera added in 0.19q; 'classic' restores the pre-0.19q
 // orbital-only behaviour (camera stays where you point it).
+// v0.24c: controller shot-power scheme (see pause menu "Shot Stick" toggle).
+// 'push' (default): stick up sets power, down pulls it back.
+// 'pull': mirrored — pull back to charge, push forward to reduce.
+// Cached on window so the per-frame gamepad poll never hits localStorage.
+window._ggwStickScheme = 'push';
+window.setStickScheme = function(scheme) {
+  if(scheme !== 'push' && scheme !== 'pull') return;
+  const meta = getMeta();
+  meta.stickScheme = scheme;
+  setMeta(meta);
+  window._ggwStickScheme = scheme;
+  const p = document.getElementById('esc-stick-push');
+  const l = document.getElementById('esc-stick-pull');
+  if(p) p.classList.toggle('active', scheme === 'push');
+  if(l) l.classList.toggle('active', scheme === 'pull');
+};
+// Hydrate the cache at boot so a saved 'pull' preference survives reloads.
+try { window._ggwStickScheme = (getMeta().stickScheme === 'pull') ? 'pull' : 'push'; } catch(e){}
+
 window.setCameraMode = function(mode) {
   if(mode !== 'follow' && mode !== 'classic') return;
   const meta = getMeta();
@@ -32814,6 +32860,12 @@ let CARD_SLOT_KEYS = ['S0','S1','S2','S3'];
 // a player with 8 cards in hand still has reachable shortcuts without
 // awkward thumb gymnastics. Display labels match for readability.
 const CARD_SLOT_LABELS = { S0:'Shift', S1:'Ctrl', S2:'Space', S3:'Alt', S4:'Tab', S5:'Z', S6:'X', S7:'C' };
+// v0.24c: controller hotkey labels, shown on the slots while a gamepad is
+// the active input device (body.pad-active). Mapping mirrors the gamepad
+// module: L1/L2/R1/R2/Y cover the 4 base slots + Full House slot; D-pad Up
+// covers slot 6 (clone-duplicate overflow). Slots past that are reached via
+// D-pad ◀▶ + X.
+const PAD_SLOT_LABELS = { S0:'L1', S1:'L2', S2:'R1', S3:'R2', S4:'Y', S5:'▲', S6:'◀▶+X', S7:'◀▶+X' };
 const CARD_SLOT_CODES  = { S0:'Shift', S1:'Control', S2:' ', S3:'Alt', S4:'Tab', S5:'z', S6:'x', S7:'c' };
 
 // ── Deck/Hand/Draw functions ──────────────────────────
@@ -34162,7 +34214,9 @@ function updateHandUI() {
 
     el.innerHTML = `<span class="card-emoji">${glyph(instDef)}</span>` +
       `<span class="card-label">${instDef.name}</span>` +
-      (_GGW_isMobile ? '' : `<span class="slot-key">${CARD_SLOT_LABELS[k]}</span>`) +
+      (document.body.classList.contains('pad-active')
+        ? `<span class="slot-key">${PAD_SLOT_LABELS[k] || ''}</span>`
+        : (_GGW_isMobile ? '' : `<span class="slot-key">${CARD_SLOT_LABELS[k]}</span>`)) +
       (armOrder > 0 ? `<span class="arm-order-badge">${armOrder}</span>` : '');
 
     const capturedInstanceId = card.instanceId;
@@ -51574,6 +51628,9 @@ function initHole() {
   // between the ball and the course. Players can pinch out to zoom further
   // if they want a wider view (clamps already scale via TILE_SIZE).
   G.camDist = Math.max(9, Math.min(18, courseDist * 0.9 + 7));
+  // v0.24c: remember the hole's default zoom so R3 (camera reset on
+  // controller) can restore it after right-stick zooming.
+  G._camDefaultDist = G.camDist;
   // Note: courseDist is in world units, which on Giant Hole is 4× larger,
   // so the formula naturally clamps to 18 (the previous max). That IS the
   // "usual" distance — at the upper end of the normal range. Good.
@@ -52032,6 +52089,14 @@ function openEscMenu() {
     const c = document.getElementById('esc-cam-classic');
     if(f) f.classList.toggle('active', mode === 'follow');
     if(c) c.classList.toggle('active', mode === 'classic');
+  } catch(e){}
+  // v0.24c: reflect controller shot-stick scheme (push default).
+  try {
+    const scheme = getMeta().stickScheme === 'pull' ? 'pull' : 'push';
+    const sp = document.getElementById('esc-stick-push');
+    const sl = document.getElementById('esc-stick-pull');
+    if(sp) sp.classList.toggle('active', scheme === 'push');
+    if(sl) sl.classList.toggle('active', scheme === 'pull');
   } catch(e){}
   // Render perk list in pause menu
   const escPerks = document.getElementById('esc-perk-list');
@@ -57353,12 +57418,18 @@ if('serviceWorker' in navigator && location.protocol === 'https:') {
 }
 
 /* ============================================================
-   v0.24a — Gamepad / controller support
-     Left stick  : aim direction + power (push harder = more power)
-     A           : fire        B : cancel aim / menu back
-     LB / RB     : cycle card   X : play selected card
-     Right stick : rotate camera
-     D-pad / L-stick : menu nav   A : confirm   B : back   Start : pause
+   v0.24c — Gamepad / controller support (scheme 2)
+     Left stick X : rotate camera (shot always aims camera-forward)
+     Left stick Y : shot power — Push (default): up sets power (absolute,
+                    ratchets up), down pulls it back. Pull: mirrored.
+                    Power LATCHES when the stick is released.
+     A            : fire        B : cancel aim → unarm last card → menu back
+     L1/L2/R1/R2/Y: card hotkeys (slots 1-5), D-pad ▲ = slot 6
+     D-pad ◀▶ + X : navigate hand / arm-disarm selected card
+     Right stick  : Y = zoom, X = rotate camera. R3 click = reset camera.
+     Select       : toggle Loadout viewer
+     Menus        : D-pad/stick nav, A confirm, B back (all submenus),
+                    locked difficulties/characters are skipped.
    Reuses the real launch path (onPointerUp) so ball + grenade fire,
    forgiveness, double-ammo, etc. all behave exactly as with mouse/touch.
    ============================================================ */
@@ -57372,10 +57443,13 @@ if('serviceWorker' in navigator && location.protocol === 'https:') {
 
   let prev = {};                 // previous frame pressed-state per button index
   let padActive = false;         // controller currently the active input device
-  let aiming = false;            // gamepad aim engaged this swing
+  let gpAiming = false;          // gamepad aim engaged this swing
+  let gpPower = 0;               // latched shot power (persists on stick release)
   let cardSel = 0;               // selected hand index
   let lastMenuEl = null, menuIdx = 0, nextNavOk = 0;
   let lastT = performance.now();
+  // v0.24c: button → hand-slot hotkey map (L1 L2 R1 R2 Y, D-pad ▲ = slot 6)
+  const CARD_BTN_SLOTS = [[BTN.LB,0],[BTN.LT,1],[BTN.RB,2],[BTN.RT,3],[BTN.Y,4],[BTN.DU,5]];
 
   const qs = s => document.querySelector(s);
   const safe = fn => { try { return fn(); } catch(e){} };
@@ -57389,70 +57463,129 @@ if('serviceWorker' in navigator && location.protocol === 'https:') {
 
   // ---------- menu context ----------
   function getPadMenu(){
+    // v0.24c: shop + hole summary use the 'visible' class, not 'open' —
+    // that's why they were unreachable by controller before this fix.
     const open = id => { const e = qs('#'+id); return e && e.classList.contains('open'); };
+    const vis  = id => { const e = qs('#'+id); return e && e.classList.contains('visible'); };
     if(open('debug-menu')) return null;                       // dev menu stays mouse-only
-    if(open('locker-overlay'))       return { el: qs('#locker-overlay'),       back: ()=>safe(closeLocker) };
-    if(open('achievements-overlay')) return { el: qs('#achievements-overlay'), back: ()=>safe(closeAchievements) };
-    if(open('shop-overlay'))         return { el: qs('#shop-overlay'),         back: null };
-    if(open('escape-menu'))          return { el: qs('#escape-menu'),          back: ()=>safe(closeEscMenu) };
+    // Sub-overlays first (they stack on top of shop / main menu).
+    if(open('deck-viewer'))            return { el: qs('#deck-viewer'),            back: ()=>safe(closeDeckViewer) };
+    if(open('card-remove-overlay'))    return { el: qs('#card-remove-overlay'),    back: ()=>safe(closeCardRemoval) };
+    if(open('dealers-choice-overlay')) return { el: qs('#dealers-choice-overlay'), back: null };  // forced pick — no backing out
+    if(open('char-details-overlay'))   return { el: qs('#char-details-overlay'),   back: ()=>safe(closeCharDetails) };
+    if(open('weekly-overlay'))         return { el: qs('#weekly-overlay'),         back: ()=>safe(closeWeeklyPicker) };
+    if(open('locker-overlay'))         return { el: qs('#locker-overlay'),         back: ()=>safe(closeLocker) };
+    if(open('achievements-overlay'))   return { el: qs('#achievements-overlay'),   back: ()=>safe(closeAchievements) };
+    if(open('escape-menu'))            return { el: qs('#escape-menu'),            back: ()=>safe(closeEscMenu) };
+    // B at shop root stays inert on purpose: "back" would mean skipping the
+    // shop, and one accidental press shouldn't eat the player's buy phase.
+    if(vis('shop-overlay'))            return { el: qs('#shop-overlay'),           back: null };
+    if(vis('hole-summary'))            return { el: qs('#hole-summary'),           back: null };
     const ov = qs('#overlay');
     if(ov && !ov.classList.contains('hidden')) return { el: ov, back: null };
     return null;
   }
 
-  // ---------- aiming ----------
-  function driveAim(p){
+  // ---------- shot power (v0.24c: latched push/pull) ----------
+  // Push (default): stick UP ratchets power up to the deflection value
+  // (absolute — push halfway, get 50%); stick DOWN pulls power back down
+  // at a deflection-proportional rate. Releasing the stick changes NOTHING
+  // — power latches where you set it, then A fires. 'pull' scheme mirrors
+  // the axis (pull back to charge). The up-axis never LOWERS power, so
+  // stick snap-back on release can't shave the latched value.
+  const PULL_BACK_RATE = 1.15;   // full-down drains 0→100% worth in ~0.87s
+  function driveShot(p, dt){
     const canAim = G.state==='playing' && G.aimMode && !G.rolling && !G.inHole
                  && !G._airstrikeAiming && !G._sharpshooterActive && !G.walkiesActive && !G._portalArming;
-    const ax = p.axes[0]||0, ay = p.axes[1]||0;
-    const mag = Math.hypot(ax, ay);
-    if(canAim && mag > AIM_DEAD){
-      const t = Math.min(1, (mag - AIM_DEAD)/(1 - AIM_DEAD));   // deadzone-remapped 0..1
-      const nx = ax/mag, ny = ay/mag;
-      const camFwd = new THREE.Vector3(); camera.getWorldDirection(camFwd);
-      const camRight = new THREE.Vector3().crossVectors(camFwd, camera.up).normalize();
-      const dir = new THREE.Vector3();
-      dir.addScaledVector(camRight, nx);     // push right  -> launch right
-      dir.addScaledVector(camFwd,  -ny);     // push up     -> launch forward (away)
-      dir.y = 0;
-      if(dir.length() > 0.01 && !G._goalOrientedArmed){
-        dir.normalize();
-        G.shotDir.copy(dir);
-        G.shotAngle = Math.atan2(G.shotDir.x, G.shotDir.z);
+    if(!canAim){ if(gpAiming || gpPower > 0) dropAim(); return; }
+    let ay = p.axes[1]||0;                                    // stick up = negative
+    if(window._ggwStickScheme === 'pull') ay = -ay;           // mirror for Pull scheme
+    const up = Math.max(0, -ay), down = Math.max(0, ay);
+    if(up > AIM_DEAD){
+      const t = Math.min(1, (up - AIM_DEAD)/(1 - AIM_DEAD));
+      if(t > gpPower) gpPower = t;                            // absolute, ratchet up only
+    } else if(down > AIM_DEAD){
+      const t = Math.min(1, (down - AIM_DEAD)/(1 - AIM_DEAD));
+      gpPower = Math.max(0, gpPower - t * PULL_BACK_RATE * dt);
+    }
+    if(gpPower > 0.01){
+      gpAiming = true;
+      input.ballDragging = true;
+      G.shotPower = gpPower;
+      // Shot direction is ALWAYS camera-forward — no independent stick aim.
+      if(!G._goalOrientedArmed){
+        safe(syncAimToCamera);
         safe(()=>{ aimManualOverride = true; });
       }
-      G.shotPower = t;
-      aiming = true;
-      input.ballDragging = true;
       G.pullCurrent = { x: window.innerWidth/2, y: window.innerHeight/2 };  // never the edge-cancel margin
       if(G._grenadeAiming){ G._grenadePower = G.shotPower; safe(rebuildGrenadePreview); }
       safe(updateAimArrow);
       const hs = document.getElementById('h-strokes');
       if(hs) hs.textContent = G.strokes + ' (' + Math.round(G.shotPower*100) + '%)';
       safe(updateStrokeColor);
-    } else if(aiming){
-      // released the stick without firing -> drop the shot cleanly
-      aiming = false; input.ballDragging = false; G.shotPower = 0;
-      G.pullStart = null; G.pullCurrent = null;
-      safe(updateAimArrow);
+    } else if(gpAiming){
+      dropAim();   // power pulled all the way back down -> clean un-aim
     }
   }
-  function fire(){ safe(onPointerUp); aiming = false; input.ballDragging = false; }
-  function cancelAim(){
-    if(G._grenadeAiming) safe(cancelGrenadeAim);
-    aiming = false; input.ballDragging = false; G.shotPower = 0;
+  function dropAim(){
+    gpAiming = false; gpPower = 0; input.ballDragging = false; G.shotPower = 0;
     G.pullStart = null; G.pullCurrent = null;
     safe(updateAimArrow);
   }
+  function fire(){
+    input.ballDragging = true; G.shotPower = gpPower;
+    safe(onPointerUp);
+    gpAiming = false; gpPower = 0; input.ballDragging = false;
+  }
+  function cancelAim(){
+    if(G._grenadeAiming) safe(cancelGrenadeAim);
+    dropAim();
+  }
+  // v0.24c: B in gameplay also undoes card arming — pop the most recently
+  // armed undoable card. beat_em_up / time_rewind have special retap
+  // semantics (punch / commit) and must never be B-undone.
+  function unarmLast(){
+    const q = Array.isArray(G._armedCards) ? G._armedCards : [];
+    for(let i = q.length - 1; i >= 0; i--){
+      const e = q[i];
+      if(e.cardId === 'beat_em_up' || e.cardId === 'time_rewind') continue;
+      safe(()=>unarmCardByInstance(e.instanceId, e.cardId));
+      return true;
+    }
+    return false;
+  }
 
-  // ---------- camera ----------
+  // ---------- camera (v0.24c: L-stick X + R-stick X rotate, R-stick Y zooms) ----------
   function driveCamera(p, dt){
-    let rx = p.axes[2]||0, ry = p.axes[3]||0;
+    let lx = p.axes[0]||0, rx = p.axes[2]||0, ry = p.axes[3]||0;
+    if(Math.abs(lx) < DEAD) lx = 0;
     if(Math.abs(rx) < DEAD) rx = 0;
     if(Math.abs(ry) < DEAD) ry = 0;
-    if(rx===0 && ry===0) return;
-    if(!G._goalOrientedArmed) G.camTheta -= rx * 2.2 * dt;
-    if(typeof G.camPhi === 'number') G.camPhi = Math.max(0.15, Math.min(1.45, G.camPhi + ry * 1.6 * dt));
+    const rot = Math.max(-1, Math.min(1, lx + rx));
+    if(rot !== 0 && !G._goalOrientedArmed){
+      G.camTheta -= rot * 2.2 * dt;
+      // camera moved -> shot follows it while a shot is charged
+      if(gpAiming) { safe(syncAimToCamera); safe(updateAimArrow); }
+    }
+    if(ry !== 0){
+      const zMax = 30 * (TILE_SIZE / TILE_SIZE_BASE);
+      G.camDist = Math.max(4, Math.min(zMax, G.camDist + ry * 10 * dt));  // down = zoom out
+    }
+  }
+  // R3 click: reset camera to the hole-start framing (face the hole,
+  // default pitch + per-hole default zoom), smoothed over 40 frames.
+  function resetCamera(){
+    safe(()=>{
+      if(G.holePos && G.ballPos){
+        const hx = G.holePos.x * TILE_SIZE, hz = G.holePos.y * TILE_SIZE;
+        const tx = G.ballPos.x - hx, tz = G.ballPos.z - hz;
+        if(Math.hypot(tx, tz) > 0.1) G.camTheta = Math.atan2(tx, tz);
+      }
+      G.camPhi = 0.85;
+      if(typeof G._camDefaultDist === 'number') G.camDist = G._camDefaultDist;
+      G._camTransitionFrames = 40;
+      if(gpAiming && !G._goalOrientedArmed){ syncAimToCamera(); updateAimArrow(); }
+    });
   }
 
   // ---------- cards ----------
@@ -57472,7 +57605,12 @@ if('serviceWorker' in navigator && location.protocol === 'https:') {
     const h = hand(); if(!h.length) return;
     if(cardSel >= h.length) cardSel = h.length - 1;
     const inst = h[cardSel] && h[cardSel].instanceId;
-    if(inst != null) safe(()=>playCard(inst));
+    if(inst != null) safe(()=>playCard(inst));   // playCard toggles: arm / re-tap unarms
+  }
+  // v0.24c: direct hotkey — play the card sitting in a specific slot.
+  function playSlot(i){
+    const card = Array.isArray(G.cardSlots) ? G.cardSlots[i] : null;
+    if(card && card.instanceId != null) safe(()=>playCard(card.instanceId));
   }
 
   // ---------- menu nav ----------
@@ -57480,6 +57618,9 @@ if('serviceWorker' in navigator && location.protocol === 'https:') {
     const sel = 'button, [onclick], .shop-card, .char-card, .toggle-btn, input[type=file]';
     return Array.from(container.querySelectorAll(sel)).filter(el=>{
       if(el.disabled) return false;
+      // v0.24c: never land focus on locked difficulty stars / characters —
+      // they can't be activated, so stepping through them is dead travel.
+      if(el.classList.contains('locked')) return false;
       const r = el.getBoundingClientRect();
       return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden';
     });
@@ -57510,11 +57651,22 @@ if('serviceWorker' in navigator && location.protocol === 'https:') {
     let active = false;
     for(let i=0;i<p.buttons.length;i++){ if(isDown(p,i)){ active = true; break; } }
     if(!active){ for(let i=0;i<p.axes.length;i++){ if(Math.abs(p.axes[i])>0.35){ active = true; break; } } }
-    if(active && !padActive){ padActive = true; document.body.classList.add('pad-active'); }
+    if(active && !padActive){
+      padActive = true; document.body.classList.add('pad-active');
+      safe(updateHandUI);   // swap slot badges to controller glyphs
+    }
+
+    // v0.24c: Select toggles the Loadout viewer — during play and at the shop.
+    if(jp(BTN.BACK)){
+      const dv = qs('#deck-viewer');
+      const shopVis = (e => e && e.classList.contains('visible'))(qs('#shop-overlay'));
+      if(dv && dv.classList.contains('open')) safe(closeDeckViewer);
+      else if(G.state==='playing' || shopVis) safe(openDeckViewer);
+    }
 
     const menu = getPadMenu();
     if(menu){
-      if(aiming) cancelAim();
+      if(gpAiming) cancelAim();
       clearCardSel();
       const lx = p.axes[0]||0, ly = p.axes[1]||0;
       let d = 0;
@@ -57525,17 +57677,26 @@ if('serviceWorker' in navigator && location.protocol === 'https:') {
       if(stickDir === 0 && Math.abs(lx) < 0.4 && Math.abs(ly) < 0.4) nextNavOk = 0;
       if(d !== 0) navMenu(menu, d);
       if(jp(BTN.A)) activateMenu(menu);
-      if(jp(BTN.B) && menu.back) menu.back();
+      if(jp(BTN.B) && menu.back) menu.back();   // B = back, every submenu
       if(jp(BTN.START) && menu.back) menu.back();
     } else {
       clearMenuFocus(); lastMenuEl = null;
-      driveAim(p);
+      driveShot(p, dt);
       driveCamera(p, dt);
-      if(jp(BTN.A) && G.state==='playing' && (aiming || (G.aimMode && G.shotPower > 0.05))) fire();
-      if(jp(BTN.B) && (aiming || G.shotPower > 0)) cancelAim();
-      if(jp(BTN.RB)) cycleCard(+1);
-      if(jp(BTN.LB)) cycleCard(-1);
+      if(jp(BTN.A) && G.state==='playing' && gpPower > 0.02) fire();
+      // B priority: cancel a charged/armed shot first, then undo the most
+      // recently armed card, else nothing.
+      if(jp(BTN.B)){
+        if(G._grenadeAiming || gpAiming || G.shotPower > 0) cancelAim();
+        else unarmLast();
+      }
+      // Card hotkeys — L1/L2/R1/R2/Y map to slots 1-5, D-pad ▲ to slot 6.
+      for(const [b, slot] of CARD_BTN_SLOTS){ if(jp(b)) playSlot(slot); }
+      // D-pad ◀▶ browses the hand, X arms/disarms the highlighted card.
+      if(jp(BTN.DL)) cycleCard(-1);
+      if(jp(BTN.DR)) cycleCard(+1);
       if(jp(BTN.X)) playSel();
+      if(jp(BTN.R3) && G.state==='playing') resetCamera();
       if(jp(BTN.START) && G.state==='playing') safe(openEscMenu);
       if(padActive) highlightCard();
     }
@@ -57546,7 +57707,11 @@ if('serviceWorker' in navigator && location.protocol === 'https:') {
 
   // mouse/touch reclaims the focus UI
   ['mousedown','touchstart'].forEach(ev => window.addEventListener(ev, ()=>{
-    if(padActive){ padActive = false; document.body.classList.remove('pad-active'); clearMenuFocus(); clearCardSel(); }
+    if(padActive){
+      padActive = false; document.body.classList.remove('pad-active');
+      clearMenuFocus(); clearCardSel();
+      safe(updateHandUI);   // restore keyboard hotkey badges
+    }
   }, {passive:true}));
 
   window.addEventListener('gamepadconnected', ()=> safe(()=>{ if(typeof showToast==='function') showToast('🎮 Controller connected', 1400); }));
