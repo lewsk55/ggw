@@ -3503,7 +3503,6 @@ body.scorecard #hole-summary{
 /* hill + flag footer (decorative, never blocks clicks).
    v0.26h: #shop-overlay removed — its green line now lives under the shop
    header (.shop-rule) so it can never overlap sale items mid-scroll. */
-body.scorecard #overlay::after,
 body.scorecard #hole-summary::after{
   content:""; position:absolute; left:0; right:0; bottom:0; height:40px; pointer-events:none; z-index:3;
   background:bottom center / 100% 40px no-repeat
@@ -4750,7 +4749,7 @@ body.scorecard #hole-summary :focus-visible{ outline:3px solid var(--sc-orange);
 
   </div>
 
-  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:10px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:340px;line-height:1.2"><div style="font-weight:700">Alpha v0.26i</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Chad's Minigolf Lessons: full 9-beat tutorial with googly-eyed Chad, typewriter dialog, and a destructible graduation patio.</div></div>
+  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:10px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:340px;line-height:1.2"><div style="font-weight:700">Alpha v0.26i2</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Finale rework: exit hole under the shack, full ball/projectile collision, auto-refilling destruction hand; plus tutorial polish and a confetti-leak engine fix.</div></div>
 </div>
 
 <!-- v0.23m: Weekly Challenges picker. Sits above #overlay; populated by
@@ -6147,7 +6146,7 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.26i';
+const GAME_VERSION = '0.26i2';
 // v0.26h10: snapshot the pristine bootstrap #overlay markup at load. This is
 // the ONE canonical main-menu HTML (with the Display hub button + the green
 // #menu-version element). escMainMenu() used to rebuild the menu from a
@@ -6160,7 +6159,7 @@ const _BOOTSTRAP_OVERLAY_HTML = (function(){
   try { const o = document.getElementById('overlay'); return o ? o.innerHTML : null; }
   catch(e) { return null; }
 })();
-const CHANGE_NOTE = "v0.26i -- CHAD'S MINIGOLF LESSONS FOR BEGINNERS: the full 9-beat tutorial, taught by Chad Putterman (owner, operator, 1998 Putt-Putt Regional Semifinalist). Eight lessons -- camera, the sacred putt, the dignified retreat (cancel), arm/disarm + Missile, pre-swing Jumper, mid-swing Jumper over a wall, a Pro Shop tour with free Portal Grenade + Holy Hand Grenade and 50 coins, and a free-play par-4 exam with the HP-over-par rule (full damage flash, instant refund) -- then Graduation Day: a coral snack shack, CONGRATULATIONS billboard, chairs, tables, heirloom flamingos and a golf cart, all live Cannon physics props. Destroy the shack to reveal the End Tutorial button while Chad's composure degrades in real time. New persistent dialog box below the cards (hand shifts up) with letter-by-letter typewriter text + old-school blips, and a pixel-art Chad portrait with googly eyes that bounce to the action, mood-driven eyebrows, exclamation pops, cartoon sweat, vibration, and bloodshot eyes at full collapse. Prompt copy adapts live to keyboard/touch/controller. First-boot Yes/Skip prompt plus a permanent Chad's Lessons menu button. Fully sandboxed: no autosave, no run history, no telemetry, zero fail-state.";
+const CHANGE_NOTE = "v0.26i2 -- Tutorial finale rework + polish batch. (1) FINALE: the End Tutorial button is gone; the exit hole hides dead-center UNDER the snack shack (no flag, beacon hidden until reveal). Destroying the shack reveals the cup plus a little EXIT sign next to it; sinking the ball ends the tutorial. (2) Missiles and Sniper shots now detonate on the shack, billboard posts, and patio props (missileInFlightHitCheck wrap, finale-only) -- previously projectiles sailed through and only lobbed explosives worked. (3) The ball now collides with everything on the patio: solid bounce off the standing shack and billboard posts, comic bumps that send flamingos/chairs/tables flying (cart deflects the ball -- it's heavy). Shack and sign remain card-destructible only. (4) Finale hand auto-refills to 4 destruction cards whenever one is spent. (5) Typing SFX louder (was inaudible). (6) Lesson 1 copy: 'hold the left mouse button' instead of right-click. (7) CONTINUE button added under the bounce arrow. (8) Finale Chad reactions interrupt immediately instead of queueing behind click-to-continue. (9) Lesson 4 'additions' renders in italics (typewriter now supports *markup*). (10) Mini-challenge HUD hidden during tutorial. (11) Skip Lessons moved to bottom-right of screen. (12) ENGINE FIX: initHole orphaned live confetti meshes by clearing G.particles without scene removal -- confetti persisted across holes; now cleaned properly (benefits base game too). (13) Hole-in-one horn -30%. (14) 'Launch pad' line removed from Lesson 5. (15) Lesson 6 intro mentions card hotkeys. (16) Shop coin nudge fires at 3.5s instead of 9s.";
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
@@ -18756,7 +18755,6 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
 
       card.innerHTML = `
         <div style="font-size:0.7rem;letter-spacing:3px;text-transform:uppercase;color:#e8c66a;font-weight:700;margin-bottom:14px">XP Unlock</div>
-        <div style="font-size:3.4rem;line-height:1;margin-bottom:10px;filter:drop-shadow(0 4px 12px rgba(232,198,106,0.5))">${(typeof pxifyHtml==='function')?pxifyHtml(catEmoji):catEmoji}</div>
         <div style="font-size:1.35rem;font-weight:700;letter-spacing:0.5px;margin-bottom:4px">${niceName}</div>
         <div style="font-size:0.75rem;color:rgba(255,255,255,0.65);margin-bottom:22px">${subText}</div>
         <button class="ggw-xp-unlock-continue" style="
@@ -47357,8 +47355,8 @@ function triggerHoleCelebration(score) {
         o.frequency.setValueAtTime(notes[ni], t + delay);
         const g = ac.createGain();
         g.gain.setValueAtTime(0, t + delay);
-        g.gain.linearRampToValueAtTime(0.25, t + delay + 0.05);
-        g.gain.setValueAtTime(0.25, t + delay + dur * 0.7);
+        g.gain.linearRampToValueAtTime(0.175, t + delay + 0.05);
+        g.gain.setValueAtTime(0.175, t + delay + dur * 0.7);
         g.gain.exponentialRampToValueAtTime(0.001, t + delay + dur);
         o.connect(g); g.connect(getACDest());
         o.start(t + delay); o.stop(t + delay + dur + 0.1);
@@ -47367,7 +47365,7 @@ function triggerHoleCelebration(score) {
         o2.frequency.setValueAtTime(notes[ni] * 2, t + delay);
         const g2 = ac.createGain();
         g2.gain.setValueAtTime(0, t + delay);
-        g2.gain.linearRampToValueAtTime(0.12, t + delay + 0.05);
+        g2.gain.linearRampToValueAtTime(0.084, t + delay + 0.05);
         g2.gain.exponentialRampToValueAtTime(0.001, t + delay + dur);
         o2.connect(g2); g2.connect(getACDest());
         o2.start(t + delay); o2.stop(t + delay + dur + 0.1);
@@ -47378,8 +47376,8 @@ function triggerHoleCelebration(score) {
         o3.frequency.value = freq;
         const g3 = ac.createGain();
         g3.gain.setValueAtTime(0, t + 0.6);
-        g3.gain.linearRampToValueAtTime(0.18, t + 0.7);
-        g3.gain.setValueAtTime(0.18, t + 1.8);
+        g3.gain.linearRampToValueAtTime(0.126, t + 0.7);
+        g3.gain.setValueAtTime(0.126, t + 1.8);
         g3.gain.exponentialRampToValueAtTime(0.001, t + 2.5);
         o3.connect(g3); g3.connect(getACDest());
         o3.start(t + 0.6); o3.stop(t + 2.6);
@@ -53919,6 +53917,13 @@ function initHole() {
   G.inHole = false;
   G.aimMode = true;
   G.shotPower = 0;
+  // v0.26i2: remove particle meshes from the scene BEFORE clearing the array.
+  // A bare reset orphaned any still-live confetti in the scene forever (the
+  // meshes are only removed by the life-tick in animate, which loses track of
+  // them once the array is cleared). Normal play masked it because the
+  // summary-screen dwell let particles die first; the tutorial's fast
+  // hole-advance exposed frozen confetti persisting across holes.
+  if(G.particles) { for(const p of G.particles) { if(p.mesh) scene.remove(p.mesh); } }
   G.particles = [];
   G.undoState = null;
   G.undoUsed = false;
@@ -61060,7 +61065,7 @@ var LINES = {
   cxl_intro:   { t:"Sometimes a great golfer chooses NOT to swing. Charge up a shot, then cancel it: {CANCEL}. Restraint. Wisdom. Patience.", mood:0 },
   cxl_fired:   { t:"That was a swing. A lovely swing. But the assignment was cowardice. Try again.", mood:0 },
   cxl_done:    { t:"Perfectly canceled! Nothing happened at all. No consequences. Savor this feeling. It does not last.", mood:0 },
-  ms_intro:    { t:"Now, corporate added a \"card system.\" For the record, I do not approve of these... additions... to the already perfect game of minigolf.", mood:1 },
+  ms_intro:    { t:"Now, corporate added a \"card system.\" For the record, I do not approve of these... *additions*... to the already perfect game of minigolf.", mood:1 },
   ms_intro2:   { t:"What's this? Missile Command? (Sigh) That doesn't seem right. Anyway, tap your card to ARM it: {CARD_TAP}. Tap again to disarm.", mood:1 },
   ms_armed:    { t:"Armed. Aim at the rock and {FIRE}. Corporate says the missile does the rest. Corporate says a lot of things.", mood:1 },
   ms_disarm:   { t:"Disarmed! Good instinct. Maybe we just putt around the... no? You're re-arming it. Okay.", mood:1 },
@@ -61068,16 +61073,15 @@ var LINES = {
   ms_sink:     { t:"In the hole. Great. Wonderful. Let's move on before you destroy anything else.", mood:2 },
   ja_intro:    { t:"Many cards like \"Jumper\" have two modes. Mode one: arm it BEFORE you swing, and your ball takes a flying leap right away. Try it to jump over those obstacles.", mood:1 },
   ja_retry:    { t:"That's okay, arm the Jumper FIRST, then swing. The kangaroo on the card is a promise.", mood:1 },
-  ja_success:  { t:"Look at it GO. That's not a tee, that's a launch pad.", mood:2, react:'pop' },
   ja_coins:    { t:"Yes, there's just money on the ground here. I don't ask anymore.", mood:1 },
-  jb_intro:    { t:"Now the hard part. That wall is un-jumpable from the tee, so putt first, then hit Jumper MID-ROLL to leap over it.", mood:2 },
+  jb_intro:    { t:"Now the hard part. That wall is un-jumpable from the tee, so putt first, then hit Jumper MID-ROLL to leap over it. You can tap the card or hit one of the hot keys under each card on your keyboard or controller.", mood:2 },
   jb_cards:    { t:"Notice you get new cards every swing. It never stops. (sigh) The cards never stop.", mood:2 },
   jb_miss_1:   { t:"Almost. Putt, THEN jump. Like patting your head and ruining my course at the same time.", mood:2 },
   jb_miss_2:   { t:"Too early! Or too late. One of those. The wall isn't going anywhere. Unlike everything else here, it's indestructible. I checked. Twice.", mood:2 },
   jb_success:  { t:"You did it! First missiles, now jumping... what new abominations lie ahead that desecrate this once-beautiful game...", mood:3 },
   sh_intro:    { t:"Between holes you'll visit my Pro Shop. Four departments: CARDS cause one-time chaos on a swing. PERKS are permanent. UPGRADES: bigger chaos. And DECK SURGERY, which REMOVES a card.", mood:1 },
   sh_gift:     { t:"Here, a Holy Hand Grenade and a Portal Grenade, on the house. The distributor sent them by mistake and will not return my calls.", mood:1, react:'pop' },
-  sh_nudge:    { t:"You have 50 coins, you know. Browse! My daughter needs braces and my snack shack needs a new roof.", mood:1 },
+  sh_nudge:    { t:"You have 250 coins, you know. Browse! My daughter needs braces and my snack shack needs a new roof.", mood:1 },
   sh_exit:     { t:"Shop tour complete! Remember: every coin you spend here keeps a small business alive. Every grenade you throw, less so.", mood:1 },
   ex_intro:    { t:"Final exam: one par-4 hole. Play it however you want. Putt it pure and true, or... do whatever unspeakable things your sick mind can dream up. I don't care anymore.", mood:2 },
   ex_hp:       { t:"Rule you should know: go over par and you LOSE HP. Yes. Hit points. In minigolf. I hate it.", mood:3 },
@@ -61086,7 +61090,7 @@ var LINES = {
   ex_hhg:      { t:"The holy one. Blast radius of a small parade. Just... throw it away from the snack shack. Please.", mood:3, react:'pop' },
   ex_sink:     { t:"The hole is complete! Your scorecard says par. My clipboard says \"numerous felonies.\" Everybody wins!", mood:2, react:'pop' },
   fn_intro:    { t:"CONGRATULATIONS! See the billboard? I rented it. That is genuine vinyl. Take a moment. Enjoy the patio. Have a churro at the snack shack. She's the heart of this entire operation.", mood:0, react:'pop' },
-  fn_objective:{ t:"Now, small issue. The game says your \"End Tutorial\" button is... somewhere around here. Just don't get any bright ideas with all of those explosive devices you have on hand.", mood:1 },
+  fn_objective:{ t:"Now, small issue. The game says the exit hole for this course is... somewhere around here. Just don't get any bright ideas with all of those explosive devices you have on hand.", mood:1 },
   fn_first_a:  { t:"HEY. HEY. That is PATIO FURNITURE.", mood:3, react:'pop', shake:1 },
   fn_first_b:  { t:"Careful! Those are rentals! Rented from ME, but STILL!", mood:3, react:'pop' },
   fn_table:    { t:"Not the table! I celebrated my birthday there!", mood:3 },
@@ -61101,7 +61105,7 @@ var LINES = {
   fn_t3a:      { t:"Somewhere out there is a golfer who just putts. Quietly. I dream of them.", mood:4 },
   fn_t3b:      { t:"RUINED. Financially. Spiritually. Agriculturally, somehow.", mood:4, shake:1 },
   fn_t3c:      { t:"What am I going to tell Chad Jr... he was to be the heir of the Putterman Discount Minigolf Empire... (sobs quietly)", mood:4 },
-  fn_shackdead:{ t:"THE SHACK. THE NACHOS LIVED THERE. THE NACHOS. ...Oh look. The End Tutorial button. Great. Wonderful. Press it. Get out.", mood:4, react:'pop', shake:1 },
+  fn_shackdead:{ t:"THE SHACK. THE NACHOS LIVED THERE. THE NACHOS. ...Oh look. A hole. With an exit sign. Great. Wonderful. Sink it. Get out.", mood:4, react:'pop', shake:1 },
   oob:         { t:"Out of bounds! Normally that's fine, the course forgives a moment of airtime. Take your time coming back.", mood:1 },
   devswitch:   { t:"Oh, you're a {DEVICE} person now? Fine. Adaptable. I respect it. New instructions on screen.", mood:1 }
 };
@@ -61118,7 +61122,7 @@ window.addEventListener('mousedown',  function(){ _dev = 'kb'; },    {passive:tr
 window.addEventListener('keydown',    function(){ _dev = 'kb'; },    {passive:true, capture:true});
 
 var TOKENS = {
-  CAMERA:   { kb:'hold right-click and drag to look around (or the A / D keys)', touch:'drag with one finger away from your ball to look around', pad:'move the RIGHT STICK to look around' },
+  CAMERA:   { kb:'hold the left mouse button and drag to look around (or the A / D keys)', touch:'drag with one finger away from your ball to look around', pad:'move the RIGHT STICK to look around' },
   ZOOM:     { kb:'scroll the mouse wheel (or W / S)', touch:'pinch with two fingers', pad:'pull LT / RT' },
   SHOT:     { kb:'Click your ball, drag back to set power, release to swing', touch:'Touch your ball, drag back to set power, lift your finger to swing', pad:'Hold LEFT STICK DOWN to charge power, press A to swing' },
   CANCEL:   { kb:'drag back up to your ball before releasing, or press Esc', touch:'slide your finger back to your ball before lifting', pad:'ease the LEFT STICK back to zero power, or press B' },
@@ -61144,6 +61148,8 @@ css.textContent = [
 '#chad-box.up{transform:translateX(-50%) translateY(0);}',
 'body.tutorial-active #card-hand{bottom:138px !important;transition:bottom 0.4s ease;}',
 'body.tutorial-active.tut-mobile #card-hand{bottom:126px !important;}',
+'body.tutorial-active #shop-overlay{padding-bottom:200px !important;}',
+'body.tutorial-active #challenge-badge, body.tutorial-active #challenge-desc{display:none !important;}',
 '#chad-face{position:relative;flex:0 0 104px;display:flex;align-items:flex-end;justify-content:center;overflow:visible;}',
 '#chad-face img{width:96px;image-rendering:pixelated;display:block;margin-bottom:-2px;filter:drop-shadow(0 3px 0 rgba(0,0,0,0.3));}',
 '#chad-face-wrap{position:relative;}',
@@ -61151,10 +61157,11 @@ css.textContent = [
 '#chad-face-wrap.vib2{animation:chadVib2 0.06s infinite;}',
 '@keyframes chadVib{0%{transform:translate(0,0)}25%{transform:translate(0.7px,-0.5px)}50%{transform:translate(-0.6px,0.6px)}75%{transform:translate(0.5px,0.4px)}100%{transform:translate(0,0)}}',
 '@keyframes chadVib2{0%{transform:translate(0,0) rotate(0.4deg)}25%{transform:translate(1.8px,-1.4px)}50%{transform:translate(-1.7px,1.5px) rotate(-0.5deg)}75%{transform:translate(1.4px,1.2px)}100%{transform:translate(0,0)}}',
-'.chad-eye{position:absolute;width:19px;height:19px;background:#fff;border:2.5px solid #0a0a0e;border-radius:50%;overflow:hidden;box-shadow:inset -1px -2px 0 rgba(0,0,0,0.12);}',
-'.chad-eye.blood{background:radial-gradient(circle at 50% 50%, #fff 34%, #ffd9d9 55%, #ff9a9a 80%, #f07070 100%);}',
-'.chad-pupil{position:absolute;width:8px;height:8px;background:#111;border-radius:50%;left:5px;top:5px;}',
 '.chad-brow{position:absolute;width:20px;height:4px;background:#0a0a0e;border-radius:2px;transition:transform 0.25s ease, top 0.25s ease;}',
+'#chad-cont-btn{position:absolute;right:10px;bottom:5px;display:none;font:800 0.58rem "Nunito",sans-serif;letter-spacing:1px;color:#1c2b12;background:#ffd54a;border:2px solid #0e2015;border-radius:8px;padding:3px 9px;cursor:pointer;box-shadow:0 2px 0 #b8912a;}',
+'#chad-cont-btn:active{transform:translateY(2px);box-shadow:none;}',
+'#chad-cont{position:absolute;right:16px;bottom:30px;font:900 0.85rem "Nunito",sans-serif;color:#ffd54a;text-shadow:0 1px 2px rgba(0,0,0,0.5);animation:chadContBob 0.9s ease-in-out infinite;pointer-events:none;display:none;}',
+'@keyframes chadContBob{0%,100%{transform:translateY(0);opacity:1}50%{transform:translateY(4px);opacity:0.55}}',
 '#chad-sweat-layer,#chad-fx-layer{position:absolute;inset:-30px -20px 0 -20px;pointer-events:none;overflow:visible;}',
 '.chad-sweat{position:absolute;width:7px;height:10px;background:#8fd8ff;border:2px solid #0a0a0e;border-radius:50% 50% 60% 60%;animation:sweatFly 0.75s ease-in forwards;}',
 '@keyframes sweatFly{0%{transform:translate(0,0) scale(0.6);opacity:1}55%{opacity:1}100%{transform:translate(var(--sx),42px) scale(1);opacity:0}}',
@@ -61164,7 +61171,8 @@ css.textContent = [
 '#chad-top{display:flex;align-items:center;gap:8px;margin-bottom:2px;}',
 '#chad-name{font:800 0.68rem "Nunito",sans-serif;letter-spacing:1.5px;color:#ffd54a;text-transform:uppercase;}',
 '#chad-lesson{font:700 0.6rem "Nunito",sans-serif;color:rgba(255,255,255,0.5);letter-spacing:0.5px;}',
-'#chad-skip{margin-left:auto;font:700 0.62rem "Nunito",sans-serif;color:rgba(255,255,255,0.55);background:rgba(255,255,255,0.08);border:1.5px solid rgba(255,255,255,0.2);border-radius:8px;padding:3px 9px;cursor:pointer;}',
+'#chad-skip{display:none;position:fixed;right:14px;bottom:14px;z-index:9510;font:700 0.66rem "Nunito",sans-serif;color:rgba(255,255,255,0.6);background:rgba(16,30,22,0.82);border:1.5px solid rgba(255,255,255,0.22);border-radius:9px;padding:5px 11px;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,0.35);}',
+'body.tutorial-active #chad-skip{display:block;}',
 '#chad-skip:hover{color:#fff;background:rgba(255,120,100,0.25);}',
 '#chad-text{font:600 0.9rem/1.32 "Nunito",sans-serif;color:#f2f7ef;min-height:52px;cursor:pointer;user-select:none;}',
 '#chad-text b{color:#ffd54a;}',
@@ -61195,18 +61203,18 @@ function buildBox(){
   box.innerHTML =
     '<div id="chad-face"><div id="chad-face-wrap">' +
       '<img src="' + CHAD_IMG + '" alt="Chad" draggable="false">' +
-      '<div class="chad-eye" style="left:31%;top:22%"><div class="chad-pupil"></div></div>' +
-      '<div class="chad-eye" style="left:53%;top:21%"><div class="chad-pupil"></div></div>' +
       '<div class="chad-brow" style="left:30%;top:16%"></div>' +
       '<div class="chad-brow" style="left:52%;top:15%"></div>' +
       '<div id="chad-sweat-layer"></div><div id="chad-fx-layer"></div>' +
     '</div></div>' +
     '<div id="chad-body">' +
-      '<div id="chad-top"><span id="chad-name">Chad</span><span id="chad-lesson"></span>' +
-      '<button id="chad-skip">Skip Lessons ✕</button></div>' +
+      '<div id="chad-top"><span id="chad-name">Chad</span><span id="chad-lesson"></span></div>' +
       '<div id="chad-text"></div>' +
     '</div>';
   document.body.appendChild(box);
+  var skip = document.createElement('button');
+  skip.id = 'chad-skip'; skip.textContent = 'Skip Lessons \u2715';
+  document.body.appendChild(skip);
   faceWrap = box.querySelector('#chad-face-wrap');
   textEl = box.querySelector('#chad-text');
   lessonEl = box.querySelector('#chad-lesson');
@@ -61214,29 +61222,79 @@ function buildBox(){
   browEls = Array.prototype.slice.call(box.querySelectorAll('.chad-brow'));
   sweatLayer = box.querySelector('#chad-sweat-layer');
   fxLayer = box.querySelector('#chad-fx-layer');
-  box.querySelector('#chad-skip').addEventListener('click', function(){ TUT.abort(); });
-  textEl.addEventListener('click', function(){ _twSkip = true; });
+  skip.addEventListener('click', function(e){ e.stopPropagation(); TUT.abort(); });
+  box.addEventListener('click', function(){
+    if(_twTimer){ _twSkip = true; }
+    else if(_twAwait){ _twContinue(); }
+  });
+  var cont = document.createElement('div');
+  cont.id = 'chad-cont'; cont.textContent = '\u25BC';
+  box.querySelector('#chad-body').appendChild(cont);
+  var contBtn = document.createElement('button');
+  contBtn.id = 'chad-cont-btn'; contBtn.textContent = 'CONTINUE';
+  box.querySelector('#chad-body').appendChild(contBtn);
+  contBtn.addEventListener('click', function(e){ e.stopPropagation(); _twContinue(); });
+  window.addEventListener('keydown', function(e){
+    if(!TUT.active || e.key !== 'Enter') return;
+    if(_twTimer){ _twSkip = true; }
+    else if(_twAwait){ _twContinue(); }
+  });
   if(window.innerWidth < 640) document.body.classList.add('tut-mobile');
 }
 
-/* Typewriter with old-school per-letter blips */
-var _twTimer = null, _twSkip = false, _twQueue = [], _twBusy = false;
+/* Typewriter with quiet lo-fi typing thocks (filtered noise, not beeps) */
+var _twTimer = null, _twSkip = false, _twQueue = [], _twBusy = false, _twAwait = null, _typBuf = null;
 function _blip(){
   try {
     if(typeof getAC !== 'function') return;
     var ac = getAC(), t0 = ac.currentTime;
-    var o = ac.createOscillator(); o.type = 'square';
-    o.frequency.value = 560 + Math.random()*260;
+    if(!_typBuf){
+      _typBuf = ac.createBuffer(1, Math.floor(ac.sampleRate * 0.04), ac.sampleRate);
+      var d = _typBuf.getChannelData(0);
+      for(var i = 0; i < d.length; i++) d[i] = (Math.random()*2 - 1) * Math.pow(1 - i/d.length, 2);
+    }
+    var src = ac.createBufferSource(); src.buffer = _typBuf;
+    src.playbackRate.value = 0.72 + Math.random()*0.55;   // varied key pitch
+    var lp = ac.createBiquadFilter(); lp.type = 'lowpass';
+    lp.frequency.value = 900 + Math.random()*650; lp.Q.value = 0.7;
     var g = ac.createGain();
-    g.gain.setValueAtTime(0.035, t0);
-    g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.045);
-    o.connect(g); g.connect(getACDest());
-    o.start(t0); o.stop(t0 + 0.05);
+    g.gain.setValueAtTime(0.022 + Math.random()*0.009, t0);
+    g.gain.exponentialRampToValueAtTime(0.0012, t0 + 0.04);
+    src.connect(lp); lp.connect(g); g.connect(getACDest());
+    src.start(t0); src.stop(t0 + 0.045);
   } catch(e){}
 }
 function chadSay(id, opts, onDone){
   _twQueue.push({ id:id, opts:opts||{}, onDone:onDone });
   _pumpSay();
+}
+/* Parse *italic* markup into segments; render as styled spans. */
+function _parseSegs(s){
+  var segs = [], re = /\*([^*]+)\*/g, last = 0, m;
+  while((m = re.exec(s))){
+    if(m.index > last) segs.push({ t: s.slice(last, m.index), i: false });
+    segs.push({ t: m[1], i: true });
+    last = re.lastIndex;
+  }
+  if(last < s.length) segs.push({ t: s.slice(last), i: false });
+  return segs;
+}
+function _buildSpans(segs){
+  textEl.innerHTML = '';
+  return segs.map(function(s){
+    var sp = document.createElement('span');
+    if(s.i){ sp.style.fontStyle = 'italic'; sp.style.color = '#ffd54a'; }
+    textEl.appendChild(sp);
+    return sp;
+  });
+}
+function _paintSegs(segs, spans, n){
+  var rem = n;
+  for(var k = 0; k < segs.length; k++){
+    var take = Math.max(0, Math.min(rem, segs[k].t.length));
+    spans[k].textContent = segs[k].t.slice(0, take);
+    rem -= take;
+  }
 }
 function _pumpSay(){
   if(_twBusy || !_twQueue.length) return;
@@ -61249,34 +61307,68 @@ function _pumpSay(){
     if(line.mood !== undefined && !job.opts.keepMood) chadMood(line.mood);
     if(line.react === 'pop' || job.opts.pop) chadExclaim();
     if(line.shake || job.opts.shake) chadEyeImpulse(9);
-    chadEyeImpulse(4);            // eyes always jiggle when a new line lands
-    var full = resolveText(line.t);
+    chadEyeImpulse(4);
+    var segs = _parseSegs(resolveText(line.t));
+    var spans = _buildSpans(segs);
+    var flat = segs.map(function(s){ return s.t; }).join('');
     TUT._currentLineId = job.id;
     TUT._currentLineRaw = line.t;
     var i = 0; _twSkip = false;
     clearInterval(_twTimer);
-    textEl.textContent = '';
     _twTimer = setInterval(function(){
-      if(_twSkip){ i = full.length; }
+      if(_twSkip){ i = flat.length; }
       i++;
-      textEl.textContent = full.slice(0, i);
-      var ch = full.charAt(i-1);
+      _paintSegs(segs, spans, i);
+      var ch = flat.charAt(i-1);
       if(ch && ch !== ' ' && (i % 2 === 0)) _blip();
-      if(i >= full.length){
+      if(i >= flat.length){
         clearInterval(_twTimer); _twTimer = null;
-        setTimeout(function(){
-          _twBusy = false;
-          if(job.onDone) try{ job.onDone(); }catch(e){}
-          _pumpSay();
-        }, job.opts.hold || 250);
+        // Click-to-continue: only when this line CHAINS to something (a
+        // follow-up line or a phase advance). Lines that sit waiting on a
+        // gameplay task keep no gate — the task itself advances them.
+        var needsContinue = (!!job.onDone || _twQueue.length > 0) && !job.opts.noWait;
+        if(needsContinue){
+          _twAwait = job;
+          _showCont(true);
+        } else {
+          setTimeout(function(){
+            _twBusy = false;
+            if(job.onDone) try{ job.onDone(); }catch(e){}
+            _pumpSay();
+          }, job.opts.hold || 250);
+        }
       }
     }, 26);
   }, delay);
 }
+/* Immediate interrupt: finale reactions preempt whatever Chad was saying. */
+function chadInterrupt(id, opts){
+  _twQueue.length = 0;
+  _twAwait = null; _showCont(false);
+  if(_twTimer){ clearInterval(_twTimer); _twTimer = null; }
+  _twBusy = false;
+  chadSay(id, opts);
+}
+function _showCont(on){
+  var el = document.getElementById('chad-cont');
+  var btn = document.getElementById('chad-cont-btn');
+  if(el) el.style.display = on ? 'block' : 'none';
+  if(btn) btn.style.display = on ? 'block' : 'none';
+}
+function _twContinue(){
+  if(!_twAwait) return;
+  var job = _twAwait; _twAwait = null;
+  _showCont(false);
+  _twBusy = false;
+  if(job.onDone) try{ job.onDone(); }catch(e){}
+  _pumpSay();
+}
 /* Re-resolve the visible line when the input device changes */
 function reRenderCurrent(){
   if(!textEl || !TUT._currentLineRaw || _twTimer) return;
-  textEl.textContent = resolveText(TUT._currentLineRaw);
+  var segs = _parseSegs(resolveText(TUT._currentLineRaw));
+  var spans = _buildSpans(segs);
+  _paintSegs(segs, spans, Infinity);
 }
 
 /* ---------- Googly eyes + mood engine ---------- */
@@ -61386,13 +61478,17 @@ function courseStraight(par){          // lessons 1-3: clean par-2 lane
   d.holePos = {x:5, y:5}; d.grid[5][5] = CELL.GREEN;
   return d;
 }
-function courseMissile(){              // lesson 4: one decorative boulder in the way
+function courseMissile(){              // lesson 4: boulder pile blocking the lane
   var d = _baseData(12, 26, 2);
   _lane(d, 4, 7, 3, 22);
   d.teePos = {x:5, y:21}; d.grid[21][5] = CELL.TEE;
   d.holePos = {x:5, y:5}; d.grid[5][5] = CELL.GREEN;
-  _rock(d, 5, 13, 2.6);                // fat rock spanning the whole lane
-  _rock(d, 7, 13, 1.6);
+  // Individual radii must stay under the missile's 2.5m blast reach:
+  // collectObstaclesInRadius measures blast-center to rock CENTER, so a rock
+  // fatter than the blast radius survives its own direct hit (the missile
+  // detonates at the surface, too far from the center to collect it). A
+  // tight pile of 1.25s reads as one blockade and one center hit clears it.
+  _rock(d, 4.6, 13, 1.25); _rock(d, 5.5, 13, 1.25); _rock(d, 6.4, 13, 1.25);
   return d;
 }
 function courseJumpA(){                // lesson 5a: low hop row near the tee + coin trail
@@ -61414,11 +61510,11 @@ function courseJumpB(){                // lesson 5b: boulder wall far from the t
   _rock(d, 4, wy, 1.15); _rock(d, 5, wy, 1.15); _rock(d, 6, wy, 1.15); _rock(d, 7, wy, 1.15);
   return d;
 }
-function courseFinale(){               // graduation patio: big open apron, no reachable cup gameplay
+function courseFinale(){               // graduation patio: the exit hole hides UNDER the shack
   var d = _baseData(30, 30, 9);
   _lane(d, 2, 27, 2, 27);
   d.teePos = {x:15, y:25}; d.grid[25][15] = CELL.TEE;
-  d.holePos = {x:27, y:2}; d.grid[2][27] = CELL.GREEN;   // parked in the far corner, decorative
+  d.holePos = {x:15, y:9}; d.grid[9][15] = CELL.GREEN;  // dead center of the shack
   return d;
 }
 
@@ -61514,8 +61610,6 @@ var TUT = {
     if(this._pollRAF) cancelAnimationFrame(this._pollRAF);
     this._pollRAF = null;
     if(box){ box.classList.remove('up'); }
-    var endWrap = document.getElementById('tut-end-btn-wrap');
-    if(endWrap) endWrap.classList.remove('show');
     this._teardownFinale();
     try { var m = getMeta(); if(completed) m.tutorialCompleted = true; m.tutorialPrompted = true; setMeta(m); } catch(e){}
     try { escMainMenu(); } catch(e){}
@@ -61576,6 +61670,8 @@ var TUT = {
       chadSay('jb_success', {}, function(){ setTimeout(function(){ self._advance(); }, 600); });
     } else if(ph.id === 'exam'){
       chadSay('ex_sink', {}, function(){ setTimeout(function(){ self._advance(); }, 600); });
+    } else if(ph.id === 'finale'){
+      setTimeout(function(){ self._showEndOverlay(); }, 900);
     } else {
       setTimeout(function(){ self._advance(); }, 700);
     }
@@ -61618,7 +61714,7 @@ var TUT = {
 
   _enterShop: function(){
     lessonEl.textContent = this.phase().label;
-    G.coins = 50;
+    G.coins = 250;
     if(typeof updateCoinHUD === 'function') updateCoinHUD();
     try { openShop(); } catch(e){}
     // Curate: cheap starter picks + force the upgrade tile for the tour.
@@ -61645,8 +61741,8 @@ var TUT = {
           if(typeof showToast === 'function') showToast('\uD83C\uDF81 Gift: Portal Grenade + Holy Hand Grenade added to your deck!', 2600);
         } catch(e){}
         self._shopNudgeTimer = setTimeout(function(){
-          if(G.coins >= 50) chadSay('sh_nudge');
-        }, 9000);
+          if(G.coins >= 250) chadSay('sh_nudge');
+        }, 3500);
       });
     });
   },
@@ -61723,6 +61819,23 @@ var TUT = {
       }
       self._lastDev = dev;
 
+      // Controller: A-button edge doubles as click-to-continue
+      if(_twAwait || _twTimer){
+        try {
+          var _gps = navigator.getGamepads ? navigator.getGamepads() : [];
+          var _aDown = false;
+          for(var _gi = 0; _gi < _gps.length; _gi++){
+            var _gp = _gps[_gi];
+            if(_gp && _gp.buttons && _gp.buttons[0] && _gp.buttons[0].pressed){ _aDown = true; break; }
+          }
+          if(_aDown && !self._padAPrev){
+            if(_twTimer) _twSkip = true;
+            else _twContinue();
+          }
+          self._padAPrev = _aDown;
+        } catch(e){}
+      } else { self._padAPrev = false; }
+
       var ph = self.phase();
       var g = self._goal;
       if(ph && G && G.state === 'playing'){
@@ -61788,8 +61901,7 @@ var TUT = {
         else if(ph.id === 'jumpA'){
           if(coins > prevCoins && !g.coinsSaid){ g.coinsSaid = true; chadSay('ja_coins', {delay:300, keepMood:true}); }
           if(jumps > prevJumps && !g.jumped){
-            g.jumped = true;
-            chadSay('ja_success', {delay:250});
+            g.jumped = true;   // no callout: geometry sells it, sink advances
           }
           if(swings > prevSwings){ g.swingAt = now; }
           if(!g.jumped && g.swingAt && now - g.swingAt > 3800 && !G.inHole){
@@ -61853,6 +61965,21 @@ var TUT = {
     this._finaleRetries = 0;
     var C = window.CANNON, T = TILE();
     var lowGfx = !!window._GGW_lowGfx;
+    // The exit hole hides under the shack: no flag, ever (Adam: "just remove
+    // the flag"), and no beacon poking through the roof. Cup mesh stays.
+    if(G.flagGroup) G.flagGroup.visible = false;
+    if(G._holeSeeThruCup) G._holeSeeThruCup.visible = false;
+    if(G.holeBeacon && G.holeBeacon.beaconCol) G.holeBeacon.beaconCol.visible = false;
+    if(G._holeTractorBeam) {
+      if(G._holeTractorBeam.mesh) G._holeTractorBeam.mesh.visible = false;
+      if(G._holeTractorBeam.core) G._holeTractorBeam.core.visible = false;
+    }
+    if(G.holeBeacon && G.holeBeacon.particles) {
+      for(var bp = 0; bp < G.holeBeacon.particles.length; bp++) {
+        var bpp = G.holeBeacon.particles[bp];
+        if(bpp && bpp.mesh) bpp.mesh.visible = false;
+      }
+    }
     var F = this._finale = {
       props: [],          // {kind, body, group, hit:false}
       shackStatics: [],   // static boxes forming the intact shack {body, mesh, def}
@@ -62005,7 +62132,8 @@ var TUT = {
       group.position.set(x, y, z);
       F.group.add(group);
       var body = addBoxBody(x, y, z, hx, hy, hz, massKg, opts);
-      F.props.push({ kind: kind, body: body, group: group, hit: false });
+      F.props.push({ kind: kind, body: body, group: group, hit: false,
+        r: Math.max(hx, hz) + 0.12, hy: hy });
       return body;
     }
     function buildChair(){
@@ -62163,6 +62291,38 @@ var TUT = {
   _shackCx: function(){ return 15*TILE(); },
   _shackCz: function(){ return 9*TILE(); },
 
+  /* Projectile hit-test against finale objects. Wired into
+     missileInFlightHitCheck below so Missile AND Sniper shots detonate on
+     the shack and patio props instead of sailing through. Returns a
+     rock-shaped hit record (never fed to destroyObstacles — the direct
+     sweptHit only stops the projectile; damage arrives via spawnExplosion
+     → onBlast). */
+  _finaleHitCheck: function(px, pz, r){
+    var F = this._finale;
+    if(!F) return null;
+    var mk = function(wx, wz){ return { wx:wx, wz:wz, type:'rock', physRef:{ _tutFinale:true }, meshes:[] }; };
+    // Shack AABB (only while standing)
+    if(F.shackAlive){
+      var cx = this._shackCx(), cz = this._shackCz();
+      if(Math.abs(px - cx) < 2.7 + r && Math.abs(pz - cz) < 1.8 + r) return mk(px, pz);
+    }
+    // Billboard posts (static, at projectile height)
+    var bbZ = 4*TILE(), bcx = this._shackCx();
+    var postXs = [bcx - (6.0 - 0.6), bcx + (6.0 - 0.6)];
+    for(var pi2 = 0; pi2 < 2; pi2++){
+      if(Math.hypot(px - postXs[pi2], pz - bbZ) < 0.28 + r) return mk(postXs[pi2], bbZ);
+    }
+    // Dynamic props: exploding a missile on a flamingo is the whole point
+    for(var i = 0; i < F.props.length; i++){
+      var p = F.props[i];
+      if(p.body.position.y > 2.2) continue;          // launched sky-high: let it fly past
+      if(Math.hypot(px - p.body.position.x, pz - p.body.position.z) < p.r + r){
+        return mk(p.body.position.x, p.body.position.z);
+      }
+    }
+    return null;
+  },
+
   _propLine: function(kind){
     var map = { table:'fn_table', chair:'fn_table', flamingo:'fn_flam', cart:'fn_cart' };
     var id = map[kind];
@@ -62182,7 +62342,7 @@ var TUT = {
       var id = ids[i];
       if(!F.usedLines[id]){
         F.usedLines[id] = true;
-        chadSay(id, {delay:250});
+        chadInterrupt(id, {delay:120});
         return;
       }
     }
@@ -62249,20 +62409,42 @@ var TUT = {
     if(typeof triggerShake === 'function') try { triggerShake('heavy'); } catch(e){}
     chadMood(4); chadExclaim();
     this._sayFresh(['fn_shackdead']);
-    this._revealEndButton();
+    this._revealExitHole();
   },
 
-  _revealEndButton: function(){
-    var wrap = document.getElementById('tut-end-btn-wrap');
-    if(!wrap){
-      wrap = document.createElement('div');
-      wrap.id = 'tut-end-btn-wrap';
-      wrap.innerHTML = '<button id="tut-end-btn">END TUTORIAL</button>';
-      document.body.appendChild(wrap);
-      var self = this;
-      wrap.querySelector('#tut-end-btn').addEventListener('click', function(){ self._showEndOverlay(); });
-    }
-    wrap.classList.add('show');
+  /* The rubble clears: cup is now reachable. Plant a little EXIT sign next
+     to it (indestructible, visual only — no flag, per design). */
+  _revealExitHole: function(){
+    var F = this._finale;
+    if(!F || F._exitSign) return;
+    var T = TILE();
+    var hx = 15*T, hz = 9*T;
+    var g = new THREE.Group();
+    var post = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.15, 8),
+      new THREE.MeshLambertMaterial({ color: 0x8a6a4a }));
+    post.position.y = 0.57; g.add(post);
+    var cv = document.createElement('canvas'); cv.width = 256; cv.height = 96;
+    var ctx = cv.getContext('2d');
+    ctx.fillStyle = '#2e7d4f'; ctx.fillRect(0, 0, 256, 96);
+    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 7; ctx.strokeRect(6, 6, 244, 84);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '900 52px "Nunito", sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('EXIT \u2192', 128, 52);
+    var tex = new THREE.CanvasTexture(cv);
+    var boardMat = new THREE.MeshLambertMaterial({ map: tex });
+    var edgeMat = new THREE.MeshLambertMaterial({ color: 0xf3efe4 });
+    var board = new THREE.Mesh(new THREE.BoxGeometry(1.35, 0.5, 0.08),
+      [edgeMat, edgeMat, edgeMat, edgeMat, boardMat, boardMat]);
+    board.position.y = 1.28;
+    g.add(board);
+    g.position.set(hx + 1.35, 0, hz);
+    g.rotation.y = 0.28;
+    F.group.add(g);
+    F._exitSign = g;
+    // Bring back the hole markers so the cup reads from across the patio.
+    if(G._holeSeeThruCup) G._holeSeeThruCup.visible = true;
+    if(G.holeBeacon && G.holeBeacon.beaconCol) G.holeBeacon.beaconCol.visible = true;
   },
   _showEndOverlay: function(){
     var ov = document.getElementById('tut-end-overlay');
@@ -62284,7 +62466,7 @@ var TUT = {
     ov.classList.add('open');
   },
 
-  /* Per-frame body→mesh sync for finale props + debris */
+  /* Per-frame body→mesh sync + ball collision + destruction-hand refill */
   _finaleTick: function(dt){
     var F = this._finale;
     if(!F) return;
@@ -62299,6 +62481,88 @@ var TUT = {
     for(var d=0; d<F.debris.length; d++){
       var db = F.debris[d];
       if(!db.body.sleepState || db.body.sleepState !== 2) sync(db.body, db.mesh);
+    }
+
+    /* ---- Ball vs finale objects ---- */
+    if(G.state === 'playing' && G.ballPos && G.ballVel){
+      var bx = G.ballPos.x, by = G.ballPos.y, bz = G.ballPos.z;
+      var spd = Math.hypot(G.ballVel.x, G.ballVel.z);
+      var BR = (typeof BALL_R !== 'undefined') ? BALL_R : 0.22;
+      // Shack (alive): solid AABB — push out + reflect. Only cards break it.
+      if(F.shackAlive){
+        var cx = this._shackCx(), cz = this._shackCz();
+        var HW = 2.85, HD = 1.95;
+        var dx0 = bx - cx, dz0 = bz - cz;
+        if(Math.abs(dx0) < HW + BR && Math.abs(dz0) < HD + BR && by < 3.2){
+          var pxo = (HW + BR) - Math.abs(dx0);
+          var pzo = (HD + BR) - Math.abs(dz0);
+          if(pxo < pzo){
+            G.ballPos.x = cx + Math.sign(dx0 || 1) * (HW + BR);
+            if(Math.sign(G.ballVel.x) !== Math.sign(dx0)) G.ballVel.x *= -0.7;
+          } else {
+            G.ballPos.z = cz + Math.sign(dz0 || 1) * (HD + BR);
+            if(Math.sign(G.ballVel.z) !== Math.sign(dz0)) G.ballVel.z *= -0.7;
+          }
+        }
+      }
+      // Billboard posts: little cylinder bounces
+      var bbZ2 = 4*TILE(), pcx = this._shackCx();
+      var posts = [pcx - 5.4, pcx + 5.4];
+      for(var pj = 0; pj < 2; pj++){
+        var pdx = bx - posts[pj], pdz = bz - bbZ2;
+        var pd = Math.hypot(pdx, pdz);
+        if(pd < 0.24 + BR && pd > 0.001 && by < 4.4){
+          var nx = pdx/pd, nz = pdz/pd;
+          G.ballPos.x = posts[pj] + nx * (0.24 + BR);
+          G.ballPos.z = bbZ2 + nz * (0.24 + BR);
+          var vdot = G.ballVel.x*nx + G.ballVel.z*nz;
+          if(vdot < 0){ G.ballVel.x -= 1.7*vdot*nx; G.ballVel.z -= 1.7*vdot*nz; }
+        }
+      }
+      // Dynamic props: comic bumps. Ball keeps most speed; prop goes flying.
+      // Impulse scales with body mass so the resulting velocity change is
+      // ~spd*k regardless of how light the prop is (an unscaled impulse sent
+      // the flamingo out at 170 m/s).
+      if(spd > 0.4 && window.CANNON){
+        var bumpK = { flamingo: 2.2, chair: 1.5, table: 1.0, cart: 0.3 };
+        for(var k = 0; k < F.props.length; k++){
+          var pr = F.props[k];
+          var ddx = pr.body.position.x - bx, ddz = pr.body.position.z - bz;
+          var dd = Math.hypot(ddx, ddz);
+          if(dd < pr.r + BR && dd > 0.001 && Math.abs(pr.body.position.y - by) < pr.hy + 0.9){
+            var ux = ddx/dd, uz = ddz/dd;
+            var imp = spd * (bumpK[pr.kind] || 1.2) * (pr.body.mass || 1);
+            try {
+              pr.body.wakeUp();
+              pr.body.applyImpulse(
+                new CANNON.Vec3(ux*imp, imp*0.5, uz*imp),
+                pr.body.position.vadd(new CANNON.Vec3((Math.random()-0.5)*0.25, 0.15, (Math.random()-0.5)*0.25)));
+            } catch(e){}
+            // Cart is heavy furniture: the ball actually deflects off it
+            if(pr.kind === 'cart'){
+              var cv = G.ballVel.x*ux + G.ballVel.z*uz;
+              if(cv > 0){ G.ballVel.x -= 1.5*cv*ux; G.ballVel.z -= 1.5*cv*uz; }
+            } else {
+              G.ballVel.x *= 0.86; G.ballVel.z *= 0.86;
+            }
+          }
+        }
+      }
+    }
+
+    /* ---- Destruction hand never runs dry: refill on any card spend ---- */
+    if(G.state === 'playing' && G.hand && G.hand.length < 4 && !this._refillPending){
+      this._refillPending = true;
+      var self = this;
+      setTimeout(function(){
+        self._refillPending = false;
+        try {
+          if(G._tutorialMode && self.phase() && self.phase().id === 'finale' &&
+             G.state === 'playing' && G.hand.length < 4){
+            drawCards(4 - G.hand.length);
+          }
+        } catch(e){}
+      }, 500);
     }
   },
   _teardownFinale: function(){
@@ -62316,6 +62580,20 @@ var TUT = {
 };
 
 window.TUT = TUT;
+
+/* Missile and Sniper projectiles collide with finale scenery. The wrap only
+   engages while the finale diorama exists; all other holes hit the original
+   check untouched. */
+if(typeof missileInFlightHitCheck === 'function'){
+  var _origMIFHC = missileInFlightHitCheck;
+  missileInFlightHitCheck = function(px, pz, missileR){
+    if(TUT._finale){
+      var h = TUT._finaleHitCheck(px, pz, missileR || 0.35);
+      if(h) return h;
+    }
+    return _origMIFHC(px, pz, missileR);
+  };
+}
 
 /* Main-menu replay button wiring (button markup added next to Awards) */
 document.addEventListener('DOMContentLoaded', function(){
