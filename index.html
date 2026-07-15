@@ -3924,6 +3924,13 @@ body.scorecard #hole-summary :focus-visible{ outline:3px solid var(--sc-orange);
         <button class="toggle-btn active" id="esc-res-btn" onclick="cycleResolution()">1920×1080</button>
       </div>
     </div>
+    <div class="esc-toggle-row">
+      <label><span class=px-camera></span> V-Sync</label>
+      <div class="toggle-btns">
+        <button class="toggle-btn" id="esc-vsync-on" onclick="setVsync('on')">On</button>
+        <button class="toggle-btn" id="esc-vsync-off" onclick="setVsync('off')">Off</button>
+      </div>
+    </div>
     <div class="esc-vol-row">
       <label><span class=px-ruler></span> Outline Width <span id="esc-outline-val" style="opacity:0.6;font-size:0.8em">0.70</span></label>
       <input type="range" id="esc-outline-slider" min="0" max="2.5" step="0.05" value="0.7" oninput="setOutlineWidth(this.value)">
@@ -4749,7 +4756,7 @@ body.scorecard #hole-summary :focus-visible{ outline:3px solid var(--sc-orange);
 
   </div>
 
-  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:10px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:340px;line-height:1.2"><div style="font-weight:700">Alpha v0.26i2</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Finale rework: exit hole under the shack, full ball/projectile collision, auto-refilling destruction hand; plus tutorial polish and a confetti-leak engine fix.</div></div>
+  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:10px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:340px;line-height:1.2"><div style="font-weight:700">Alpha v0.26i5</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Performance pass 3: outline depth pass now unlit (was a second full lit scene render), 2048 shadows at half-rate for ambient obstacles, crate physics decoupled from the 120Hz ball loop.</div></div>
 </div>
 
 <!-- v0.23m: Weekly Challenges picker. Sits above #overlay; populated by
@@ -4815,6 +4822,14 @@ body.scorecard #hole-summary :focus-visible{ outline:3px solid var(--sc-orange);
         <button class="toggle-btn active" id="dm-res-btn" onclick="cycleResolution()">1920×1080</button>
       </div>
     </div>
+    <div class="disp-row">
+      <label><span class=px-camera></span> V-Sync</label>
+      <div class="toggle-btns">
+        <button class="toggle-btn" id="dm-vsync-on" onclick="setVsync('on')">On</button>
+        <button class="toggle-btn" id="dm-vsync-off" onclick="setVsync('off')">Off</button>
+      </div>
+    </div>
+    <div class="controls-hint" id="dm-vsync-hint" style="display:none;margin-top:-4px"></div>
     <div class="disp-row">
       <label><span class=px-ruler></span> Outline Width <span id="dm-outline-val" style="opacity:0.6;font-size:0.8em">0.70</span></label>
       <input type="range" id="dm-outline-slider" min="0" max="2.5" step="0.05" value="0.7" oninput="setOutlineWidth(this.value)">
@@ -5303,7 +5318,17 @@ void main() {
       this.scene.traverse(obj => {
         if(!obj.visible) return;
         const parentHidden = obj.parent && hiddenSet.has(obj.parent);
-        if (obj.userData.noOutline || parentHidden) {
+        // v0.26i5: with the flat override material below, any mesh left visible
+        // writes depth. Meshes whose own material has depthWrite:false (glow
+        // discs, beams, sky, invisible placeholders) contribute NO depth today,
+        // so they must be hidden too or they'd start occluding/outlining.
+        let dwOff = false;
+        if(!obj.userData.noOutline && !parentHidden && obj.material) {
+          const m = obj.material;
+          dwOff = Array.isArray(m) ? m.every(x => x && x.depthWrite === false)
+                                   : m.depthWrite === false;
+        }
+        if (obj.userData.noOutline || parentHidden || dwOff) {
           if (obj.userData.blocksOutlineDepth) return;
           hiddenSet.add(obj);
           hidden.push(obj);
@@ -5311,9 +5336,22 @@ void main() {
         }
       });
 
+      // v0.26i5 PERF: the depth capture only ever feeds tDepth (the color
+      // output of _depthRT is never sampled — tDiffuse comes from readBuffer).
+      // Rendering it with the scene's full lit toon/standard materials meant a
+      // SECOND complete lit scene render per frame, including shadow-map PCF
+      // sampling, at full buffer resolution — the single largest GPU item
+      // during motion on ANGLE/D3D11. Depth values come from geometry, not the
+      // material, so a flat unlit override produces a byte-identical depth
+      // buffer at a fraction of the fragment cost. depthWrite:false meshes are
+      // hidden above so their (absent) depth contribution is preserved.
+      if(!this._depthOverrideMat) this._depthOverrideMat = new THREE.MeshBasicMaterial();
+      const _prevOverride = this.scene.overrideMaterial;
+      this.scene.overrideMaterial = this._depthOverrideMat;
       renderer.setRenderTarget(this._depthRT);
       renderer.clear();
       renderer.render(this.scene, this.camera);
+      this.scene.overrideMaterial = _prevOverride;
 
       // Restore hidden objects
       for (let i = 0; i < hidden.length; i++) hidden[i].visible = true;
@@ -5512,7 +5550,9 @@ const _GGW_perfMode = true;
 // by the Electron preload from the SteamDeck env var — no async race).
 const _GGW_isDeck = !!(window.ggwDisplay && window.ggwDisplay.isSteamDeck);
 const _GGW_lowGfx = _GGW_isMobile || _GGW_perfMode || _GGW_isDeck;
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: !_GGW_lowGfx });
+// v0.26i3: powerPreference forces the discrete GPU on dual-GPU laptops —
+// without it Chromium/Electron can silently bind WebGL to the iGPU.
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: !_GGW_lowGfx, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, _GGW_lowGfx ? 1.5 : 2));
 renderer.shadowMap.enabled = true;
 // v0.26h13: hard, cartoon-style shadows — a single shade with firm edges rather
@@ -5542,6 +5582,7 @@ renderer.info.autoReset = false;
 // GPU has headroom and shadow-swim tolerance was already tuned for it.
 if(_GGW_lowGfx) renderer.shadowMap.autoUpdate = false;
 let _shadowForceFrames = 0;   // countdown: keep updating for N frames after motion stops
+let _shadowHalfRateParity = 0; // v0.26i5: alternator for presence-only 30Hz shadow updates
 function _requestShadowUpdate(frames){ if(frames > _shadowForceFrames) _shadowForceFrames = frames; }
 window._ggwRequestShadowUpdate = _requestShadowUpdate;   // VFX/spawn sites can poke it
 renderer.setClearColor(0x87CEEB);
@@ -5740,7 +5781,11 @@ sun.castShadow = true;
 // several texels wide instead of about one, and detached the contact shadow.
 // Bias requirements scale with TEXEL SIZE, i.e. with 1/mapSize, so derive them
 // from the map resolution instead of hardcoding.
-const _SHADOW_MAP_SIZE = (_GGW_isMobile || _GGW_isDeck) ? 1024 : 4096;
+// v0.26i5 PERF: desktop dropped 4096→2048. The shadow map re-renders every
+// frame whenever anything moves (ball rolling, awake crates, animated
+// obstacles) — a 4096² depth pass per frame was the second-largest GPU item
+// on ANGLE/D3D11. 2048 is 4× fewer texels; bias scales via _shBiasScale below.
+const _SHADOW_MAP_SIZE = (_GGW_isMobile || _GGW_isDeck) ? 1024 : 2048;
 sun.shadow.mapSize.set(_SHADOW_MAP_SIZE, _SHADOW_MAP_SIZE);
 sun.shadow.camera.near = 0.5;
 sun.shadow.camera.far = 200;
@@ -5752,7 +5797,7 @@ sun.shadow.camera.bottom = -60;
 // offsets shrink 4x too. This keeps large flat receivers (the green, wall tops)
 // free of shadow acne while letting the contact shadow stay ATTACHED to the base
 // of crates, bumpers and walls instead of floating away from them.
-const _shBiasScale = 1024 / _SHADOW_MAP_SIZE;   // 1.0 on Deck/mobile, 0.25 on desktop
+const _shBiasScale = 1024 / _SHADOW_MAP_SIZE;   // 1.0 on Deck/mobile, 0.5 on desktop (2048)
 sun.shadow.bias = -0.0004 * _shBiasScale;
 sun.shadow.normalBias = 0.018 * _shBiasScale;
 scene.add(sun);
@@ -6146,7 +6191,7 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.26i2';
+const GAME_VERSION = '0.26i5';
 // v0.26h10: snapshot the pristine bootstrap #overlay markup at load. This is
 // the ONE canonical main-menu HTML (with the Display hub button + the green
 // #menu-version element). escMainMenu() used to rebuild the menu from a
@@ -6159,7 +6204,7 @@ const _BOOTSTRAP_OVERLAY_HTML = (function(){
   try { const o = document.getElementById('overlay'); return o ? o.innerHTML : null; }
   catch(e) { return null; }
 })();
-const CHANGE_NOTE = "v0.26i2 -- Tutorial finale rework + polish batch. (1) FINALE: the End Tutorial button is gone; the exit hole hides dead-center UNDER the snack shack (no flag, beacon hidden until reveal). Destroying the shack reveals the cup plus a little EXIT sign next to it; sinking the ball ends the tutorial. (2) Missiles and Sniper shots now detonate on the shack, billboard posts, and patio props (missileInFlightHitCheck wrap, finale-only) -- previously projectiles sailed through and only lobbed explosives worked. (3) The ball now collides with everything on the patio: solid bounce off the standing shack and billboard posts, comic bumps that send flamingos/chairs/tables flying (cart deflects the ball -- it's heavy). Shack and sign remain card-destructible only. (4) Finale hand auto-refills to 4 destruction cards whenever one is spent. (5) Typing SFX louder (was inaudible). (6) Lesson 1 copy: 'hold the left mouse button' instead of right-click. (7) CONTINUE button added under the bounce arrow. (8) Finale Chad reactions interrupt immediately instead of queueing behind click-to-continue. (9) Lesson 4 'additions' renders in italics (typewriter now supports *markup*). (10) Mini-challenge HUD hidden during tutorial. (11) Skip Lessons moved to bottom-right of screen. (12) ENGINE FIX: initHole orphaned live confetti meshes by clearing G.particles without scene removal -- confetti persisted across holes; now cleaned properly (benefits base game too). (13) Hole-in-one horn -30%. (14) 'Launch pad' line removed from Lesson 5. (15) Lesson 6 intro mentions card hotkeys. (16) Shop coin nudge fires at 3.5s instead of 9s.";
+const CHANGE_NOTE = "v0.26i5 -- Performance pass 3 (render pipeline + physics cadence). (1) OUTLINE DEPTH PASS: the outline's depth capture re-rendered the ENTIRE scene with full lit toon/standard materials including shadow-map PCF sampling -- but only the depth texture is ever consumed. It now renders with a flat MeshBasicMaterial override (byte-identical depth, fraction of the fragment cost); depthWrite:false meshes are hidden during the capture so they still contribute no depth. This was the largest per-frame GPU item during motion on ANGLE/D3D11. (2) SHADOW MAP: desktop 4096 -> 2048 (4x fewer texels per redraw; bias auto-scales). (3) SHADOW CADENCE: animated-obstacle PRESENCE (spin bars, slide blocks, popup walls, pendulums, floombas) used to force full-rate shadow redraws for the whole hole; presence-only motion now drives a 30Hz half-rate update. Ball/crate/camera motion still forces full rate. (4) CRATE PHYSICS CADENCE: the Cannon world step, kinematic sync, conveyor/fan force fields, and instance-matrix compose ran inside the 120Hz ball loop; now stepped once per render frame from animate() (Cannon fixed-steps internally at 1/60). (5) ALLOC HYGIENE: scratch Vec3 for spin-bar axis (was a fresh alloc per bar per tick), dead holePosWorld Vector3 removed from the 120Hz hole-check path, ghost-HUD projection vector reused.";
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
@@ -7963,6 +8008,47 @@ window.cycleResolution = function(){
   refreshDisplayUI();
 };
 
+// ── v0.26i3: V-Sync switch ──────────────────────────────────────────────────
+// Presentation sync is owned by the compositor: the renderer process cannot
+// flip it at runtime. The switch persists the preference and hands it to the
+// Electron main process (via the ggwDisplay preload bridge when available,
+// localStorage mirror otherwise) which must append `disable-gpu-vsync` +
+// `disable-frame-rate-limit` before app-ready on next launch. Web builds are
+// always browser-synced; the hint says so.
+window.setVsync = function(mode){
+  if(mode !== 'on' && mode !== 'off') return;
+  const meta = getMeta();
+  meta.vsync = mode;
+  setMeta(meta);
+  try { localStorage.setItem('ggw_vsync', mode); } catch(e){}
+  try {
+    if(window.ggwDisplay && typeof window.ggwDisplay.setVsync === 'function')
+      window.ggwDisplay.setVsync(mode === 'on');
+  } catch(e){}
+  refreshVsyncUI(true);
+};
+function refreshVsyncUI(justChanged){
+  const mode = (getMeta().vsync || 'on');
+  const pairs = [['dm-vsync-on','dm-vsync-off'], ['esc-vsync-on','esc-vsync-off']];
+  for(const [onId, offId] of pairs){
+    const a = document.getElementById(onId), b = document.getElementById(offId);
+    if(a) a.classList.toggle('active', mode === 'on');
+    if(b) b.classList.toggle('active', mode === 'off');
+  }
+  const hint = document.getElementById('dm-vsync-hint');
+  if(!hint) return;
+  const isApp = !!(window.ggwDisplay && window.ggwDisplay.isElectron);
+  if(!isApp){
+    hint.style.display = '';
+    hint.textContent = 'Browser builds are always synced by the browser. This setting applies to the Steam build.';
+  } else if(justChanged){
+    hint.style.display = '';
+    hint.textContent = 'Applies on next launch — restart the game.';
+  } else {
+    hint.style.display = 'none';
+  }
+}
+
 // ── v0.26h9: Graphics settings (outline width + anti-aliasing) ──────────────
 // Live, persisted graphics tuning. Two knobs the player asked to dial in on
 // desktop before we split desktop-vs-Deck defaults:
@@ -8175,6 +8261,7 @@ window.openDisplaySettings = function(){
   const o = document.getElementById('display-overlay');
   if(o) o.classList.add('open');
   try { refreshDisplayUI(); } catch(e){}
+  try { refreshVsyncUI(); } catch(e){}
   // sync the standalone overlay's display/res buttons too (refreshDisplayUI
   // only touches esc-* ids). Mirror them onto dm-* here.
   try {
@@ -20884,18 +20971,17 @@ function tickParachute(dt) {
         // Smoke poof
         try {
           for(let i = 0; i < 8; i++) {
-            const m = new THREE.Mesh(
-              new THREE.SphereGeometry(0.15, 4, 3),
-              new THREE.MeshStandardMaterial({color:0xeeeeee, transparent:true, opacity:0.7})
-            );
+            const m = acquireFxMesh('sphere');   // v0.26i4: pooled
+            m.material.color.setHex(0xeeeeee);
+            m.material.opacity = 0.7;
+            m.scale.setScalar(0.15);
             m.position.copy(G._parachuteCanopy.position);
-            m.userData.noOutline = true;
-            scene.add(m);
-            G.particles.push({
-              mesh: m,
+            const rec = {
+              mesh: m, _fxPooled: true,
               vel: new THREE.Vector3((Math.random()-0.5)*2, 1+Math.random(), (Math.random()-0.5)*2),
               life: 0.4 + Math.random()*0.3, maxLife: 0.7,
-            });
+            };
+            G.particles.push(rec); m.userData._fxLive = rec;
           }
         } catch(e){}
         G._parachuteCanopy.parent.remove(G._parachuteCanopy);
@@ -21884,15 +21970,25 @@ function updatePhysics(dt) {
   // pull the carried ball through the floor and collision resolution
   // would fight the drone's transit path. Crate/perk ticks still run so
   // the world keeps animating around the cinematic.
+  // v0.23c: Drone Delivery suspends ball physics. The drone's animation
+  // loop manages ballPos directly; if we ran physics here gravity would
+  // pull the carried ball through the floor and collision resolution
+  // would fight the drone's transit path. Crate/perk ticks still run so
+  // the world keeps animating around the cinematic (crate physics is now
+  // stepped once per render frame from animate — see v0.26i5 note below).
   if(G._droneDeliveryActive) {
-    if(typeof updateCratePhysics === 'function') updateCratePhysics(dt);
     return;
   }
-  // v0.22a: integrate crate physics first so subsequent ball collisions
-  // resolve against current crate positions. updateCratePhysics handles
-  // crate-vs-wall, crate-vs-obstacle, crate-vs-crate, ground/gravity,
-  // tower teeter, and rest-snapping.
-  if(typeof updateCratePhysics === 'function') updateCratePhysics(dt);
+  // v0.22a → v0.26i5: crate physics used to be integrated here, which meant
+  // that during rolling (120Hz fixed-step loop) the Cannon world step,
+  // kinematic obstacle sync, conveyor/fan force fields, and per-crate
+  // instance-matrix compose all ran at up to 120×/s — double the useful rate
+  // (Cannon fixed-steps internally at 1/60). It now runs ONCE per render
+  // frame from animate(), before this fixed-step loop. Ball-vs-crate
+  // collisions in this function read crate positions frozen at frame start;
+  // crates move slowly relative to the ball, so this is imperceptible, and
+  // ball→crate impulses queue onto the bodies for the next world step
+  // exactly as before (one frame of latency at most).
   // v0.23g: Sticky shoot-through clear-check. Once the ball has physically
   // cleared the attached object's hit envelope, drop the skip state so
   // normal collisions resume. For 'wall' kind we use signed distance along
@@ -26201,7 +26297,8 @@ function updatePhysics(dt) {
   const _hoff = G._holeWorldOffset || {x:0, z:0};
   const holeWX = hp.x*TILE_SIZE + _hoff.x, holeWZ = hp.y*TILE_SIZE + _hoff.z;
   const holeTerrainY = G.heightMap.length ? getTerrainHeight(hp.x*TILE_SIZE, hp.y*TILE_SIZE) : 0;
-  const holePosWorld = new THREE.Vector3(holeWX, holeTerrainY + FLOOR_H/2, holeWZ);
+  // v0.26i5 PERF: dead `holePosWorld` Vector3 allocation removed — it was
+  // never read, and this code runs per physics tick (up to 120Hz).
   const holeDistXZ = Math.hypot(G.ballPos.x - holeWX, G.ballPos.z - holeWZ);
   // v0.20r: scale catch radius with TILE_SIZE so Giant Hole's visible cup
   // actually catches at its rendered footprint.
@@ -26236,7 +26333,9 @@ function updatePhysics(dt) {
     ghostHud.innerHTML = pxifyHtml(`👻 ${G._ghostTimer.toFixed(1)}s`);
     ghostHud.style.opacity = '1';
     // Position above the ball
-    const gVec = new THREE.Vector3(G.ballPos.x, G.ballPos.y + 1.2, G.ballPos.z);
+    // v0.26i5 PERF: scratch vector — allocated fresh per tick before.
+    const gVec = G._ghostHudVec || (G._ghostHudVec = new THREE.Vector3());
+    gVec.set(G.ballPos.x, G.ballPos.y + 1.2, G.ballPos.z);
     gVec.project(camera);
     ghostHud.style.left = ((gVec.x * 0.5 + 0.5) * window.innerWidth) + 'px';
     ghostHud.style.top = ((-gVec.y * 0.5 + 0.5) * window.innerHeight - 30) + 'px';
@@ -27434,30 +27533,26 @@ function spawnCoinRing(wx, wz, index) {
   const y = terrY + FLOOR_H / 2 + 0.08;
   // Larger ring with each coin collected this swing
   const startR = 0.12 + index * 0.18;
-  const geo = new THREE.TorusGeometry(startR, 0.035, 6, 32);
-  const mat = new THREE.MeshStandardMaterial({
-    color: 0xffd700, emissive: 0xffaa00,
-    emissiveIntensity: 1.8 + index * 0.4,
-    transparent: true, opacity: 0.9,
-    depthWrite: false,
-  });
-  const ring = new THREE.Mesh(geo, mat);
+  const ring = acquireFxMesh('ring');   // v0.26i4: pooled unit torus
+  ring.material.color.setHex(0xffd700);
+  ring.material.opacity = 0.9;
+  ring.scale.set(startR, startR, startR);
   ring.rotation.x = Math.PI / 2; // lay flat on ground
   ring.position.set(wx, y, wz);
-  ring.userData.noOutline = true;
-  scene.add(ring);
 
   // Animate: expand outward with ease-in-out, fade
   const maxScale = 4 + index * 2.5;
   const duration = 0.55;
   let elapsed = 0;
-  G.particles.push({
-    mesh: ring,
+  const rec = {
+    mesh: ring, _fxPooled: true,
     vel: new THREE.Vector3(0, 0, 0),
     life: duration, maxLife: duration,
     isCoinRing: true,
     coinRingMaxScale: maxScale,
-  });
+    _ringBase: startR,
+  };
+  G.particles.push(rec); ring.userData._fxLive = rec;
 }
 
 // ── Gravity well UFO tractor beam sound ───────────────
@@ -29769,19 +29864,32 @@ function showHoleSummary(earnings, bustedBudget, _epoch) {
     }
     // Fast individual rise: whole row counts up in ~260ms regardless of size,
     // with a per-tick chime whose pitch climbs across the run.
+    // v0.26i3 PERF: the old tick forced a synchronous reflow every 14ms
+    // (`void offsetWidth` to restart the .pop animation) and mutated
+    // font-size (a layout property) per tick — a layout+paint storm on a
+    // full-screen overlay while the 3D scene keeps rendering behind it.
+    // Now the pop is a Web-Animations transform (compositor-only, no reflow)
+    // and growth uses transform:scale instead of font-size. Chimes are
+    // throttled to ≥22ms apart so timer slip can't stack oscillators.
     const RISE_MS = 260;
     const TICKS = Math.min(24, Math.max(6, total));   // cap ticks so chime stays crisp
     const stepMs = Math.max(14, RISE_MS / TICKS);
     const perTick = total / TICKS;
-    let ticks = 0, current = 0;
+    let ticks = 0, current = 0, _lastChime = 0;
+    amtEl.style.display = 'inline-block';   // transforms need a box
     function tick(){
       ticks++;
       current = (ticks >= TICKS) ? total : Math.min(total, Math.round(perTick * ticks));
       const progress = current / total;
-      amtEl.style.fontSize = current < total ? `${1.0 + progress * 0.6}rem` : '1rem';
       amtEl.textContent = `+${current}`;
-      amtEl.classList.remove('pop'); void amtEl.offsetWidth; amtEl.classList.add('pop');
-      if(AC) sfxCoinPickup(r.gci + current - 1);
+      const grow = current < total ? 1.0 + progress * 0.6 : 1.0;
+      try {
+        amtEl.animate(
+          [{ transform: `scale(${grow * 1.22})` }, { transform: `scale(${grow})` }],
+          { duration: 110, fill: 'forwards', easing: 'ease-out' });
+      } catch(e){ amtEl.style.transform = `scale(${grow})`; }
+      const nowT = performance.now();
+      if(AC && nowT - _lastChime >= 22){ _lastChime = nowT; sfxCoinPickup(r.gci + current - 1); }
       if(current < total){ const t = setTimeout(tick, stepMs); _tickUpTimers.push(t); }
       else { const t = setTimeout(()=>_runCountRow(ri+1, done), 90); _tickUpTimers.push(t); }
     }
@@ -33125,16 +33233,13 @@ function destroyCrate(crate, autoCollect, ironBallSmashed) {
   }
   // Wood splinter particles
   for(let i = 0; i < 8; i++) {
-    const sg = new THREE.BoxGeometry(0.10, 0.04, 0.04);
-    const sm = new THREE.Mesh(sg, new THREE.MeshStandardMaterial({
-      color: 0x8a5a30, roughness: 0.9
-    }));
+    const sm = acquireFxMesh('box');   // v0.26i4: pooled
+    sm.material.color.setHex(0x8a5a30);
+    sm.scale.set(0.10, 0.04, 0.04);
     sm.position.set(crate.wx, crate.y, crate.wz);
-    sm.userData.noOutline = true;
-    if(scene) scene.add(sm);
     if(G.particles) {
-      G.particles.push({
-        mesh: sm,
+      const rec = {
+        mesh: sm, _fxPooled: true,
         vel: new THREE.Vector3(
           (Math.random() - 0.5) * 6,
           1.5 + Math.random() * 3,
@@ -33142,7 +33247,8 @@ function destroyCrate(crate, autoCollect, ironBallSmashed) {
         ),
         life: 0.6 + Math.random() * 0.4, maxLife: 1.0,
         gravity: -8,
-      });
+      };
+      G.particles.push(rec); sm.userData._fxLive = rec;
     }
   }
   if(AC) {
@@ -33356,12 +33462,16 @@ function updateCratePhysics(dt) {
   // honor angularVelocity for proper contact-momentum transfer.
   if(G.physSpinBodies) {
     const _shMul = G._speedHoleMul || 1;
+    // v0.26i5 PERF: scratch axis vector — this used to allocate a fresh
+    // C.Vec3 per bar per call, minor-GC churn during exactly the frames
+    // that already carry the physics load.
+    const _upAxis = G._physUpAxis || (G._physUpAxis = new C.Vec3(0, 1, 0));
     for(const e of G.physSpinBodies) {
       const bar = e.bar, body = e.body;
       if(!bar || bar._destroyed) continue;
       // Position is fixed; rotation follows bar.angle each frame.
       body.position.set(bar.wx, 0.45, bar.wz);
-      body.quaternion.setFromAxisAngle(new C.Vec3(0, 1, 0), bar.angle || 0);
+      body.quaternion.setFromAxisAngle(_upAxis, bar.angle || 0);
       body.angularVelocity.set(0, (bar.speed || 0) * _shMul, 0);
     }
   }
@@ -34012,9 +34122,13 @@ function spawnExplosion(x, y, z, scale) {
   const sc = scale || 1.0; // 0.5 = small, 1.0 = normal, 2.0 = big
   // v0.26i: tutorial finale — every blast shoves the patio props around.
   if(G._tutorialMode && window.TUT && TUT.onBlast) { try { TUT.onBlast(x, y, z, sc); } catch(e){} }
-  // v0.26h2: an explosion flings crates/debris — keep the frozen shadow map
-  // refreshing for a short window so their moving shadows read correctly.
-  if(window._ggwRequestShadowUpdate) window._ggwRequestShadowUpdate(30);
+  // v0.26h2 / v0.26i3: keep the frozen shadow map refreshing while physics
+  // bodies fly. Full 30-frame window only when something actually moves
+  // (crates or the tutorial patio); bare obstacle blasts get a short window.
+  if(window._ggwRequestShadowUpdate) {
+    const _bodiesFlying = (G.crates && G.crates.length) || (G._tutorialMode && window.TUT && TUT._finale);
+    window._ggwRequestShadowUpdate(_bodiesFlying ? 30 : 12);
+  }
   // v0.23a: Blast crate stacks via Cannon impulses. Per Adam: "Explosions
   // should send crate stacks flying — it shouldn't just impact the box that
   // was hit by the projectile." Each crate in radius gets a radial impulse
@@ -34056,39 +34170,37 @@ function spawnExplosion(x, y, z, scale) {
       cr.body.applyImpulse(new C.Vec3(nx * horizMag, vertMag, nz * horizMag), off);
     }
   }
-  // Fireball shockwave: hot inner + orange outer particles
+  // Fireball shockwave: hot inner + orange outer particles (pooled, v0.26i3)
   const particleCount = Math.floor(20 + 12 * sc);
   for(let i = 0; i < particleCount; i++) {
     const size = (0.10 + Math.random()*0.18) * sc;
     const hue  = 0.03 + Math.random()*0.10; // red→orange
-    const col  = new THREE.Color().setHSL(hue, 1.0, 0.55);
-    const m = new THREE.Mesh(
-      new THREE.SphereGeometry(size, 5, 4),
-      new THREE.MeshStandardMaterial({color:col, emissive:col, emissiveIntensity:1.2, transparent:true, opacity:1})
-    );
+    const m = acquireFxMesh('sphere');
+    m.material.color.setHSL(hue, 1.0, 0.55);
+    m.scale.setScalar(size);
     m.position.set(x, y, z);
-    m.userData.noOutline = true;
-    scene.add(m);
     const el = (Math.random()-0.5)*Math.PI;
     const a  = Math.random()*Math.PI*2;
     const sp = (3 + Math.random()*7) * sc;
-    G.particles.push({
-      mesh: m,
+    const rec = {
+      mesh: m, _fxPooled: true,
       vel: new THREE.Vector3(Math.cos(a)*Math.cos(el)*sp, Math.sin(el)*sp+2*sc, Math.sin(a)*Math.cos(el)*sp),
       life: 0.7 + Math.random()*0.5, maxLife: 1.2,
-    });
+    };
+    G.particles.push(rec);
+    m.userData._fxLive = rec;
   }
-  // Smoke puffs
+  // Smoke puffs (pooled)
   const smokeCount = Math.floor(6 + 4 * sc);
   for(let i = 0; i < smokeCount; i++) {
-    const m = new THREE.Mesh(
-      new THREE.SphereGeometry((0.25+Math.random()*0.2)*sc, 5, 4),
-      new THREE.MeshStandardMaterial({color:0x444444, transparent:true, opacity:0.5})
-    );
+    const m = acquireFxMesh('sphere');
+    m.material.color.setHex(0x444444);
+    m.material.opacity = 0.5;
+    m.scale.setScalar((0.25+Math.random()*0.2)*sc);
     m.position.set(x + (Math.random()-0.5)*0.5*sc, y, z + (Math.random()-0.5)*0.5*sc);
-    m.userData.noOutline = true;
-    scene.add(m);
-    G.particles.push({mesh:m, vel:new THREE.Vector3((Math.random()-0.5)*1.5*sc, (1.5+Math.random()*2)*sc, (Math.random()-0.5)*1.5*sc), life:1.0+sc*0.3, maxLife:1.0+sc*0.3});
+    const rec = {mesh:m, _fxPooled:true, vel:new THREE.Vector3((Math.random()-0.5)*1.5*sc, (1.5+Math.random()*2)*sc, (Math.random()-0.5)*1.5*sc), life:1.0+sc*0.3, maxLife:1.0+sc*0.3};
+    G.particles.push(rec);
+    m.userData._fxLive = rec;
   }
   // SFX — dramatic multi-layered explosion with size-based variation
   if(AC) {
@@ -35242,7 +35354,10 @@ function cardArtURI(def){
 }
 function _artImg(uri, id){
   const cls = id ? ' art-'+id : '';
-  return '<img class="card-art'+cls+'" src="'+uri+'" alt="" draggable="false">';
+  // v0.26i4: decoding="async" keeps the base64 PNG decode off the critical
+  // paint path — first shop open was decoding a dozen card-art images
+  // synchronously during layout.
+  return '<img class="card-art'+cls+'" decoding="async" src="'+uri+'" alt="" draggable="false">';
 }
 // HTML glyph for a card/perk def: image if it has art, else its emoji.
 function glyph(def){
@@ -37203,6 +37318,55 @@ function _ensureSparkPool() {
   }
   G._sparkPoolMeshes = _sparkPool;
 }
+
+// v0.26i3: GENERAL FX MESH POOL — the same fix v0.26h8 applied to pinball
+// sparks, extended to every burst-FX consumer. spawnExplosion allocated ~42
+// fresh SphereGeometries + MeshStandardMaterials per call (and a missile
+// impact calls it THREE times = ~126 geometry uploads + material/program
+// setups in a single frame, none ever disposed). spawnHoleCelebrationParticles
+// allocated up to 90 more, including a metalness:0.9 variant that compiles a
+// separate shader program. These allocation storms are the 60→26fps hitch on
+// every blast and the single-digit fps on the hole summary. The pool holds a
+// fixed ring of meshes over THREE shared unit geometries; size lives in
+// mesh.scale, colour/opacity in a per-mesh reused MeshBasicMaterial (unlit =
+// one cheap shader for everything; fireballs/confetti read as emissive
+// anyway). Zero allocation per burst, zero GPU-buffer churn.
+let _fxPool = null, _fxPoolIdx = 0;
+const _FX_POOL_SIZE = 280;
+const _FX_GEOS = {};
+function _ensureFxPool() {
+  if(_fxPool) return;
+  _FX_GEOS.sphere = new THREE.SphereGeometry(1, 5, 4);
+  _FX_GEOS.plane  = new THREE.PlaneGeometry(1, 1);
+  _FX_GEOS.box    = new THREE.BoxGeometry(1, 1, 1);
+  _FX_GEOS.tetra  = new THREE.TetrahedronGeometry(1);
+  _FX_GEOS.ring   = new THREE.TorusGeometry(1, 0.05, 6, 32);
+  _fxPool = [];
+  for(let i = 0; i < _FX_POOL_SIZE; i++) {
+    const mat = new THREE.MeshBasicMaterial({ color:0xffffff, transparent:true, opacity:0, side:THREE.DoubleSide });
+    const m = new THREE.Mesh(_FX_GEOS.sphere, mat);
+    m.visible = false;
+    m.userData.noOutline = true;
+    scene.add(m);
+    _fxPool.push(m);
+  }
+}
+// Ring-buffer acquire. If the slot is still driven by a live particle (pool
+// wrapped under heavy load), that particle is flagged stolen and drops out of
+// the update loop next tick without touching the mesh.
+function acquireFxMesh(geoKind) {
+  _ensureFxPool();
+  const m = _fxPool[_fxPoolIdx];
+  _fxPoolIdx = (_fxPoolIdx + 1) % _FX_POOL_SIZE;
+  if(m.userData._fxLive) { m.userData._fxLive._fxStolen = true; m.userData._fxLive = null; }
+  const g = _FX_GEOS[geoKind] || _FX_GEOS.sphere;
+  if(m.geometry !== g) m.geometry = g;
+  m.visible = true;
+  m.scale.set(1, 1, 1);
+  m.rotation.set(0, 0, 0);
+  m.material.opacity = 1;
+  return m;
+}
 function spawnPinballSpark() {
   if(!G.ballMesh) return;
   _ensureSparkPool();
@@ -37411,15 +37575,14 @@ function spawnFrisbeePoof(x, y, z, hex) {
   for(let i = 0; i < N; i++) {
     const ang = (i / N) * Math.PI * 2 + Math.random() * 0.4;
     const r = 0.35 + Math.random() * 0.18;
-    const g = new THREE.SphereGeometry(0.07 + Math.random() * 0.05, 4, 4);
-    const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({
-      color: hex || 0xffffff, roughness: 0.7, transparent: true, opacity: 0.95,
-    }));
-    m.userData.noOutline = true;
+    const m = acquireFxMesh('sphere');   // v0.26i4: pooled
+    m.material.color.setHex(hex || 0xffffff);
+    m.material.opacity = 0.95;
+    m.scale.setScalar(0.07 + Math.random() * 0.05);
     m.position.set(x + Math.cos(ang) * r, y + 0.05, z + Math.sin(ang) * r);
-    scene.add(m);
     const v = new THREE.Vector3(Math.cos(ang) * 1.8, 1.2 + Math.random() * 0.6, Math.sin(ang) * 1.8);
-    G.particles.push({ mesh: m, vel: v, spin: new THREE.Vector3(0, 0, 0), life: 0.45, maxLife: 0.45 });
+    const rec = { mesh: m, _fxPooled: true, vel: v, spin: new THREE.Vector3(0, 0, 0), life: 0.45, maxLife: 0.45 };
+    G.particles.push(rec); m.userData._fxLive = rec;
   }
 }
 
@@ -46677,14 +46840,16 @@ function applyPerkEffect(id) {
 
 // ── Particles ─────────────────────────────────────────
 function spawnHitParticles(pos) {
+  // v0.26i4: pooled — this fires on every wall/obstacle contact, and its 5
+  // fresh geometry+material pairs per hit were the remaining collision hitch.
   for(let i=0;i<5;i++){
-    const g=new THREE.SphereGeometry(0.04+Math.random()*0.04,4,4);
-    const m=new THREE.Mesh(g,new THREE.MeshStandardMaterial({color:0xe0c880,roughness:1}));
-    m.userData.noOutline=true;
+    const m = acquireFxMesh('sphere');
+    m.material.color.setHex(0xe0c880);
+    m.scale.setScalar(0.04+Math.random()*0.04);
     m.position.copy(pos);
-    scene.add(m);
     const v=new THREE.Vector3((Math.random()-0.5)*3,(Math.random())*4,(Math.random()-0.5)*3);
-    G.particles.push({mesh:m,vel:v,life:0.6,maxLife:0.6});
+    const rec={mesh:m,_fxPooled:true,vel:v,life:0.6,maxLife:0.6};
+    G.particles.push(rec); m.userData._fxLive=rec;
   }
   if(AC) {
     const now=performance.now();
@@ -46701,36 +46866,33 @@ function spawnHitParticles(pos) {
 // from beneath the ball" reads correctly).
 function spawnDashDust(x, y, z, dustDirX, dustDirZ) {
   for(let i = 0; i < 10; i++) {
-    const sz = 0.06 + Math.random() * 0.08;
-    const g = new THREE.SphereGeometry(sz, 5, 4);
-    // Mix between tan and light grey — reads as kicked-up dirt
-    const col = Math.random() < 0.6 ? 0xc8b890 : 0xb0a890;
-    const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({
-      color: col, roughness: 1.0, transparent: true, opacity: 0.85,
-    }));
-    m.userData.noOutline = true;
+    const m = acquireFxMesh('sphere');   // v0.26i4: pooled
+    m.material.color.setHex(Math.random() < 0.6 ? 0xc8b890 : 0xb0a890);
+    m.material.opacity = 0.85;
+    m.scale.setScalar(0.06 + Math.random() * 0.08);
     m.position.set(x, Math.max(y - 0.05, BALL_R), z);
-    scene.add(m);
     // Velocity: strong push in dust direction + spread + small upward kick
     const spread = 1.2;
     const fwdSpd = 2.5 + Math.random() * 2.0;
     const vx = dustDirX * fwdSpd + (Math.random() - 0.5) * spread;
     const vz = dustDirZ * fwdSpd + (Math.random() - 0.5) * spread;
     const vy = 0.8 + Math.random() * 1.5;
-    G.particles.push({ mesh: m, vel: new THREE.Vector3(vx, vy, vz), life: 0.45, maxLife: 0.45 });
+    const rec = { mesh: m, _fxPooled: true, vel: new THREE.Vector3(vx, vy, vz), life: 0.45, maxLife: 0.45 };
+    G.particles.push(rec); m.userData._fxLive = rec;
   }
 }
 
 function spawnSplash(pos) {
   for(let i=0;i<12;i++){
-    const g=new THREE.SphereGeometry(0.05+Math.random()*0.05,4,4);
-    const m=new THREE.Mesh(g,new THREE.MeshStandardMaterial({color:0x60aaee,roughness:0.3,transparent:true,opacity:0.8}));
-    m.userData.noOutline=true;
+    const m = acquireFxMesh('sphere');   // v0.26i4: pooled
+    m.material.color.setHex(0x60aaee);
+    m.material.opacity = 0.8;
+    m.scale.setScalar(0.05+Math.random()*0.05);
     m.position.copy(pos);
-    scene.add(m);
     const a=Math.random()*Math.PI*2, sp=1+Math.random()*3;
     const v=new THREE.Vector3(Math.cos(a)*sp,2+Math.random()*3,Math.sin(a)*sp);
-    G.particles.push({mesh:m,vel:v,life:0.8,maxLife:0.8});
+    const rec={mesh:m,_fxPooled:true,vel:v,life:0.8,maxLife:0.8};
+    G.particles.push(rec); m.userData._fxLive=rec;
   }
   if(AC) sfxSplash();
 }
@@ -46741,22 +46903,18 @@ function spawnSplash(pos) {
 function spawnBarbedWireSparks(x, y, z, nx, nz) {
   const pos = new THREE.Vector3(x, y, z);
   for(let i = 0; i < 9; i++) {
-    const g = new THREE.TetrahedronGeometry(0.06 + Math.random()*0.05);
-    const col = Math.random() < 0.7 ? 0xff2030 : 0xffaa44; // mostly red, some sparks
-    const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({
-      color: col, roughness: 0.6,
-      emissive: col, emissiveIntensity: 0.6,
-    }));
-    m.userData.noOutline = true;
+    const m = acquireFxMesh('tetra');   // v0.26i4: pooled
+    m.material.color.setHex(Math.random() < 0.7 ? 0xff2030 : 0xffaa44);
+    m.scale.setScalar(0.06 + Math.random()*0.05);
     m.position.copy(pos);
-    scene.add(m);
     // Cone of velocity along normal, with spread + upward kick
     const spread = 1.2;
     const vx = nx * (1.5 + Math.random()*2.0) + (Math.random()-0.5)*spread;
     const vz = nz * (1.5 + Math.random()*2.0) + (Math.random()-0.5)*spread;
     const vy = 1.5 + Math.random()*3.0;
     const v = new THREE.Vector3(vx, vy, vz);
-    G.particles.push({ mesh: m, vel: v, life: 0.7, maxLife: 0.7 });
+    const rec = { mesh: m, _fxPooled: true, vel: v, life: 0.7, maxLife: 0.7 };
+    G.particles.push(rec); m.userData._fxLive = rec;
   }
   // Brief metallic-spike SFX: high noise burst + downward chirp
   if(AC) {
@@ -46803,20 +46961,16 @@ function spawnFlameTrail(pos, speed) {
     const hue = 0.04 + Math.random() * 0.06; // 0.04 (orange) .. 0.10 (yellow)
     const sat = 0.95;
     const lum = 0.50 + Math.random() * 0.15;
-    const col = new THREE.Color().setHSL(hue, sat, lum);
-    const g = new THREE.SphereGeometry(0.08 + Math.random() * 0.05, 5, 4);
-    const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({
-      color: col, roughness: 0.6, transparent: true, opacity: 0.9,
-      emissive: col, emissiveIntensity: 0.8,
-    }));
-    m.userData.noOutline = true;
+    const m = acquireFxMesh('sphere');   // v0.26i4: pooled (per-frame emitter)
+    m.material.color.setHSL(hue, sat, lum);
+    m.material.opacity = 0.9;
+    m.scale.setScalar(0.08 + Math.random() * 0.05);
     // Spawn slightly behind and under the ball to form a ground-level trail
     m.position.set(
       pos.x + (Math.random() - 0.5) * 0.15,
       pos.y - 0.05 + Math.random() * 0.05,
       pos.z + (Math.random() - 0.5) * 0.15
     );
-    scene.add(m);
     // Slow rising drift + slight horizontal noise
     const v = new THREE.Vector3(
       (Math.random() - 0.5) * 0.4,
@@ -46824,21 +46978,21 @@ function spawnFlameTrail(pos, speed) {
       (Math.random() - 0.5) * 0.4
     );
     const life = 0.35 + intensity * 0.35;  // 0.35-0.70s
-    G.particles.push({ mesh: m, vel: v, life, maxLife: life, isAir: true });
+    const rec = { mesh: m, _fxPooled: true, vel: v, life, maxLife: life, isAir: true };
+    G.particles.push(rec); m.userData._fxLive = rec;
   }
 }
 
 function spawnHoleParticles(pos) {
   for(let i=0;i<20;i++){
-    const g=new THREE.SphereGeometry(0.06+Math.random()*0.06,4,4);
-    const col=new THREE.Color().setHSL(0.1+Math.random()*0.15,0.9,0.55);
-    const m=new THREE.Mesh(g,new THREE.MeshStandardMaterial({color:col,roughness:0.5,emissive:col,emissiveIntensity:0.3}));
-    m.userData.noOutline=true;
+    const m = acquireFxMesh('sphere');   // v0.26i4: pooled
+    m.material.color.setHSL(0.1+Math.random()*0.15,0.9,0.55);
+    m.scale.setScalar(0.06+Math.random()*0.06);
     m.position.copy(pos);
-    scene.add(m);
     const a=Math.random()*Math.PI*2, sp=1.5+Math.random()*3.5;
     const v=new THREE.Vector3(Math.cos(a)*sp,3+Math.random()*5,Math.sin(a)*sp);
-    G.particles.push({mesh:m,vel:v,life:1.2,maxLife:1.2});
+    const rec={mesh:m,_fxPooled:true,vel:v,life:1.2,maxLife:1.2};
+    G.particles.push(rec); m.userData._fxLive=rec;
   }
 }
 
@@ -46856,15 +47010,22 @@ function updateParticles(dt) {
     const _excess = G.particles.length - _PARTICLE_CAP;
     for(let i = 0; i < _excess; i++) {
       const p = G.particles[i];
-      if(p && p.mesh){ if(p._sparkFade){ p.mesh.visible = false; p.mesh.material.opacity = 0; } else scene.remove(p.mesh); }
+      if(p && p.mesh){
+        if(p._sparkFade || p._fxPooled){ p.mesh.visible = false; p.mesh.material.opacity = 0; if(p._fxPooled && p.mesh.userData) p.mesh.userData._fxLive = null; }
+        else scene.remove(p.mesh);
+      }
     }
     G.particles.splice(0, _excess);
   }
   G.particles = G.particles.filter(p=>{
+    // v0.26i3: pool reclaimed this mesh for a newer effect — drop silently.
+    if(p._fxStolen) return false;
     p.life -= dt;
     if(p.life<=0){
       // v0.26h8: pooled sparks are hidden + recycled, never removed/disposed.
       if(p._sparkFade){ p.mesh.visible = false; p.mesh.material.opacity = 0; return false; }
+      // v0.26i3: pooled FX meshes likewise return to the pool.
+      if(p._fxPooled){ p.mesh.visible = false; p.mesh.material.opacity = 0; if(p.mesh.userData) p.mesh.userData._fxLive = null; return false; }
       scene.remove(p.mesh); return false;
     }
     // v0.26h8: pooled pinball spark — fade opacity + shrink in place, no gravity.
@@ -46881,8 +47042,8 @@ function updateParticles(dt) {
       const rawT = 1 - p.life / p.maxLife;
       // Ease in-out cubic
       const eased = rawT < 0.5 ? 4*rawT*rawT*rawT : 1 - Math.pow(-2*rawT+2,3)/2;
-      const s = 1 + eased * (p.coinRingMaxScale - 1);
-      p.mesh.scale.set(s, s, 1);
+      const s = (1 + eased * (p.coinRingMaxScale - 1)) * (p._ringBase || 1);
+      p.mesh.scale.set(s, s, p._ringBase || 1);
       // Fade: in for first 30%, out for last 70%
       const fade = rawT < 0.3 ? rawT / 0.3 : (1 - rawT) / 0.7;
       if(p.mesh.material) p.mesh.material.opacity = Math.max(0, fade * 0.85);
@@ -46891,8 +47052,8 @@ function updateParticles(dt) {
     // Celebration ring: expand outward and fade
     if(p.isCelebRing) {
       const t = 1 - p.life/p.maxLife;
-      const s = 1 + t * 7;
-      p.mesh.scale.set(s, s, 1);
+      const s = (1 + t * 7) * (p._ringBase || 1);
+      p.mesh.scale.set(s, s, p._ringBase || 1);
       if(p.mesh.material) p.mesh.material.opacity = p.life/p.maxLife * 0.9;
       return true;
     }
@@ -47407,46 +47568,34 @@ function spawnHoleCelebrationParticles(score) {
   };
   const [cols, [count, speed, spread]] = palettes[score] || palettes.par;
 
-  // ── Confetti pieces: flat rectangles + small spheres + stars ──────────
+  // ── Confetti pieces: flat rectangles + small spheres + boxes ──────────
+  // v0.26i3: pooled. Shape variety now comes from scaling the pool's shared
+  // unit geometries; colour from the reused per-mesh basic material (unlit
+  // full-bright reads like the old emissive look — the metallic variant is
+  // gone, flagged in the change note).
   for(let i=0; i<count; i++) {
     const type = Math.random();
-    let geo;
+    let m;
     if(type < 0.45) {
-      // Flat rectangle (classic confetti)
-      geo = new THREE.PlaneGeometry(
-        0.08 + Math.random()*0.10,
-        0.14 + Math.random()*0.12
-      );
+      m = acquireFxMesh('plane');                        // classic rectangle
+      m.scale.set(0.08 + Math.random()*0.10, 0.14 + Math.random()*0.12, 1);
     } else if(type < 0.75) {
-      // Small sphere dot
-      geo = new THREE.SphereGeometry(0.04 + Math.random()*0.05, 5, 4);
+      m = acquireFxMesh('sphere');                       // small dot
+      m.scale.setScalar(0.04 + Math.random()*0.05);
     } else if(type < 0.90) {
-      // Thin ribbon strip
-      geo = new THREE.PlaneGeometry(0.04 + Math.random()*0.04, 0.22 + Math.random()*0.18);
+      m = acquireFxMesh('plane');                        // thin ribbon
+      m.scale.set(0.04 + Math.random()*0.04, 0.22 + Math.random()*0.18, 1);
     } else {
-      // Tiny box
-      geo = new THREE.BoxGeometry(
-        0.06 + Math.random()*0.06,
-        0.06 + Math.random()*0.06,
-        0.02
-      );
+      m = acquireFxMesh('box');                          // tiny box
+      m.scale.set(0.06 + Math.random()*0.06, 0.06 + Math.random()*0.06, 0.02);
     }
-
-    const col = new THREE.Color(cols[Math.floor(Math.random()*cols.length)]);
-    // Every piece either bright solid or slightly metallic
-    const mat = Math.random() < 0.5
-      ? new THREE.MeshStandardMaterial({ color:col, emissive:col, emissiveIntensity:0.6, roughness:0.4, metalness:0.3, side:THREE.DoubleSide })
-      : new THREE.MeshStandardMaterial({ color:col, roughness:0.1, metalness:0.9, side:THREE.DoubleSide });
-
-    const m = new THREE.Mesh(geo, mat);
-    m.userData.noOutline = true;
+    m.material.color.setHex(cols[Math.floor(Math.random()*cols.length)]);
     // Start inside the hole
     m.position.set(
       hx + (Math.random()-0.5)*0.3,
       originY,
       hz + (Math.random()-0.5)*0.3
     );
-    scene.add(m);
 
     // Launch: explosive burst — strong upward with wide sideways spray
     const angle = Math.random() * Math.PI * 2;
@@ -47473,8 +47622,8 @@ function spawnHoleCelebrationParticles(score) {
       (Math.random()-0.5) * 20
     );
 
-    G.particles.push({
-      mesh: m,
+    const rec = {
+      mesh: m, _fxPooled: true,
       vel: new THREE.Vector3(
         Math.cos(angle) * sideSpeed,
         upSpeed,
@@ -47486,27 +47635,26 @@ function spawnHoleCelebrationParticles(score) {
       spin,
       isConfetti: true,
       drag: 0.88 + Math.random() * 0.08,
-    });
+    };
+    G.particles.push(rec);
+    m.userData._fxLive = rec;
   }
 
   // ── Expanding ring wave from hole ─────────────────────────────────────
   for(let r=0; r<2; r++) {
-    const ringGeo = new THREE.TorusGeometry(0.1, 0.04, 6, 24);
-    const ringCol = new THREE.Color(cols[r % cols.length]);
-    const ringMat = new THREE.MeshStandardMaterial({
-      color: ringCol, emissive: ringCol, emissiveIntensity: 2.0,
-      transparent: true, opacity: 0.9
-    });
-    const ring = new THREE.Mesh(ringGeo, ringMat);
+    const ring = acquireFxMesh('ring');   // v0.26i4: pooled unit torus
+    ring.material.color.setHex(cols[r % cols.length]);
+    ring.material.opacity = 0.9;
+    ring.scale.set(0.1, 0.1, 0.1);
     ring.rotation.x = Math.PI/2;
     ring.position.set(hx, originY + 0.05 + r*0.1, hz);
-    ring.userData.noOutline = true;
-    scene.add(ring);
-    G.particles.push({
-      mesh: ring, vel: new THREE.Vector3(0,0,0),
+    const rec = {
+      mesh: ring, _fxPooled: true, vel: new THREE.Vector3(0,0,0),
       life: 0.7 - r*0.1, maxLife: 0.7 - r*0.1,
       isCelebRing: true,
-    });
+      _ringBase: 0.1,
+    };
+    G.particles.push(rec); ring.userData._fxLive = rec;
   }
 }
 
@@ -48765,9 +48913,11 @@ canvas.addEventListener('wheel', e=>{
   if(G._sharpshooterActive) return;
   e.preventDefault();
   // deltaY > 0 when scrolling down — interpret as "zoom out" (farther).
-  // Step is proportional to current distance for smooth feel at any zoom.
-  const step = G.camDist * 0.0015 * e.deltaY;
-  G.camDist = clampCamDist(G.camDist + step);
+  // v0.26i3: each notch used to write camDist directly, so wheel detents read
+  // as abrupt steps. The delta now accumulates into an impulse that the
+  // animate loop eases out exponentially — same continuous feel as the
+  // controller triggers.
+  G._camZoomImpulse = (G._camZoomImpulse || 0) + G.camDist * 0.0015 * e.deltaY;
 }, { passive: false });
 
 // Touch events
@@ -50438,14 +50588,33 @@ window.togglePerfHud = function(){
   if(dm) dm.classList.remove('open');
 };
 function _updatePerfHud(now){
+  if(!_perfEl) return;   // v0.26i4: guard — flag can be set before the HUD element exists
   _perfFrames++;
-  if(_perfLastNow) _perfFrameMsAcc += (now - _perfLastNow);
+  if(_perfLastNow) {
+    const _fMs = now - _perfLastNow;
+    _perfFrameMsAcc += _fMs;
+    // v0.26i4: track the WORST single frame in each 250ms window — hitches
+    // hide inside a healthy average, but not inside the max.
+    if(_fMs > (G._perfWorstFrame || 0)) G._perfWorstFrame = _fMs;
+  }
   _perfLastNow = now;
   if(now - _perfLastUpd < 250) return;
   const secs = (now - _perfLastUpd) / 1000;
   const fps = _perfFrames / secs;
   const frameMs = _perfFrames ? (_perfFrameMsAcc / _perfFrames) : 0;
   _perfLastUpd = now; _perfFrames = 0; _perfFrameMsAcc = 0;
+  // v0.26i4: which GPU adapter is WebGL actually bound to? On dual-GPU
+  // Windows laptops (Optimus) the browser can silently pick the iGPU even
+  // with powerPreference:'high-performance' — this line settles it at a
+  // glance. Queried once and cached.
+  if(window._ggwGpuName === undefined){
+    window._ggwGpuName = '?';
+    try {
+      const gl = renderer.getContext();
+      const ext = gl.getExtension('WEBGL_debug_renderer_info');
+      if(ext) window._ggwGpuName = String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)).slice(0, 48);
+    } catch(e){}
+  }
   const ri = (renderer && renderer.info && renderer.info.render) || {};
   const w = G.physWorld;
   const contacts = w && w.contacts ? w.contacts.length : 0;
@@ -50453,10 +50622,12 @@ function _updatePerfHud(now){
   let sleeping = 0;
   if(w && w.bodies){ for(const b of w.bodies){ if(b.sleepState === 2) sleeping++; } }
   _perfEl.textContent =
-      'FPS      ' + fps.toFixed(0) + '  (' + frameMs.toFixed(1) + ' ms)\n'
+      'FPS      ' + fps.toFixed(0) + '  (' + frameMs.toFixed(1) + ' ms, worst ' + (G._perfWorstFrame || 0).toFixed(0) + ')\n'
+    + 'gpu      ' + window._ggwGpuName + '\n'
     + 'draws    ' + (ri.calls != null ? ri.calls : '?') + '   tris ' + (ri.triangles != null ? (ri.triangles/1000).toFixed(0)+'k' : '?') + '\n'
     + 'phys     ' + (G._perfPhysMs || 0).toFixed(2) + ' ms  peak ' + (G._perfPhysPeak || 0).toFixed(1) + '\n'
     + 'contacts ' + contacts + '   bodies ' + bodies + ' (' + sleeping + ' asleep)';
+  G._perfWorstFrame = 0;
   G._perfPhysPeak = (G._perfPhysPeak || 0) * 0.5;   // decay the peak so spikes stay visible ~2s
 }
 function showToast(msg,dur=2000){
@@ -53923,7 +54094,7 @@ function initHole() {
   // them once the array is cleared). Normal play masked it because the
   // summary-screen dwell let particles die first; the tutorial's fast
   // hole-advance exposed frozen confetti persisting across holes.
-  if(G.particles) { for(const p of G.particles) { if(p.mesh) scene.remove(p.mesh); } }
+  if(G.particles) { for(const p of G.particles) { if(p.mesh) { if(p._sparkFade || p._fxPooled) { p.mesh.visible = false; p.mesh.material.opacity = 0; if(p._fxPooled && p.mesh.userData) p.mesh.userData._fxLive = null; } else scene.remove(p.mesh); } } }
   G.particles = [];
   G.undoState = null;
   G.undoUsed = false;
@@ -54115,6 +54286,19 @@ function initHole() {
   if(G.aimArrow){ scene.remove(G.aimArrow); G.aimArrow=null; }
 
   buildCourse(data);
+
+  // v0.26i3: ANGLE shader warmup. On Windows, WebGL shaders compile through
+  // ANGLE -> D3D11 HLSL, and the D3D compiler takes tens-to-hundreds of ms
+  // per program — the reason mid-play material creation hitched on Steam but
+  // never on mobile GLES. Build the FX/spark pools now (their basic-material
+  // program is shared by every pooled particle) and precompile everything in
+  // the scene once per session, so the first blast/celebration of a run
+  // never pays a compile mid-frame.
+  try {
+    if(typeof _ensureSparkPool === 'function') _ensureSparkPool();
+    if(typeof _ensureFxPool === 'function') _ensureFxPool();
+    if(!window._ggwShadersWarmed){ window._ggwShadersWarmed = true; renderer.compile(scene, camera); }
+  } catch(e){}
 
   // ── Per-hole challenge ──────────────────────────────
   G._challengeRollingTime = 0;
@@ -54712,6 +54896,7 @@ function openEscMenu() {
   } catch(e){}
   // v0.24d: reflect display mode + resolution.
   try { refreshDisplayUI(); } catch(e){}
+  try { refreshVsyncUI(); } catch(e){}
   try { refreshGfxUI(); } catch(e){}
   // Render perk list in pause menu
   const escPerks = document.getElementById('esc-perk-list');
@@ -55262,7 +55447,7 @@ function escMainMenu() {
   if(G.aimArrow) { scene.remove(G.aimArrow); G.aimArrow = null; }
   // v0.19x: drop any occluder fade refs — their meshes are gone now
   if(typeof _currentOccluders !== 'undefined' && _currentOccluders.clear) _currentOccluders.clear();
-  if(G.particles) { for(const p of G.particles) { if(p.mesh) scene.remove(p.mesh); } G.particles = []; }
+  if(G.particles) { for(const p of G.particles) { if(p.mesh) { if(p._sparkFade || p._fxPooled) { p.mesh.visible = false; p.mesh.material.opacity = 0; if(p._fxPooled && p.mesh.userData) p.mesh.userData._fxLive = null; } else scene.remove(p.mesh); } } G.particles = []; }
   // Clean up multiplayer idle balls
   for(const ib of G.idleBalls) { if(ib.mesh) scene.remove(ib.mesh); if(ib.shadow) scene.remove(ib.shadow); }
   G.idleBalls = [];
@@ -55940,7 +56125,7 @@ function startGame(){
   if(typeof _currentOccluders !== 'undefined' && _currentOccluders.clear) _currentOccluders.clear();
   // Clean up particles from previous game
   if(G.particles) {
-    for(const p of G.particles) { if(p.mesh) scene.remove(p.mesh); }
+    for(const p of G.particles) { if(p.mesh) { if(p._sparkFade || p._fxPooled) { p.mesh.visible = false; p.mesh.material.opacity = 0; if(p._fxPooled && p.mesh.userData) p.mesh.userData._fxLive = null; } else scene.remove(p.mesh); } }
     G.particles = [];
   }
 
@@ -57534,11 +57719,21 @@ function _getPooledNoise(duration, colored) {
   }
   return pool[(Math.random() * pool.length) | 0];
 }
+const _longNoiseCache = new Map();
 function makeNoiseBuffer(duration=0.12, colored=false) {
-  // Short, frequently-fired noises come from the pool; long/one-off noises
-  // (splashes, celebrations) can allocate fresh — they're rare.
+  // Short, frequently-fired noises come from the pool; long noises (missile
+  // booms 0.5s, shimmer tails 0.4s) are memoized — v0.26i3: they were rebuilt
+  // (22k-sample fill loop + allocation) on EVERY blast. AudioBuffers are
+  // immutable to sources, so sharing one per (duration,colored) is safe and
+  // the repetition is inaudible in noise.
   if(duration <= 0.12) return _getPooledNoise(duration, colored);
-  return _buildNoiseBuffer(duration, colored);
+  const key = duration.toFixed(2) + ':' + (colored ? 1 : 0);
+  let buf = _longNoiseCache.get(key);
+  if(!buf){
+    buf = _buildNoiseBuffer(duration, colored);
+    if(_longNoiseCache.size < 12) _longNoiseCache.set(key, buf);
+  }
+  return buf;
 }
 function _buildNoiseBuffer(duration=0.12, colored=false) {
   const ac = getAC();
@@ -58445,6 +58640,15 @@ function animate(now) {
   if(G._slowMoScale && G._slowMoScale < 1.0) dt *= G._slowMoScale;
   flagTime+=dt;
 
+  // v0.26i3: smooth wheel zoom — drain the accumulated impulse exponentially
+  // (~12/s decay) so each detent glides instead of stepping.
+  if(G._camZoomImpulse){
+    const _zoomApply = G._camZoomImpulse * Math.min(1, dt * 12);
+    G.camDist = clampCamDist(G.camDist + _zoomApply);
+    G._camZoomImpulse -= _zoomApply;
+    if(Math.abs(G._camZoomImpulse) < 0.002) G._camZoomImpulse = 0;
+  }
+
   // v0.23aa: TRUE-PAUSE mid-hole snapshot. The moment the ball settles after a
   // shot (rolling→rest with aim re-engaged, not holed), persist the live state
   // so quitting to the menu and resuming drops the player back HERE on the same
@@ -58759,6 +58963,12 @@ function animate(now) {
   }
 
   if(G.state==='playing') {
+    // v0.26i5 PERF: crate/Cannon physics steps ONCE per render frame (moved out
+    // of updatePhysics, which runs at up to 120Hz while the ball rolls).
+    // Cannon fixed-steps internally at 1/60 with substeps, so per-frame dt is
+    // its intended calling pattern. dt here is already slow-mo scaled, so
+    // crates slow down with the rest of the world exactly as before.
+    if(typeof updateCratePhysics === 'function') updateCratePhysics(dt);
     // v0.26h3: FIXED-TIMESTEP physics with render interpolation. The ball was
     // integrated with the raw variable frame dt and drawn at that exact
     // position, so uneven frame pacing (very common on the Deck) produced
@@ -59470,11 +59680,10 @@ function animate(now) {
           c._sparkleT = (c._sparkleT || 0) - dt;
           if(c._sparkleT <= 0) {
             c._sparkleT = 0.12 + Math.random() * 0.15;
-            const sg = new THREE.SphereGeometry(0.03 + Math.random() * 0.03, 4, 3);
-            const sm = new THREE.Mesh(sg, new THREE.MeshStandardMaterial({
-              color: 0xffffcc, emissive: 0xffee66, emissiveIntensity: 2.5,
-              transparent: true, opacity: 0.9, depthWrite: false,
-            }));
+            const sm = acquireFxMesh('sphere');   // v0.26i4: pooled
+            sm.material.color.setHex(0xffffcc);
+            sm.material.opacity = 0.9;
+            sm.scale.setScalar(0.03 + Math.random() * 0.03);
             const sparkAngle = Math.random() * Math.PI * 2;
             const sparkR = 0.15 + Math.random() * 0.2;
             sm.position.set(
@@ -59482,17 +59691,16 @@ function animate(now) {
               baseY + bob + (Math.random() - 0.3) * 0.3,
               c.wz + Math.sin(sparkAngle) * sparkR
             );
-            sm.userData.noOutline = true;
-            scene.add(sm);
-            G.particles.push({
-              mesh: sm,
+            const rec = {
+              mesh: sm, _fxPooled: true,
               vel: new THREE.Vector3(
                 (Math.random()-0.5)*0.8,
                 1.0 + Math.random()*1.5,
                 (Math.random()-0.5)*0.8
               ),
               life: 0.4 + Math.random()*0.3, maxLife: 0.7,
-            });
+            };
+            G.particles.push(rec); sm.userData._fxLive = rec;
           }
         }
         // v0.22a: 10-coin (mega) — drive the orbiting golden particle aura.
@@ -59675,25 +59883,19 @@ function animate(now) {
           const spawnY = getTerrainHeight(spawnX, spawnZ) + 0.9 + Math.random()*0.5;
           const speed = fan.strength * (0.4 + Math.random()*0.3);
 
-          const pg = new THREE.SphereGeometry(0.06+Math.random()*0.08, 4, 3);
-          const pm = new THREE.Mesh(pg, new THREE.MeshStandardMaterial({
-            color: 0xddeeff,
-            transparent: true,
-            opacity: 0.55,
-            roughness: 1,
-            depthWrite: false,
-            
-          }));
+          const pm = acquireFxMesh('sphere');   // v0.26i4: pooled
+          pm.material.color.setHex(0xddeeff);
+          pm.material.opacity = 0.55;
+          pm.scale.setScalar(0.06+Math.random()*0.08);
           pm.position.set(spawnX, spawnY, spawnZ);
-          pm.userData.noOutline = true;
-          scene.add(pm);
-          G.particles.push({
-            mesh: pm,
+          const rec = {
+            mesh: pm, _fxPooled: true,
             vel: new THREE.Vector3(fan.dx*speed, 0.15+Math.random()*0.2, fan.dz*speed),
             life: 0.6 + Math.random()*0.5,
             maxLife: 1.1,
             isAir: true,
-          });
+          };
+          G.particles.push(rec); pm.userData._fxLive = rec;
         }
       }
     }
@@ -60061,13 +60263,20 @@ function animate(now) {
     }
     // Animated obstacles that sweep a shadow every frame (spin bars, slide
     // blocks, popup walls, pendulums, floombas). Their mere PRESENCE means the
-    // shadow changes continuously, so keep updating while any exist + active.
+    // shadow changes continuously.
+    // v0.26i5 PERF: this used to force a full-rate shadow redraw for the ENTIRE
+    // hole whenever any such obstacle existed — even before the first swing.
+    // A sweeping bar's shadow at 30Hz is visually indistinguishable from 60Hz,
+    // so presence-only motion now drives a half-rate update (every other
+    // frame). Ball/crate/camera motion still forces full rate via
+    // _shadowMoving above/below.
+    let _shadowAnimPresence = false;
     if(!_shadowMoving){
       if((G.spinBars && G.spinBars.some(b=>b && !b._destroyed)) ||
          (G.slideBlocks && G.slideBlocks.some(s=>s && !s._destroyed)) ||
          (G.popupWalls && G.popupWalls.some(w=>w && !w._destroyed)) ||
          (G.pendulums && G.pendulums.length) ||
-         (G._floombas && G._floombas.length)) _shadowMoving = true;
+         (G._floombas && G._floombas.length)) _shadowAnimPresence = true;
     }
     // Camera motion (shadow frustum tracks the camera on the mobile/Deck path,
     // so a pan/rotate changes which casters are in-map even if nothing else moved).
@@ -60084,6 +60293,12 @@ function animate(now) {
       }
     }
     if(_shadowMoving) _requestShadowUpdate(2);   // update this frame + 1 trailing
+    else if(_shadowAnimPresence){
+      // Half-rate: request a single-frame update on alternating frames → the
+      // map re-renders at ~30Hz while only ambient obstacle motion is present.
+      _shadowHalfRateParity ^= 1;
+      if(_shadowHalfRateParity) _requestShadowUpdate(1);
+    }
     if(_shadowForceFrames > 0){ renderer.shadowMap.needsUpdate = true; _shadowForceFrames--; }
     else { renderer.shadowMap.needsUpdate = false; }
   }
@@ -60158,7 +60373,23 @@ function animate(now) {
   if(typeof _gradePass !== 'undefined' && _gradePass && _gradePass.material){
     _gradePass.material.uniforms.uTime.value = (now || performance.now()) * 0.001;
   }
-  composer.render();
+  // v0.26i4: the Pro Shop's background is a 98%-opaque gradient — the 3D
+  // scene behind it is invisible, yet we were still paying the full render
+  // (shadow pass + outline + FXAA at 1080p) on every frame while the player
+  // browsed. Skip the composer entirely once the shop's 0.3s fade-in has
+  // finished; rendering resumes the frame the overlay starts closing. This
+  // frees the whole GPU/CPU frame budget for the shop DOM (hover effects,
+  // scrolling, gamepad nav), which is where the shop-navigation drops came
+  // from.
+  let _skip3D = false;
+  const _shopEl2 = window._ggwShopEl || (window._ggwShopEl = document.getElementById('shop-overlay'));
+  if(_shopEl2 && _shopEl2.classList.contains('visible')){
+    if(!G._shopVisibleSince) G._shopVisibleSince = now;
+    if(now - G._shopVisibleSince > 400) _skip3D = true;
+  } else {
+    G._shopVisibleSince = 0;
+  }
+  if(!_skip3D) composer.render();
   // v0.26g: perf HUD — sampled every 250ms, renderer.info read right after
   // the render so draw calls/triangles reflect this exact frame.
   if(window._ggwPerfHudOn) _updatePerfHud(now);
