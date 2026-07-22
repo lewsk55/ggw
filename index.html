@@ -4797,7 +4797,7 @@ body.scorecard #hole-summary :focus-visible{ outline:3px solid var(--sc-orange);
 
   </div>
 
-  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:10px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:340px;line-height:1.2"><div style="font-weight:700">Alpha v0.26i11</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Big copy + balance pass from the revised copy doc. Five upgrades deleted. Dodgeball Frenzy holds its second shot for you. Mecha Floomba. Hole big.</div></div>
+  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:10px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:340px;line-height:1.2"><div style="font-weight:700">Alpha v0.26i12</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Steam leaderboards split by difficulty: strokes + style boards for every star level, 9 and 18 holes. Weekly challenges rank both metrics. Global Best is live in the weekly picker.</div></div>
 </div>
 
 <!-- v0.23m: Weekly Challenges picker. Sits above #overlay; populated by
@@ -6337,7 +6337,7 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.26i11';
+const GAME_VERSION = '0.26i12';
 // v0.26h10: snapshot the pristine bootstrap #overlay markup at load. This is
 // the ONE canonical main-menu HTML (with the Display hub button + the green
 // #menu-version element). escMainMenu() used to rebuild the menu from a
@@ -6350,7 +6350,7 @@ const _BOOTSTRAP_OVERLAY_HTML = (function(){
   try { const o = document.getElementById('overlay'); return o ? o.innerHTML : null; }
   catch(e) { return null; }
 })();
-const CHANGE_NOTE = "v0.26i11 -- Card/perk/upgrade copy + balance pass from Adam's revised copy doc (v0.26i5 markup). COPY: ~55 card, perk, and upgrade descriptions tightened to the revised copy (Big Hole is now just 'Hole big.'). DELETED UPGRADES: Scootch Combo, Hyperball, Wider Portal, Bumper Walls, Cardiologist (Pierce Shot + Auto-Aim were already gone in earlier patches) -- their parents are now single-branch; all engine field reads fall back to base values. DODGEBALL FRENZY REWORK: no more auto-queued fan -- firing the first dodgeball puts a fresh Frenzy dodgeball back in your hand (temp copy, not recycled into deck) and a toast tells you to fire the second anytime. BALANCE: Mega Explosivo radius 1.75x -> 2x; Mecha Floomba (renamed from Mega Floomba) 2.5x size / 2x speed; Hand of God = 2x HHG blast radius; Power Walkies duration +30% -> +50% (~18s); Pro Skater now also halves grind friction bleed (easier balancing + less friction = longer grinds); Drone Delivery base recoveries 2 -> 1 per hole (+1 per stack). Double Ammo copy no longer lists Portal Grenade (in-game exclusion shipped v0.26i9).";
+const CHANGE_NOTE = "v0.26i12 -- STEAM LEADERBOARDS, PER-DIFFICULTY SPLIT. New board scheme: GGW_{9|18}_d{1-10}_swings (ascending, completed runs only) and GGW_{9|18}_d{1-10}_pts (descending, completed runs only) -- 40 static boards bucketed by the run's STARTING difficulty (bonus-hole difficulty drift can't promote a run into a harder bucket; run records now carry startingDifficulty). Weekly challenge seeds now submit BOTH metrics: GGW_wk_<id>_<side>_<seed>_pts and _swings (findOrCreate on first submit, completed runs only). GGW_points_alltime stays as the headline any-terminal-run board; the old combined GGW_swings_9/18 boards are retired. RANKS UI: tabs are now Points / Strokes / Style / Weekly -- Strokes and Style get a 9/18 length picker + 1-10 star picker (defaults to your current difficulty); weekly rounds get a Style/Strokes toggle; stale-fetch guard is token-based. WEEKLY PICKER: Global Best is live -- each round's cell fills in with the world's best strokes + style from the Steam boards (was 'Coming soon'). Backend setup doc: STEAM_LEADERBOARDS_SETUP.md.";
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
@@ -7440,13 +7440,45 @@ function _weeklyLocalBest(seed) {
   return row;
 }
 
-// Global leaderboard fetch — stubbed. Returns null until the global LB
-// backend exists. UI handles null gracefully ("Global leaderboard coming
-// soon"). When wired, this should return { topDiff, topStyle, entries }
-// or null on network failure.
-function _weeklyGlobalBest(seed) {
-  // TODO: wire to global leaderboard service when implemented.
-  return null;
+// v0.26i12: Global Best is now LIVE via the Steam weekly boards. The picker
+// renders a placeholder cell per round (id wk-global-<seed>), then this
+// fires one top-1 fetch per metric per round and fills the cells in as the
+// results land. No Steam (web build) → cells say "Steam only".
+function _fillWeeklyGlobalBests() {
+  let rounds = [];
+  try {
+    for(const c of getActiveWeeklyChallenges()){
+      for(const side of ['9','18']){
+        const round = side === '9' ? c.nineH : c.eighteenH;
+        if(round) rounds.push({ id: c.id, side, seed: round.seed });
+      }
+    }
+  } catch(e){ return; }
+  for(const r of rounds){
+    const el = document.getElementById('wk-global-' + r.seed);
+    if(!el) continue;
+    if(!window._ggwSteamOn || !window.ggwSteam){
+      el.innerHTML = '<span class="weekly-round-lb-empty">Steam only</span>';
+      continue;
+    }
+    const challengeId = r.id + ':' + r.side;
+    const pPts = window.ggwSteam.lbFetch({ board: weeklyBoardName(challengeId, r.seed, 'pts'),    sort:'desc', scope:'global', count:1 }).catch(()=>null);
+    const pSw  = window.ggwSteam.lbFetch({ board: weeklyBoardName(challengeId, r.seed, 'swings'), sort:'asc',  scope:'global', count:1 }).catch(()=>null);
+    Promise.all([pPts, pSw]).then(([pts, sw]) => {
+      const cell = document.getElementById('wk-global-' + r.seed);
+      if(!cell) return; // picker closed / re-rendered
+      const topPts = (pts && pts.available && pts.entries && pts.entries[0]) ? pts.entries[0] : null;
+      const topSw  = (sw  && sw.available  && sw.entries  && sw.entries[0])  ? sw.entries[0]  : null;
+      if(!topPts && !topSw){
+        cell.innerHTML = '<span class="weekly-round-lb-empty">No scores yet</span>';
+        return;
+      }
+      const bits = [];
+      if(topSw)  bits.push(`<span class="weekly-round-lb-score">🏌 ${topSw.score|0}</span>`);
+      if(topPts) bits.push(`<span class="weekly-round-lb-style">✦${(topPts.score|0).toLocaleString()}</span>`);
+      cell.innerHTML = bits.join(' · ');
+    });
+  }
 }
 
 // Render one challenge round (9h or 18h side of a card).
@@ -7457,7 +7489,6 @@ function _weeklyRoundHtml(challenge, side) {
     ? (getDifficultyMods(round.diff).name || '')
     : '';
   const local = _weeklyLocalBest(round.seed);
-  const global = _weeklyGlobalBest(round.seed);
   // Local row: under-par + style, or "Not played yet"
   let localHtml;
   if(local) {
@@ -7467,10 +7498,9 @@ function _weeklyRoundHtml(challenge, side) {
   } else {
     localHtml = '<span class="weekly-round-lb-empty">Not played yet</span>';
   }
-  // Global row: stubbed for now
-  const globalHtml = global
-    ? `<span class="weekly-round-lb-score">${global.topDiff===0?'Even':(global.topDiff>0?'+'+global.topDiff:''+global.topDiff)}</span>`
-    : '<span class="weekly-round-lb-empty">Coming soon</span>';
+  // Global row: placeholder cell — _fillWeeklyGlobalBests() populates it
+  // asynchronously from the Steam weekly boards after the picker renders.
+  const globalHtml = '<span class="weekly-round-lb-empty">…</span>';
   return `
     <div class="weekly-round diff-${round.diff}"
          onclick="launchWeeklyChallenge('${challenge.id}','${side}')">
@@ -7482,7 +7512,7 @@ function _weeklyRoundHtml(challenge, side) {
         <div class="weekly-round-lb-label">Local Best</div>
         ${localHtml}
         <div class="weekly-round-lb-label" style="margin-top:4px">Global Best</div>
-        <div class="weekly-round-lb-global">${globalHtml}</div>
+        <div class="weekly-round-lb-global" id="wk-global-${round.seed}">${globalHtml}</div>
       </div>
     </div>`;
 }
@@ -7508,6 +7538,8 @@ function openWeeklyPicker() {
   renderWeeklyPicker();
   const ov = document.getElementById('weekly-overlay');
   if(ov) ov.classList.add('open');
+  // v0.26i12: fill the Global Best cells from the Steam weekly boards.
+  try { _fillWeeklyGlobalBests(); } catch(e){}
 }
 
 function closeWeeklyPicker() {
@@ -7975,9 +8007,21 @@ setTimeout(function(){ try { applyKeyBinds(); } catch(e){} }, 0);
 // Steam-native by design decision: real identities + friends filtering; the
 // web build shows no Ranks UI at all. All calls go through the ggwSteam IPC
 // bridge (main process owns steamworks-ffi-node; renderer stays sandboxed).
-// Boards: GGW_points_alltime (desc, DEFAULT tab per spec), GGW_swings_9/18
-// (asc, completed runs only), GGW_wk_<id>_<side>_<seed> (desc, per weekly
-// seed — findOrCreate on first submit, so weekly rotation is zero-config).
+//
+// v0.26i12 BOARD SCHEME (per Adam — per-difficulty split):
+//   GGW_points_alltime            desc  any terminal run, all difficulties
+//                                       (headline board, DEFAULT Ranks tab)
+//   GGW_{9|18}_d{1-10}_swings     asc   completed runs only (strokes)
+//   GGW_{9|18}_d{1-10}_pts        desc  completed runs only (style points)
+//   GGW_wk_<id>_<side>_<seed>_swings  asc   completed weekly runs (strokes)
+//   GGW_wk_<id>_<side>_<seed>_pts     desc  completed weekly runs (style)
+// 40 static per-difficulty boards + points_alltime are pre-created in the
+// Steamworks partner backend (see STEAM_LEADERBOARDS_SETUP.md); weekly
+// boards are findOrCreate'd on first submit so weekly rotation stays
+// zero-config. Difficulty bucket = the run's STARTING difficulty (bonus
+// holes bump live G.difficulty +1 per hole — that must not leak a run into
+// a higher bucket). v0.26a's GGW_swings_9/18 combined boards are RETIRED
+// (no further submissions; delete them in the partner backend).
 window._ggwSteamOn = false;
 try {
   if(window.ggwSteam && window.ggwSteam.status){
@@ -7998,24 +8042,46 @@ try {
   }
 } catch(e){}
 
-function weeklyBoardName(challengeId, seed){
-  return ('GGW_wk_' + String(challengeId) + '_' + String(seed || '')).replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 120);
+// v0.26i12: metric suffix ('pts' | 'swings') appended AFTER the sanitize+
+// truncate so the suffix can never be sliced off. Base capped at 110 chars
+// (Steam API-name limit is 128; 110 + '_swings' = 117, safe margin).
+function weeklyBoardName(challengeId, seed, metric){
+  const base = ('GGW_wk_' + String(challengeId) + '_' + String(seed || '')).replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 110);
+  return base + '_' + (metric === 'swings' ? 'swings' : 'pts');
+}
+// Static per-difficulty board name. len = 9|18, diff clamped 1-10.
+function diffBoardName(len, diff, metric){
+  const d = Math.max(1, Math.min(10, diff | 0));
+  return 'GGW_' + (len === 18 ? 18 : 9) + '_d' + d + '_' + (metric === 'swings' ? 'swings' : 'pts');
 }
 // Fire-and-forget submission on terminal runs; called from saveRunData.
+// v0.26i12: per-difficulty split. Strokes AND style boards are completed-
+// runs-only (per Adam — a dead run's totals aren't comparable); only the
+// all-time points board still accepts lost runs.
 function submitSteamLeaderboards(run){
   if(!window._ggwSteamOn || !window.ggwSteam) return;
   if(run.outcome !== 'won' && run.outcome !== 'lost') return;   // abandons don't rank
   const pts = run.totalStyleScore | 0;
-  const details = [run.totalStrokes | 0, run.holesCompleted | 0, run.difficulty | 0];
+  const strokes = run.totalStrokes | 0;
+  const len = run.totalHoles | 0;
+  // Bucket by STARTING difficulty — bonus holes bump live difficulty +1
+  // per hole, and that drift must not promote a run into a harder bucket.
+  const diff = Math.max(1, Math.min(10, (run.startingDifficulty != null ? run.startingDifficulty : run.difficulty) | 0));
+  const won = run.outcome === 'won';
+  const validLen = (len === 9 || len === 18);
+  const details = [strokes, run.holesCompleted | 0, diff];
   const subs = [];
+  // Headline all-difficulties board — unchanged from v0.26a (lost runs OK).
   if(pts > 0) subs.push({ board:'GGW_points_alltime', score:pts, sort:'desc', details });
-  // Swings boards are completed-runs-only and split 9/18 — mixing lengths
-  // on one ascending board would make every 18-hole finish look terrible.
-  if(run.outcome === 'won' && run.totalStrokes > 0 && (run.totalHoles === 9 || run.totalHoles === 18)){
-    subs.push({ board:'GGW_swings_' + run.totalHoles, score:run.totalStrokes | 0, sort:'asc', details:[pts, run.difficulty | 0] });
+  if(won && validLen){
+    if(strokes > 0) subs.push({ board: diffBoardName(len, diff, 'swings'), score: strokes, sort:'asc', details:[pts, diff] });
+    if(pts > 0)     subs.push({ board: diffBoardName(len, diff, 'pts'),    score: pts,     sort:'desc', details });
   }
-  if(run.weeklyChallengeId && pts > 0){
-    subs.push({ board: weeklyBoardName(run.weeklyChallengeId, run.seed), score: pts, sort:'desc', details });
+  // Weekly seeds: strokes + style, completed runs only. findOrCreate on
+  // first submit — no backend config needed for weekly rotation.
+  if(run.weeklyChallengeId && won){
+    if(pts > 0)     subs.push({ board: weeklyBoardName(run.weeklyChallengeId, run.seed, 'pts'),    score: pts,     sort:'desc', details });
+    if(strokes > 0) subs.push({ board: weeklyBoardName(run.weeklyChallengeId, run.seed, 'swings'), score: strokes, sort:'asc',  details:[pts, diff] });
   }
   for(const p of subs){
     window.ggwSteam.lbSubmit(p).then(r => {
@@ -8031,17 +8097,26 @@ function submitSteamLeaderboards(run){
 let _ranksTab = 'points';          // default = point score, per spec
 let _ranksScope = 'global';
 let _ranksWeeklyPick = null;       // { id, side, seed, label }
+// v0.26i12: per-difficulty browsing state. Length + star bucket apply to
+// the Strokes and Style tabs; weekly rounds get a metric toggle instead.
+let _ranksLen = 9;                 // 9 | 18
+let _ranksDiff = 3;                // 1-10 star bucket
+let _ranksWeeklyMetric = 'pts';    // 'pts' | 'swings'
+let _ranksReqToken = 0;            // stale-fetch guard
 function _ranksBoards(){
   const tabs = [
     { id:'points', label:'Points', board:'GGW_points_alltime', sort:'desc' },
-    { id:'swings9', label:'Swings 9', board:'GGW_swings_9', sort:'asc' },
-    { id:'swings18', label:'Swings 18', board:'GGW_swings_18', sort:'asc' },
-    { id:'weekly', label:'Weekly', board:null, sort:'desc' },
+    { id:'swings', label:'Strokes', board:null, sort:'asc' },   // per-difficulty
+    { id:'pts',    label:'Style',   board:null, sort:'desc' },  // per-difficulty
+    { id:'weekly', label:'Weekly',  board:null, sort:'desc' },
   ];
   return tabs;
 }
 window.openRanksMenu = function(){
   if(!window._ggwSteamOn) return;
+  // Default the star picker to the player's current difficulty so the first
+  // board they see is the one they actually play on.
+  try { _ranksDiff = Math.max(1, Math.min(10, (G.difficulty || 3) | 0)); } catch(e){}
   document.getElementById('ranks-overlay').classList.add('open');
   renderRanksMenu();
 };
@@ -8050,8 +8125,12 @@ window.closeRanksMenu = function(){
 };
 window.setRanksTab = function(t){ _ranksTab = t; _ranksWeeklyPick = null; renderRanksMenu(); };
 window.setRanksScope = function(sc){ _ranksScope = sc; renderRanksMenu(); };
+window.setRanksLen = function(n){ _ranksLen = (n === 18 ? 18 : 9); renderRanksMenu(); };
+window.setRanksDiff = function(d){ _ranksDiff = Math.max(1, Math.min(10, d | 0)); renderRanksMenu(); };
+window.setRanksWeeklyMetric = function(m){ _ranksWeeklyMetric = (m === 'swings' ? 'swings' : 'pts'); renderRanksMenu(); };
 window.setRanksWeekly = function(id, side, seed, label){
   _ranksWeeklyPick = { id, side, seed, label };
+  _ranksWeeklyMetric = 'pts';
   renderRanksMenu();
 };
 function renderRanksMenu(){
@@ -8078,25 +8157,50 @@ function renderRanksMenu(){
     listEl.innerHTML = rows || '<div class="ranks-empty">No weekly challenges</div>';
     return;
   }
-  // Resolve board + fetch
+  // Resolve board + fetch.
+  // v0.26i12: Strokes/Style tabs browse the per-difficulty boards via a
+  // length picker (9/18) and a star picker (1-10). Weekly rounds get a
+  // Style/Strokes metric toggle. All sub-picker rows render into the
+  // heading area above the list.
   let board, sort = 'desc', heading = '';
   if(_ranksTab === 'weekly'){
-    board = weeklyBoardName(_ranksWeeklyPick.id + ':' + _ranksWeeklyPick.side, _ranksWeeklyPick.seed);
-    heading = `<div class="controls-hint">${_ranksWeeklyPick.label} — points · <a href="#" onclick="setRanksTab('weekly');return false">back to list</a></div>`;
+    board = weeklyBoardName(_ranksWeeklyPick.id + ':' + _ranksWeeklyPick.side, _ranksWeeklyPick.seed, _ranksWeeklyMetric);
+    sort = _ranksWeeklyMetric === 'swings' ? 'asc' : 'desc';
+    heading =
+      `<div class="controls-hint">${_ranksWeeklyPick.label} · <a href="#" onclick="setRanksTab('weekly');return false">back to list</a></div>` +
+      `<div style="margin:4px 0">` +
+        `<button class="bind-btn${_ranksWeeklyMetric==='pts'?' active':''}" onclick="setRanksWeeklyMetric('pts')">✦ Style</button>` +
+        `<button class="bind-btn${_ranksWeeklyMetric==='swings'?' active':''}" onclick="setRanksWeeklyMetric('swings')">🏌 Strokes</button>` +
+      `</div>`;
+  } else if(_ranksTab === 'swings' || _ranksTab === 'pts'){
+    board = diffBoardName(_ranksLen, _ranksDiff, _ranksTab);
+    sort = _ranksTab === 'swings' ? 'asc' : 'desc';
+    const diffName = (typeof getDifficultyMods === 'function') ? (getDifficultyMods(_ranksDiff).name || '') : '';
+    heading =
+      `<div style="margin:4px 0">` +
+        `<button class="bind-btn${_ranksLen===9?' active':''}" onclick="setRanksLen(9)">9 Holes</button>` +
+        `<button class="bind-btn${_ranksLen===18?' active':''}" onclick="setRanksLen(18)">18 Holes</button>` +
+      `</div>` +
+      `<div style="margin:4px 0;display:flex;flex-wrap:wrap;gap:2px">` +
+        Array.from({length:10}, (_, i) =>
+          `<button class="bind-btn${_ranksDiff===i+1?' active':''}" style="padding:4px 7px" onclick="setRanksDiff(${i+1})">★${i+1}</button>`).join('') +
+      `</div>` +
+      `<div class="controls-hint">${_ranksLen} holes · ★${_ranksDiff} ${diffName} · ${_ranksTab==='swings'?'fewest strokes':'style points'} · completed runs only</div>`;
   } else {
     const t = _ranksBoards().find(t => t.id === _ranksTab);
     board = t.board; sort = t.sort;
   }
   listEl.innerHTML = heading + '<div class="ranks-empty">Loading…</div>';
+  const _tok = ++_ranksReqToken;
   window.ggwSteam.lbFetch({ board, sort, scope: _ranksScope, count: 20 }).then(r => {
-    if(_ranksTab !== 'weekly' && board !== (_ranksBoards().find(t=>t.id===_ranksTab)||{}).board) return; // stale
+    if(_tok !== _ranksReqToken) return; // stale — a newer fetch superseded this one
     if(!r || !r.available || !r.entries || !r.entries.length){
       listEl.innerHTML = heading + '<div class="ranks-empty">No scores yet — go break some golf.</div>';
       return;
     }
     listEl.innerHTML = heading + r.entries.map(e =>
       `<div class="ranks-row"><div class="rr-rank">#${e.rank}</div><div>${String(e.name).replace(/[<>&]/g,'')}</div><div class="rr-score">${(e.score|0).toLocaleString()}</div></div>`).join('');
-  }).catch(()=>{ listEl.innerHTML = heading + '<div class="ranks-empty">Couldn\'t reach Steam.</div>'; });
+  }).catch(()=>{ if(_tok === _ranksReqToken) listEl.innerHTML = heading + '<div class="ranks-empty">Couldn\'t reach Steam.</div>'; });
 }
 
 // ── v0.24d: display settings. The Steam (Electron) shell injects
@@ -53525,6 +53629,9 @@ function saveRunData(outcome) {
       // critical for tuning Smashy/Speedball/Precision relative to Classic.
       character: G.currentCharacter || 'classic',
       difficulty: G.difficulty || 1,
+      // v0.26i12: the difficulty the player SELECTED. Live G.difficulty gets
+      // +1 per bonus hole, so leaderboard bucketing must use this instead.
+      startingDifficulty: (G._runStartingDifficulty != null) ? (G._runStartingDifficulty | 0) : (G.difficulty || 1),
       totalHoles: G.totalHoles || 0,
       holesCompleted: (G.scorecard && G.scorecard.length) || 0,
       outcome: outcome || 'unknown',
