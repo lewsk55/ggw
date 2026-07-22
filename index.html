@@ -1655,7 +1655,32 @@ transition:opacity 0.2s;
   backdrop-filter:blur(8px);
   transition:opacity 0.2s, transform 0.1s;
 }
+#btn-slowmo { display:none !important; } /* v0.26i9: replaced by #ability-slots tiles */
+#hand-brake-badge { display:none !important; } /* v0.26i9: replaced by #ability-slots tiles */
 #btn-slowmo:active { transform:scale(0.95); background:#fff0a0; }
+/* v0.26i9: perk-ability tiles — live NEXT TO the hand, styled like cards but
+   visually distinct (darker plum, dashed gold edge, PERK ribbon) since they
+   aren't dealt. */
+#ability-slots { display:none; align-items:stretch; gap:8px; margin-right:12px;
+  padding-right:12px; border-right:2px dashed rgba(255,255,255,0.25); pointer-events:none; }
+.ability-tile { position:relative; width:72px; min-height:86px; border-radius:12px;
+  background:linear-gradient(160deg, rgba(58,34,74,0.92), rgba(34,22,48,0.94));
+  border:2px dashed rgba(245,200,66,0.75); color:#fff; cursor:pointer;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:3px; padding:8px 4px 20px; pointer-events:auto; user-select:none;
+  -webkit-user-select:none; box-shadow:0 3px 10px rgba(0,0,0,0.35);
+  transition:transform 0.1s, opacity 0.2s, box-shadow 0.2s; }
+.ability-tile:active { transform:scale(0.94); }
+.ability-tile .ab-name { font-family:'Lato',sans-serif; font-size:0.56rem; font-weight:800;
+  letter-spacing:0.5px; text-transform:uppercase; text-align:center; line-height:1.15; }
+.ability-tile .ab-ribbon { position:absolute; top:-7px; left:50%; transform:translateX(-50%);
+  font-size:0.44rem; font-weight:800; letter-spacing:1.5px; padding:1px 7px; border-radius:6px;
+  background:#f5c842; color:#4a3208; }
+.ability-tile .ab-key { position:absolute; bottom:5px; left:50%; transform:translateX(-50%);
+  font-family:'Lato',sans-serif; font-size:0.56rem; font-weight:800; padding:1px 8px;
+  border-radius:6px; background:rgba(255,255,255,0.16); border:1px solid rgba(255,255,255,0.35); }
+.ability-tile.disabled { opacity:0.35; cursor:not-allowed; }
+.ability-tile.hot { box-shadow:0 0 14px rgba(245,200,66,0.55), 0 3px 10px rgba(0,0,0,0.35); }
 #btn-slowmo:disabled { opacity:0.35; cursor:not-allowed; background:rgba(200,200,200,0.5); color:#888; border-color:rgba(150,150,150,0.4); }
 /* ── Card Hand (4 centered slots at bottom) ── */
 #card-hand {
@@ -4159,6 +4184,22 @@ body.scorecard #hole-summary :focus-visible{ outline:3px solid var(--sc-orange);
 <!-- v0.20f4: armed-effect HUD chips, sit above the card hand -->
 <div id="armed-chips"></div>
 <div id="card-hand">
+  <!-- v0.26i9: perk-ability tiles (Slow Mo / Hand Brake) — card-adjacent but
+       visually distinct; they are abilities, not dealt cards. -->
+  <div id="ability-slots">
+    <div class="ability-tile" id="ab-slowmo">
+      <div class="ab-ribbon">PERK</div>
+      <span class="px-snail"></span>
+      <div class="ab-name">Slow Mo</div>
+      <div class="ab-key">Q · L3</div>
+    </div>
+    <div class="ability-tile" id="ab-brake">
+      <div class="ab-ribbon">PERK</div>
+      <div style="font-size:1.3rem;line-height:1">🛑</div>
+      <div class="ab-name">Hand Brake<br><span style="font-weight:600;opacity:0.75;text-transform:none;letter-spacing:0">hold</span></div>
+      <div class="ab-key">E · D-pad ▼</div>
+    </div>
+  </div>
   <div class="card-slot" id="card-slot-S0"></div>
   <div class="card-slot" id="card-slot-S1"></div>
   <div class="card-slot" id="card-slot-S2"></div>
@@ -4756,7 +4797,7 @@ body.scorecard #hole-summary :focus-visible{ outline:3px solid var(--sc-orange);
 
   </div>
 
-  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:10px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:340px;line-height:1.2"><div style="font-weight:700">Alpha v0.26i5</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Performance pass 3: outline depth pass now unlit (was a second full lit scene render), 2048 shadows at half-rate for ambient obstacles, crate physics decoupled from the 120Hz ball loop.</div></div>
+  <div id="menu-version" style="font-size:0.8rem;color:rgba(255,255,255,0.78);letter-spacing:0.5px;margin-top:10px;text-shadow:0 1px 2px rgba(0,0,0,0.25);text-align:center;max-width:340px;line-height:1.2"><div style="font-weight:700">Alpha v0.26i11</div><div style="font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);margin-top:2px;line-height:1.3">Big copy + balance pass from the revised copy doc. Five upgrades deleted. Dodgeball Frenzy holds its second shot for you. Mecha Floomba. Hole big.</div></div>
 </div>
 
 <!-- v0.23m: Weekly Challenges picker. Sits above #overlay; populated by
@@ -5242,6 +5283,23 @@ void main() {
   // Scale-invariant relative discontinuity.
   float raw = disc / max(izc, 1.0) * strength;
 
+  // v0.26i7: DISTANCE-CONSTANT EDGE INK, WINDOWED. The measure above works
+  // out to ~strength * (depth step) / (view distance): a wall of fixed height
+  // gives a response that shrinks linearly with camera distance. Up close it
+  // saturates the smoothstep -> full black; viewed from above / zoomed out
+  // (z ~ 25-30, the top of the gameplay zoom range) it lands only partway up
+  // the soft shoulder -> faint gray. That's the "outlines get less black from
+  // overhead" fade. Boost the response in proportion to distance so a
+  // fixed-height silhouette inks the same at any gameplay zoom (reference
+  // z ~= 12m), BUT window the boost to the gameplay range: an unwindowed
+  // boost re-amplified sub-threshold noise on mid-distance terrain into the
+  // exact black-smudge artifact the h21 curvature detector eliminated.
+  // zc = view-space z in meters (c is z/far, far = 350). Boost ramps 12->30m,
+  // caps at 2.5x, and falls back to 1x by ~48m; farFade owns the far field.
+  float zc = c * 350.0;
+  float lift = (clamp(zc / 12.0, 1.0, 2.5) - 1.0) * (1.0 - smoothstep(30.0, 48.0, zc));
+  raw *= (1.0 + lift);
+
   // Distance roll-off. c grows with distance, so this fades outlines out on the
   // far tree line and the horizon, where a hard black line just reads as grime —
   // especially at the Deck's resolution. farFade = 0 disables it.
@@ -5345,7 +5403,12 @@ void main() {
       // material, so a flat unlit override produces a byte-identical depth
       // buffer at a fraction of the fragment cost. depthWrite:false meshes are
       // hidden above so their (absent) depth contribution is preserved.
-      if(!this._depthOverrideMat) this._depthOverrideMat = new THREE.MeshBasicMaterial();
+      // v0.26i7: the override MUST be DoubleSide. MAT.wall / MAT.wallTop /
+      // corner triangles / belts / flags are DoubleSide materials whose
+      // geometry depends on it; the v0.26i5 FrontSide override backface-culled
+      // them in the depth capture, so walls dropped out of the depth buffer at
+      // many view angles -> broken/jagged outlines on desktop and Deck.
+      if(!this._depthOverrideMat) this._depthOverrideMat = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide });
       const _prevOverride = this.scene.overrideMaterial;
       this.scene.overrideMaterial = this._depthOverrideMat;
       renderer.setRenderTarget(this._depthRT);
@@ -5743,7 +5806,11 @@ function resizeRenderer() {
     // Half-res outline is a genuine perf lever, but only where it was meant to
     // apply: real mobile + Steam Deck. Desktop now gets full-buffer outlines.
     if(typeof outlinePass !== 'undefined' && outlinePass && typeof outlinePass.setSize === 'function'){
-      if(_GGW_isMobile || _GGW_isDeck){
+      // v0.26i7: the Deck moves to FULL-res outlines. Half-res was a draw-era
+      // perf lever; with the decor merges (~920 -> ~483 draws) and the unlit
+      // depth pass, the fill cost is affordable and the outline staircase on
+      // the Deck's 800p screen goes away. True mobile keeps half-res.
+      if(_GGW_isMobile){
         outlinePass.setSize(Math.max(2, Math.round(bw / 2)), Math.max(2, Math.round(bh / 2)));
       } else {
         outlinePass.setSize(bw, bh);
@@ -5992,6 +6059,12 @@ function makeCloud(x, y, z) {
     maxR = Math.max(maxR, Math.hypot(px, pz) + r);
   }
   const s = 1.6 + Math.random() * 1.6;
+  // v0.26i7 PERF: merge the 4-7 puff meshes into one (the persistent sky has
+  // ~20-30 of these clouds = ~137 individual sphere draws). Drift moves the
+  // group; puffs are static inside it, so the merge is lossless. The paired
+  // ground shadow is a scene sibling (not a child) and is unaffected.
+  _ggwMergeGroupByMaterial(g);
+  g.traverse(o => { if(o.isMesh) o.userData.noOutline = true; });
   g.position.set(x, y, z);
   g.scale.setScalar(s);
   g.frustumCulled = true;
@@ -6145,6 +6218,79 @@ function toon(params) {
   delete p.roughness; delete p.metalness;
   return new THREE.MeshToonMaterial(Object.assign({ gradientMap: _toonGrad }, p));
 }
+// v0.26i7 PERF: merge a list of meshes (with their LOCAL transforms baked in)
+// into a single BufferGeometry. Used to collapse per-part decor meshes
+// (ball dimples, cloud puffs, tree parts) into 1 draw call each. All input
+// meshes must share one material. Non-indexed concat of position/normal/uv.
+function _ggwMergeMeshGeos(meshes) {
+  const geos = [];
+  for(const m of meshes) {
+    m.updateMatrix();
+    const g = m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone();
+    g.applyMatrix4(m.matrix);
+    geos.push(g);
+  }
+  let total = 0, hasUv = true, hasNorm = true;
+  for(const g of geos) {
+    total += g.attributes.position.count;
+    if(!g.attributes.uv) hasUv = false;
+    if(!g.attributes.normal) hasNorm = false;
+  }
+  const pos = new Float32Array(total * 3);
+  const norm = hasNorm ? new Float32Array(total * 3) : null;
+  const uv = hasUv ? new Float32Array(total * 2) : null;
+  let o = 0;
+  for(const g of geos) {
+    const n = g.attributes.position.count;
+    pos.set(g.attributes.position.array, o * 3);
+    if(norm) norm.set(g.attributes.normal.array, o * 3);
+    if(uv) uv.set(g.attributes.uv.array, o * 2);
+    o += n;
+    g.dispose();
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  if(norm) out.setAttribute('normal', new THREE.BufferAttribute(norm, 3));
+  if(uv) out.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  return out;
+}
+// Collapse a Group's direct+nested child meshes into one merged mesh per
+// material (world-relative-to-group transforms baked). Preserves castShadow /
+// noOutline flags (any-of semantics per material bucket).
+function _ggwMergeGroupByMaterial(grp) {
+  const buckets = new Map();   // material -> {meshes:[], cast:false, noOutline:true}
+  grp.updateMatrixWorld(true);
+  const inv = grp.matrixWorld.clone().invert();
+  grp.traverse(o => {
+    if(!o.isMesh || Array.isArray(o.material)) return;
+    let b = buckets.get(o.material);
+    if(!b){ b = { meshes:[], cast:false, allNoOutline:true }; buckets.set(o.material, b); }
+    // bake transform relative to grp
+    const rel = o.matrixWorld.clone().premultiply(inv);
+    b.meshes.push({ mesh:o, rel:rel });
+    if(o.castShadow) b.cast = true;
+    if(!(o.userData && o.userData.noOutline)) b.allNoOutline = false;
+  });
+  if(!buckets.size) return;
+  // remove originals
+  const olds = [];
+  grp.traverse(o => { if(o.isMesh && !Array.isArray(o.material)) olds.push(o); });
+  for(const o of olds){ if(o.parent) o.parent.remove(o); }
+  // clear now-empty child groups
+  for(let i = grp.children.length - 1; i >= 0; i--){
+    const c = grp.children[i];
+    if(c.isGroup && c.children.length === 0) grp.remove(c);
+  }
+  for(const [mat, b] of buckets) {
+    const fake = b.meshes.map(e => ({ geometry: e.mesh.geometry, matrix: e.rel,
+      updateMatrix(){}}));
+    const merged = _ggwMergeMeshGeos(fake);
+    const mm = new THREE.Mesh(merged, mat);
+    mm.castShadow = b.cast;
+    if(b.allNoOutline) mm.userData.noOutline = true;
+    grp.add(mm);
+  }
+}
 function toonFlat(params) {
   return toon(params);
 }
@@ -6191,7 +6337,7 @@ const MAT = {
 };
 
 // ── Version + tunables ────────────────────────────────
-const GAME_VERSION = '0.26i5';
+const GAME_VERSION = '0.26i11';
 // v0.26h10: snapshot the pristine bootstrap #overlay markup at load. This is
 // the ONE canonical main-menu HTML (with the Display hub button + the green
 // #menu-version element). escMainMenu() used to rebuild the menu from a
@@ -6204,7 +6350,7 @@ const _BOOTSTRAP_OVERLAY_HTML = (function(){
   try { const o = document.getElementById('overlay'); return o ? o.innerHTML : null; }
   catch(e) { return null; }
 })();
-const CHANGE_NOTE = "v0.26i5 -- Performance pass 3 (render pipeline + physics cadence). (1) OUTLINE DEPTH PASS: the outline's depth capture re-rendered the ENTIRE scene with full lit toon/standard materials including shadow-map PCF sampling -- but only the depth texture is ever consumed. It now renders with a flat MeshBasicMaterial override (byte-identical depth, fraction of the fragment cost); depthWrite:false meshes are hidden during the capture so they still contribute no depth. This was the largest per-frame GPU item during motion on ANGLE/D3D11. (2) SHADOW MAP: desktop 4096 -> 2048 (4x fewer texels per redraw; bias auto-scales). (3) SHADOW CADENCE: animated-obstacle PRESENCE (spin bars, slide blocks, popup walls, pendulums, floombas) used to force full-rate shadow redraws for the whole hole; presence-only motion now drives a 30Hz half-rate update. Ball/crate/camera motion still forces full rate. (4) CRATE PHYSICS CADENCE: the Cannon world step, kinematic sync, conveyor/fan force fields, and instance-matrix compose ran inside the 120Hz ball loop; now stepped once per render frame from animate() (Cannon fixed-steps internally at 1/60). (5) ALLOC HYGIENE: scratch Vec3 for spin-bar axis (was a fresh alloc per bar per tick), dead holePosWorld Vector3 removed from the 120Hz hole-check path, ghost-HUD projection vector reused.";
+const CHANGE_NOTE = "v0.26i11 -- Card/perk/upgrade copy + balance pass from Adam's revised copy doc (v0.26i5 markup). COPY: ~55 card, perk, and upgrade descriptions tightened to the revised copy (Big Hole is now just 'Hole big.'). DELETED UPGRADES: Scootch Combo, Hyperball, Wider Portal, Bumper Walls, Cardiologist (Pierce Shot + Auto-Aim were already gone in earlier patches) -- their parents are now single-branch; all engine field reads fall back to base values. DODGEBALL FRENZY REWORK: no more auto-queued fan -- firing the first dodgeball puts a fresh Frenzy dodgeball back in your hand (temp copy, not recycled into deck) and a toast tells you to fire the second anytime. BALANCE: Mega Explosivo radius 1.75x -> 2x; Mecha Floomba (renamed from Mega Floomba) 2.5x size / 2x speed; Hand of God = 2x HHG blast radius; Power Walkies duration +30% -> +50% (~18s); Pro Skater now also halves grind friction bleed (easier balancing + less friction = longer grinds); Drone Delivery base recoveries 2 -> 1 per hole (+1 per stack). Double Ammo copy no longer lists Portal Grenade (in-game exclusion shipped v0.26i9).";
 // Global price multiplier — applied on top of all shop prices (perks, cards, rerolls, card remove).
 // Bump this for difficulty scaling; keep independent of per-hole difficulty ramp so each lever tunes separately.
 // v0.19o1: synced 1.0 → 1.25 per tuning sheet.
@@ -7690,10 +7836,10 @@ const CONTROL_ROWS = [
   { name:'Card 5', kb:'S4', pad:'LB' },
   { name:'Card 6', kb:'S5', pad:null, padFixed:'D-Up' },
   { name:'Card 7', kb:'S6', pad:null, padFixed:'D-Down' },
-  { name:'Card 8', kb:'S7', pad:null, padFixed:'◀▶+A' },
+  { name:'Card 8', kb:'S7', pad:null, padFixed:'—' },
   { name:'Zoom In', kb:'zoomIn', pad:'RT' },
   { name:'Zoom Out', kb:'zoomOut', pad:'LT' },
-  { name:'Fire / Arm Card', kb:null, kbFixed:'Mouse', pad:'A' },
+  { name:'Fire / Swing', kb:null, kbFixed:'Mouse', pad:'A' },
   { name:'Loadout', kb:null, kbFixed:'—', pad:'BACK' },
   { name:'Pause', kb:null, kbFixed:'Esc', pad:'START' },
   { name:'Reset Camera', kb:null, kbFixed:'—', pad:'R3' },
@@ -12444,6 +12590,10 @@ function buildCourse(data) {
       // amplitude jitter so they lean together (same phase) but not robotically.
       tg.userData.swayBaseRot = tg.rotation.z;
       tg.userData.swayAmp = 0.8 + Math.random() * 0.5;
+      // v0.26i7 PERF: merge the tree's parts per material (trunk + foliage =
+      // up to 8 meshes -> at most 2). Sway rotates the group and Boulder
+      // destruction ejects the group's meshes, so both behaviors survive.
+      _ggwMergeGroupByMaterial(tg);
       group.add(tg);
       // Track for boulder destruction
       if(!G._bgTrees) G._bgTrees = [];
@@ -12471,6 +12621,10 @@ function buildCourse(data) {
         puff.position.set((Math.random()-0.5)*pr*2, (Math.random()-0.5)*pr*0.4, (Math.random()-0.5)*pr*1.5);
         puff.scale.y = 0.3 + Math.random() * 0.2; cg.add(puff);
       }
+      // v0.26i7 PERF: merge the cloud's puffs (3-6 individual sphere meshes,
+      // ~137 draws across all clouds) into a single mesh per cloud. Drift
+      // moves the group; puffs are static within it, so this is lossless.
+      _ggwMergeGroupByMaterial(cg);
       cg.position.set(cx+(Math.random()-0.5)*(W+30)*T, 18+Math.random()*20, cz+(Math.random()-0.5)*(H+30)*T);
       cg.traverse(o => { if(o.isMesh) o.userData.noOutline = true; });
       group.add(cg);
@@ -12711,24 +12865,44 @@ function buildCourse(data) {
         const poleMesh=new THREE.Mesh(poleG,MAT.flagPole);
         poleMesh.position.y = 1.2 * _gWorldS;
         fg2.add(poleMesh);
-        // Bigger flag — 2× size, higher up on a taller pole
-        const flG=new THREE.PlaneGeometry(1.0 * _gWorldS, 0.7 * _gWorldS);
+        // v0.26i9: classic red minigolf TRIANGLE pennant. Base sits ON the
+        // pole (x = 0) tapering to an apex at x = L, and the wave is done
+        // per-vertex with amplitude growing toward the tip — so the pivot is
+        // the pole, not the flag's center, and the motion reads as a snake
+        // ripple instead of a plate wobbling on a pin. The old build was a
+        // rectangle centered 0.5 to the RIGHT of the pole rotating around its
+        // own middle (the reported "face is off from the model" look).
+        const _flagL = 1.05 * _gWorldS, _flagHh = 0.30 * _gWorldS, _flagYc = 2.08 * _gWorldS;
+        const _FCOLS = 9;
         const flagMat = new THREE.MeshStandardMaterial({
           color: 0xff2020, emissive: 0xff4040, emissiveIntensity: 0.6,
           side: THREE.DoubleSide, roughness: 0.55, metalness: 0.1,
         });
-        const flM=new THREE.Mesh(flG,flagMat);
-        flM.position.set(0.5 * _gWorldS, 2.15 * _gWorldS, 0);
+        const _fPos = new Float32Array((_FCOLS + 1) * 2 * 3);
+        const _fBaseX = new Float32Array((_FCOLS + 1) * 2);
+        for(let fc = 0; fc <= _FCOLS; fc++){
+          const fu = fc / _FCOLS;
+          const fx = fu * _flagL;
+          const fh = (1 - fu) * _flagHh;   // converges to the apex point
+          const vi = fc * 2;
+          _fPos[vi*3] = fx;   _fPos[vi*3+1] = _flagYc + fh; _fPos[vi*3+2] = 0;
+          _fPos[vi*3+3] = fx; _fPos[vi*3+4] = _flagYc - fh; _fPos[vi*3+5] = 0;
+          _fBaseX[vi] = fx; _fBaseX[vi+1] = fx;
+        }
+        const _fIdx = [];
+        for(let fc = 0; fc < _FCOLS; fc++){
+          const a0 = fc*2, b0 = fc*2+1, a1 = fc*2+2, b1 = fc*2+3;
+          _fIdx.push(a0, b0, a1, b0, b1, a1);
+        }
+        const flG = new THREE.BufferGeometry();
+        flG.setAttribute('position', new THREE.BufferAttribute(_fPos, 3));
+        flG.setIndex(_fIdx);
+        flG.computeVertexNormals();
+        const flM = new THREE.Mesh(flG, flagMat);
+        flM.userData._waveBaseX = _fBaseX;
+        flM.userData._waveL = _flagL;
         fg2.add(flM);
-        // Yellow stripe on the flag for contrast — small inner plane
-        const flStripeG = new THREE.PlaneGeometry(0.95 * _gWorldS, 0.18 * _gWorldS);
-        const flStripeMat = new THREE.MeshStandardMaterial({
-          color: 0xffea40, emissive: 0xffcc20, emissiveIntensity: 0.8,
-          side: THREE.DoubleSide, roughness: 0.5, metalness: 0.1,
-        });
-        const flStripe = new THREE.Mesh(flStripeG, flStripeMat);
-        flStripe.position.set(0.5 * _gWorldS, 2.15 * _gWorldS, 0.001); // tiny offset to prevent z-fighting
-        fg2.add(flStripe);
+        G._flagWaveMesh = flM;
         // Flag-top ball ornament
         const topBallG = new THREE.SphereGeometry(0.09 * _gWorldS, 8, 6);
         const topBallMat = new THREE.MeshStandardMaterial({
@@ -12761,10 +12935,15 @@ function buildCourse(data) {
         stPole.renderOrder = 9000;
         stPole.userData.noOutline = true;
         fg2.add(stPole);
-        // Flag silhouette — slightly larger, brighter
-        const stFlagG = new THREE.PlaneGeometry(1.05, 0.75);
-        const stFlag = new THREE.Mesh(stFlagG, seeThruFlagMat);
-        stFlag.position.set(0.5, 2.15, 0);
+        // v0.26i9: silhouette matches the triangle pennant, base at the pole.
+        // The old rectangle silhouette floated 0.5 to the right of the pole —
+        // the always-on-top offset plate in the "flag face looks off" report.
+        const stShape = new THREE.Shape();
+        stShape.moveTo(0, _flagYc + _flagHh * 1.12);
+        stShape.lineTo(_flagL * 1.06, _flagYc);
+        stShape.lineTo(0, _flagYc - _flagHh * 1.12);
+        stShape.closePath();
+        const stFlag = new THREE.Mesh(new THREE.ShapeGeometry(stShape), seeThruFlagMat);
         stFlag.renderOrder = 9001;
         stFlag.userData.noOutline = true;
         fg2.add(stFlag);
@@ -17234,6 +17413,7 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
     const HIGHLIGHT_OFFSET = BALL_R + 0.0018;
     const lightWorld = new THREE.Vector3(1.2, 2.0, 1.0).normalize();
     const phi = Math.PI * (3 - Math.sqrt(5));
+    const _dimpleRoot = new THREE.Group();
     for(let i = 0; i < N_DIMPLES; i++) {
       const y = 1 - 2 * (i + 0.5) / N_DIMPLES;
       const radiusAtY = Math.sqrt(1 - y * y);
@@ -17257,7 +17437,6 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
       }
       const shadow = new THREE.Mesh(new THREE.CircleGeometry(SHADOW_R, 12), shadowMat);
       shadow.scale.set(1.0, 0.78, 1.0);
-      shadow.userData.skipOutline = true;
       dimple.add(shadow);
       const highlight = new THREE.Mesh(
         new THREE.CircleGeometry(HIGHLIGHT_R, 10),
@@ -17265,10 +17444,17 @@ function addOutlineToGroup(group /*, thickness */) { return group; }
       );
       highlight.position.set(offX, offY, (HIGHLIGHT_OFFSET - SHADOW_OFFSET));
       highlight.scale.set(1.0, 0.78, 1.0);
-      highlight.userData.skipOutline = true;
       dimple.add(highlight);
-      g.add(dimple);
+      _dimpleRoot.add(dimple);
     }
+    // v0.26i7 PERF: the dimple decals used to be 100 groups x 2 meshes = 200
+    // draw calls following the ball through every pass on every hole (the
+    // single largest draw-call sink in the game). Merge them into ONE mesh per
+    // material (shadow + highlight) = 2 draws, visually identical since the
+    // dimples never move relative to the ball group.
+    _ggwMergeGroupByMaterial(_dimpleRoot);
+    _dimpleRoot.traverse(o => { if(o.isMesh) o.userData.skipOutline = true; });
+    g.add(_dimpleRoot);
     return g;
   }
 
@@ -21864,8 +22050,14 @@ function tickSkaterBall(dt) {
   // the ball settles into is 50% faster — grinds feel like they're
   // moving, not crawling, before the bail. Combined effect: slow
   // deceleration, brisker minimum.
-  G.ballVel.x *= 0.9985;
-  G.ballVel.z *= 0.9985;
+  // v0.26i11: Pro Skater upgrade lowers grind friction (reads grindFriction
+  // off the skater_ball def; base 0.9985, Pro Skater 0.9993 ≈ half the
+  // per-second speed bleed → visibly longer grinds).
+  const _grindFr = (typeof getCardField === 'function')
+    ? (getCardField('skater_ball','grindFriction',0.9985) || 0.9985)
+    : 0.9985;
+  G.ballVel.x *= _grindFr;
+  G.ballVel.z *= _grindFr;
   const _grindSpd = Math.hypot(G.ballVel.x, G.ballVel.z);
   // v0.23b13: modulate grind sound loop volume by current speed
   if(typeof _updateSkaterGrindLoopVolume === 'function') _updateSkaterGrindLoopVolume(_grindSpd);
@@ -21964,6 +22156,28 @@ function tickMultiballGhost(dt) {
   }
 }
 
+// v0.26i8: CONTACT-FX RATE LIMITER. A ball pinned against a wall by a
+// conveyor (or resting against a crate) re-contacts on EVERY physics tick —
+// up to 120x/s. Each contact used to fire particles + a fresh Web Audio
+// graph + a style event that grows the combo DOM string (relayout each
+// time). Result: 450ms frames on the Deck with phys at 1.5ms. This gate
+// allows a contact-FX burst only when the ball has actually TRAVELLED since
+// the last one (real pinball always travels between hits), with a 1.5s
+// heartbeat so a pinned ball isn't 100% silent forever.
+function _contactFxAllowed(kind, minMs, minMove) {
+  if(!G._fxGate) G._fxGate = {};
+  const now = performance.now();
+  const g = G._fxGate[kind];
+  const bx = G.ballPos ? G.ballPos.x : 0, bz = G.ballPos ? G.ballPos.z : 0;
+  if(g) {
+    const elapsed = now - g.t;
+    if(elapsed < minMs) return false;                       // hard rate cap
+    const moved = Math.hypot(bx - g.x, bz - g.z);
+    if(moved < minMove && elapsed < 1500) return false;     // pinned: heartbeat only
+  }
+  G._fxGate[kind] = { t: now, x: bx, z: bz };
+  return true;
+}
 function updatePhysics(dt) {
   // v0.23c: Drone Delivery suspends ball physics. The drone's animation
   // loop manages ballPos directly; if we ran physics here gravity would
@@ -22136,17 +22350,51 @@ function updatePhysics(dt) {
     if(G._stuckSampleAccum >= 0.1) {
       G._stuckSampleAccum = 0;
       G._stuckSamples.push({ x: G.ballPos.x, z: G.ballPos.z, t: performance.now() });
-      // Keep only last 0.5s (5 samples)
-      while(G._stuckSamples.length > 5) G._stuckSamples.shift();
+      // v0.26i8: buffer widened 5 -> 20 samples (2.0s) for cluster detection.
+      while(G._stuckSamples.length > 20) G._stuckSamples.shift();
       if(G._stuckSamples.length >= 5) {
-        const first = G._stuckSamples[0];
-        const last = G._stuckSamples[G._stuckSamples.length - 1];
+        // NARROW window (unchanged): conveyor/fan pins the ball dead still.
+        const n = G._stuckSamples.length;
+        const first = G._stuckSamples[n - 5];
+        const last = G._stuckSamples[n - 1];
         const moved = Math.hypot(last.x - first.x, last.z - first.z);
-        // BALL_R ≈ 0.20; require nearly zero displacement across the window
-        G._ballStuckDetected = moved < (BALL_R * 0.8);
+        const narrowStuck = moved < (BALL_R * 0.8);
+        // v0.26i8 WIDE window: BUMPER-CLUSTER ping-pong. Restitution > 1 adds
+        // energy above the dribble fade, so a ball trapped between two close
+        // bumpers oscillates at an equilibrium speed (3-8) forever — too fast
+        // for tap-to-stop's speed gate and too wide for the narrow window.
+        // Signature: over 2s the ball's bounding box stays tiny (< 1.6m,
+        // genuinely CONFINED — corridor pinball sweeps a bigger box) while
+        // racking up many obstacle bounces (>= 6 in 2s).
+        let wideStuck = false;
+        if(n >= 20) {
+          let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+          for(let si = 0; si < n; si++) {
+            const s = G._stuckSamples[si];
+            if(s.x < minX) minX = s.x; if(s.x > maxX) maxX = s.x;
+            if(s.z < minZ) minZ = s.z; if(s.z > maxZ) maxZ = s.z;
+          }
+          if(Math.hypot(maxX - minX, maxZ - minZ) < 1.6) {
+            const nowT = performance.now();
+            if(G._bounceLog) {
+              while(G._bounceLog.length && nowT - G._bounceLog[0] > 2000) G._bounceLog.shift();
+              wideStuck = G._bounceLog.length >= 6;
+            }
+          }
+        }
+        G._ballStuckDetected = narrowStuck || wideStuck;
       } else {
         G._ballStuckDetected = false;
       }
+    }
+    // v0.26i8: while stuck, progressively damp XZ velocity (half-life ~0.17s)
+    // so cluster ping-pong and conveyor-pin jitter DECAY into the bumper
+    // dribble regime and the ball settles into aim mode on its own, instead of
+    // soft-locking until the player quits. Fast travelling pinball never trips
+    // the detector, so intended chaos is untouched.
+    if(G._ballStuckDetected) {
+      const _dmp = Math.max(0, 1 - dt * 4);
+      G.ballVel.x *= _dmp; G.ballVel.z *= _dmp;
     }
   } else {
     G._ballStuckDetected = false;
@@ -22932,6 +23180,23 @@ function updatePhysics(dt) {
   // "ghost ball + inbounds, somehow ended up OOB" bug. Doubling the cap
   // doubles the safe speed range for ~negligible perf cost (per-substep
   // work is the same, we just iterate more substeps when truly needed).
+  // v0.26i8: GLOBAL SPEED CAP + NaN guard — placed BEFORE the substep count
+  // computation. A NaN velocity used to propagate into SUB_STEPS, turning the
+  // substep loop into zero iterations (physics silently dead -> crash-adjacent
+  // states); it now resets on the spot. Runaway bounce builds (pinball + iron
+  // ball + speed-on-destruction perks) are capped at 55 m/s (~123 mph): the
+  // absurd-speed fantasy stays fully intact while the sim stays bounded.
+  // Vertical capped at +/-30. Non-finite position resets to the tee.
+  if(!isFinite(G.ballVel.x) || !isFinite(G.ballVel.y) || !isFinite(G.ballVel.z)) {
+    G.ballVel.set(0, 0, 0);
+  } else {
+    const _capXZ = Math.hypot(G.ballVel.x, G.ballVel.z);
+    if(_capXZ > 55) { const _cs = 55 / _capXZ; G.ballVel.x *= _cs; G.ballVel.z *= _cs; }
+    if(G.ballVel.y > 30) G.ballVel.y = 30; else if(G.ballVel.y < -30) G.ballVel.y = -30;
+  }
+  if(!isFinite(G.ballPos.x + G.ballPos.y + G.ballPos.z)) {
+    try { resetToTee(); } catch(e) { G.ballPos.set(0, 1, 0); G.ballVel.set(0, 0, 0); }
+  }
   const WALL_THICK_SUB = 0.25 + BALL_R_EFF;
   const xzSpeed = Math.hypot(G.ballVel.x, G.ballVel.z);
   const travelPerFrame = xzSpeed * dt;
@@ -24048,7 +24313,9 @@ function updatePhysics(dt) {
               } catch(e){}
             }
             // Mark style + skip normal physics
-            if(!pushed) { pushed = true; recordStyleEvent('wall_bounce'); }
+            if(!pushed) { pushed = true;
+              if(!G._bounceLog) G._bounceLog = []; G._bounceLog.push(performance.now());
+              if(_contactFxAllowed('wall', 120, 0.5)) recordStyleEvent('wall_bounce'); }
             continue;
           }
           if(G._skaterActive) {
@@ -24229,8 +24496,12 @@ function updatePhysics(dt) {
             }
           }
           if(!pushed) {
-            spawnHitParticles(G.ballPos);
             pushed=true;
+            if(!G._bounceLog) G._bounceLog = []; G._bounceLog.push(performance.now());
+            // v0.26i8: FX gate — see _contactFxAllowed. A conveyor-pinned ball
+            // stops spamming style events / particles / stats entirely.
+            if(_contactFxAllowed('wall', 120, 0.5)) {
+            spawnHitParticles(G.ballPos);
             recordStyleEvent('wall_bounce');
             // Catapult: consume bounce-boost charge
             if(G._catapultBounceBoost > 0) {
@@ -24285,6 +24556,7 @@ function updatePhysics(dt) {
               blastIdleBalls(G.ballPos.x, G.ballPos.z, boomR, 15);
               triggerShake(Math.min(0.8, impactSpeed / 20));
             }
+            } // v0.26i8: end wall contact-FX gate
           }
         }
       }
@@ -25203,7 +25475,12 @@ function updatePhysics(dt) {
           }
           bmp.squashT = bmp.variant === 'power' ? 0.28 : 0.18;
         }
+        if(!G._bounceLog) G._bounceLog = []; G._bounceLog.push(performance.now());
         const _isPowerHit = bmp.variant === 'power';
+        // v0.26i8: FX gate — a ball ping-ponging inside a bumper cluster fires
+        // this block several times a second, forever. Physics (reflection,
+        // squash, Bounce & Boom) stays untouched; only the FX/stat spam gates.
+        if(_contactFxAllowed('bumper', 120, 0.4)) {
         if(AC) sfxBounce(Math.max(2, Math.hypot(G.ballVel.x,G.ballVel.z)*(_isPowerHit ? 0.75 : 0.5)));
         spawnHitParticles(G.ballPos);
         if(_isPowerHit) {
@@ -25223,6 +25500,7 @@ function updatePhysics(dt) {
         triggerShake(_isPowerHit
           ? Math.min(1.0, Math.hypot(G.ballVel.x, G.ballVel.z) / 18)
           : Math.min(0.6, Math.hypot(G.ballVel.x, G.ballVel.z) / 24));
+        } // v0.26i8: end bumper contact-FX gate
         // Bounce & Boom on bumper hit
         if(!hasIronBall && G.modifiers.some(m=>m.id==='bounce_boom')) {
           const boomSpd = Math.hypot(G.ballVel.x, G.ballVel.z);
@@ -25774,6 +26052,10 @@ function updatePhysics(dt) {
         }
 
         // Impact FX + audio
+        // v0.26i8: rate-limited — slow-rolling against a crate used to fire
+        // particles + a NEW Web Audio graph + shake + a style event on every
+        // contact tick (FPS collapse on Deck).
+        if(_contactFxAllowed('crate', 120, 0.35)) {
         spawnHitParticles(G.ballPos);
         if(AC) {
           try {
@@ -25792,6 +26074,7 @@ function updatePhysics(dt) {
         // combo item ('Boxer'). Each impact pays small style points and
         // contributes toward BOXER (3+) and HEAVYWEIGHT (5+) tricks.
         if(typeof recordStyleEvent === 'function') recordStyleEvent('crate_bump');
+        } // v0.26i8: end crate contact-FX gate
       }
     }
   }
@@ -27983,6 +28266,19 @@ function showLiveStyleEvent(type, pts, mult, isNewType) {
 function rebuildComboDisplay(total, mult) {
   const container = document.getElementById('style-popup');
   if(!container) return;
+  // v0.26i10: cap the chain array in place. Only ~3 lines ever display, so
+  // items beyond the newest 40 are pure per-bounce string-build and slice
+  // cost. A long pinball shot pushed hundreds of wall_bounce entries here;
+  // scoring is unaffected (it reads G._shotEvents, not this display list).
+  // _comboChainDropped tells the truncator to keep the leading "…" even
+  // when the surviving tail happens to fit.
+  {
+    const _ci = G._comboChainItems;
+    if(_ci && _ci.length > 40) {
+      _ci.splice(0, _ci.length - 40);
+      G._comboChainDropped = true;
+    }
+  }
   container.innerHTML = '';
 
   // Score line at top — show base × mult so the math is clear
@@ -28037,25 +28333,31 @@ function _truncateComboChain(chain, parts) {
     lh = fs * 1.5;
   }
   const maxH = lh * 3 + 1; // +1 px slop for sub-pixel rounding
-  if(chain.scrollHeight <= maxH) return; // already fits
+  const forceEllipsis = !!G._comboChainDropped;   // older items already capped away
+  if(chain.scrollHeight <= maxH && !forceEllipsis) return; // already fits
   const renderTail = (tailN) => {
     const tail = parts.slice(parts.length - tailN);
     const sep = '<span style="opacity:0.55;font-weight:400">\u2026</span>';
-    if(tailN >= parts.length) {
+    if(tailN >= parts.length && !forceEllipsis) {
       chain.innerHTML = tail.join(' + ');
     } else {
       chain.innerHTML = sep + ' + ' + tail.join(' + ');
     }
   };
-  // Start by trying to show ALL items (no truncation), then shrink from the
-  // front until we fit 3 lines.
-  let tailN = parts.length;
-  renderTail(tailN);
-  let safety = 64;
-  while(chain.scrollHeight > maxH && tailN > 1 && safety-- > 0) {
-    tailN--;
-    renderTail(tailN);
+  // v0.26i10: BINARY SEARCH over the tail size. The old loop shrank tailN
+  // one item at a time, and every step was an innerHTML write + a forced
+  // synchronous reflow (scrollHeight read). On a long pinball shot the
+  // chain grew unbounded, so each new bounce paid O(chain length) reflows —
+  // the Steam Deck single-digit-FPS collapse on bounce-heavy later holes.
+  // Binary search caps it at ~6 reflows regardless of chain length.
+  let lo = 1, hi = parts.length, fit = 1;
+  while(lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    renderTail(mid);
+    if(chain.scrollHeight <= maxH) { fit = mid; lo = mid + 1; }
+    else { hi = mid - 1; }
   }
+  renderTail(fit);
 }
 
 // Check tricks during the shot (live), show them immediately
@@ -30983,12 +31285,12 @@ function renderShop() {
       const isPostElite = !!G._shopUpgradeWasPostElite;
       const hasVoucher = (G._freeUpgradeVouchers|0) > 0;
       const flair = hasVoucher
-        ? `🎟️ FREE UPGRADE${G._freeUpgradeVouchers > 1 ? ' ×'+G._freeUpgradeVouchers : ''}`
-        : (isPostElite ? '⚠️ POST-ELITE BONUS' : '✨ UPGRADE AVAILABLE');
+        ? `<span class=px-gift></span> FREE UPGRADE${G._freeUpgradeVouchers > 1 ? ' ×'+G._freeUpgradeVouchers : ''}`
+        : (isPostElite ? '<span class=px-warning></span> POST-ELITE BONUS' : '<span class=px-sparkles></span> UPGRADE AVAILABLE');
       const tileSubtitle = hasVoucher
         ? `${totalCount} eligible — your voucher covers the cost. Pick a card or perk to evolve.`
         : `${totalCount} eligible — pick one of two branches to evolve it. Effect lasts the rest of the run.`;
-      _svcUpgradeHtml += `<div class="shop-section-label">⭐ Upgrades <span class="shop-section-desc">— double down on what you already own</span></div>`;
+      _svcUpgradeHtml += `<div class="shop-section-label"><span class=px-sparkles></span> Upgrades <span class="shop-section-desc">— double down on what you already own</span></div>`;
       if(G._thisShopUpgradeUsed) {
         // v0.23aa3: one upgrade per shop. Once used, render a dimmed,
         // non-clickable tile so the player isn't invited to tap a button that
@@ -31015,7 +31317,7 @@ function renderShop() {
           border:2px solid #ffd750;
           box-shadow:0 0 18px rgba(255,215,80,0.35), inset 0 0 12px rgba(255,215,80,0.12);
           position:relative;">
-          <div class="shop-card-emoji" style="filter:drop-shadow(0 0 6px rgba(255,215,80,0.7))">⭐</div>
+          <div class="shop-card-emoji" style="filter:drop-shadow(0 0 6px rgba(255,215,80,0.7))"><span class=px-sparkles></span></div>
           <div class="shop-card-body">
             <div class="shop-card-name" style="color:#ffe580">Upgrade a Card or Perk</div>
             <div class="shop-card-desc">${tileSubtitle}</div>
@@ -31070,7 +31372,7 @@ function renderShop() {
 
   // ── Perk row ──
   if(picks.length > 0) {
-    _perksHtml += '<div class="shop-section-label">⭐ Perks <span class="shop-section-desc">— permanent passive upgrades</span></div>';
+    _perksHtml += '<div class="shop-section-label"><span class=px-gear></span> Perks <span class="shop-section-desc">— permanent passive upgrades</span></div>';
     for(const perk of picks) {
       const owned = !perk.stackable && G.modifiers.find(m => m.id === perk.id);
       const scaledPrice = getScaledPrice(perk);
@@ -35095,12 +35397,12 @@ const PERKS_HIDDEN_FROM_SHOP = new Set(['all_bounce', 'bowling_ball']);
 const INACTIVE_CARDS = new Set(['wrecking_ball', 'wall_magnet', 'arc_shot', 'golden_path', 'slow_mo', 'curve_ball', 'backspin', 'reverse', 'inbounds_card']);
 
 const CARD_DEFS = {
-  lil_scootch:  { id:'lil_scootch',  emoji:'🧤', name:"Lil' Scootch",    desc:'Cartoon glove gives the ball a nudge.',                        rarity:'common',    price:10,   context:'any',    holdable:false },
+  lil_scootch:  { id:'lil_scootch',  emoji:'🧤', name:"Lil' Scootch",    desc:'Give the ball a nudge.',                        rarity:'common',    price:10,   context:'any',    holdable:false },
   power_shot:   { id:'power_shot',   emoji:'💪', name:'Power Shot',      desc:'This swing: 2× max power.',                                    rarity:'common',    price:20,   context:'pre',    holdable:false, weight:6 },
   shooter:      { id:'shooter',      emoji:'🚀', name:'Missile', desc:'Fire a missile that destroys obstacles in its path.',            rarity:'common',    price:20,  context:'pre',    holdable:false, weight:4 },
-  sniper:       { id:'sniper',       emoji:'🎯', name:'Sniper',          desc:'Zoom a scope and fire a precision missile at a distant obstacle.', rarity:'epic',      price:24,  context:'pre',    holdable:false, weight:3 },
-  sharpshooter: { id:'sharpshooter', emoji:'🏌️‍♂️', name:'Sharpshooter',    desc:'Zoom a scope and launch YOUR BALL precisely down the barrel.',       rarity:'epic',      price:30,  context:'pre',    holdable:false, weight:2 },
-  grenade:      { id:'grenade',      emoji:'🧨', name:'Grenade',         desc:'Arms grenade aim mode. Pull back to set throw distance & direction (red arc); release to lob. Bounces 3×, then BOOM.', rarity:'common',    price:15,  context:'pre',    holdable:false },
+  sniper:       { id:'sniper',       emoji:'🎯', name:'Sniper',          desc:'Look down the scope and fire a precision missile at a distant obstacle.', rarity:'epic',      price:24,  context:'pre',    holdable:false, weight:3 },
+  sharpshooter: { id:'sharpshooter', emoji:'🏌️‍♂️', name:'Sharpshooter',    desc:'Look down the scope and fire YOUR BALL down the barrel.',       rarity:'epic',      price:30,  context:'pre',    holdable:false, weight:2 },
+  grenade:      { id:'grenade',      emoji:'🧨', name:'Grenade',         desc:'Pull back to set throw distance and direction, then release to lob. Bounces 3×, then BOOM.', rarity:'common',    price:15,  context:'pre',    holdable:false },
   boulder:      { id:'boulder',      emoji:'🪨', name:'Boulder',         desc:'Summon an unstoppable boulder that smashes everything.',          rarity:'epic',      price:32,  context:'pre',    holdable:false, weight:2 },
   dodgeball:    { id:'dodgeball',    emoji:'🔴', name:'Dodgeball',       desc:'Fire a super-bouncy red ball that ricochets off everything.',     rarity:'epic',      price:42,  context:'pre',    holdable:false, weight:2 },
   explosivo:    { id:'explosivo',    emoji:'💥', name:'Explosivo',       desc:'Detonate a huge explosion at the ball\'s position.',              rarity:'epic',      price:21,  context:'any',    holdable:false },
@@ -35111,10 +35413,10 @@ const CARD_DEFS = {
   walkies:      { id:'walkies',      emoji:'🦵', name:'Walkies',         desc:'Sprout legs and walk anywhere for 12 seconds.',                  rarity:'rare',      price:22,  context:'pre',    holdable:false },
   // arc_shot hidden — may revisit later
   // arc_shot:     { id:'arc_shot',     emoji:'🌈', name:'Arc Shot',        desc:'This swing: high arc trajectory, sail over obstacles.',           rarity:'rare',      price:12,  context:'pre',    holdable:false },
-  iron_ball:    { id:'iron_ball',    emoji:'🔩', name:'Iron Ball',       desc:'Plow through obstacles, destroying them on contact. Play anytime!', rarity:'rare',      price:18,  context:'any',    holdable:false },
+  iron_ball:    { id:'iron_ball',    emoji:'🔩', name:'Iron Ball',       desc:'Plow through obstacles, destroying them on contact.', rarity:'rare',      price:18,  context:'any',    holdable:false },
   mulligan:     { id:'mulligan',     emoji:'↩️', name:'Mulligan',        desc:'Undo your last swing. Ball returns, stroke refunded.',            rarity:'rare',      price:22,  context:'post',   holdable:false },
   airstrike:    { id:'airstrike',    emoji:'🎯', name:'Airstrike',       desc:'Tap a spot. After 2s, massive explosion rains down.',             rarity:'epic',      price:28,  context:'pre',    holdable:false },
-  cannonball:   { id:'cannonball',   emoji:'💣', name:'Cannonball',      desc:'This swing: blast through walls AND spikes — both shatter on contact. Great for off-roading.',     rarity:'epic',      price:25,  context:'pre',    holdable:false },
+  cannonball:   { id:'cannonball',   emoji:'💣', name:'Cannonball',      desc:'Blast through walls AND spikes — both shatter on contact.',     rarity:'epic',      price:25,  context:'pre',    holdable:false },
   wrecking_ball:{ id:'wrecking_ball',emoji:'⛓️', name:'Wrecking Ball',   desc:'Ball swings on a chain arc, destroying everything in the sweep.', rarity:'epic',      price:24,  context:'during', holdable:false },
   reverse:      { id:'reverse',      emoji:'⏪', name:'Reverse',         desc:'Instantly reverse the ball\'s direction. Full speed. BIG combo points — huge bonus if it leads to a hole.', rarity:'common',    price:10,  context:'during', holdable:false },
   // v0.23i: Time Rewind — replaces the retired Backspin card in the
@@ -35140,11 +35442,11 @@ const CARD_DEFS = {
   // frequent" — bump price 25% (30→38), drop weight 2→1 to halve its shop
   // appearance rate.
   portal_grenade: { id:'portal_grenade', emoji:'🟣', name:'Portal Grenade',
-    desc:'Lob a grenade — wherever it lands becomes a purple exit portal. A green entry portal auto-places in front of your ball, facing the exit. Ball + missiles + dodgeballs + grenades + boulders all teleport through. Stays open until hole-out.',
+    desc:'Lob a grenade — wherever it lands becomes a purple exit portal. A green entry portal gets dropped in front of your ball. Everything teleports through. Stays open for the rest of the hole.',
     rarity:'legendary', price:38, context:'pre', holdable:false, weight:1 },
-  holy_hand_grenade: { id:'holy_hand_grenade', emoji:'⛪', name:'Holy Hand Grenade', desc:'And the Lord did grin. Lob a sanctified grenade — 2× blast radius. Spares corner walls (the Lord is merciful).', rarity:'legendary', price:25, context:'pre', holdable:false, weight:1 },
-  airstrike:    { id:'airstrike',    emoji:'✈️', name:'Air Strike',       desc:'Call in a Top Gun-style bombing run. A pill-shaped target oscillates near→far in front of you — tap to lock distance. A jet drops 8 bombs across the strike zone, destroying everything inside.', rarity:'epic', price:35, context:'pre', holdable:false, weight:2 },
-  pinball:      { id:'pinball',      emoji:'🎰', name:'Pinball',         desc:'12 seconds of invulnerable, frictionless, perfectly bouncy ball. The walls cannot hurt you. The walls cannot hold you.', rarity:'legendary', price:32, context:'pre', holdable:false, weight:1 },
+  holy_hand_grenade: { id:'holy_hand_grenade', emoji:'⛪', name:'Holy Hand Grenade', desc:'Lob a sanctified grenade with a massive blast radius.', rarity:'legendary', price:25, context:'pre', holdable:false, weight:1 },
+  airstrike:    { id:'airstrike',    emoji:'✈️', name:'Air Strike',       desc:'Call in a bombing run. A pill-shaped target oscillates in front of you — tap to lock in the strike. A jet drops 8 bombs across the strike zone, destroying everything in their path.', rarity:'epic', price:35, context:'pre', holdable:false, weight:2 },
+  pinball:      { id:'pinball',      emoji:'🎰', name:'Pinball',         desc:'12 seconds of invulnerable, frictionless, perfectly bouncy ball.', rarity:'legendary', price:32, context:'pre', holdable:false, weight:1 },
   freeze_frame: { id:'freeze_frame', emoji:'🧊', name:'Freeze Frame',    desc:'All moving obstacles freeze for 10 seconds.',                    rarity:'rare',      price:11,  context:'any',    holdable:false, weight:3 },
   coin_shower:  { id:'coin_shower',  emoji:'🌧️', name:'Coin Shower',     desc:'Drop 20 coins in a line ahead of your ball, ending with a 🪙×10 bonus coin.', rarity:'rare',      price:18,  context:'pre',    holdable:false },
   // golden_path hidden — may revisit later
@@ -35152,15 +35454,15 @@ const CARD_DEFS = {
   // v0.20g: angler moved from CARD_DEFS to ALL_PERKS. Was a single-use card;
   // is now a passive perk that shows the bounce predictor on every aim.
   // angler:       { id:'angler',       emoji:'📐', name:'Angler',          desc:'This swing: shows predicted bounce lines off walls.',              rarity:'rare',      price:14,  context:'pre',    holdable:false },
-  floomba:      { id:'floomba',      emoji:'🤖', name:'Floomba',         desc:'Deploy a disc robot that roams the course destroying obstacles.',  rarity:'epic',      price:28,  context:'pre',    holdable:false },
-  perpetual_motion: { id:'perpetual_motion', emoji:'♾️', name:'Perpetual Motion', desc:'Zero friction and perfect wall bounces. Pure chaos.', rarity:'rare', price:20, context:'any', holdable:false },
+  floomba:      { id:'floomba',      emoji:'🤖', name:'Floomba',         desc:'Deploy a robot that roams the course destroying obstacles.',  rarity:'epic',      price:28,  context:'pre',    holdable:false },
+  perpetual_motion: { id:'perpetual_motion', emoji:'♾️', name:'Perpetual Motion', desc:'Zero friction. Pure chaos.', rarity:'rare', price:20, context:'any', holdable:false },
   wall_magnet:  { id:'wall_magnet',  emoji:'🧲', name:'Wall Magnet',     desc:'This swing: ball curves toward the nearest wall. Bounce synergy!', rarity:'rare',      price:15,  context:'pre',    holdable:false },
-  catapult:     { id:'catapult',     emoji:'🪤', name:'Catapult',         desc:'This swing: launch in a huge arc with bouncy landings. Skip walls!', rarity:'rare',  price:18,  context:'pre',    holdable:false, weight:3 },
+  catapult:     { id:'catapult',     emoji:'🪤', name:'Catapult',         desc:'Launch in a huge arc with bouncy landings. Skip walls!', rarity:'rare',  price:18,  context:'pre',    holdable:false, weight:3 },
   mighty_egg:   { id:'mighty_egg',   emoji:'🥚', name:'The Mighty Egg',        desc:'Encase your ball in a protective egg. Absorbs one 1-HP hit from spikes or other damage obstacles. Cracks on impact.', rarity:'common', price:10, context:'any', holdable:false, weight:2 },
-  sticky:       { id:'sticky',       emoji:'🟢', name:'Sticky',           desc:'Ball sticks to the first surface it hits — wall, bumper, spinner, slide block, rock, corner, spike (still costs HP), or pop-up wall. Take a FREE re-aim shot from the stuck position. Tap card again to unstick.', rarity:'common', price:15, context:'pre', holdable:false, weight:4 },
-  parkour:      { id:'parkour',      emoji:'🤸', name:'Parkour',          desc:'This swing: automatically vault the first obstacle in your path with a slow-mo cartwheel.', rarity:'rare', price:20, context:'pre', holdable:false, weight:3 },
-  vacuum:       { id:'vacuum',       emoji:'🌪️', name:'Vacuum',            desc:'Suck up coins, hearts, and obstacles in a wide V-shaped cone in front of you. Play anytime — mid-roll briefly slows time.', rarity:'rare', price:30, context:'any', holdable:false, weight:2 },
-  goal_oriented:{ id:'goal_oriented',emoji:'🎯', name:'Goal Oriented',    desc:'MID-SWING: redirect the ball mid-flight straight toward the hole. Combos with Power Shot. (Upgrade adds a pre-swing aim lock.)', rarity:'epic', price:25, context:'pre', holdable:false, weight:3 },
+  sticky:       { id:'sticky',       emoji:'🟢', name:'Sticky',           desc:'Ball sticks to the first surface it hits — wall, bumper, spinner, slide block, rock, corner, spike, or pop-up wall. Take a FREE shot from the stuck position.', rarity:'common', price:15, context:'pre', holdable:false, weight:4 },
+  parkour:      { id:'parkour',      emoji:'🤸', name:'Parkour',          desc:'Automatically vault over the first obstacle in your path with a cartwheel.', rarity:'rare', price:20, context:'pre', holdable:false, weight:3 },
+  vacuum:       { id:'vacuum',       emoji:'🌪️', name:'Vacuum',            desc:'Suck up coins, hearts, and obstacles in a wide V-shaped cone in front of you. Play anytime.', rarity:'rare', price:30, context:'any', holdable:false, weight:2 },
+  goal_oriented:{ id:'goal_oriented',emoji:'🎯', name:'Goal Oriented',    desc:'Mid-swing: redirect the ball mid-flight straight toward the hole.', rarity:'epic', price:25, context:'pre', holdable:false, weight:3 },
   // v0.21c: Frisbee — arc fly-over, then snaps to a hard stop. Pull-distance still
   // controls power; horizontal range is 1.5× normal max but ground friction is 4×
   // normal so it stops in roughly half the post-landing distance. Visual: ball
@@ -35173,7 +35475,7 @@ const CARD_DEFS = {
   // v0.21c: Beat 'Em Up — during-roll. Cyan ring around the ball; tap card to
   // throw a giant anime fist that punches the closest in-circle obstacle. Up
   // to 3 punches per swing. Each punch destroys + knockback + style bonus.
-  beat_em_up:   { id:'beat_em_up',   emoji:'🥊', name:"Beat 'Em Up",       desc:'Cyan ring follows your ball. Tap to PUNCH the closest obstacle inside — works pre-swing or mid-roll. Up to 3 punches per swing. BEATDOWN bonus if all 3 land!', rarity:'epic', price:40, context:'during', holdable:false, weight:2 },
+  beat_em_up:   { id:'beat_em_up',   emoji:'🥊', name:"Beat 'Em Up",       desc:'Tap to bonk the closest obstacle in the Punch Zone™ — pre-swing or mid-roll. Up to 3 punches per swing. Get a BEATDOWN bonus if all 3 land!', rarity:'epic', price:40, context:'during', holdable:false, weight:2 },
   // v0.21h: Inbounds — card version of the perk. Activates Tron-style blue
   // grid boundary walls for the rest of THIS hole only. Stacks on top of the
   // free OOB grace (1 free per hole). Permanent perk version remains as the
@@ -35182,8 +35484,8 @@ const CARD_DEFS = {
   // ── v0.23b: 9 new cards (data-only, see _executeCardAbilityInner for impls) ──
   joker:           { id:'joker',           emoji:'🃏',  name:'Joker',             desc:'Plays a copy of the last card you played this hole. Cannot copy itself or other Jokers.',                                          rarity:'rare',      price:25, context:'any', holdable:false, weight:3 },
   power_steering:  { id:'power_steering',  emoji:'🎮',  name:'Power Steering',    desc:'While ball is in motion, hold ← / → (or canvas edges) to nudge its trajectory. Active until ball stops.',                       rarity:'rare',      price:22, context:'any', holdable:false, weight:3 },
-  parachute:       { id:'parachute',       emoji:'🪂',  name:'Parachute',         desc:'Auto-deploys at the apex of any airborne shot. Slows descent and lets you nudge landing position. 1 charge per card play.',         rarity:'epic',      price:26, context:'any', holdable:false, weight:3 },
-  skater_ball:     { id:'skater_ball',     emoji:'🛹',  name:'Skater Ball',       desc:'Ball rides a board for one swing. Hit a wall to grind it for huge style — tap left/right to balance. Press "release" to bail. Faster entry = longer grind.', rarity:'epic',      price:29, context:'pre', holdable:false, weight:3 },
+  parachute:       { id:'parachute',       emoji:'🪂',  name:'Parachute',         desc:'Auto-deploys at the apex of any airborne shot. Slows descent and lets you control your trajectory mid-flight.',         rarity:'epic',      price:26, context:'any', holdable:false, weight:3 },
+  skater_ball:     { id:'skater_ball',     emoji:'🛹',  name:'Skater Ball',       desc:'Ball rides a board for one swing. Hit a wall to grind it for huge style — tap left/right to balance (THPS-style). Press "release" to bail.', rarity:'epic',      price:29, context:'pre', holdable:false, weight:3 },
   multiball:       { id:'multiball',       emoji:'⚪⚪', name:'Multiball',         desc:'Take TWO different shots from your current position on a single swing. Whichever ball ends closer to the hole becomes your next ball.', rarity:'legendary', price:35, context:'pre', holdable:false, weight:1 },
   blackhole_grenade:{ id:'blackhole_grenade', emoji:'🕳️', name:'Blackhole Grenade', desc:'Throw a grenade that creates a black hole on impact. Sucks all coins, hearts, and obstacles within a large radius into the singularity.', rarity:'legendary', price:30, context:'pre', holdable:false, weight:1 },
   tactical_nuke:   { id:'tactical_nuke',   emoji:'☢️',  name:'Tactical Nuke',     desc:'Clears the entire hole of ALL destructible obstacles. 1 use per RUN.',                                                          rarity:'legendary', price:40, context:'pre', holdable:false, weight:1 },
@@ -35226,7 +35528,7 @@ const CHARACTERS = {
     emoji: '🏌️',
     color: 0xffffff,
     tagline: 'Balanced starter — approachable, flexible.',
-    blessings: ['No special modifiers — pure golf'],
+    blessings: ['No special modifiers, just pure golf.'],
     curses: [],
     starter: {
       // v0.22e: 8-card starter (2× each opening card) — incentivizes card
@@ -36421,7 +36723,10 @@ function discardHand() {
 //     the relevant fire-completion path re-arms the same card.
 //   EXCLUDED: airstrike (carve-out), and anything not on the spec list.
 const DOUBLE_AMMO_INSTANT_FIRE = new Set(['shooter', 'dodgeball', 'boulder', 'explosivo', 'floomba']);
-const DOUBLE_AMMO_AIM_REENTER  = new Set(['grenade', 'holy_hand_grenade', 'portal_grenade', 'sniper', 'sharpshooter']);
+// v0.26i9: portal_grenade removed — two portal pairs from one card play made
+// no sense (the second pair instantly invalidated the first). Portal Grenade
+// is now excluded from Double Ammo entirely, like airstrike.
+const DOUBLE_AMMO_AIM_REENTER  = new Set(['grenade', 'holy_hand_grenade', 'sniper', 'sharpshooter']);
 
 function isDoubleAmmoEligibleCard(cardId) {
   return DOUBLE_AMMO_INSTANT_FIRE.has(cardId) || DOUBLE_AMMO_AIM_REENTER.has(cardId);
@@ -36488,33 +36793,39 @@ function _executeCardAbilityInner(id) {
     case 'lil_scootch':  activateScootch(); break;
     case 'dodgeball':    {
       // v0.21d: Dodgeball Frenzy upgrade reads spawnCount off CARD_DEFS.dodgeball
-      // (default 1, Frenzy = 2). _missileAnim is a single slot, so we chain
-      // the second activation after the first one finishes by polling.
+      // (default 1, Frenzy = 2).
+      // v0.26i11: Frenzy REWORK per Adam — the second dodgeball is no longer
+      // auto-queued in a fan. Instead, firing the first puts a fresh Frenzy
+      // dodgeball back into your hand (marked _frenzySecond so it can't
+      // duplicate again, and _cloneDuplicate so hole-end discard doesn't
+      // recycle it into the deck). A toast tells the player they can fire
+      // the second anytime. playCard's discard of the ORIGINAL instance
+      // runs after this returns, so hand size stays legal.
       const _dbN = (typeof getCardField === 'function') ? getCardField('dodgeball','spawnCount',1) : 1;
       const _n = Math.max(1, _dbN|0);
+      const _inst = G._activeCardInstance;
       activateDodgeball();
-      if(_n > 1) {
-        // Stagger queued spawns. Each waits until _missileAnim slot is free.
-        let _queued = _n - 1;
-        const _tick = () => {
-          if(_queued <= 0) return;
-          if(!G._missileAnim) {
-            _queued--;
-            // Slight angular offset for a "fan" feel.
-            const _saved = G.shotDir.clone();
-            const _ang = (_n - _queued - 1) * 0.18 - 0.09; // small spread per shot
-            const _ca = Math.cos(_ang), _sa = Math.sin(_ang);
-            const nx = _saved.x * _ca - _saved.z * _sa;
-            const nz = _saved.x * _sa + _saved.z * _ca;
-            G.shotDir.set(nx, 0, nz).normalize();
-            activateDodgeball();
-            G.shotDir.copy(_saved);
-            if(_queued > 0) setTimeout(_tick, 200);
-          } else {
-            setTimeout(_tick, 200);
-          }
+      if(_n > 1 && !(_inst && _inst._frenzySecond)) {
+        const _copy = {
+          id: 'dodgeball',
+          instanceId: G._cardInstanceCounter++,
+          deckIndex: -1,
+          _frenzySecond: true,
+          _cloneDuplicate: true,
         };
-        setTimeout(_tick, 220);
+        if(_inst && _inst.upgradeBranch) {
+          _copy.upgradeBranch = _inst.upgradeBranch;
+          _copy._defOverride = _inst._defOverride
+            || buildCardInstanceDef('dodgeball', _inst.upgradeBranch);
+        }
+        G.hand.push(_copy);
+        // Slot/UI refresh happens in playCard's tail after the original is
+        // discarded; this timeout just covers non-playCard entry points.
+        setTimeout(() => {
+          if(typeof assignCardsToSlots === 'function') assignCardsToSlots();
+          if(typeof updateHandUI === 'function') updateHandUI();
+        }, 0);
+        showToast('🔴 FRENZY! Fire your second dodgeball anytime!', 1400);
       }
       break;
     }
@@ -36679,6 +36990,7 @@ function renderArmedChips() {
 }
 
 function updateHandUI() {
+  try { updateSlowMoButton(); } catch(e){}
   // v0.20f4: refresh armed-effect chips alongside slot rendering. Cheap
   // (string concat + innerHTML on a small element) so safe to do every call.
   renderArmedChips();
@@ -37115,21 +37427,83 @@ window.activateSlowMoPerk = activateSlowMoPerk;
 // ── Slow Mo button visibility ────────────────────────────────
 // Shows when the perk is owned and unused this hole; hides otherwise.
 function updateSlowMoButton() {
-  const btn = document.getElementById('btn-slowmo');
-  if(!btn) return;
-  const owned = G.modifiers && G.modifiers.some(m=>m.id==='slow_mo');
-  const show = owned && G.state === 'playing' && !G.inHole;
-  if(!show) { btn.style.display = 'none'; return; }
-  btn.style.display = 'block';
-  if(G._slowMoUsedThisHole || G._slowMoPerkActive) {
-    btn.disabled = true;
-    btn.innerHTML = pxifyHtml(G._slowMoPerkActive ? '🐌 Slow Mo ·' + Math.ceil(G._slowMoPerkTimer||0) + 's' : '🐌 Used');
-  } else {
-    btn.disabled = false;
-    btn.innerHTML = pxifyHtml('🐌 Slow Mo');
+  // v0.26i9: the old bottom-left pill is retired — this now drives the
+  // card-adjacent ability TILES (#ability-slots next to the hand) for both
+  // Slow Mo and Hand Brake. Name kept so all existing call sites Just Work.
+  const wrap = document.getElementById('ability-slots');
+  const smTile = document.getElementById('ab-slowmo');
+  const hbTile = document.getElementById('ab-brake');
+  if(!wrap || !smTile || !hbTile) return;
+  const playing = G.state === 'playing' && !G.inHole;
+  const smOwned = playing && G.modifiers && G.modifiers.some(m => m.id === 'slow_mo');
+  const hbOwned = playing && (typeof playerOwnsHandBrake === 'function') && playerOwnsHandBrake();
+  wrap.style.display = (smOwned || hbOwned) ? 'flex' : 'none';
+  smTile.style.display = smOwned ? 'flex' : 'none';
+  hbTile.style.display = hbOwned ? 'flex' : 'none';
+  if(smOwned) {
+    const nameEl = smTile.querySelector('.ab-name');
+    if(G._slowMoPerkActive) {
+      smTile.classList.add('disabled'); smTile.classList.remove('hot');
+      if(nameEl) nameEl.textContent = Math.ceil(G._slowMoPerkTimer || 0) + 's';
+    } else if(G._slowMoUsedThisHole) {
+      smTile.classList.add('disabled'); smTile.classList.remove('hot');
+      if(nameEl) nameEl.textContent = 'Used';
+    } else {
+      smTile.classList.remove('disabled'); smTile.classList.add('hot');
+      if(nameEl) nameEl.textContent = 'Slow Mo';
+    }
+  }
+  if(hbOwned) {
+    const engaged = G._handBrakeState === 'engaged' || G._handBrakeState === 'soft';
+    hbTile.classList.toggle('hot', !!G.rolling || engaged);
+    hbTile.classList.toggle('disabled', !G.rolling && !engaged);
   }
 }
 window.updateSlowMoButton = updateSlowMoButton;
+
+// v0.26i9: tile inputs. Slow Mo = tap / Q / L3. Hand Brake = HOLD (pointer,
+// E key, or D-pad down) — engages on press while rolling, releases on let-go.
+(function _wireAbilityTiles(){
+  function _init(){
+    const smTile = document.getElementById('ab-slowmo');
+    const hbTile = document.getElementById('ab-brake');
+    if(!smTile || !hbTile) return;
+    smTile.addEventListener('pointerdown', function(e){
+      e.preventDefault(); e.stopPropagation();
+      if(smTile.classList.contains('disabled')) return;
+      activateSlowMoPerk();
+    });
+    function hbDown(e){
+      if(e){ e.preventDefault(); e.stopPropagation(); }
+      if(!playerOwnsHandBrake() || !G.rolling || G.inHole || G.state !== 'playing') return;
+      if(G._handBrakeState !== 'engaged') _engageHandBrake();
+    }
+    function hbUp(){
+      if(G._handBrakeState === 'engaged') _releaseHandBrake();
+    }
+    hbTile.addEventListener('pointerdown', hbDown);
+    hbTile.addEventListener('pointerup', hbUp);
+    hbTile.addEventListener('pointercancel', hbUp);
+    hbTile.addEventListener('pointerleave', function(){ if(G._handBrakeState === 'engaged') _releaseHandBrake(); });
+    document.addEventListener('keydown', function(e){
+      if(e.repeat || G.state !== 'playing' || G.inHole) return;
+      if(e.target && /INPUT|TEXTAREA/.test(e.target.tagName)) return;
+      if(e.code === 'KeyQ') {
+        const owned = G.modifiers && G.modifiers.some(m => m.id === 'slow_mo');
+        if(owned && !G._slowMoPerkActive && !G._slowMoUsedThisHole) activateSlowMoPerk();
+      } else if(e.code === 'KeyE') hbDown();
+    });
+    document.addEventListener('keyup', function(e){ if(e.code === 'KeyE') hbUp(); });
+    window._ggwPadSlowMo = function(){
+      if(G.state !== 'playing' || G.inHole) return;
+      const owned = G.modifiers && G.modifiers.some(m => m.id === 'slow_mo');
+      if(owned && !G._slowMoPerkActive && !G._slowMoUsedThisHole) activateSlowMoPerk();
+    };
+    window._ggwPadBrake = function(held){ if(held) hbDown(); else hbUp(); };
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _init);
+  else _init();
+})();
 
 // ── Perpetual Motion — zero friction + perfect bounces for 10s ──
 function activatePerpetualMotion() {
@@ -38639,10 +39013,12 @@ function activateWalkiesCard() {
     G._walkieLegs = legGrp;
     G._walkieLegPhase = 0;
   }
-  if(G.holePos) {
-    const hx = G.holePos.x * TILE_SIZE, hz = G.holePos.y * TILE_SIZE;
-    G._walkTarget = new THREE.Vector3(hx, 0, hz);
-  }
+  // v0.26i10: removed the legacy auto-walk-toward-the-hole block that set
+  // G._walkTarget here. The per-frame loop converts _walkTarget into
+  // _walkDir on the FIRST walk frame, which silently stomped the aim-arrow
+  // priming above — walkies always marched at the cup no matter where the
+  // arrow pointed. Per Adam: "Walkies needs to start moving in the
+  // direction that the player's arrow is facing — currently doesn't."
   if(AC) {
     const ac = getAC(), t = ac.currentTime;
     const o = ac.createOscillator(); o.type='triangle'; o.frequency.value=440;
@@ -42043,6 +42419,7 @@ function fireSharpshooterBall() {
   G._tricksShownThisShot = new Set();
   G._trickAwardsThisShot = {};   // v0.20g: per-shot post-decay trick awards
   G._comboChainItems = [];
+  G._comboChainDropped = false;  // v0.26i10: chain-cap ellipsis flag
   G._liveShotTotal = 0;
   // v0.23b: reset Time Bomb per-shot fire flag and Parachute apex flag.
   G._timeBombFiredThisShot = false;
@@ -48388,6 +48765,7 @@ function fireShot() {
   G._tricksShownThisShot = new Set();
   G._trickAwardsThisShot = {};   // v0.20g: per-shot post-decay trick awards
   G._comboChainItems = [];
+  G._comboChainDropped = false;  // v0.26i10: chain-cap ellipsis flag
   G._liveShotTotal = 0;
   G._wasOOB = false;
   G._oobWasGhost = false;
@@ -50649,7 +51027,7 @@ const ALL_PERKS = [
   { id:'strengthen_swing', name:'Stronger Swing',      emoji:'💪', rarity:'common',    price:10,  stackable:true,  weight:4,
     desc:'+30% shot power. Stacks every purchase — no cap.' },
   { id:'bouncy_walls',     name:'Rubber Walls',        emoji:'🧱', rarity:'common',    price:15,  stackable:true,  weight:3,
-    desc:'Increased wall and surface restitution — bouncier everything. Stacks!' },
+    desc:'Everything is bouncier. Stack it for even more bounce.' },
   { id:'hot_streak',       name:'Hot Streak',          emoji:'🔥', rarity:'common',    price:20,  stackable:false, weight:6,
     desc:'Each consecutive par-or-better hole adds +10% to coin earnings (max ×4). Resets on bogey.' },
   { id:'magnet',           name:'Coin Magnet',         emoji:'🧲', rarity:'common',    price:18,  stackable:false, weight:8,
@@ -50657,23 +51035,23 @@ const ALL_PERKS = [
   { id:'extra_heart',     name:'Heart',                emoji:'❤️‍🩹', rarity:'common',   price:11,  stackable:true,  weight:4,
     desc:'Heal +2 HP instantly.' },
   { id:'high_speed_finish', name:'High Speed Finish',  emoji:'🏁', rarity:'common',   price:15,  stackable:false, weight:4,
-    desc:'Score +10 coins when you fly into the hole at high speed. Checkered flag celebration!' },
+    desc:'Score +10 coins when you fly into the hole at high speed.' },
   // RARE — base weight 4
   { id:'speed_hoops',      name:'Speed Hoops',         emoji:'⭕', rarity:'rare',      price:12,  stackable:false, weight:4,
-    desc:'Glowing GOLD hoops appear on each course. Roll through one for a burst of speed + 3 coins.' },
+    desc:'Glowing gold hoops appear on each course. Roll through one for a burst of speed + 3 coins.' },
   { id:'snowball',         name:'Snowball',            emoji:'❄️', rarity:'epic',      price:18,  stackable:true,  weight:2,
-    desc:'+25% speed on wall bounces, up to 3 bounces per stack. Stacks extend the count!' },
+    desc:'+25% speed on wall bounces, up to 3 bounces per stack.' },
   // { id:'thin_ice', ... } — hidden for now, will revisit
   { id:'free_reroll',     name:'Free Rerolls',         emoji:'🆓', rarity:'rare',      price:12,  stackable:false, weight:1,
     desc:'Your first shop reroll each hole is free.' },
   { id:'slippery_ball',   name:'Slippery Ball',        emoji:'🧊', rarity:'rare',      price:12,  stackable:true,  weight:4,
-    desc:'50% less friction on the ball. Stacks for even faster rolling.' },
+    desc:'50% less friction on the ball. Stacks for even more slipperiness.' },
   { id:'gravity_pull',    name:'Gravitational Pull',   emoji:'🌀', rarity:'rare',      price:15, stackable:false, weight:4,
     desc:'When close to the hole, a gentle force pulls the ball toward it.' },
   { id:'coin_bouncer',   name:'Coin Bouncer',          emoji:'🪙', rarity:'rare',      price:12,  stackable:true,  weight:0,
     desc:'[MERGED INTO MONEY BOUNCE v0.17r — auto-migrated on load]' },
   { id:'full_house',      name:'Full House',            emoji:'🂡', rarity:'rare',     price:30, stackable:false, weight:6,
-    desc:'Hold 5 cards at a time instead of 4. One more tool in your back pocket.' },
+    desc:'Hold 5 cards at a time instead of 4.' },
   { id:'bounce_boom',     name:'Bounce & Boom',        emoji:'🔥', rarity:'epic',     price:25, stackable:false, weight:4,
     desc:'Every wall/obstacle bounce triggers an explosion that destroys nearby obstacles. Bigger bounce = bigger boom.' },
   { id:'money_bounce',    name:'Money Bounce',         emoji:'💸', rarity:'rare',      price:15, stackable:true,  weight:3,
@@ -50681,9 +51059,9 @@ const ALL_PERKS = [
   { id:'lot_of_heart',    name:'Lot of Heart',         emoji:'💝', rarity:'rare',     price:15, stackable:false, weight:4,
     desc:'A floating heart spawns on 1/3rd of holes. Pick it up to heal 2 HP.' },
   { id:'heart_surgeon',   name:'Heart Surgeon',         emoji:'🫀', rarity:'rare',     price:22, stackable:true, weight:3,
-    desc:'+2 max HP and +4 HP heal per stack. Stack for late-run survivability.' },
+    desc:'+2 max HP and +4 HP heal per stack.' },
   { id:'explosive_speed', name:'Explosive Speed',       emoji:'💨', rarity:'rare',     price:20, stackable:true, weight:2,
-    desc:'+10% ball speed kick each time you destroy something this swing. Pre-shot projectiles + iron-ball rolls love this. Stacks!' },
+    desc:'+10% ball speed kick each time you destroy something this swing. Stacks!' },
   { id:'regeneration',    name:'Regeneration',          emoji:'🌿', rarity:'rare',     price:30, stackPrice:50, stackable:true, weight:2,
     desc:'+1 HP at the end of each hole. Steady drip of survivability. Stacks (each next stack costs more).' },
   { id:'inbounds',        name:'Healthy Boundaries',    emoji:'🟩', rarity:'rare',     price:12, stackable:false, weight:5,
@@ -50693,7 +51071,7 @@ const ALL_PERKS = [
   { id:'showboat',        name:'Showboat',              emoji:'🎭', rarity:'rare',     price:14, stackable:true,  weight:4,
     desc:'Style score coin bonus is +50% larger. Stacks: 2.0×, 2.5×, 3.0×…' },
   { id:'quick_draw',      name:'Quick Draw',            emoji:'🤠', rarity:'rare',     price:16, stackable:false, weight:3,
-    desc:'Draw 2 new cards every swing instead of 1. More chaos per stroke.' },
+    desc:'Draw 2 new cards every swing instead of 1.' },
   { id:'off_roading',     name:'Off-Roading',           emoji:'🏜️', rarity:'rare',     price:18, stackable:false, weight:3,
     desc:'Out-of-bounds grace period extended from 1.5s to 10s. Live dangerously.' },
   { id:'slow_mo',         name:'Slow Mo',               emoji:'🐌', rarity:'rare',     price:20, stackable:false, weight:3,
@@ -50702,14 +51080,14 @@ const ALL_PERKS = [
   // predictor visualization while aiming — high information value, no
   // physics changes, so it slots cleanly as a rare passive.
   { id:'angler',          name:'Angler',                emoji:'📐', rarity:'rare',     price:14, stackable:false, weight:3,
-    desc:'Shows predicted multi-bounce lines off walls every time you aim.' },
+    desc:'Shows predicted bounce angles off walls every time you aim.' },
   // EPIC — base weight 2
   { id:'big_hole',         name:'Big Hole',            emoji:'🕳️', rarity:'epic',      price:14, stackable:false, weight:2,
-    desc:'The hole radius doubles — much more forgiving on close approaches.' },
+    desc:'Hole big.' },
   { id:'three_balls',      name:'Three Balls',         emoji:'🎱', rarity:'epic',      price:24, stackable:false, weight:3,
     desc:'Each shot fires 3 balls simultaneously. The one closest to the hole continues.' },
   { id:'shrink_ray',       name:'Shrink Ray',          emoji:'🔬', rarity:'epic',      price:18, stackable:false, weight:2,
-    desc:'Ball is half its normal size — harder to sink, but slips past rocks and gaps.' },
+    desc:'Ball is half its normal size, letting you slip past obstacles.' },
   { id:'four_choices',    name:'Four!',                emoji:'4️⃣', rarity:'epic',      price:15, stackable:false, weight:1,
     desc:'The shop now shows 4 options instead of 3.' },
   { id:'money_pit',       name:'Money Pit',            emoji:'💰', rarity:'epic',      price:22, stackable:true,  weight:1,
@@ -50721,7 +51099,7 @@ const ALL_PERKS = [
   { id:'all_bounce',      name:'All Bounce No Hole',    emoji:'🏐', rarity:'epic',     price:25, stackable:false, weight:0,
     desc:'[HIDDEN v0.23p2 — being reworked into an elite, see also bowling_ball]' },
   { id:'big_boom',        name:'Big Boom',              emoji:'💥', rarity:'epic',     price:30, stackable:false, weight:2,
-    desc:'ALL your explosions are 100% larger. Missiles, grenades, Explosivo, Bounce & Boom — everything goes KABOOM.' },
+    desc:'ALL your explosions are 100% larger. Missiles, grenades, Explosivo, etc — everything goes BOOM.' },
   { id:'scorched_earth',  name:'Scorched Earth',        emoji:'🔥', rarity:'epic',     price:20, stackable:true,  weight:2,
     desc:'+1 coin per obstacle destroyed, +2 per wall chunk destroyed. Stacks!' },
   { id:'combo_multiplier',name:'Combo Multiplier',      emoji:'✨', rarity:'epic',     price:20, stackable:false, weight:2,
@@ -50730,25 +51108,25 @@ const ALL_PERKS = [
   // for additional bolts per kill. Distinct from Chain Reaction (which uses an
   // AOE explosion radius); this is single-target chains, recursion-capped at 3.
   { id:'chain_lightning', name:'Chain Lightning',       emoji:'⚡', rarity:'epic',     price:35, stackable:true,  weight:2,
-    desc:'Any destruction zaps +1 nearby obstacle per stack with lightning. Recursion-capped. Stacks with Chain Reaction!' },
+    desc:'Any destruction zaps +1 nearby obstacle per stack with lightning.' },
   // LEGENDARY — base weight 1
   { id:'double_or_nothing',name:'Double or Nothing',   emoji:'🎰', rarity:'legendary', price:27, stackable:false, weight:1,
     desc:'Once per run, wager all your coins on birdie-or-better. Hit it: 2×. Miss: zero.' },
   { id:'clone',            name:'Clone',                emoji:'✨', rarity:'legendary', price:30, stackable:false, weight:1,
-    desc:"The first card you play each hole sparkles a duplicate into your hand. Free. Compounding." },
+    desc:"The first card you play each hole spawns a duplicate in your deck." },
   { id:'dealers_choice',   name:"Dealer's Choice",      emoji:'🃏', rarity:'legendary', price:25, stackable:false, weight:1,
-    desc:"Pick a card from your deck. It always sparkles into your opening hand, leftmost slot." },
+    desc:"Pick a card from your deck. It always gets dealt into your opening hand." },
   // v0.21c: Double Ammo — every projectile card fires twice. The 2-stage flow
   // re-enters aim mode after shot 1 lands the trigger; instant-fire cards (Boulder,
   // Explosivo, Floomba) just fire 2× back-to-back. Air Strike excluded (carve-out
   // — already devastating). Counts as 1 swing total.
   { id:'double_ammo',     name:'Double Ammo',           emoji:'🎯', rarity:'legendary', price:60, stackable:false, weight:1,
-    desc:'Projectile cards fire TWICE. Aim each shot separately. Missile, Sniper, Sharpshooter, Grenade, Holy Hand Grenade, Dodgeball, Portal Grenade — all double. Counts as 1 swing.' },
+    desc:'Projectile cards fire TWICE. Aim each shot separately. Missile, Sniper, Sharpshooter, Grenade, Holy Hand Grenade, and Dodgeball all fire double. Counts as 1 swing.' },
   // ── v0.23b: 8 new perks ──────────────────────────────────────────────
   { id:'yard_sale',       name:'Yard Sale',             emoji:'🏷️', rarity:'rare',     price:15, stackable:false, weight:4,
     desc:'Sell cards from your hand for 50% of their current shop price instead of paying to remove them.' },
   { id:'bargain_hunter',  name:'Bargain Hunter',        emoji:'🏪', rarity:'common',   price:25, stackable:false, weight:3,
-    desc:'All shop prices 25% cheaper. Doesn\'t apply to itself or to Clearance Sale.' },
+    desc:'All shop prices 25% cheaper.' },
   { id:'clearance_sale',  name:'Clearance Sale',        emoji:'🛒', rarity:'epic',     price:40, stackable:false, weight:2,
     desc:'Requires Bargain Hunter. Upgrades shop discount from 25% to 50%.' },
   { id:'time_bomb',       name:'Time Bomb',             emoji:'💣', rarity:'rare',     price:22, stackable:false, weight:4,
@@ -50758,7 +51136,7 @@ const ALL_PERKS = [
   { id:'mo_money_mo_problems', name:'Mo Money Mo Problems', emoji:'💰', rarity:'epic', price:28, stackable:false, weight:2,
     desc:'Under-par payouts doubled. Par on each hole reduced by 1 (resets each hole).' },
   { id:'kickback',        name:'Drone Delivery',        emoji:'🛸', rarity:'rare',     price:18, stackable:true,  weight:4,
-    desc:'Recovery drones save your ball from OOB. 2 recoveries per hole, +1 per stack. Upgrade chain: Drone Fleet → Drone Armada → Drone Cavalry (each +1 recovery).' },
+    desc:'Recovery drones save your ball from OOB. 1 recovery per hole, +1 per stack.' },
   { id:'lucky',           name:'Lucky',                 emoji:'🍀', rarity:'rare',     price:20, stackable:true,  weight:3,
     desc:'Rare, Epic, and Legendary cards/perks appear 25% more often per stack.' },
   // v0.23i: Hand Brake — replaces the retired Backspin card. Held-friction
@@ -50768,7 +51146,7 @@ const ALL_PERKS = [
   // a shop weight boost when this perk is owned (see weightedShopPicks +
   // weightedCardPicks).
   { id:'hand_brake',      name:'Brake Pedal',           emoji:'🛑', rarity:'epic',     price:26, stackable:false, weight:3,
-    desc:'Double-tap and hold anywhere while rolling — heavy friction kicks in. Release to disengage. Quick double-tap = light auto-brake. The chaos-card safety net.' },
+    desc:'Double-tap and hold anywhere while rolling to brake.' },
 ];
 
 // Filter ALL_PERKS to only include active entries
@@ -50799,14 +51177,14 @@ const CARD_UPGRADES = {
   // pre-swing aim lock.
   goal_oriented: {
     a: { id:'guided_setup', name:'Guided Setup', emoji:'🎯', archetypes:[],
-         desc:'Also works PRE-SWING: lock your aim straight at the hole before you fire.',
+         desc:'PRE-SWING: lock your aim straight at the hole. DURING SWING: ball\'s direction shifts towards the hole.',
          preSwingLock: true },
   },
   // v0.26h14: Coin Shower upgrade — a longer downpour. Doubles the line to 40
   // regular coins; with the trailing 🪙×10 bonus that's up to 50 coins total.
   coin_shower: {
     a: { id:'coin_downpour', name:'Coin Downpour', emoji:'🌧️', archetypes:['speed'],
-         desc:'Twice the line — 40 coins ahead of your ball, still capped with the 🪙×10 bonus. Up to 50 coins total.',
+         desc:'40 coins ahead of your ball with a 🪙×10 bonus at the end. Up to 50 coins total.',
          lineCount: 40 },
     // Branch B intentionally open — single-branch upgrade.
   },
@@ -50815,29 +51193,29 @@ const CARD_UPGRADES = {
     a: { id:'big_scootch', name:'Big Scootch', emoji:'🧤', archetypes:['pinball','demolition'],
          desc:'3× nudge force — the ball gets a real shove.',
          nudgeForceMult: 3.0 },
-    b: { id:'scootch_combo', name:'Scootch Combo', emoji:'🧤', archetypes:['card_engine'],
-         desc:'Scootching also draws a card. Hand stays full while you chip away.',
-         drawOnUse: 1 },
+    // v0.26i11: Scootch Combo (b) removed per Adam — Big Scootch is the
+    // single upgrade path. (The drawOnUse read in activateScootch defaults
+    // to 0, so no code change needed there.)
   },
   power_shot: {
     a: { id:'mega_power', name:'Mega Power', emoji:'💪', archetypes:['demolition','speed'],
-         desc:'3× max power (was 2×). Screen-shake on impact.',
+         desc:'3× max power (was 2×).',
          powerMult: 3.0, screenShakeOnImpact: true },
-    b: { id:'pierce_shot', name:'Pierce Shot', emoji:'💪', archetypes:['demolition'],
-         desc:'2.25× power per stack — modest power buff, big when the wall-shatter follow-up lands.',
-         powerMult: 2.25, shatterOneWall: true, _unwired:true },
+    // v0.26i8: Pierce Shot (b) removed — its wall-shatter effect was never
+    // wired in (placeholder). power_shot is single-branch until a real second
+    // upgrade ships.
   },
   shooter: {
     a: { id:'mirv', name:'MIRV', emoji:'🚀', archetypes:['demolition'],
          desc:'Missile splits into 3 warheads on first impact, each fanning back from the boom.',
          splitCount: 3 },
     b: { id:'big_payload', name:'Big Payload', emoji:'🚀', archetypes:['demolition'],
-         desc:'2× impact size — the boom is bigger.',
+         desc:'2× impact size — bigger boom.',
          radiusMult: 2.0 },
   },
   grenade: {
     a: { id:'cluster_grenade', name:'Cluster Grenade', emoji:'🧨', archetypes:['demolition'],
-         desc:'Spawns 4 mini-grenades in a ring on first bounce. Saturation bombing.',
+         desc:'Spawns 4 mini-grenades in a ring on first bounce.',
          clusterCount: 4 },
     b: { id:'sticky_grenade', name:'Sticky Grenade', emoji:'🧨', archetypes:['trick_shot'],
          desc:'Sticks to the ground on first contact — no bounce. 1.5× radius.',
@@ -50845,7 +51223,7 @@ const CARD_UPGRADES = {
   },
   backspin: {
     a: { id:'hard_brake', name:'Hard Brake', emoji:'🔄', archetypes:['pinball','trick_shot'],
-         desc:'Full stop + draw a card. The pause that refreshes.',
+         desc:'Full stop + draw a card.',
          brakeFullStop: true, drawOnUse: 1 },
     // Branch B left open intentionally — only one branch listed in spec
   },
@@ -50854,7 +51232,7 @@ const CARD_UPGRADES = {
          desc:'Trigger jump 2 times per swing instead of once.',
          jumpCharges: 2 },
     b: { id:'rocket_jump', name:'Rocket Jump', emoji:'🦘', archetypes:['demolition'],
-         desc:'Pre-loaded or mid-swing jump explodes obstacles when you land. Ground shakes.',
+         desc:'Pre-loaded or mid-swing jump explodes obstacles when you land.',
          landingExplodes: true },
   },
   catapult: {
@@ -50868,7 +51246,7 @@ const CARD_UPGRADES = {
          // arc height and horizontal speed. Net: same arc shape, ~50% less
          // bonus range. landingExplodes still does the heavy lifting on
          // demolition feel.
-         desc:'Loftier arc with a longer, flatter trajectory. Landings explode on impact.',
+         desc:'Much bigger trajectory. Landings explode on impact.',
          arcHeightMult: 1.15, horizMult: 1.15, landingExplodes: true },
     // Branch B left open
   },
@@ -50877,7 +51255,7 @@ const CARD_UPGRADES = {
          desc:'Absorbs 2 hits instead of 1. Tougher shell.',
          hitAbsorption: 2 },
     b: { id:'dragon_egg', name:'Dragon Egg', emoji:'🥚', archetypes:['demolition'],
-         desc:'Cracks on first hit, but explodes when it cracks. Damage trade-up.',
+         desc:'Cracks on first hit, but explodes when it cracks.',
          explodeOnCrack: true },
   },
   // v0.23a7: Sticky upgrade — Double Stick. Glue to the wall TWICE and
@@ -50885,7 +51263,7 @@ const CARD_UPGRADES = {
   // multi-attempt aim across two stick anchors is genuinely game-bending.
   sticky: {
     a: { id:'double_stick', name:'Double Stick', emoji:'🟢', archetypes:['trick_shot','pinball'],
-         desc:'Stick to TWO surfaces in a row — both free re-aims count as a single swing. (Premium upgrade.)',
+         desc:'Stick to TWO surfaces in a row — both free re-aims count as a single swing.',
          maxSticks: 2, priceMult: 2.5 },
     // Branch B left open for a future variant.
   },
@@ -50894,22 +51272,23 @@ const CARD_UPGRADES = {
   //  INACTIVE_CARDS so only the perk variant is reachable.)
   walkies: {
     a: { id:'power_walkies', name:'Power Walkies', emoji:'🦵', archetypes:['speed'],
-         desc:'2.6× walk speed (jog!), +30% duration (~13s).',
-         walkSpeedMult: 2.6, durationMult: 1.3 },
+         // v0.26i11: duration bumped +30% → +50% per Adam (12s base → ~18s).
+         desc:'2.6× walk speed (jog!), +50% duration (~18s).',
+         walkSpeedMult: 2.6, durationMult: 1.5 },
     b: { id:'stompies', name:'Stompies', emoji:'🦵', archetypes:['demolition'],
          desc:'Walking destroys obstacles you touch. Heavy footfalls.',
          destroyOnContact: true },
   },
   iron_ball: {
     a: { id:'wrecking_ball_iron', name:'Wrecking Ball', emoji:'🔩', archetypes:['demolition'],
-         desc:'1.5× shot power. Hard hit; not the apocalypse.',
+         desc:'1.5× shot power.',
          powerMult: 1.5 },
     // v0.22b: Snowball Iron — picks up speed on every destruction.
     // Reads speedOnDestroy multiplier off the card def in destroyObstacles
     // (the iron-destruction code path) — applied as an XZ velocity scale
     // when at least one obstacle is destroyed in this contact.
     b: { id:'snowball_iron', name:'Snowball Iron', emoji:'❄️🔩', archetypes:['demolition','speed'],
-         desc:'+30% speed on every obstacle destruction. Builds momentum as you smash through.',
+         desc:'+30% speed on every obstacle destruction. Build momentum as you smash through stuff.',
          speedOnDestroy: 1.30 },
   },
   freeze_frame: {
@@ -50922,7 +51301,7 @@ const CARD_UPGRADES = {
   },
   parkour: {
     a: { id:'acrobat', name:'Acrobat', emoji:'🤸', archetypes:['trick_shot'],
-         desc:'Vaults the first 2 obstacles, not just one. (+50% trick points + brief slow-mo land in a future patch.)',
+         desc:'Vault over the first 2 obstacles.',
          vaultCount: 2, trickPointsMult: 1.5, briefSlowMo: true },
     // Branch B left open
   },
@@ -50950,21 +51329,25 @@ const CARD_UPGRADES = {
   },
   dodgeball: {
     a: { id:'dodgeball_frenzy', name:'Dodgeball Frenzy', emoji:'🔴', archetypes:['demolition','pinball'],
-         desc:'2 dodgeballs in a fan (queued — second fires after first finishes).',
+         // v0.26i11: reworked per Adam — no more auto-queued fan. Firing the
+         // first dodgeball keeps a Frenzy dodgeball in your hand; fire the
+         // second whenever you like (toast prompts the player after shot 1).
+         desc:'Fire off 2 dodgeballs in a row.',
          spawnCount: 2 },
     b: { id:'bouncing_bomb', name:'Bouncing Bomb', emoji:'🔴', archetypes:['demolition'],
-         desc:'Dodgeball explodes on every 3rd bounce. Bouncing → booming.',
+         desc:'Dodgeball explodes on every 3rd bounce.',
          explodeEveryNBounces: 3 },
   },
   explosivo: {
     a: { id:'mega_explosivo', name:'Mega Explosivo', emoji:'💥', archetypes:['demolition'],
-         desc:'1.75× radius. Screen-shake to taste.',
-         radiusMult: 1.75, screenShakeOnImpact: true },
+         // v0.26i11: radius 1.75× → 2× per Adam.
+         desc:'2× radius.',
+         radiusMult: 2.0, screenShakeOnImpact: true },
     // Branch B left open
   },
   ghost_ball: {
     a: { id:'long_ghost', name:'Long Ghost', emoji:'👻', archetypes:['trick_shot','pinball'],
-         desc:'6s duration (was 3s). The phase lasts twice as long. (1.2× speed + ghostify-touched lands later.)',
+         desc:'6s duration (was 3s). More ghost time.',
          durationMult: 2.0, speedMult: 1.2, ghostifyTouched: true },
     // speedMult & ghostifyTouched flagged for follow-up wiring
   },
@@ -50972,9 +51355,11 @@ const CARD_UPGRADES = {
   // INACTIVE_CARDS so the upgrade is harmless dead code. Kept for when the
   // base card is reactivated.
   floomba: {
-    a: { id:'mega_floomba', name:'Mega Floomba', emoji:'🤖', archetypes:['demolition'],
-         desc:'Mech-tank chassis: 2.47× size, 1.75× speed, twin cannons, faces direction of travel.',
-         sizeMult: 2.47, speedMult: 1.75 },
+    // v0.26i11: renamed Mega → Mecha Floomba per Adam; 2.47× → 2.5× size,
+    // 1.75× → 2× speed.
+    a: { id:'mega_floomba', name:'Mecha Floomba', emoji:'🤖', archetypes:['demolition'],
+         desc:'Floomba becomes Mecha-fied. 2.5× size, 2× speed.',
+         sizeMult: 2.5, speedMult: 2.0 },
     b: { id:'floomba_squad', name:'Floomba Squad', emoji:'🤖', archetypes:['demolition'],
          desc:'2 Floombas spawn instead of 1. Roomba army.',
          spawnCount: 2 },
@@ -50982,8 +51367,10 @@ const CARD_UPGRADES = {
   // ── LEGENDARY ──
   holy_hand_grenade: {
     a: { id:'hand_of_god', name:'Hand of God', emoji:'⛪', archetypes:['demolition'],
-         desc:'4× blast radius (vs HHG\'s 3×). The Lord is wroth.',
-         radiusMult: 4.0/3.0 /* HHG already 3×; 4/3 brings the total to 4× */ },
+         // v0.26i11: per Adam — Hand of God is now 2× the (already large)
+         // Holy Hand Grenade blast radius.
+         desc:'2x large Holy Hand Grenade radius.',
+         radiusMult: 2.0 /* 2× on top of HHG's blast */ },
     b: { id:'divine_wrath', name:'Divine Wrath', emoji:'⛪', archetypes:['demolition'],
          desc:'Holy explosion also heals you 1 HP. Smite + sustain.',
          healOnExplosion: 1 },
@@ -50992,9 +51379,8 @@ const CARD_UPGRADES = {
     a: { id:'eternal_pinball', name:'Eternal Pinball', emoji:'🎰', archetypes:['pinball'],
          desc:'20s duration (was 12s).',
          durationMult: 20/12 },
-    b: { id:'hyperball', name:'Hyperball', emoji:'🎰', archetypes:['pinball','speed'],
-         desc:'12s but ball is 2× speed at launch. The bounce friction is already zero, so the kick persists.',
-         speedMult: 2.0 },
+    // v0.26i11: Hyperball (b) removed per Adam — Eternal Pinball is the
+    // single upgrade path.
   },
   // v0.22d: Beat 'Em Up upgrades. Final Fight (a) doubles your punches per
   // swing from 3 to 6 and pays a bigger bonus if all 6 land. Bigger ring (b)
@@ -51012,11 +51398,10 @@ const CARD_UPGRADES = {
   // armPortalGrenade / fireGrenade when isPortal — see lobMult lookup.
   portal_grenade: {
     a: { id:'portal_trebuchet', name:'Portal Trebuchet', emoji:'🟣', archetypes:['speed','trick_shot'],
-         desc:'Throw the portal 2× as far. For when the green and the cup are on different planets.',
+         desc:'Throw the portal 2× as far.',
          lobMult: 2.0 },
-    b: { id:'wider_portal', name:'Wider Portal', emoji:'🟣', archetypes:['trick_shot','pinball'],
-         desc:'Portal mouth is 50% wider — easier to thread shots through. Forgiving aim.',
-         portalRadiusMult: 1.5 },
+    // v0.26i11: Wider Portal (b) removed per Adam — Portal Trebuchet is the
+    // single upgrade path. (portalRadiusMult reads default to 1.0.)
   },
   // v0.23b1: Parachute upgrades. Skydiver (a) bumps charges from 1 to 3 per
   // hole — the spec's original Skydiver legendary, now properly an upgrade
@@ -51025,30 +51410,30 @@ const CARD_UPGRADES = {
   parachute: {
     // v0.23aa3: Soft Landing (b) removed per Adam. Only Skydiver remains.
     a: { id:'skydiver', name:'Skydiver', emoji:'🪂', archetypes:['trick_shot'],
-         desc:'3 parachute charges per hole instead of 1. Three free apex saves every hole.',
+         desc:'3 parachute charges per hole instead of 1.',
          skydiver: true },
   },
   // v0.23b4: Skater Ball upgrades. Pro Skater (a) makes the balance minigame
   // more forgiving — drift force grows slower so long grinds are reachable.
   // Trick Master (b) doubles style point gen while grinding.
   skater_ball: {
+    // v0.26i11: per Adam — Pro Skater is now "easier balancing + less
+    // friction". grindFriction is the per-frame velocity multiplier used in
+    // tickSkaterBall (base 0.9985; 0.9993 ≈ half the per-second bleed).
     a: { id:'pro_skater', name:'Pro Skater', emoji:'🛹', archetypes:['trick_shot'],
-         desc:'Balance drift force grows 50% slower. Long grinds are reachable.',
-         driftRampMult: 0.5 },
+         desc:'Easier balancing + less friction = longer grinds.',
+         driftRampMult: 0.5, grindFriction: 0.9993 },
     b: { id:'trick_master', name:'Trick Master', emoji:'🛹', archetypes:['trick_shot'],
-         desc:'Style points generate 2× faster while grinding. 16/sec instead of 8/sec.',
+         desc:'Style points generate 2× faster while grinding.',
          styleRateMult: 2.0 },
   },
-  // v0.23b1: Power Steering upgrades. Tighter Turning (a) raises the deflection
-  // cap from 30° to 60° so you can carve harder. Active Steering (b) adds an
-  // auto-aim tug toward the cup while held, so you don't have to overcorrect.
+  // v0.23b1: Power Steering upgrade. Tighter Turning raises the deflection
+  // cap from 30° to 60° so you can carve harder. (Auto-Aim branch b removed
+  // in v0.26i10 — was never wired into gameplay.)
   power_steering: {
     a: { id:'tighter_turning', name:'Tighter Turning', emoji:'🎮', archetypes:['trick_shot'],
-         desc:'Deflection cap raised from 30° to 60°. Carve harder.',
+         desc:'Turn tighter.',
          deflectionCapDeg: 60 },
-    b: { id:'auto_aim', name:'Auto-Aim', emoji:'🎮', archetypes:['trick_shot'],
-         desc:'While steering, the ball gently homes toward the cup. Soft tug, not magnetic.',
-         autoAim: true },
   },
   // v0.23b1: Multiball upgrades. Triple Threat (a) gives THREE shots; pick
   // the closest. Buy-One-Get-One (b) — the loser ball stays as a passive
@@ -51097,11 +51482,10 @@ const PERK_UPGRADES = {
   // v0.21h: Rubber Walls — bouncy_walls
   bouncy_walls: {
     a: { id:'trampoline_walls', name:'Trampoline Walls', emoji:'🧱', archetypes:['pinball'],
-         desc:'1.5× restitution boost per stack.',
+         desc:'1.5× more bounciness per stack.',
          restitutionMult: 1.5 },
-    b: { id:'bumper_walls', name:'Bumper Walls', emoji:'🧱', archetypes:['pinball'],
-         desc:'Walls also act as bumpers — small kick on contact.',
-         bumperKick: true },
+    // v0.26i11: Bumper Walls (b) removed per Adam — Trampoline Walls is the
+    // single upgrade path. (bumperKick reads default to false.)
   },
   // v0.21h: Hot Streak
   hot_streak: {
@@ -51118,14 +51502,14 @@ const PERK_UPGRADES = {
   // v0.21h: Heart — extra_heart
   extra_heart: {
     a: { id:'big_heart', name:'Big Heart', emoji:'❤️‍🩹', archetypes:[],
-         desc:'All hearts heal +3 HP instead of +2 (purchase, pickups, regen-adjacent).',
+         desc:'All hearts heal +3 HP instead of +2.',
          heartHeal: 3 },
   },
   // v0.21h: High Speed Finish
   high_speed_finish: {
     a: { id:'checkered_flag', name:'Checkered Flag', emoji:'🏁', archetypes:['speed'],
-         desc:'+20 coins instead of +10, plus brief slow-mo on the finish.',
-         coinsOnFinish: 20, slowMoOnFinish: true /* slow-mo bit deferred — coin bonus is the headline */ },
+         desc:'+20 coins instead of +10.',
+         coinsOnFinish: 20 },
   },
   // ──────────────── RARE ────────────────
   speed_hoops: {
@@ -51150,9 +51534,9 @@ const PERK_UPGRADES = {
     a: { id:'frictionless', name:'Frictionless', emoji:'🧊', archetypes:['speed'],
          desc:'75% friction reduction per stack (was 50%).',
          frictionFactorPerStack: 0.25 },
-    b: { id:'glacial_ball', name:'Glacial Ball', emoji:'🧊', archetypes:['speed','pinball'],
-         desc:'Less friction + slight wall sliding (curves along walls).',
-         frictionFactorPerStack: 0.5, wallSliding: true, _unwired:true /* wall-sliding physics deferred */ },
+    // v0.26i8: Glacial Ball (b) removed — wall-sliding physics was never
+    // wired in (placeholder). slippery_ball is single-branch until a real
+    // second upgrade ships.
   },
   gravity_pull: {
     // v0.23aa3: Magnetic Hole (b) removed per Adam — bad upgrade idea. Only the
@@ -51185,16 +51569,16 @@ const PERK_UPGRADES = {
          spawnChance: 1.0 },
   },
   heart_surgeon: {
-    a: { id:'cardiologist', name:'Cardiologist', emoji:'🫀', archetypes:[],
-         desc:'+3 max HP per stack instead of +2 (applies to future purchases).',
-         maxHpPerStack: 3 },
+    // v0.26i11: Cardiologist (a) removed per Adam — Defibrillator is the
+    // single upgrade path. (Picker + applyPerkUpgrade handle a b-only entry;
+    // maxHpPerStack reads default to base.)
     b: { id:'defibrillator', name:'Defibrillator', emoji:'🫀', archetypes:[],
          desc:'Revives you at 1 HP if you would die. Once per run.',
          defibRevive: true },
   },
   explosive_speed: {
     a: { id:'detonation_speed', name:'Detonation Speed', emoji:'💨', archetypes:['speed','demolition'],
-         desc:'+15% speed kick per destruction (was +10%), no decay between destructions.',
+         desc:'+15% speed boost per destruction (was +10%).',
          pctPerDestruction: 0.15, noDecay: true /* current impl already has no decay between destructions */ },
     b: { id:'speed_combo', name:'Speed Combo', emoji:'💨', archetypes:['speed','card_engine'],
          desc:'Each speed stack also draws 1 card if a slot is open.',
@@ -51248,7 +51632,7 @@ const PERK_UPGRADES = {
   // existing slow_mo upgrade (kept inline)
   slow_mo: {
     a: { id:'bullet_time', name:'Bullet Time', emoji:'🐌', archetypes:['trick_shot'],
-         desc:'12s instead of 6s. Drink in the chaos.',
+         desc:'12s instead of 6s.',
          durationMult: 2.0 },
     // Branch B left open
   },
@@ -51765,6 +52149,11 @@ window.closeUpgradePicker = function() {
 };
 
 function renderUpgradePicker() {
+  // v0.26i10: the picker swaps innerHTML between its list and branch stages
+  // without changing the overlay element — re-seed pad focus after this
+  // render commits so the first item (the single confirm card on
+  // one-branch upgrades, branch A on two-branch) is highlighted by default.
+  if(typeof window !== 'undefined' && typeof window._ggwPadRefocus === 'function') setTimeout(window._ggwPadRefocus, 0);
   const list = document.getElementById('upgrade-overlay-list');
   const titleEl = document.getElementById('upgrade-overlay-title');
   const subEl = document.getElementById('upgrade-overlay-subtitle');
@@ -51788,7 +52177,7 @@ function renderUpgradePicker() {
     // the picker so the player can't miss the price = 0 reason.
     const _isFreeUpgrade = (G._freeUpgradeVouchers|0) > 0;
     const _priceLabel = _isFreeUpgrade
-      ? `<span style="background:linear-gradient(90deg,#ffd750,#ff8c2a);color:#3a1a00;padding:3px 8px;border-radius:8px;font-weight:900;letter-spacing:1px">FREE 🎟️</span>`
+      ? `<span style="background:linear-gradient(90deg,#ffd750,#ff8c2a);color:#3a1a00;padding:3px 8px;border-radius:8px;font-weight:900;letter-spacing:1px">FREE <span class=px-gift></span></span>`
       : `<span class="coin-icon"></span> ${src.price}`;
     if(titleEl) titleEl.innerHTML = `${glyph(src.def)} ${src.def.name} — pick a branch`;
     if(subEl) {
@@ -52457,7 +52846,10 @@ function showGameOver(bustedBudget=false){
     <span style="cursor:pointer;margin-left:6px" onclick="toggleSaveSeed('${G.seed}')" id="go-star">${getSavedSeeds().includes(G.seed)?'⭐':'☆'} Save seed</span>
   </div>` : '';
 
-  const coinsLine = `<div style="font-size:0.8rem;color:#f5c842;margin:4px 0"><span class="coin-icon"></span> ${G.coins} coins earned this run</div>`;
+  // v0.26i10: coins now render as a stat tile in styleLine — the old text
+  // line would duplicate it. Kept as an empty string so both template paths
+  // stay untouched.
+  const coinsLine = '';
   // v0.19p: XP line placeholder. Filled in after XP deposit runs below.
   const xpLine = `<div id="go-xp-line" style="font-size:0.95rem;color:#60d4ff;font-weight:700;margin:6px 0 2px;text-shadow:0 0 10px rgba(96,212,255,0.4);opacity:0;transition:opacity 0.4s ease-out"></div>`;
 
@@ -52465,10 +52857,21 @@ function showGameOver(bustedBudget=false){
   const bestTrick = G._bestTrickRun;
   const heatPeak = G._heatStreak || 0;
   const destroyed = G._obstaclesDestroyedRun || 0;
-  const styleLine = `<div style="font-size:1.1rem;color:#e040fb;font-weight:700;margin:6px 0;text-shadow:0 0 12px rgba(224,64,251,0.4)">
-    STYLE SCORE: ${runStyle.toLocaleString()}</div>
+  // v0.26i8: twin stat tiles. v0.26i10: Style Score promoted up into the big
+  // final-score pair (side by side with under-par), so this row now pairs
+  // Swings with Coins to stay a balanced two-tile layout.
+  const styleLine = `<div style="display:flex;gap:10px;justify-content:center;align-items:stretch;margin:8px auto 4px;max-width:360px">
+    <div style="flex:1;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.25);border-radius:12px;padding:8px 10px;text-align:center">
+      <div style="font-size:0.6rem;letter-spacing:2px;color:rgba(255,255,255,0.7);font-weight:700;text-transform:uppercase">Swings</div>
+      <div style="font-size:1.3rem;color:#fff;font-weight:800;line-height:1.2">${G.totalStrokes}</div>
+    </div>
+    <div style="flex:1;background:rgba(245,200,66,0.08);border:1px solid rgba(245,200,66,0.35);border-radius:12px;padding:8px 10px;text-align:center">
+      <div style="font-size:0.6rem;letter-spacing:2px;color:rgba(245,200,66,0.9);font-weight:700;text-transform:uppercase">Coins</div>
+      <div style="font-size:1.3rem;color:#f5c842;font-weight:800;line-height:1.2">${G.coins}</div>
+    </div>
+  </div>
     ${bestTrick ? `<div style="font-size:0.65rem;color:rgba(255,255,255,0.6)">Best trick: ${bestTrick.name} — ${bestTrick.pts.toLocaleString()} pts (Hole ${bestTrick.hole})</div>` : ''}
-    ${destroyed > 0 ? `<div style="font-size:0.65rem;color:rgba(255,255,255,0.5)">💥 ${destroyed} obstacles destroyed</div>` : ''}`;
+    ${destroyed > 0 ? `<div style="font-size:0.65rem;color:rgba(255,255,255,0.5)">${destroyed} obstacles destroyed</div>` : ''}`;
 
   const soloAwards = computeSoloAwards();
 
@@ -52526,7 +52929,17 @@ function showGameOver(bustedBudget=false){
       <h1>Out of<br>Lives</h1>
       <p>You lost your last life on hole ${holesPlayed + 1}.<br>
       ${G.totalStrokes} strokes over ${holesPlayed} holes.</p>
-      <div class="big-score-val" style="font-size:clamp(3rem,12vw,5rem)">${ds}</div>
+      <div style="display:flex;gap:20px;justify-content:center;align-items:flex-end;margin:2px auto 0">
+        <div style="text-align:center">
+          <div class="big-score-val" style="font-size:clamp(2.6rem,11vw,4.4rem)">${ds}</div>
+          <div style="font-size:0.64rem;letter-spacing:2.5px;color:rgba(255,255,255,0.75);font-weight:700;text-transform:uppercase;margin-top:2px">vs Par</div>
+        </div>
+        <div style="width:1px;align-self:stretch;background:rgba(255,255,255,0.22);margin-bottom:16px"></div>
+        <div style="text-align:center">
+          <div class="big-score-val" style="font-size:clamp(2.6rem,11vw,4.4rem);color:#e040fb;text-shadow:0 0 24px rgba(224,64,251,0.45)">${runStyle.toLocaleString()}</div>
+          <div style="font-size:0.64rem;letter-spacing:2.5px;color:rgba(224,64,251,0.9);font-weight:700;text-transform:uppercase;margin-top:2px">Style</div>
+        </div>
+      </div>
       <div id="go-progress-group" style="width:100%;display:flex;flex-direction:column;align-items:center;scroll-margin-top:32vh;scroll-margin-bottom:32vh">
         ${xpLine}
         ${cosmoProgressBlock}
@@ -52543,8 +52956,17 @@ function showGameOver(bustedBudget=false){
     ov.innerHTML=`
       <div class="tagline">Round Complete</div>
       <h1>Final<br>Score</h1>
-      <div class="big-score-val">${ds}</div>
-      <p style="margin-top:-8px">${G.totalStrokes} total strokes · Par ${totalPar}</p>
+      <div style="display:flex;gap:22px;justify-content:center;align-items:flex-end;margin:2px auto 0">
+        <div style="text-align:center">
+          <div class="big-score-val" style="font-size:clamp(3rem,13vw,5.4rem)">${ds}</div>
+          <div style="font-size:0.68rem;letter-spacing:2.5px;color:rgba(255,255,255,0.75);font-weight:700;text-transform:uppercase;margin-top:2px">Par ${totalPar}</div>
+        </div>
+        <div style="width:1px;align-self:stretch;background:rgba(255,255,255,0.22);margin-bottom:18px"></div>
+        <div style="text-align:center">
+          <div class="big-score-val" style="font-size:clamp(3rem,13vw,5.4rem);color:#e040fb;text-shadow:0 0 24px rgba(224,64,251,0.45)">${runStyle.toLocaleString()}</div>
+          <div style="font-size:0.68rem;letter-spacing:2.5px;color:rgba(224,64,251,0.9);font-weight:700;text-transform:uppercase;margin-top:2px">Style</div>
+        </div>
+      </div>
       <div id="go-progress-group" style="width:100%;display:flex;flex-direction:column;align-items:center;scroll-margin-top:32vh;scroll-margin-bottom:32vh">
         ${xpLine}
         ${cosmoProgressBlock}
@@ -52800,7 +53222,7 @@ function showGameOver(bustedBudget=false){
           _withThresh.sort((a, b) => a.thr - b.thr);
           const _rows = _withThresh.map((entry, idx) => {
             const item = entry.item;
-            let _icon = '🎉', _line1 = 'Unlocked!', _line2 = '';
+            let _icon = '', _line1 = 'Unlocked!', _line2 = '';
             if(item.kind === 'difficulty') {
               _icon = '★';
               _line1 = `★${item.star} ${(item.name || '').toUpperCase()}`;
@@ -52811,12 +53233,11 @@ function showGameOver(bustedBudget=false){
                          : 'New Cosmetic';
               const _name = (typeof cosmeticDisplayName === 'function')
                 ? cosmeticDisplayName(item.id) : item.id;
-              _icon = item.category === 'hat' ? '🎩'
-                    : item.category === 'skin' ? '⚪' : '🎨';
+              _icon = '';   // v0.26i8: no emoji icons on unlock cards
               _line1 = _name;
               _line2 = _cat;
             } else if(item.kind === 'character') {
-              _icon = (typeof pxifyHtml==='function') ? pxifyHtml(item.emoji || '✨') : (item.emoji || '✨');
+              _icon = '';   // v0.26i8: no emoji icons on unlock cards
               _line1 = (item.name || '').toUpperCase();
               _line2 = 'Character unlocked';
             } else if(item.kind === 'runLength') {
@@ -52826,7 +53247,7 @@ function showGameOver(bustedBudget=false){
             }
             return `
               <div class="ggw-unlock-row" data-xp-threshold="${entry.thr}" data-reveal-idx="${idx}" style="display:flex;align-items:center;gap:14px;padding:14px 16px;background:linear-gradient(135deg, rgba(245,200,66,0.18), rgba(167,139,250,0.10));border:1px solid rgba(245,200,66,0.45);border-radius:14px;margin-bottom:8px;box-shadow:0 4px 16px rgba(245,200,66,0.18);opacity:0;transform:scale(0.7) translateY(8px);transition:opacity 380ms cubic-bezier(0.2,0.9,0.3,1.4), transform 380ms cubic-bezier(0.2,0.9,0.3,1.4);visibility:hidden;height:0;padding-top:0;padding-bottom:0;margin-bottom:0;border-width:0">
-                <div style="font-size:2.6rem;line-height:1;flex-shrink:0">${_icon}</div>
+                ${_icon ? `<div style="font-size:2.6rem;line-height:1;flex-shrink:0">${_icon}</div>` : ''}
                 <div style="flex:1;min-width:0;text-align:left">
                   <div style="font-size:1.15rem;font-weight:800;color:#fff;letter-spacing:0.5px;line-height:1.15">${_line1}</div>
                   <div style="font-size:0.7rem;color:rgba(255,220,140,0.85);letter-spacing:1.5px;text-transform:uppercase;margin-top:2px;font-weight:700">${_line2}</div>
@@ -53757,11 +54178,12 @@ function initHole() {
   // v0.23b: per-hole state resets for new perks/cards.
   // — Kickback: 1 charge per hole (granted only if perk owned, but harmless to set).
   // v0.23g: Drone Delivery now stackable + endlessly upgradeable.
-  // Base 2 recoveries/hole, +1 per stack (each duplicate perk owned),
+  // v0.26i11: base 2 → 1 recovery/hole per Adam. +1 per stack (each
+  // duplicate perk owned),
   // +1 per upgrade tier (Fleet/Armada/Cavalry — each adds 1).
   const _kickbackStacks = (G.modifiers || []).filter(m => m.id === 'kickback').length;
   if(_kickbackStacks > 0) {
-    let _drones = 2 + (_kickbackStacks - 1); // base 2 + 1 per extra stack
+    let _drones = 1 + (_kickbackStacks - 1); // base 1 + 1 per extra stack
     // Upgrade bonus — read upgrade branch off the perk-def field.
     // Fleet (a) = +1, Armada (b) = +2, Cavalry (c) = +3. Read via getPerkField.
     const _droneBonus = (typeof getPerkField === 'function')
@@ -53895,7 +54317,7 @@ function initHole() {
     data = generatePuttPuttCourse(G.hole);
   }
   // v0.26i: Chad's Lessons — tutorial phases supply hand-authored layouts.
-  // The exam phase keeps the real generator's output (examTweak just pins par).
+  // v0.26i6: the exam phase now also has an authored layout (courseExam).
   if(G._tutorialMode && window.TUT) {
     const _td = TUT.courseData();
     if(_td) data = _td;
@@ -57783,6 +58205,11 @@ function sfxSwing(power) {
 }
 
 function sfxBounce(speed) {
+  // v0.26i8: global min-interval. Contact storms (conveyor-pin, cluster
+  // ping-pong) used to build a fresh audio graph per bounce, per tick.
+  const _nowB = performance.now();
+  if(_nowB - (window._lastBounceSfxT || 0) < 50) return;
+  window._lastBounceSfxT = _nowB;
   // v0.23b13: suppress bounce SFX while Skater Ball is grinding. The grind
   // has its own continuous concrete-skid loop (see _startSkaterGrindLoop)
   // that conveys the contact, and bounce pops would clash with it.
@@ -59206,9 +59633,20 @@ function animate(now) {
     } else if(canvas.style.transform) {
       canvas.style.transform = '';
     }
-    if(G.flagGroup) {
-      const fl=G.flagGroup.children[1];
-      if(fl) fl.rotation.y=Math.sin(flagTime*2.5)*0.3;
+    if(G.flagGroup && G._flagWaveMesh && G._flagWaveMesh.geometry) {
+      // v0.26i9: snake ripple — a wave travelling from the pole toward the
+      // tip, amplitude ramping with x^1.5 so the base stays pinned to the
+      // pole and the tip flutters most. Replaces the old whole-plane
+      // rotation.y wobble (which pivoted around the flag's own center).
+      const flW = G._flagWaveMesh;
+      const flPos = flW.geometry.attributes.position;
+      const flBx = flW.userData._waveBaseX, flL = flW.userData._waveL || 1;
+      for(let fv = 0; fv < flPos.count; fv++){
+        const fu = flBx[fv] / flL;
+        flPos.setZ(fv, 0.17 * flL * Math.pow(fu, 1.5) * Math.sin(6.5 * fu - flagTime * 3.2));
+      }
+      flPos.needsUpdate = true;
+      flW.geometry.computeVertexNormals();
     }
     // v0.19t: advance the active hole defense each frame.
     if(G._holeDefenseState && G._holeDefenseState.update) {
@@ -60727,8 +61165,11 @@ if('serviceWorker' in navigator && location.protocol === 'https:') {
   // pad, keyboard, and touch share one physics path (pillar 7).
   let _padSteerSet = false, _padWalkSet = false;
   function driveSteer(ax){
+    // v0.26i9 FIX: gate on ARMED, not ACTIVE. _powerSteeringActive only turns
+    // true once steering input is already held (keyboard sets it via keys[]),
+    // so the pad could never initiate steering — classic chicken-and-egg.
     const flight  = G.state === 'playing' && G.rolling
-                  && (G._powerSteeringActive || G._parachuteActive);
+                  && (G._powerSteeringArmed || G._powerSteeringActive || G._parachuteActive);
     const walking = G.state === 'playing' && !!G.walkiesActive;   // v0.26e: tank-steer parity
     if(flight){
       G._powerSteeringTouchLeft  = ax[0] < -0.35;
@@ -60782,12 +61223,7 @@ if('serviceWorker' in navigator && location.protocol === 'https:') {
     if(el) el.classList.add('pad-card-sel');
   }
   function cycleCard(d){ const h = hand(); if(!h.length) return; cardSel = (cardSel + d + h.length) % h.length; highlightCard(); }
-  function playSel(){
-    const h = hand(); if(!h.length) return;
-    if(cardSel >= h.length) cardSel = h.length - 1;
-    const inst = h[cardSel] && h[cardSel].instanceId;
-    if(inst != null) safe(()=>playCard(inst));   // playCard toggles: arm / re-tap unarms
-  }
+  // v0.26i10: playSel removed — A never arms/toggles the browsed card.
   // v0.24c: direct hotkey — play the card sitting in a specific slot.
   function playSlot(i){
     const card = Array.isArray(G.cardSlots) ? G.cardSlots[i] : null;
@@ -60829,6 +61265,24 @@ if('serviceWorker' in navigator && location.protocol === 'https:') {
     return 0;
   }
   function clearMenuFocus(){ document.querySelectorAll('.pad-focus').forEach(e=>e.classList.remove('pad-focus')); }
+  // v0.26i10: overlays that re-render their innerHTML WITHOUT changing the
+  // overlay element (the upgrade picker's list→branch stage swap) keep the
+  // same menu.el, so lastMenuEl never resets and the stale menuIdx survives
+  // into the new item list — pad focus landed on the Back button and a
+  // single-branch upgrade needed an Up press to reach. This hook re-seeds
+  // focus at items[0] (or the menu's focusId) and paints the highlight
+  // immediately, no nav press required.
+  window._ggwPadRefocus = function(){
+    lastMenuEl = null;
+    if(!padActive) return;
+    const menu = getPadMenu();
+    if(!menu) return;
+    const items = focusables(menu.el); if(!items.length) return;
+    lastMenuEl = menu.el; menuIdx = _initialIdx(menu, items);
+    clearMenuFocus();
+    const el = items[menuIdx] || items[0];
+    if(el){ el.classList.add('pad-focus'); el.scrollIntoView({block:'nearest'}); _afterPadFocus(el); }
+  };
   // v0.26h3: when pad focus lands on a loadout tile (deck viewer), there's no
   // mouse to trigger the hover-desc, so update the description panel directly
   // from the focused tile's data-name / data-desc. Lets controller players read
@@ -61067,6 +61521,18 @@ if('serviceWorker' in navigator && location.protocol === 'https:') {
     const curr = {};
     for(let i = 0; i < p.buttons.length; i++) curr[i] = isDown(p, i);
     const jp = idx => curr[idx] && !prev[idx];
+    // v0.26i9: perk-ability pad inputs. L3 fires Slow Mo. D-pad down is a
+    // HOLD for Hand Brake — but only while the D-pad-down CARD slot (S6,
+    // Crowded House) isn't in play, which keeps the existing card binding
+    // authoritative when it exists.
+    if(G.state === 'playing' && !G.inHole){
+      if(jp(BTN.L3) && window._ggwPadSlowMo) window._ggwPadSlowMo();
+      const _ddIsCard = G.cardSlots && G.cardSlots.length > 6;
+      if(!_ddIsCard && window._ggwPadBrake){
+        if(curr[BTN.DD] && !prev[BTN.DD]) window._ggwPadBrake(true);
+        else if(!curr[BTN.DD] && prev[BTN.DD]) window._ggwPadBrake(false);
+      }
+    }
 
     // device-active detection (toggles focus UI)
     let active = false;
@@ -61209,11 +61675,15 @@ if('serviceWorker' in navigator && location.protocol === 'https:') {
           fire();
         }
         else if(gpPower > 0.02) fire();
-        else if(!padTapToStop()) playSel();
+        else padTapToStop();
+        // v0.26i10: A no longer arms/toggles the browsed card. A is for
+        // swings (fire / tap-to-stop / commit) only — cards fire exclusively
+        // through their dedicated hotkeys below. Fixes accidental card arms
+        // when pressing A to swing with a card highlighted.
       }
       // Card hotkeys — X/Y/B/R1/L1 map to slots 1-5, D-pad ▲▼ to 6-7.
       for(const [b, slot] of CARD_BTN_SLOTS){ if(jp(b)) playSlot(slot); }
-      // D-pad ◀▶ browses the hand (A toggles the highlighted card).
+      // D-pad ◀▶ browses the hand (highlight/preview only — no A toggle).
       if(jp(BTN.DL)) cycleCard(-1);
       if(jp(BTN.DR)) cycleCard(+1);
       if(jp(BTN.R3) && G.state==='playing') resetCameraSmooth();
@@ -61290,14 +61760,14 @@ var LINES = {
   cam_done:    { t:"Excellent! Top-tier camera work. Okay, now we golf.", mood:0, react:'pop' },
   putt_intro:  { t:"The putt. The soul of minigolf. {SHOT}. Gentle. Controlled. Respectful of the green.", mood:0 },
   putt_miss_1: { t:"Almost! Again. The ball can smell hesitation.", mood:0 },
-  putt_miss_2: { t:"No rush! Take unlimited tries. That's the Chad's Discount guarantee. It's our only guarantee.", mood:0 },
+  putt_miss_2: { t:"No rush! Take unlimited tries. That's our Chad's Discount guarantee. It's our only guarantee.", mood:0 },
   putt_miss_3: { t:"Try again! Chad believes in you.", mood:0 },
   putt_sink:   { t:"Perfection! You're a natural. This is my proudest moment since installing our ball washer.", mood:0, react:'pop' },
   cxl_intro:   { t:"Sometimes a great golfer chooses NOT to swing. Charge up a shot, then cancel it: {CANCEL}. Restraint. Wisdom. Patience.", mood:0 },
   cxl_fired:   { t:"That was a swing. A lovely swing. But the assignment was cowardice. Try again.", mood:0 },
   cxl_done:    { t:"Perfectly canceled! Nothing happened at all. No consequences. Savor this feeling. It does not last.", mood:0 },
   ms_intro:    { t:"Now, corporate added a \"card system.\" For the record, I do not approve of these... *additions*... to the already perfect game of minigolf.", mood:1 },
-  ms_intro2:   { t:"What's this? Missile Command? (Sigh) That doesn't seem right. Anyway, tap your card to ARM it: {CARD_TAP}. Tap again to disarm.", mood:1 },
+  ms_intro2:   { t:"What's this? Missile Command? (Sigh) That doesn't seem right. Anyway, to arm it, {CARD_TAP}.", mood:1 },
   ms_armed:    { t:"Armed. Aim at the rock and {FIRE}. Corporate says the missile does the rest. Corporate says a lot of things.", mood:1 },
   ms_disarm:   { t:"Disarmed! Good instinct. Maybe we just putt around the... no? You're re-arming it. Okay.", mood:1 },
   ms_boom:     { t:"THAT BOULDER WAS DECORATIVE! ...Points? You got POINTS for that? I need to talk to corporate about this.", mood:2, react:'pop', shake:1 },
@@ -61305,10 +61775,10 @@ var LINES = {
   ja_intro:    { t:"Many cards like \"Jumper\" have two modes. Mode one: arm it BEFORE you swing, and your ball takes a flying leap right away. Try it to jump over those obstacles.", mood:1 },
   ja_retry:    { t:"That's okay, arm the Jumper FIRST, then swing. The kangaroo on the card is a promise.", mood:1 },
   ja_coins:    { t:"Yes, there's just money on the ground here. I don't ask anymore.", mood:1 },
-  jb_intro:    { t:"Now the hard part. That wall is un-jumpable from the tee, so putt first, then hit Jumper MID-ROLL to leap over it. You can tap the card or hit one of the hot keys under each card on your keyboard or controller.", mood:2 },
+  jb_intro:    { t:"Now the hard part. That wall is un-jumpable from the tee, so putt first, then hit Jumper MID-ROLL to leap over it. You can tap the card or hit one of the hotkeys under each card on your keyboard or controller.", mood:2 },
   jb_cards:    { t:"Notice you get new cards every swing. It never stops. (sigh) The cards never stop.", mood:2 },
-  jb_miss_1:   { t:"Almost. Putt, THEN jump. Like patting your head and ruining my course at the same time.", mood:2 },
-  jb_miss_2:   { t:"Too early! Or too late. One of those. The wall isn't going anywhere. Unlike everything else here, it's indestructible. I checked. Twice.", mood:2 },
+  jb_miss_1:   { t:"Almost. Putt, THEN jump. Back to the tee. Like patting your head and ruining my course at the same time.", mood:2 },
+  jb_miss_2:   { t:"Too early! Or too late. One of those. Back to the tee you go. The wall isn't going anywhere. Unlike everything else here, it's indestructible. I checked. Twice.", mood:2 },
   jb_success:  { t:"You did it! First missiles, now jumping... what new abominations lie ahead that desecrate this once-beautiful game...", mood:3 },
   sh_intro:    { t:"Between holes you'll visit my Pro Shop. Four departments: CARDS cause one-time chaos on a swing. PERKS are permanent. UPGRADES: bigger chaos. And DECK SURGERY, which REMOVES a card.", mood:1 },
   sh_gift:     { t:"Here, a Holy Hand Grenade and a Portal Grenade, on the house. The distributor sent them by mistake and will not return my calls.", mood:1, react:'pop' },
@@ -61353,11 +61823,11 @@ window.addEventListener('mousedown',  function(){ _dev = 'kb'; },    {passive:tr
 window.addEventListener('keydown',    function(){ _dev = 'kb'; },    {passive:true, capture:true});
 
 var TOKENS = {
-  CAMERA:   { kb:'hold the left mouse button and drag to look around (or the A / D keys)', touch:'drag with one finger away from your ball to look around', pad:'move the RIGHT STICK to look around' },
-  ZOOM:     { kb:'scroll the mouse wheel (or W / S)', touch:'pinch with two fingers', pad:'pull LT / RT' },
+  CAMERA:   { kb:'Hold the left mouse button and drag to look around (or the A / D keys)', touch:'Drag with one finger away from your ball to look around', pad:'Move the RIGHT STICK to look around' },
+  ZOOM:     { kb:'Scroll the mouse wheel (or W / S)', touch:'Pinch with two fingers', pad:'Pull LT / RT' },
   SHOT:     { kb:'Click your ball, drag back to set power, release to swing', touch:'Touch your ball, drag back to set power, lift your finger to swing', pad:'Hold LEFT STICK DOWN to charge power, press A to swing' },
   CANCEL:   { kb:'drag back up to your ball before releasing, or press Esc', touch:'slide your finger back to your ball before lifting', pad:'ease the LEFT STICK back to zero power, or press B' },
-  CARD_TAP: { kb:'click the card (or press its number key)', touch:'tap the card', pad:'press the button shown on the card' },
+  CARD_TAP: { kb:'click the card (or press its hotkey)', touch:'tap the card', pad:'press the button shown on the card' },
   FIRE:     { kb:'swing like a normal putt (drag back and release)', touch:'swing like a normal putt (drag back and lift)', pad:'charge with the stick and press A to swing' },
   DEVICE:   { kb:'keyboard', touch:'touchscreen', pad:'controller' }
 };
@@ -61388,7 +61858,10 @@ css.textContent = [
 '#chad-face-wrap.vib2{animation:chadVib2 0.06s infinite;}',
 '@keyframes chadVib{0%{transform:translate(0,0)}25%{transform:translate(0.7px,-0.5px)}50%{transform:translate(-0.6px,0.6px)}75%{transform:translate(0.5px,0.4px)}100%{transform:translate(0,0)}}',
 '@keyframes chadVib2{0%{transform:translate(0,0) rotate(0.4deg)}25%{transform:translate(1.8px,-1.4px)}50%{transform:translate(-1.7px,1.5px) rotate(-0.5deg)}75%{transform:translate(1.4px,1.2px)}100%{transform:translate(0,0)}}',
-'.chad-brow{position:absolute;width:20px;height:4px;background:#0a0a0e;border-radius:2px;transition:transform 0.25s ease, top 0.25s ease;}',
+'.chad-brow{position:absolute;width:15px;height:4px;background:#0a0a0e;border-radius:2px;transition:transform 0.25s ease, top 0.25s ease;}',
+'.chad-eye{position:absolute;width:15px;height:15px;background:#fff;border:2px solid #0a0a0e;border-radius:50%;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,0.35);transition:background 0.3s ease;}',
+'.chad-eye.blood{background:#ffe3e0;}',
+'.chad-eye .chad-pupil{position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px 0 0 -3px;background:#0a0a0e;border-radius:50%;}',
 '#chad-cont-btn{position:absolute;right:10px;bottom:5px;display:none;font:800 0.58rem "Nunito",sans-serif;letter-spacing:1px;color:#1c2b12;background:#ffd54a;border:2px solid #0e2015;border-radius:8px;padding:3px 9px;cursor:pointer;box-shadow:0 2px 0 #b8912a;}',
 '#chad-cont-btn:active{transform:translateY(2px);box-shadow:none;}',
 '#chad-cont{position:absolute;right:16px;bottom:30px;font:900 0.85rem "Nunito",sans-serif;color:#ffd54a;text-shadow:0 1px 2px rgba(0,0,0,0.5);animation:chadContBob 0.9s ease-in-out infinite;pointer-events:none;display:none;}',
@@ -61434,8 +61907,10 @@ function buildBox(){
   box.innerHTML =
     '<div id="chad-face"><div id="chad-face-wrap">' +
       '<img src="' + CHAD_IMG + '" alt="Chad" draggable="false">' +
-      '<div class="chad-brow" style="left:30%;top:16%"></div>' +
-      '<div class="chad-brow" style="left:52%;top:15%"></div>' +
+      '<div class="chad-eye" style="left:30%;top:26%;transform:translate(-50%,-50%)"><div class="chad-pupil"></div></div>' +
+      '<div class="chad-eye" style="left:47%;top:26%;transform:translate(-50%,-50%)"><div class="chad-pupil"></div></div>' +
+      '<div class="chad-brow" style="left:23%;top:17%"></div>' +
+      '<div class="chad-brow" style="left:40%;top:17%"></div>' +
       '<div id="chad-sweat-layer"></div><div id="chad-fx-layer"></div>' +
     '</div></div>' +
     '<div id="chad-body">' +
@@ -61487,16 +61962,26 @@ function _blip(){
     var src = ac.createBufferSource(); src.buffer = _typBuf;
     src.playbackRate.value = 0.72 + Math.random()*0.55;   // varied key pitch
     var lp = ac.createBiquadFilter(); lp.type = 'lowpass';
-    lp.frequency.value = 900 + Math.random()*650; lp.Q.value = 0.7;
+    lp.frequency.value = 1500 + Math.random()*900; lp.Q.value = 0.7;
     var g = ac.createGain();
-    g.gain.setValueAtTime(0.022 + Math.random()*0.009, t0);
-    g.gain.exponentialRampToValueAtTime(0.0012, t0 + 0.04);
+    // v0.26i6: audibility bump — the previous 0.022 gain through an 900-1200Hz
+    // lowpass was inaudible over music/SFX. ~3x louder with a brighter filter.
+    g.gain.setValueAtTime(0.075 + Math.random()*0.03, t0);
+    g.gain.exponentialRampToValueAtTime(0.0012, t0 + 0.05);
     src.connect(lp); lp.connect(g); g.connect(getACDest());
-    src.start(t0); src.stop(t0 + 0.045);
+    src.start(t0); src.stop(t0 + 0.055);
   } catch(e){}
 }
 function chadSay(id, opts, onDone){
-  _twQueue.push({ id:id, opts:opts||{}, onDone:onDone });
+  opts = opts || {};
+  // v0.26i6: gameplay-triggered lines (opts.act) never wait behind a prior
+  // line's CONTINUE gate. If the previous narrative line is just sitting on
+  // its button and the player DID something, the reaction pops right away.
+  if(opts.act && _twAwait){
+    var pend = _twAwait; _twAwait = null; _showCont(false); _twBusy = false;
+    if(pend.onDone){ try{ pend.onDone(); }catch(e){} }
+  }
+  _twQueue.push({ id:id, opts:opts, onDone:onDone });
   _pumpSay();
 }
 /* Parse *italic* markup into segments; render as styled spans. */
@@ -61514,7 +61999,7 @@ function _buildSpans(segs){
   textEl.innerHTML = '';
   return segs.map(function(s){
     var sp = document.createElement('span');
-    if(s.i){ sp.style.fontStyle = 'italic'; sp.style.color = '#ffd54a'; }
+    if(s.i){ sp.style.fontStyle = 'italic'; }
     textEl.appendChild(sp);
     return sp;
   });
@@ -61551,7 +62036,7 @@ function _pumpSay(){
       i++;
       _paintSegs(segs, spans, i);
       var ch = flat.charAt(i-1);
-      if(ch && ch !== ' ' && (i % 2 === 0)) _blip();
+      if(ch && ch !== ' ') _blip();
       if(i >= flat.length){
         clearInterval(_twTimer); _twTimer = null;
         // Click-to-continue: only when this line CHAINS to something (a
@@ -61642,7 +62127,7 @@ function chadMood(m){
   ][m];
   browEls.forEach(function(b,i){
     b.style.transform = 'rotate(' + cfg[i].r + 'deg)';
-    b.style.top = 'calc(' + (i===0?16:15) + '% + ' + cfg[i].dy + 'px)';
+    b.style.top = 'calc(17% + ' + cfg[i].dy + 'px)';
   });
 }
 function _spawnSweat(){
@@ -61741,6 +62226,8 @@ function courseJumpB(){                // lesson 5b: boulder wall far from the t
   _rock(d, 4, wy, 1.15); _rock(d, 5, wy, 1.15); _rock(d, 6, wy, 1.15); _rock(d, 7, wy, 1.15);
   return d;
 }
+// v0.26i9: courseExam removed — the exam now runs the real generator on a
+// pinned seed (see courseData) so it gets the full obstacle pipeline.
 function courseFinale(){               // graduation patio: the exit hole hides UNDER the shack
   var d = _baseData(30, 30, 9);
   _lane(d, 2, 27, 2, 27);
@@ -61850,12 +62337,44 @@ var TUT = {
   courseData: function(){
     var ph = this.phase();
     if(!ph) return null;
-    if(ph.id === 'exam') return null;   // exam uses the real generator (examTweak sets par)
+    // v0.26i9: the exam runs the REAL course generator (full obstacle
+    // pipeline) on a CURATED, PINNED seed — same par-4 hole with real
+    // obstacles every time, for every player. The authored courseExam of
+    // v0.26i6 was obstacle-free and had a dead-end stub; the pre-i6 exam had
+    // random par-8 U-shapes. Pinning seed + hole number + difficulty mods for
+    // the generation gets the best of both. Pins are restored in examTweak
+    // (which runs right after generation).
+    if(ph.id === 'exam'){
+      this._examPins = {
+        hole: G.hole, difficulty: G.difficulty, diffMods: G._diffMods,
+      };
+      initSeed(this.EXAM_SEED);
+      G.hole = 2;
+      G.difficulty = 2;
+      if(typeof getDifficultyMods === 'function') G._diffMods = getDifficultyMods(2);
+      return null;   // fall through to generatePuttPuttCourse
+    }
     var fn = ph.course;
     return fn ? fn() : null;
   },
+  // Curated by harness search (60 candidates at hole 2 / difficulty 2):
+  // EXAM09 generates par 4, ~287 fair cells, 11 obstacles, no spikes, no
+  // hole defense, not a U-shape. Deterministic for every player.
+  EXAM_SEED: 'EXAM09',
   examTweak: function(data){
-    if(this.phase() && this.phase().id === 'exam'){ data.par = 4; }
+    if(this.phase() && this.phase().id === 'exam'){
+      // Restore the pre-exam pins now that generation is done.
+      if(this._examPins){
+        G.hole = this._examPins.hole;
+        G.difficulty = this._examPins.difficulty;
+        G._diffMods = this._examPins.diffMods;
+        this._examPins = null;
+      }
+      if(data){
+        data.par = 4;            // curated seed generates par 4; belt and braces
+        data.holeDefense = null; // never surprise the exam with a force field
+      }
+    }
   },
   applyPhaseDeck: function(){
     var ph = this.phase();
@@ -62046,7 +62565,7 @@ var TUT = {
       var dev = currentDevice();
       if(self._lastDev && dev !== self._lastDev){
         reRenderCurrent();
-        if(!_devAckDone){ _devAckDone = true; chadSay('devswitch', {delay:150}); }
+        if(!_devAckDone){ _devAckDone = true; chadSay('devswitch', {delay:150, act:true}); }
       }
       self._lastDev = dev;
 
@@ -62074,7 +62593,7 @@ var TUT = {
             destroyed = G._holeObstaclesDestroyed|0, coins = G._holeCoinsPickedUp|0;
 
         // OOB grace reactive line (any phase, once)
-        if(!oobSaid && G._oobGraceTimer > 0){ oobSaid = true; chadSay('oob', {keepMood:true}); }
+        if(!oobSaid && G._oobGraceTimer > 0){ oobSaid = true; chadSay('oob', {keepMood:true, act:true}); }
 
         if(ph.id === 'cam'){
           g.rot += Math.abs((G.camTheta||0) - (g.thetaPrev===undefined ? (G.camTheta||0) : g.thetaPrev));
@@ -62083,11 +62602,11 @@ var TUT = {
           g.distPrev = G.camDist||0;
           if(!g.rotDone && g.rot > 1.3){
             g.rotDone = true; chadEyeImpulse(5);
-            chadSay('cam_zoom', {delay:200});
+            chadSay('cam_zoom', {delay:200, act:true});
           }
           if(g.rotDone && !g.zoomDone && g.zoom > 3){
             g.zoomDone = true;
-            chadSay('cam_done', {}, function(){ self._advance(); });
+            chadSay('cam_done', {act:true}, function(){ self._advance(); });
           }
         }
         else if(ph.id === 'putt'){
@@ -62098,7 +62617,7 @@ var TUT = {
             if(!G.inHole && G.state === 'playing'){
               self._missCount++;
               var mid = 'putt_miss_' + (((self._missCount-1) % 3) + 1);
-              chadSay(mid, {keepMood:true});
+              chadSay(mid, {keepMood:true, act:true});
             }
           }
         }
@@ -62110,54 +62629,60 @@ var TUT = {
             if(swings > prevSwings){
               // they fired instead
               g.charged = false; powerPeak = 0;
-              chadSay('cxl_fired', {keepMood:true});
+              chadSay('cxl_fired', {keepMood:true, act:true});
             } else {
               g.done = true;
-              chadSay('cxl_done', {}, function(){ self._advance(); });
+              chadSay('cxl_done', {act:true}, function(){ self._advance(); });
             }
           }
         }
         else if(ph.id === 'missile'){
           var armed = !!(G._armedCards && G._armedCards.length) || !!G._pendingCancellableCard;
-          if(armed && !g.wasArmed && !g.armedSaid){ g.armedSaid = true; chadSay('ms_armed', {delay:150}); }
+          if(armed && !g.wasArmed && !g.armedSaid){ g.armedSaid = true; chadSay('ms_armed', {delay:150, act:true}); }
           if(!armed && g.wasArmed && !g.disarmSaid && !g.boomSaid && destroyed === 0 && swings === prevSwings){
-            g.disarmSaid = true; chadSay('ms_disarm', {delay:150, keepMood:true});
+            g.disarmSaid = true; chadSay('ms_disarm', {delay:150, keepMood:true, act:true});
           }
           g.wasArmed = armed;
           if(destroyed > prevDestroyed && !g.boomSaid){
             g.boomSaid = true;
-            chadSay('ms_boom', {delay:550});
+            chadSay('ms_boom', {delay:550, act:true});
           }
         }
         else if(ph.id === 'jumpA'){
-          if(coins > prevCoins && !g.coinsSaid){ g.coinsSaid = true; chadSay('ja_coins', {delay:300, keepMood:true}); }
+          if(coins > prevCoins && !g.coinsSaid){ g.coinsSaid = true; chadSay('ja_coins', {delay:300, keepMood:true, act:true}); }
           if(jumps > prevJumps && !g.jumped){
             g.jumped = true;   // no callout: geometry sells it, sink advances
           }
           if(swings > prevSwings){ g.swingAt = now; }
           if(!g.jumped && g.swingAt && now - g.swingAt > 3800 && !G.inHole){
             g.swingAt = 0;
-            chadSay('ja_retry', {keepMood:true});
+            chadSay('ja_retry', {keepMood:true, act:true});
           }
         }
         else if(ph.id === 'jumpB'){
-          if(swings === 1 && !g.cardsSaid && !_twBusy){ g.cardsSaid = true; chadSay('jb_cards', {delay:900, keepMood:true}); }
-          if(jumps > prevJumps){ g.jumped = true; }
-          if(swings > prevSwings){ g.swingAt = now; g.jumpedThisSwing = false; }
-          if(jumps > prevJumps) g.jumpedThisSwing = true;
-          if(g.swingAt && now - g.swingAt > 4200 && !g.jumpedThisSwing && !G.inHole){
-            g.swingAt = 0;
+          if(swings === 1 && !g.cardsSaid && !_twBusy){ g.cardsSaid = true; chadSay('jb_cards', {delay:900, keepMood:true, act:true}); }
+          if(swings > prevSwings){ g.swingAt = now; g.jumpedThisSwing = false; g.warpPending = true; }
+          if(jumps > prevJumps){ g.jumped = true; g.jumpedThisSwing = true; g.warpPending = false; }
+          // v0.26i10: enforcement. Any swing that resolves without clearing
+          // the boulder wall warps the ball back to the tee once it stops.
+          // No creeping up to the wall for a point-blank pre-load hop; the
+          // lesson is the mid-roll jump, every attempt starts from the tee.
+          // 900ms floor lets the swing actually launch before we watch for
+          // the stop.
+          if(g.warpPending && g.swingAt && now - g.swingAt > 900 && !G.rolling && !G.inHole && !g.jumpedThisSwing){
+            g.warpPending = false; g.swingAt = 0;
+            self._warpToTee();
             self._jbMissCount++;
-            chadSay(self._jbMissCount === 1 ? 'jb_miss_1' : 'jb_miss_2', {keepMood:true});
+            chadSay(self._jbMissCount === 1 ? 'jb_miss_1' : 'jb_miss_2', {keepMood:true, act:true});
           }
         }
         else if(ph.id === 'exam'){
-          if(!g.hpSaid && swings >= (G.par||4)){ g.hpSaid = true; chadSay('ex_hp', {delay:400}); }
+          if(!g.hpSaid && swings >= (G.par||4)){ g.hpSaid = true; chadSay('ex_hp', {delay:400, act:true}); }
           var pend = G._pendingCancellableCard, armedIds = [];
           if(pend && pend.cardId) armedIds.push(pend.cardId);
           if(G._armedCards) for(var a=0;a<G._armedCards.length;a++) armedIds.push(G._armedCards[a].cardId);
-          if(!g.portalSaid && armedIds.indexOf('portal_grenade') >= 0){ g.portalSaid = true; chadSay('ex_portal', {delay:200, keepMood:true}); }
-          if(!g.hhgSaid && armedIds.indexOf('holy_hand_grenade') >= 0){ g.hhgSaid = true; chadSay('ex_hhg', {delay:200, keepMood:true}); }
+          if(!g.portalSaid && armedIds.indexOf('portal_grenade') >= 0){ g.portalSaid = true; chadSay('ex_portal', {delay:200, keepMood:true, act:true}); }
+          if(!g.hhgSaid && armedIds.indexOf('holy_hand_grenade') >= 0){ g.hhgSaid = true; chadSay('ex_hhg', {delay:200, keepMood:true, act:true}); }
         }
         else if(ph.id === 'finale'){
           self._finaleTick(dt);
@@ -62168,6 +62693,30 @@ var TUT = {
       self._pollRAF = requestAnimationFrame(tick);
     }
     this._pollRAF = requestAnimationFrame(tick);
+  },
+
+  /* v0.26i10: jumpB enforcement. Snap the stopped ball back to the tee with
+     dust at both ends, a light shake, and a smooth camera lerp. Also resets
+     lastShotPos so any downstream OOB reset agrees on the tee. */
+  _warpToTee: function(){
+    try {
+      var tp = G.teePos; if(!tp) return;
+      var tx = tp.x * TILE_SIZE, tz = tp.y * TILE_SIZE;
+      var ty = (G.heightMap && G.heightMap.length) ? getTerrainHeight(tx, tz) : 0;
+      var ox = G.ballPos.x, oy = G.ballPos.y, oz = G.ballPos.z;
+      G.ballPos.set(tx, ty + FLOOR_H/2 + BALL_R, tz);
+      G.ballVel.set(0, 0, 0);
+      if(G.ball) G.ball.position.copy(G.ballPos);
+      if(G.ballShadow) G.ballShadow.position.set(tx, 0.05, tz);
+      G.lastShotPos = { x: tx, z: tz };
+      if(typeof spawnDashDust === 'function'){
+        spawnDashDust(ox, oy, oz, 0, 1);            // vanish puff where it stopped
+        spawnDashDust(tx, G.ballPos.y, tz, 0, -1);  // arrival puff at the tee
+      }
+      if(typeof triggerShake === 'function') triggerShake('light');
+      if(typeof showToast === 'function') showToast('↩️ Back to the tee', 1400);
+      G._camTransitionFrames = 45;
+    } catch(e){}
   },
 
   /* Cannon world accessor: the game's world lives at G.physWorld and is
@@ -62214,7 +62763,7 @@ var TUT = {
     var F = this._finale = {
       props: [],          // {kind, body, group, hit:false}
       shackStatics: [],   // static boxes forming the intact shack {body, mesh, def}
-      shackAlive: true, shackHP: 6,
+      shackAlive: true, shackHP: 2,
       bbPanels: [],       // {body(static→dyn), mesh, detached}
       bbAlive: true,
       debris: [],         // dynamic pieces (persistent)
@@ -62241,8 +62790,14 @@ var TUT = {
         shape: new C.Box(new C.Vec3(hx,hy,hz)),
         allowSleep: true, sleepSpeedLimit: 0.35, sleepTimeLimit: 0.6,
         linearDamping: opts.ld !== undefined ? opts.ld : 0.25,
-        angularDamping: opts.ad !== undefined ? opts.ad : 0.3
+        // v0.26i9: 0.3 -> 0.55 default. Light boxes with high-offset impulses
+        // were spinning like fan blades; crates behave because of exactly this
+        // kind of damping + the crate contact material below.
+        angularDamping: opts.ad !== undefined ? opts.ad : 0.55
       });
+      // v0.26i9: reuse the tuned crate contact material so props get the same
+      // ground friction/restitution behavior the crates already have.
+      try { if(G.physMaterials && G.physMaterials.crate) body.material = G.physMaterials.crate; } catch(e){}
       TUT._physWorld().addBody(body);
       return body;
     }
@@ -62418,17 +62973,17 @@ var TUT = {
     }
     // Layout: patio between shack and tee
     var patioZ = shackZ + 3.2;
-    addProp('table', buildTable(), cx - 2.6, 0.78, patioZ, 0.75, 0.42, 0.75, 9, {ld:0.3});
-    addProp('table', buildTable(), cx + 2.8, 0.78, patioZ + 1.4, 0.75, 0.42, 0.75, 9, {ld:0.3});
+    addProp('table', buildTable(), cx - 2.6, 0.78, patioZ, 0.75, 0.42, 0.75, 22, {ld:0.55, ad:0.5});
+    addProp('table', buildTable(), cx + 2.8, 0.78, patioZ + 1.4, 0.75, 0.42, 0.75, 22, {ld:0.55, ad:0.5});
     var chairSpots = [[-3.6, patioZ+1.0],[-1.7, patioZ+1.1],[2.0, patioZ+2.4],[3.7, patioZ+0.6],[0.4, patioZ+2.0]];
     for(var ci=0;ci<chairSpots.length;ci++){
-      addProp('chair', buildChair(), cx + chairSpots[ci][0], 0.46, chairSpots[ci][1], 0.34, 0.44, 0.32, 4);
+      addProp('chair', buildChair(), cx + chairSpots[ci][0], 0.46, chairSpots[ci][1], 0.34, 0.44, 0.32, 8, {ld:0.5, ad:0.5});
     }
     var flamSpots = [[-4.6, shackZ+1.2],[-5.2, patioZ+2.6],[4.9, shackZ+0.6],[5.6, patioZ+2.0],[-2.2, shackZ-2.2],[3.2, shackZ-2.4]];
     for(var fi=0;fi<flamSpots.length;fi++){
-      addProp('flamingo', buildFlamingo(), cx + flamSpots[fi][0], 0.58, flamSpots[fi][1], 0.26, 0.55, 0.22, 0.35, {ld:0.12, ad:0.15});
+      addProp('flamingo', buildFlamingo(), cx + flamSpots[fi][0], 0.58, flamSpots[fi][1], 0.26, 0.55, 0.22, 3.5, {ld:0.5, ad:0.55});
     }
-    addProp('cart', buildCart(), cx + 6.4, 0.6, patioZ + 4.6, 1.1, 0.6, 0.6, 26, {ld:0.18, ad:0.35});
+    addProp('cart', buildCart(), cx + 6.4, 0.6, patioZ + 4.6, 1.1, 0.6, 0.6, 90, {ld:0.35, ad:0.45});
 
     // Chairs/tables/flamingos start asleep so the patio is still until provoked.
     for(var pi=0;pi<F.props.length;pi++){ try { F.props[pi].body.sleep(); } catch(e){} }
@@ -62440,7 +62995,7 @@ var TUT = {
     if(!F || !window.CANNON) return;
     var C = window.CANNON;
     var sc = scale || 1;
-    var blastR = 5.2 * sc, baseImp = 24 * sc;
+    var blastR = 5.2 * sc, baseImp = 30 * sc;
     var anyHit = false, self = this;
 
     function impulseBody(body, mass){
@@ -62450,7 +63005,7 @@ var TUT = {
       var fall = 1 - (d/blastR)*0.7;
       var imp = baseImp * fall;
       var inv = 1/Math.max(0.001, d);
-      var iv = new C.Vec3(dx*inv*imp, (dy*inv*imp)*0.7 + imp*0.55, dz*inv*imp);
+      var iv = new C.Vec3(dx*inv*imp, (dy*inv*imp)*0.5 + imp*0.28, dz*inv*imp);
       var off = new C.Vec3((Math.random()-0.5)*0.3, (Math.random()-0.5)*0.3, (Math.random()-0.5)*0.3);
       try { body.wakeUp(); body.applyImpulse(iv, body.position.vadd(off)); } catch(e){}
       return true;
@@ -62500,7 +63055,10 @@ var TUT = {
       var dS = Math.hypot((this._shackCx() - x), (this._shackCz() - z));
       if(dS <= blastR + 2.4){
         anyHit = true;
-        F.shackHP--;
+        // v0.26i6: blast-size-scaled damage so a MISSILE actually breaks the
+        // shack (was flat -1 vs 6 HP, needing six hits). Missile sc~1 => 2 dmg;
+        // HHG / explosivo sc~2 => 4 dmg (one-shot).
+        F.shackHP -= Math.max(2, Math.round(sc * 2));
         if(!F._shackFirstSaid){ F._shackFirstSaid = true; this._sayFresh(['fn_shack1']); }
         chadEyeImpulse(10);
         if(F.shackHP <= 0) this._fractureShack(x, y, z, sc);
@@ -62595,7 +63153,8 @@ var TUT = {
         var sb = new C.Body({ mass: 3, position: s.body.position.clone(),
           shape: new C.Box(new C.Vec3(1.8, 0.55, 0.08)),
           allowSleep: true, sleepSpeedLimit: 0.35, sleepTimeLimit: 0.6,
-          linearDamping: 0.2, angularDamping: 0.2 });
+          linearDamping: 0.2, angularDamping: 0.5 });
+        try { if(G.physMaterials && G.physMaterials.crate) sb.material = G.physMaterials.crate; } catch(e){}
         TUT._physWorld().addBody(sb);
         F.debris.push({ body: sb, mesh: s.mesh });
         made++;
@@ -62617,7 +63176,8 @@ var TUT = {
           var pb = new C.Body({ mass: 1.4, position: new C.Vec3(px, py, pz),
             shape: new C.Box(new C.Vec3(chunkH.hx, chunkH.hy, chunkH.hz)),
             allowSleep: true, sleepSpeedLimit: 0.4, sleepTimeLimit: 0.5,
-            linearDamping: 0.22, angularDamping: 0.25 });
+            linearDamping: 0.22, angularDamping: 0.5 });
+          try { if(G.physMaterials && G.physMaterials.crate) pb.material = G.physMaterials.crate; } catch(e){}
           TUT._physWorld().addBody(pb);
           var pmesh = new THREE.Mesh(new THREE.BoxGeometry(chunkH.hx*2, chunkH.hy*2, chunkH.hz*2),
             s.mesh.material.length ? s.mesh.material[0] : s.mesh.material);
@@ -62627,8 +63187,10 @@ var TUT = {
           // launch outward from the blast
           var dx = px - bx, dz = pz - bz, dl = Math.hypot(dx, dz) || 1;
           var imp = (16 + Math.random()*10) * (sc || 1);
-          try { pb.applyImpulse(new C.Vec3(dx/dl*imp, imp*0.8 + Math.random()*6, dz/dl*imp),
-            new C.Vec3(px + (Math.random()-0.5)*0.3, py, pz + (Math.random()-0.5)*0.3)); } catch(e){}
+          // v0.26i9: application offset 0.3 -> 0.1 and vertical 0.8 -> 0.55 —
+          // big random lever arms were the source of the blinding chunk spin.
+          try { pb.applyImpulse(new C.Vec3(dx/dl*imp, imp*0.55 + Math.random()*4, dz/dl*imp),
+            new C.Vec3(px + (Math.random()-0.5)*0.1, py, pz + (Math.random()-0.5)*0.1)); } catch(e){}
           F.debris.push({ body: pb, mesh: pmesh });
           made++;
         }
@@ -62683,7 +63245,6 @@ var TUT = {
       ov = document.createElement('div');
       ov.id = 'tut-end-overlay';
       ov.innerHTML = '<div class="tut-panel">' +
-        '<img src="' + CHAD_IMG + '" alt="Chad">' +
         '<h3>LESSONS COMPLETE</h3>' +
         '<p>Chad\u2019s Discount Minigolf thanks you for your enthusiasm. Please never return.</p>' +
         '<button class="tut-btn yes" id="tut-end-done">Tee Off For Real</button></div>';
@@ -62705,13 +63266,37 @@ var TUT = {
       obj.position.set(body.position.x, body.position.y, body.position.z);
       obj.quaternion.set(body.quaternion.x, body.quaternion.y, body.quaternion.z, body.quaternion.w);
     }
+    // v0.26i6: CONTAINMENT + velocity clamp. Explosions used to shotput props
+      // and debris hundreds of feet off the level. Keep everything on the patio:
+      // clamp speed, and softly bounce any body that reaches the course edge
+      // back inward. Bounds are the finale lane (cells 2..27) with a small margin.
+      var _T = TILE();
+      var _minB = 3.0*_T, _maxB = 26.0*_T;   // world XZ bounds (inside the perimeter walls)
+      var _MAXV = 14;                          // m/s cap so nothing launches
+      function _contain(body){
+        var v = body.velocity;
+        var sp2 = v.x*v.x + v.y*v.y + v.z*v.z;
+        if(sp2 > _MAXV*_MAXV){ var s = _MAXV/Math.sqrt(sp2); v.x*=s; v.y*=s; v.z*=s; }
+        // v0.26i9: angular cap (~1.4 rev/s). Props and debris could spin at
+        // fan-blade speed after offset impulses; a readable tumble tops out here.
+        var av = body.angularVelocity;
+        var am2 = av.x*av.x + av.y*av.y + av.z*av.z;
+        if(am2 > 81){ var as_ = 9/Math.sqrt(am2); av.x*=as_; av.y*=as_; av.z*=as_; }
+        var pos = body.position;
+        if(pos.x < _minB && v.x < 0){ pos.x = _minB; v.x = Math.abs(v.x)*0.4; }
+        else if(pos.x > _maxB && v.x > 0){ pos.x = _maxB; v.x = -Math.abs(v.x)*0.4; }
+        if(pos.z < _minB && v.z < 0){ pos.z = _minB; v.z = Math.abs(v.z)*0.4; }
+        else if(pos.z > _maxB && v.z > 0){ pos.z = _maxB; v.z = -Math.abs(v.z)*0.4; }
+        // Also cap upward launch so a blast can't fountain a prop off-screen.
+        if(v.y > 8) v.y = 8;
+      }
     for(var i=0;i<F.props.length;i++){
       var p = F.props[i];
-      if(!p.body.sleepState || p.body.sleepState !== 2) sync(p.body, p.group);
+      if(!p.body.sleepState || p.body.sleepState !== 2){ _contain(p.body); sync(p.body, p.group); }
     }
     for(var d=0; d<F.debris.length; d++){
       var db = F.debris[d];
-      if(!db.body.sleepState || db.body.sleepState !== 2) sync(db.body, db.mesh);
+      if(!db.body.sleepState || db.body.sleepState !== 2){ _contain(db.body); sync(db.body, db.mesh); }
     }
 
     /* ---- Ball vs finale objects ---- */
@@ -62755,19 +63340,23 @@ var TUT = {
       // ~spd*k regardless of how light the prop is (an unscaled impulse sent
       // the flamingo out at 170 m/s).
       if(spd > 0.4 && window.CANNON){
-        var bumpK = { flamingo: 2.2, chair: 1.5, table: 1.0, cart: 0.3 };
+        var bumpK = { flamingo: 0.9, chair: 0.7, table: 0.5, cart: 0.18 };
         for(var k = 0; k < F.props.length; k++){
           var pr = F.props[k];
           var ddx = pr.body.position.x - bx, ddz = pr.body.position.z - bz;
           var dd = Math.hypot(ddx, ddz);
           if(dd < pr.r + BR && dd > 0.001 && Math.abs(pr.body.position.y - by) < pr.hy + 0.9){
             var ux = ddx/dd, uz = ddz/dd;
-            var imp = spd * (bumpK[pr.kind] || 1.2) * (pr.body.mass || 1);
+            // v0.26i6: gentle shove that TOPPLES rather than launches. imp
+            // gives Delta-v ~ spd*bumpK regardless of mass; a tiny vertical
+            // component + a high application point (well above center) makes
+            // the prop tip over and fall, staying on the patio.
+            var imp = spd * (bumpK[pr.kind] || 0.6) * (pr.body.mass || 1);
             try {
               pr.body.wakeUp();
               pr.body.applyImpulse(
-                new CANNON.Vec3(ux*imp, imp*0.5, uz*imp),
-                pr.body.position.vadd(new CANNON.Vec3((Math.random()-0.5)*0.25, 0.15, (Math.random()-0.5)*0.25)));
+                new CANNON.Vec3(ux*imp, imp*0.08, uz*imp),
+                pr.body.position.vadd(new CANNON.Vec3(ux*0.05, pr.hy*0.55, uz*0.05)));
             } catch(e){}
             // Cart is heavy furniture: the ball actually deflects off it
             if(pr.kind === 'cart'){
